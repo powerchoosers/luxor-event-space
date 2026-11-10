@@ -25,6 +25,7 @@ export async function GET() {
       enabled: features.authoringEnabled,
       executionEnabled: features.executionEnabled,
       activationEnabled: features.activationEnabled,
+      connectedTriggers: features.connectedTriggers,
       unavailableReason: features.authoringEnabled ? undefined : 'Draft creation and editing are disabled by the workflow runtime control.',
       workflows: await listCustomWorkflows(session.email),
     }, { headers: { 'Cache-Control': 'no-store' } })

@@ -2,6 +2,7 @@ import 'server-only'
 
 import type { LuxorInquiry } from './luxorInquiryTypes'
 import { buildAiTourConfirmationEmail, buildTourReminderEmail, type TourEmailContext } from './luxorTourEmailServer'
+import { readTourEmailCopySettings } from './luxorTourEmailCopyServer'
 
 export const LUXOR_TOUR_TIMEZONE = 'America/Chicago'
 export const LUXOR_TOUR_LOCATION = 'Luxor at Las Palmas Events, 803 Castroville Rd #402, San Antonio, TX 78237'
@@ -82,10 +83,12 @@ export async function buildLuxorTourPlan(input: {
     inquiry: input.inquiry, meetingType, clientFacingNotes, tourDateLabel, tourTimeLabel, durationMinutes,
     responseUrl: input.responseUrl, cancelUrl: input.cancelUrl, contactPhone: input.contactPhone,
   }
+  const { settings } = await readTourEmailCopySettings()
+  const copyFor = (key: 'confirmation' | 'reminder_24' | 'reminder_2') => settings.find((item) => item.notice_key === key)?.copy_override || null
   const templates = {
-    confirmation: await buildAiTourConfirmationEmail(emailContext),
-    reminder_24: buildTourReminderEmail(emailContext, 'tomorrow'),
-    reminder_2: buildTourReminderEmail(emailContext, 'soon'),
+    confirmation: await buildAiTourConfirmationEmail(emailContext, { copyOverride: copyFor('confirmation') }),
+    reminder_24: buildTourReminderEmail(emailContext, 'tomorrow', copyFor('reminder_24')),
+    reminder_2: buildTourReminderEmail(emailContext, 'soon', copyFor('reminder_2')),
   }
   const attendeeEmails = Array.from(new Set((input.attendeeEmails || [input.inquiry.email])
     .map((email) => email.trim().toLowerCase()).filter(Boolean)))

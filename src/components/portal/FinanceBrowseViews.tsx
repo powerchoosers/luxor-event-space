@@ -5,7 +5,6 @@ import { createPortal } from 'react-dom'
 import Link from 'next/link'
 import { AnimatePresence, motion } from 'framer-motion'
 import {
-  CalendarBlank,
   CalendarDots,
   CreditCard,
   CurrencyCircleDollar,
@@ -24,6 +23,8 @@ export type FinanceBrowseView =
   | 'payments'
   | 'expenses'
   | 'expense-dashboard'
+  | 'bill-review'
+  | 'bill-providers'
   | 'recurring-expenses'
   | 'business-expenses'
   | 'event-expenses'
@@ -107,12 +108,12 @@ const links: BrowseItem[] = [
     icon: <TrendDown size={16} weight="regular" />,
   },
   {
-    id: 'recurring-expenses',
-    label: 'Recurring Expenses',
-    description: 'Fixed and variable expenses generated from active templates',
-    href: '/portal/finances?view=expense-recurring',
+    id: 'bill-review',
+    label: 'Bills',
+    description: 'Review incoming bills, confirm details, and prepare payments',
+    href: '/portal/finances?view=bill-review',
     group: 'Expense Management',
-    icon: <CalendarBlank size={16} weight="regular" />,
+    icon: <FileText size={16} weight="regular" />,
   },
   {
     id: 'business-expenses',
@@ -177,6 +178,8 @@ export const FINANCE_VIEW_LABELS: Record<FinanceBrowseView, string> = {
   payments: 'Payments Log',
   expenses: 'Expenses Tracking',
   'expense-dashboard': 'Expense Dashboard',
+  'bill-review': 'Bills',
+  'bill-providers': 'Providers',
   'recurring-expenses': 'Recurring Expenses',
   'business-expenses': 'Business Expenses',
   'event-expenses': 'Event Expenses',
@@ -198,7 +201,7 @@ export function FinanceBrowseViews({
   open: boolean
   close: () => void
   currentView: FinanceBrowseView
-  onLegacySelect?: (view: 'dashboard' | 'revenue' | 'receivables' | 'invoices' | 'payments' | 'expenses' | 'reports') => void
+  onLegacySelect?: (view: 'dashboard' | 'revenue' | 'receivables' | 'invoices' | 'payments' | 'expenses' | 'reports' | 'bill-review' | 'bill-providers') => void
 }) {
   const handleClose = useCallback(() => close(), [close])
 
@@ -258,21 +261,19 @@ export function FinanceBrowseViews({
                   <section key={group}>
                     <h3 className="mb-2 px-1 text-[9px] font-black uppercase tracking-[0.16em] text-[color:var(--portal-faint)]">{group}</h3>
                     <div className="divide-y divide-[color:var(--portal-border)] overflow-hidden rounded-xl border border-[color:var(--portal-border)]">
-                      {group === 'Bills & Vendors' ? (
-                        <Link
-                          href="/portal/finances/bills"
-                          onClick={handleClose}
-                          aria-current={currentView === 'bills' ? 'page' : undefined}
-                          className={`flex w-full items-center gap-3 px-3.5 py-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#caa24c]/45 ${currentView === 'bills' ? 'bg-[#caa24c]/10 text-[#9a6d26] dark:text-[#e0bd67]' : 'text-[color:var(--portal-text)] hover:bg-[color:var(--portal-soft)]'}`}
-                        >
+                      {group === 'Bills & Vendors' ? (() => {
+                        const isCurrent = currentView === 'bill-providers'
+                        const itemClass = `flex w-full items-center gap-3 px-3.5 py-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#caa24c]/45 ${isCurrent ? 'bg-[#caa24c]/10 text-[#9a6d26] dark:text-[#e0bd67]' : 'text-[color:var(--portal-text)] hover:bg-[color:var(--portal-soft)]'}`
+                        const content = <>
                           <FileText size={16} weight="regular" aria-hidden="true" />
                           <span className="min-w-0 flex-1">
-                            <span className="block text-sm font-bold">Bills and vendors</span>
-                            <span className="mt-0.5 block text-[11px] text-[color:var(--portal-muted)]">Balances, payment history, reminders, and vendor profiles</span>
+                            <span className="block text-sm font-bold">Providers</span>
+                            <span className="mt-0.5 block text-[11px] text-[color:var(--portal-muted)]">Provider details, bills, documents, and recurring schedules</span>
                           </span>
                           <ChevronRight size={16} className="shrink-0 text-[color:var(--portal-faint)]" aria-hidden="true" />
-                        </Link>
-                      ) : (
+                        </>
+                        return onLegacySelect ? <button type="button" aria-current={isCurrent ? 'page' : undefined} onClick={() => { onLegacySelect('bill-providers'); handleClose() }} className={itemClass}>{content}</button> : <Link href="/portal/finances?view=bill-providers" onClick={handleClose} aria-current={currentView === 'bill-providers' ? 'page' : undefined} className={itemClass}>{content}</Link>
+                      })() : (
                         links.filter((item) => item.group === group).map((item) => {
                           const isCurrent = item.id === currentView
                           const itemClass = `flex w-full items-center gap-3 px-3.5 py-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#caa24c]/45 ${
@@ -301,9 +302,11 @@ export function FinanceBrowseViews({
                               item.id === 'invoices' ||
                               item.id === 'payments' ||
                               item.id === 'expenses' ||
+                              item.id === 'bill-review' ||
+                              item.id === 'bill-providers' ||
                               item.id === 'reports')
                           ) {
-                            const legacyTab = item.id === 'overview' ? 'dashboard' : item.id
+                            const legacyTab = item.id === 'overview' ? 'dashboard' : item.id as 'revenue' | 'receivables' | 'invoices' | 'payments' | 'expenses' | 'reports' | 'bill-review' | 'bill-providers'
                             return (
                               <button
                                 key={item.id}

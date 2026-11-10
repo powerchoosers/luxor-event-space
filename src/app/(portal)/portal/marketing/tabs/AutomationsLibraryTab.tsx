@@ -15,7 +15,10 @@ import {
   type AutomationStatus,
   type AutomationStatusFilter,
 } from '@/lib/luxorAutomationsLibrary'
-import type { CustomWorkflowDefinition, CustomWorkflowStatus, CustomWorkflowStep } from '@/lib/luxorCustomWorkflowDefinition'
+import { SYSTEM_WORKFLOWS } from '@/lib/luxorSystemWorkflowCatalog'
+import { CUSTOM_WORKFLOW_TRIGGER_LABELS, type CustomWorkflowDefinition, type CustomWorkflowStatus, type CustomWorkflowStep } from '@/lib/luxorCustomWorkflowDefinition'
+
+
 
 type LibraryResponse = {
   workflows: AutomationLibraryEntry[]
@@ -118,7 +121,8 @@ export function AutomationsLibraryTab() {
   const [search, setSearch] = React.useState('')
   const [status, setStatus] = React.useState<AutomationStatusFilter>('all')
   const [openEntryId, setOpenEntryId] = React.useState<string | null>(null)
-  const [prebuiltOpen, setPrebuiltOpen] = useState(true)
+  const [prebuiltOpen, setPrebuiltOpen] = useState(false)
+  const [systemOpen, setSystemOpen] = useState(false)
   const reduceMotion = useReducedMotion() ?? false
   const [customWorkflows, setCustomWorkflows] = React.useState<CustomWorkflowSummary[]>([])
   const [customAuthoringEnabled, setCustomAuthoringEnabled] = React.useState(false)
@@ -231,30 +235,19 @@ export function AutomationsLibraryTab() {
       {loading && data ? <p role="status" className="text-xs text-[color:var(--portal-muted)]">Refreshing saved workflow data…</p> : null}
       {automationControlError ? <p role="alert" className="rounded-lg border border-rose-500/25 bg-rose-500/5 px-3 py-2 text-xs text-[color:var(--portal-muted)]">{automationControlError}</p> : null}
       {/* Pre-built Workflows / Templates Library */}
-      <section aria-labelledby="prebuilt-workflows-heading" className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-4 sm:p-5 space-y-4">
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-          <button type="button" aria-expanded={prebuiltOpen} aria-controls="prebuilt-workflows-content" onClick={() => setPrebuiltOpen((open) => !open)} className="flex min-h-11 min-w-0 flex-1 items-start justify-between gap-3 rounded-lg text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45">
-          <div className="min-w-0">
-            <div className="flex items-center gap-2">
-              <span className="text-[10px] font-black uppercase tracking-[0.2em] text-[#a8792f]">
-                Ready-to-Use Sequences
-              </span>
-              <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-bold text-emerald-600 dark:text-emerald-400">
-                5 Default Templates
-              </span>
-            </div>
-            <h2 id="prebuilt-workflows-heading" className="mt-1 text-base sm:text-lg font-bold text-[color:var(--portal-text)]">
-              Pre-built Workflows <span className="ml-1 inline-block align-middle text-[color:var(--portal-muted)]">{prebuiltOpen ? '−' : '+'}</span>
-            </h2>
-            <p className="mt-0.5 text-xs text-[color:var(--portal-muted)] max-w-2xl">
-              {prebuiltOpen ? 'Start with a draft, review the sender and messages, then activate it before enrolling leads.' : '5 ready-to-use sequences'}
-            </p>
-          </div>
+      <section aria-labelledby="prebuilt-workflows-heading" className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-4 sm:p-5">
+        <h2 id="prebuilt-workflows-heading">
+          <button type="button" aria-expanded={prebuiltOpen} aria-controls="prebuilt-workflows-content" onClick={() => setPrebuiltOpen((open) => !open)} className="flex min-h-11 w-full items-center justify-between gap-3 rounded-lg text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45">
+            <span className="min-w-0">
+              <span className="block text-base font-bold text-[color:var(--portal-text)] sm:text-lg">Pre-built workflows</span>
+              <span className="mt-1 block text-xs leading-5 text-[color:var(--portal-muted)]">{PREBUILT_WORKFLOWS.length} templates to start a workflow draft.</span>
+            </span>
+            <ChevronDown size={17} aria-hidden="true" className={`shrink-0 text-[color:var(--portal-muted)] transition-transform motion-reduce:transition-none ${prebuiltOpen ? 'rotate-180' : ''}`} />
           </button>
-        </div>
+        </h2>
 
-        <motion.div id="prebuilt-workflows-content" initial={false} animate={{ height: prebuiltOpen ? 'auto' : 0, opacity: prebuiltOpen ? 1 : 0 }} transition={{ duration: reduceMotion ? 0 : 0.28, ease: [0.22, 1, 0.36, 1] }} style={{ overflow: 'hidden' }} aria-hidden={!prebuiltOpen}>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5 pt-1">
+        <motion.div id="prebuilt-workflows-content" initial={false} animate={{ height: prebuiltOpen ? 'auto' : 0, opacity: prebuiltOpen ? 1 : 0 }} transition={{ duration: reduceMotion ? 0 : 0.28, ease: [0.22, 1, 0.36, 1] }} style={{ overflow: 'hidden' }} inert={!prebuiltOpen}>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5 pt-4">
           {PREBUILT_WORKFLOWS.map((pb) => (
             <div
               key={pb.id}
@@ -299,6 +292,20 @@ export function AutomationsLibraryTab() {
         </motion.div>
       </section>
 
+      <section aria-labelledby="system-workflows-heading" className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-4 sm:p-5">
+        <h2 id="system-workflows-heading">
+          <button type="button" aria-expanded={systemOpen} aria-controls="system-workflows-content" onClick={() => setSystemOpen((open) => !open)} className="flex min-h-11 w-full items-center justify-between gap-3 rounded-lg text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45">
+            <span className="min-w-0"><span className="block text-base font-bold text-[color:var(--portal-text)] sm:text-lg">System-managed workflows</span><span className="mt-1 block text-xs leading-5 text-[color:var(--portal-muted)]">{SYSTEM_WORKFLOWS.length} workflows for messages sent by Luxor.</span></span>
+            <ChevronDown size={17} aria-hidden="true" className={`shrink-0 text-[color:var(--portal-muted)] transition-transform motion-reduce:transition-none ${systemOpen ? 'rotate-180' : ''}`} />
+          </button>
+        </h2>
+        <motion.div id="system-workflows-content" initial={false} animate={{ height: systemOpen ? 'auto' : 0, opacity: systemOpen ? 1 : 0 }} transition={{ duration: reduceMotion ? 0 : 0.28, ease: [0.22, 1, 0.36, 1] }} style={{ overflow: 'hidden' }} inert={!systemOpen}>
+          <div className="mt-3 divide-y divide-[color:var(--portal-border)] border-t border-[color:var(--portal-border)]">
+            {SYSTEM_WORKFLOWS.map(([id, name, detail]) => <Link key={id} href={`/portal/marketing/custom-workflows/${id}`} className="flex min-h-14 items-center justify-between gap-3 py-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45"><span className="min-w-0"><span className="block text-sm font-semibold text-[color:var(--portal-text)]">{name}</span><span className="mt-1 block text-xs text-[color:var(--portal-muted)]">{detail}</span></span><ChevronRight size={16} aria-hidden="true" className="shrink-0 text-[color:var(--portal-muted)]" /></Link>)}
+          </div>
+        </motion.div>
+      </section>
+
       {/* Elena Workflow Architect Modal */}
       <ElenaWorkflowArchitectModal
         isOpen={isArchitectOpen}
@@ -340,7 +347,7 @@ export function AutomationsLibraryTab() {
         </div>
         {!customAuthoringEnabled ? <p className="mt-3 text-[11px] leading-5 text-[color:var(--portal-muted)]">Draft creation and editing are disabled by the workflow controls. Existing saved workflows remain available to inspect.</p> : null}
         {customLoadError ? <div role="alert" className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-rose-500/25 bg-rose-500/5 p-3"><p className="text-xs text-[color:var(--portal-muted)]">{customLoadError}</p><button type="button" onClick={() => setCustomRetryVersion((value) => value + 1)} className="min-h-10 rounded-lg border border-[color:var(--portal-border)] px-3 text-xs font-semibold text-[color:var(--portal-text)]">Retry</button></div> : null}
-        {customWorkflows.length ? <div className="mt-4 divide-y divide-[color:var(--portal-border)] border-t border-[color:var(--portal-border)]">{customWorkflows.map((workflow) => <Link key={workflow.id} href={`/portal/marketing/custom-workflows/${encodeURIComponent(workflow.id)}`} className="flex min-h-14 flex-col gap-1 py-3 transition hover:text-[#a8792f] sm:flex-row sm:items-center sm:justify-between"><span className="min-w-0"><span className="block break-words text-sm font-semibold text-[color:var(--portal-text)]">{workflow.name}</span><span className="mt-1 block text-[11px] text-[color:var(--portal-muted)]">{workflow.draft_definition.steps.length} configured steps · Contact form inquiry</span></span><span className="shrink-0 text-xs font-semibold text-[color:var(--portal-muted)]">{workflowStatusLabel(workflow.status)} · Updated {formatDate(workflow.updated_at)}</span></Link>)}</div> : customAuthoringEnabled ? <p className="mt-4 border-t border-[color:var(--portal-border)] pt-3 text-xs text-[color:var(--portal-muted)]">No custom workflows saved yet.</p> : null}
+        {customWorkflows.length ? <div className="mt-4 divide-y divide-[color:var(--portal-border)] border-t border-[color:var(--portal-border)]">{customWorkflows.map((workflow) => <Link key={workflow.id} href={`/portal/marketing/custom-workflows/${encodeURIComponent(workflow.id)}`} className="flex min-h-14 flex-col gap-1 py-3 transition hover:text-[#a8792f] sm:flex-row sm:items-center sm:justify-between"><span className="min-w-0"><span className="block break-words text-sm font-semibold text-[color:var(--portal-text)]">{workflow.name}</span><span className="mt-1 block text-[11px] text-[color:var(--portal-muted)]">{workflow.draft_definition.steps.length} configured steps · {CUSTOM_WORKFLOW_TRIGGER_LABELS[workflow.draft_definition.trigger]?.label || 'Unknown trigger'}</span></span><span className="shrink-0 text-xs font-semibold text-[color:var(--portal-muted)]">{workflowStatusLabel(workflow.status)} · Updated {formatDate(workflow.updated_at)}</span></Link>)}</div> : customAuthoringEnabled ? <p className="mt-4 border-t border-[color:var(--portal-border)] pt-3 text-xs text-[color:var(--portal-muted)]">No custom workflows saved yet.</p> : null}
       </section>
 
       <section aria-label="Saved automation totals" className="grid grid-cols-2 border-y border-[color:var(--portal-border)] lg:grid-cols-4">
@@ -442,7 +449,7 @@ function SummaryMetric({ label, value, detail }: { label: string; value: number 
   return (
     <div className="min-h-24 border-r border-[color:var(--portal-border)] p-3 last:border-r-0 sm:p-4">
       <p className="text-[10px] font-black uppercase tracking-[0.15em] text-[color:var(--portal-muted)]">{label}</p>
-      <p className="mt-2 text-2xl font-bold tabular-nums text-[color:var(--portal-text)]">{value === null ? '—' : value.toLocaleString()}</p>
+      <p className="mt-2 text-2xl font-bold tabular-nums text-[color:var(--portal-text)]">{value === null ? '—' : value.toLocaleString('en-US')}</p>
       <p className="mt-1 text-[10px] leading-4 text-[color:var(--portal-muted)]">{detail}</p>
     </div>
   )
@@ -507,7 +514,7 @@ function AutomationEntryCard({ entry, expanded, onToggle, onSetEnabled, saving }
             </button>
           </div>
           <Link
-            href={`/portal/marketing/automations/${entry.id === 'system:payment-reminders' ? 'payment-reminders' : entry.kind === 'system' ? 'tour-notifications' : encodeURIComponent(entry.id)}`}
+            href={entry.id === 'brochure_lead' ? '/portal/marketing/custom-workflows/system-brochure' : `/portal/marketing/automations/${entry.id === 'system:payment-reminders' ? 'payment-reminders' : entry.kind === 'system' ? 'tour-notifications' : encodeURIComponent(entry.id)}`}
             className="luxor-gold-raised inline-flex min-h-11 items-center justify-center rounded-lg px-4 text-xs font-bold text-white transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45"
           >
             View details
@@ -640,7 +647,7 @@ function formatStepTiming(entry: AutomationLibraryEntry, key: string, delayDays:
 }
 
 function metricLabel(value: number | null) {
-  return value === null ? 'Unavailable' : value.toLocaleString()
+  return value === null ? 'Unavailable' : value.toLocaleString('en-US')
 }
 
 function workflowStatusLabel(status: CustomWorkflowStatus) {

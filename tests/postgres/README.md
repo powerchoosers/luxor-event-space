@@ -1,5 +1,44 @@
 # Follow-up PostgreSQL integration harness
 
+## Custom workflow attended-tour event capture
+
+Run `psql -v ON_ERROR_STOP=1 -f tests/postgres/custom-workflow-tour-outbox.integration.sql`
+against a fresh disposable database. The fixture uses synthetic records inside
+a rolled-back transaction and applies the actual tour outbox migration. It
+checks revision and active-version capture, replay, disabled runtime, paused
+workflows, transactional rollback, enrollment timing, correction before and
+after enrollment, consent and table grants. The fixture uses minimal workflow
+tables and a stub definition validator. Separate Node tests check worker handling
+of a missing or failed consumer. Real queue dispatch and concurrent transactions
+are not verified by this fixture, and the application does not yet allow the
+tour trigger to be activated.
+
+The main `custom-workflows.integration.sql` also applies the actual workflow
+and tour migrations to its synthetic schema. It exercises attended-tour event
+capture, enrollment, SMS queueing, and the actual pre-send guard after a visit
+correction or opt-out, under both clean and Supabase-style default grants. It
+also verifies email queueing and the unsubscribe token, suppression at the
+pre-send guard, and rejection of queued email or text after the contact changes
+their destination. No provider call is made, and this does not prove atomicity
+with an external send.
+
+## Paid bill provider links
+
+Use a fresh disposable PostgreSQL database with the `anon`, `authenticated`, and
+`service_role` roles present. Apply `paid-bill-provider.fixture.sql`, then the
+`luxor_recurring_provider_links` and `luxor_paid_bill_provider_link` migrations,
+then `paid-bill-provider.integration.sql`, with `psql -v ON_ERROR_STOP=1`.
+The final file runs synthetic data inside a rolled-back transaction. It checks
+service-role access, audit permissions, preservation of bill facts and payment
+rows, and rejection of stale, archived, and conflicting-provider links. The
+fixture is a minimal schema, not a full production copy.
+
+The same disposable fixture can exercise recurring-cost request identity by
+applying the `luxor_recurring_cost_request_keys` migration and then
+`recurring-cost-request-key.integration.sql`. It checks duplicate request keys,
+immutable fingerprints, and incomplete request pairs inside a rolled-back
+transaction.
+
 Run the disposable synthetic database test with:
 
 ```sh
@@ -48,6 +87,8 @@ tests/postgres/run-custom-workflows-postgres.sh
 ```
 
 The script starts a disposable PostgreSQL 16 container without publishing a host port. It runs the synthetic custom-workflow migration harness twice, each inside a transaction that rolls back: once with clean ACL defaults and once with Supabase-style table and function defaults. The checks include migration reapply, private-table and service-role ACLs, untrusted RPC denial, fail-closed controls, event/step uniqueness, immutable version pinning, legacy queue preservation, consent and Chicago SMS-window checks, acknowledgment reuse, and pause/resume/archive behavior. Fixtures use synthetic `.invalid` recipients; no hosted database or provider is contacted.
+
+The harness also applies the workflow phone-normalization migration after the baseline and checks canonical consent matching, a ten-digit inquiry phone at queue time, opt-out rejection, and helper-function permissions. The fixture is not a full copy of the production migration history.
 
 ## Manual installment correction
 

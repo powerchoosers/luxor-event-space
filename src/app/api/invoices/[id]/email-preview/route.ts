@@ -5,6 +5,7 @@ import { getLuxorInquiry } from '@/lib/luxorInquiriesServer'
 import { getLuxorBooking, listLuxorBookingsByInquiry } from '@/lib/luxorBookingsServer'
 import { getLatestLuxorSignatureRequestByBooking } from '@/lib/luxorSignaturesServer'
 import { buildLuxorProposalEmail, buildLuxorProposalContractEmail } from '@/lib/luxorProposalEmailServer'
+import { readAgreementPackageCopy } from '@/lib/luxorAgreementPackageCopyServer'
 
 type UnknownRecord = Record<string, unknown>
 
@@ -113,7 +114,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       recipient: inquiry.email,
       attachmentFileName,
       snapshot,
-      ...await buildLuxorProposalContractEmail({ invoice, inquiry, booking, signingUrl }),
+      ...await buildLuxorProposalContractEmail({ invoice, inquiry, booking, signingUrl, copyOverride: await readAgreementPackageCopy() }),
     })
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : 'Unable to prepare the email preview.' }, { status: 500 })

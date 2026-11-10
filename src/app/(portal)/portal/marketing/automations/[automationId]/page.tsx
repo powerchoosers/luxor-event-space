@@ -6,6 +6,8 @@ import { useParams, useRouter } from 'next/navigation'
 import { ArrowLeft, CalendarClock, Clock3, Mail, MessageSquareText, Phone, RefreshCw, Save, Workflow } from '@/lib/icons/phosphor-compat'
 import { PortalButton, PortalModal, PortalPageFrame } from '@/components/portal/PortalUI'
 import type { AutomationLibraryEntry, AutomationLibraryTotals, AutomationStatus } from '@/lib/luxorAutomationsLibrary'
+import { BrochureWorkflowContacts } from '@/components/portal/BrochureWorkflowContacts'
+import { BrochureStepSettings, type BrochureSettingsStep } from '@/components/portal/BrochureStepSettings'
 
 type LibraryResponse = {
   workflows: AutomationLibraryEntry[]
@@ -159,6 +161,8 @@ export default function AutomationDetailPage() {
   const [detail, setDetail] = React.useState<DetailResponse | null>(null)
   const [selectedStepKey, setSelectedStepKey] = React.useState('')
   const [draft, setDraft] = React.useState<ContentDraft>(EMPTY_DRAFT)
+  const [settingsDirty, setSettingsDirty] = React.useState(false)
+  const [settingsReset, setSettingsReset] = React.useState(0)
   const [previewHtml, setPreviewHtml] = React.useState<string | null>(null)
   const [previewNote, setPreviewNote] = React.useState<string | null>(null)
   const [loading, setLoading] = React.useState(true)
@@ -280,17 +284,17 @@ export default function AutomationDetailPage() {
   }, [activeTemplate?.id, activeTemplate?.updated_at])
 
   React.useEffect(() => {
-    if (!dirty) return
+    if (!dirty && !settingsDirty) return
     const warnBeforeLeaving = (event: BeforeUnloadEvent) => {
       event.preventDefault()
       event.returnValue = ''
     }
     window.addEventListener('beforeunload', warnBeforeLeaving)
     return () => window.removeEventListener('beforeunload', warnBeforeLeaving)
-  }, [dirty])
+  }, [dirty, settingsDirty])
 
   React.useEffect(() => {
-    if (!dirty) return
+    if (!dirty && !settingsDirty) return
     const guardInternalNavigation = (event: MouseEvent) => {
       if (!(event.target instanceof Element)) return
       const link = event.target.closest('a[href]') as HTMLAnchorElement | null
@@ -300,21 +304,23 @@ export default function AutomationDetailPage() {
       if (destination.pathname === window.location.pathname && destination.search === window.location.search) return
       event.preventDefault()
       event.stopImmediatePropagation()
-      requestConfirmation('Discard unsaved changes?', 'Your email edits have not been saved. Discard them and leave this detail page?', 'Discard and leave', () => {
+      requestConfirmation('Discard unsaved changes?', 'Your step changes have not been saved. Discard them and leave this detail page?', 'Discard and leave', () => {
         router.push(`${destination.pathname}${destination.search}${destination.hash}`)
       })
     }
     document.addEventListener('click', guardInternalNavigation, true)
     return () => document.removeEventListener('click', guardInternalNavigation, true)
-  }, [dirty, requestConfirmation, router])
+  }, [dirty, settingsDirty, requestConfirmation, router])
 
   function handleRefresh() {
     const refresh = () => {
       if (activeTemplate) setDraft(draftFromTemplate(activeTemplate))
+      setSettingsDirty(false)
+      setSettingsReset((value) => value + 1)
       setReloadVersion((value) => value + 1)
     }
-    if (dirty) {
-      requestConfirmation('Discard unsaved changes?', 'Reloading will discard your email edits and load the saved automation data.', 'Reload saved data', refresh)
+    if (dirty || settingsDirty) {
+      requestConfirmation('Discard unsaved changes?', 'Reloading will discard your step changes and load the saved automation data.', 'Reload saved data', refresh)
       return
     }
     refresh()
@@ -344,10 +350,11 @@ export default function AutomationDetailPage() {
     if (key === selectedStepKey) return
     const selectStep = () => {
       if (activeTemplate) setDraft(draftFromTemplate(activeTemplate))
+      setSettingsDirty(false)
       setSelectedStepKey(key)
     }
-    if (dirty) {
-      requestConfirmation('Discard unsaved changes?', 'Opening another step will discard your email edits.', 'Discard and continue', selectStep)
+    if (dirty || settingsDirty) {
+      requestConfirmation('Discard unsaved changes?', 'Opening another step will discard your step changes.', 'Discard and continue', selectStep)
       return
     }
     selectStep()
@@ -417,6 +424,7 @@ export default function AutomationDetailPage() {
 
   async function saveDraft() {
     if (!activeTemplate || !dirty) return
+    if (settingsDirty) { setFeedback('Save or discard step settings before saving email content.'); return }
     if (applyToQueued && (!queuedPreview || queuedPreview.templateUpdatedAt !== activeTemplate.updated_at || queuedPreview.limitExceeded)) {
       setFeedback('Review the matching queued emails again before saving.')
       return
@@ -539,6 +547,10 @@ export default function AutomationDetailPage() {
             onCancel={cancelDraft}
             onToggleApplyToQueued={toggleApplyToQueued}
             onReviewQueuedCopies={reviewQueuedCopies}
+            settingsDirty={settingsDirty}
+            settingsReset={settingsReset}
+            onSettingsDirtyChange={setSettingsDirty}
+            onSettingsSaved={(updated) => { setDetail((current) => current?.kind === 'saved' ? { ...current, templates: current.templates.map((template) => template.id === updated.id ? { ...template, ...updated } : template) } : current); setReloadVersion((value) => value + 1) }}
           />
         ) : detail?.kind === 'system' ? <TourNotificationDetail detail={detail} /> : detail?.kind === 'payment-reminders' ? <PaymentReminderDetailView detail={detail} /> : entry ? <UnknownWorkflowDetail entry={entry} /> : null}
       </div>
@@ -579,6 +591,10 @@ function SavedWorkflowDetail(props: {
   onCancel: () => void
   onToggleApplyToQueued: (enabled: boolean) => void
   onReviewQueuedCopies: () => void
+  settingsDirty: boolean
+  settingsReset: number
+  onSettingsDirtyChange: (dirty: boolean) => void
+  onSettingsSaved: (step: BrochureSettingsStep) => void
 }) {
   const { detail } = props
   return (
@@ -588,11 +604,12 @@ function SavedWorkflowDetail(props: {
         <Metric label="Emails sent" value={metricLabel(detail.activity.sentEmails)} />
         <Metric label="Runtime gate" value={detail.sendsConfigured === null ? 'Unknown' : detail.sendsConfigured ? 'Enabled' : 'Disabled'} />
       </section>
+      <BrochureWorkflowContacts />
       <div className="grid gap-5 xl:grid-cols-[minmax(0,0.88fr)_minmax(0,1.12fr)]">
         <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)]">
           <div className="border-b border-[color:var(--portal-border)] px-4 py-4 sm:px-5">
             <h2 className="text-base font-bold text-[color:var(--portal-text)]">Saved sequence</h2>
-            <p className="mt-1 text-xs leading-5 text-[color:var(--portal-muted)]">Ordered by its saved step order. Timing and channel controls are unavailable here.</p>
+            <p className="mt-1 text-xs leading-5 text-[color:var(--portal-muted)]">Ordered by saved step order. Select a step to review its content and timing.</p>
           </div>
           {props.templates.length ? <ol className="divide-y divide-[color:var(--portal-border)]">
             {props.templates.map((template, index) => (
@@ -616,6 +633,7 @@ function SavedWorkflowDetail(props: {
         </section>
         <div className="min-w-0 space-y-5">
           <SelectedStepPanel {...props} />
+          {props.activeTemplate && !props.activeTemplate.uses_existing_delivery && ['email', 'phone'].includes(props.activeTemplate.channel) ? <BrochureStepSettings key={`${props.activeTemplate.id}:${props.activeTemplate.updated_at}:${props.settingsReset}`} step={props.activeTemplate} available={props.entry.canToggle === true} contentDirty={props.dirty} onDirtyChange={props.onSettingsDirtyChange} onSaved={props.onSettingsSaved} /> : null}
           {props.activeTemplate?.uses_existing_delivery ? <ReadOnlyEmailPreview title={detail.brochureDelivery.subject} previewText={detail.brochureDelivery.previewText} html={detail.brochureDelivery.bodyHtml} note={detail.brochureDelivery.note} /> : null}
         </div>
       </div>
@@ -643,6 +661,7 @@ function SelectedStepPanel(props: Parameters<typeof SavedWorkflowDetail>[0]) {
         {props.dirty ? <span className="text-[10px] font-bold text-amber-700 dark:text-amber-300">Unsaved changes</span> : <span className="text-[10px] text-[color:var(--portal-muted)]">Saved</span>}
       </div>
       <div className="space-y-4 p-4 sm:p-5">
+        {props.entry.canToggle === false ? <p className="text-xs text-[color:var(--portal-muted)]">Live automation editing is unavailable in this preview.</p> : null}
         <Field label="Internal email name"><input value={props.draft.name} onChange={(event) => props.onDraftChange('name', event.target.value)} maxLength={500} className={inputClass} /></Field>
         <Field label="Subject"><input value={props.draft.subject} onChange={(event) => props.onDraftChange('subject', event.target.value)} maxLength={500} className={inputClass} /><p className="mt-1 text-[10px] text-[color:var(--portal-muted)]">The saved subject also supplies inbox preview text.</p></Field>
         <Field label="Email body"><textarea value={props.draft.body} onChange={(event) => props.onDraftChange('body', event.target.value)} maxLength={12000} rows={9} className={`${inputClass} min-h-44 resize-y`} /><p className="mt-1 text-[10px] leading-4 text-[color:var(--portal-muted)]">Plain text is escaped into the existing Luxor branded email renderer. Keep any existing {'{{merge fields}}'} exactly as written.</p></Field>
@@ -666,7 +685,7 @@ function SelectedStepPanel(props: Parameters<typeof SavedWorkflowDetail>[0]) {
           <button type="button" onClick={props.onPreview} disabled={props.previewing || props.saving} className="inline-flex min-h-11 items-center justify-center gap-2 px-1 text-xs font-semibold text-[color:var(--portal-muted)] transition hover:text-[#a8792f] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 disabled:cursor-not-allowed disabled:opacity-45"><Mail size={14} aria-hidden="true" />{props.previewing ? 'Rendering…' : 'Preview'}</button>
           <div className="flex flex-wrap items-center justify-end gap-2">
             <button type="button" onClick={props.onCancel} disabled={!props.dirty || props.saving} className={secondaryButtonClass}>Cancel</button>
-            <button type="button" onClick={props.onSave} disabled={!props.dirty || props.saving || props.previewing || props.queuePreviewing || (props.applyToQueued && (!props.queuedPreview || props.queuedPreview.limitExceeded))} className="luxor-gold-raised inline-flex min-h-11 items-center justify-center gap-2 rounded-lg px-4 text-xs font-bold !text-white transition hover:!text-white focus-visible:!text-white disabled:cursor-not-allowed disabled:opacity-45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45"><Save size={14} aria-hidden="true" className="!text-white" />{props.saving ? 'Saving…' : 'Save changes'}</button>
+            <button type="button" onClick={props.onSave} disabled={props.entry.canToggle !== true || !props.dirty || props.settingsDirty || props.saving || props.previewing || props.queuePreviewing || (props.applyToQueued && (!props.queuedPreview || props.queuedPreview.limitExceeded))} className="luxor-gold-raised inline-flex min-h-11 items-center justify-center gap-2 rounded-lg px-4 text-xs font-bold !text-white transition hover:!text-white focus-visible:!text-white disabled:cursor-not-allowed disabled:opacity-45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45"><Save size={14} aria-hidden="true" className="!text-white" />{props.saving ? 'Saving…' : 'Save changes'}</button>
           </div>
         </div>
         {props.feedback ? <p role="status" className="text-xs leading-5 text-[color:var(--portal-muted)]">{props.feedback}</p> : null}

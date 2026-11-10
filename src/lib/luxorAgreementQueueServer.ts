@@ -7,6 +7,7 @@ import { updateInvoice } from './luxorInvoicesServer'
 import { updateLuxorInquiry } from './luxorInquiriesServer'
 import { roundLuxorMoney } from './luxorOffer'
 import { buildLuxorProposalContractEmail } from './luxorProposalEmailServer'
+import { readAgreementPackageSetting } from './luxorAgreementPackageCopyServer'
 import {
   createLuxorSignatureRequest,
   activateLuxorDirectAgreementHandoff,
@@ -103,6 +104,17 @@ function hasAcceptedLockedProposal(invoice: LuxorInvoice) {
     invoice.offer_status !== 'withdrawn' &&
     !sameDayBookingRequiresRevision(invoice),
   )
+}
+
+async function agreementPackageCopyExtras() {
+  try {
+    const { setting, installed } = await readAgreementPackageSetting()
+    if (!installed) return { copy_settings_unavailable: true as const }
+    if (!setting.copy_override) return {}
+    return { agreement_package_copy_snapshot: setting.copy_override }
+  } catch {
+    return { copy_settings_unavailable: true as const }
+  }
 }
 
 function agreementJobMetadata(invoice: LuxorInvoice, requestedBy: string, extra: Record<string, unknown> = {}) {
@@ -382,7 +394,9 @@ export async function queueLuxorAcceptedProposalAgreement(input: {
 
   const origin = (process.env.NEXT_PUBLIC_SITE_URL || 'https://www.luxoratlaspalmas.com').replace(/\/$/, '')
   const signingUrl = `${origin}/secure-portal/sign/${signature.token}`
-  const email = await buildLuxorProposalContractEmail({ invoice, inquiry, booking, signingUrl })
+  const copyExtras = await agreementPackageCopyExtras()
+  const copyOverride = 'agreement_package_copy_snapshot' in copyExtras ? copyExtras.agreement_package_copy_snapshot ?? null : null
+  const email = await buildLuxorProposalContractEmail({ invoice, inquiry, booking, signingUrl, copyOverride })
   const now = new Date().toISOString()
 
   if (latest?.status === 'failed') {
@@ -409,6 +423,7 @@ export async function queueLuxorAcceptedProposalAgreement(input: {
       last_error: null,
       metadata: agreementJobMetadata(invoice, requestedBy, {
         ...latest.metadata,
+        ...copyExtras,
         agreement_resend: forceResend || latest.metadata?.agreement_resend === true,
         agreement_delivery_request_id: forceResend ? latest.id : latest.metadata?.agreement_delivery_request_id,
         retry_requested_at: now,
@@ -436,12 +451,15 @@ export async function queueLuxorAcceptedProposalAgreement(input: {
     // second delay prevents a fast worker from observing a job before that
     // record is durable, then it becomes due immediately after the update.
     scheduledFor: forceResend ? new Date(Date.now() + 1_000).toISOString() : now,
-    metadata: agreementJobMetadata(invoice, requestedBy, forceResend ? {
-      agreement_resend: true,
-      agreement_delivery_request_id: undefined,
-      resend_requested_at: now,
-      resend_requested_by: requestedBy,
-    } : {}),
+    metadata: agreementJobMetadata(invoice, requestedBy, {
+      ...copyExtras,
+      ...(forceResend ? {
+        agreement_resend: true,
+        agreement_delivery_request_id: undefined,
+        resend_requested_at: now,
+        resend_requested_by: requestedBy,
+      } : {}),
+    }),
   })
 
   if (forceResend) {

@@ -17,7 +17,7 @@ import { luxorTestEmailDeliveryPatch } from './luxorTestEmailDelivery'
 export type ResendEvent = {
   type: string; created_at: string
   data: {
-    email_id?: string; message_id?: string; from?: string; to?: string[]; subject?: string
+    email_id?: string; message_id?: string; from?: string; to?: string[]; cc?: string[]; received_for?: string[]; subject?: string
     tags?: Record<string, string>; bounce?: { type?: string; subType?: string; message?: string }
   }
 }
@@ -64,7 +64,7 @@ function isLuxorMailboxRecipient(value: string) {
 function isLuxorEvent(event: ResendEvent) {
   const senders = luxorMailSenders()
   return event.type === 'email.received'
-    ? (event.data.to || []).some(isLuxorMailboxRecipient)
+    ? [...(event.data.to || []), ...(event.data.cc || []), ...(event.data.received_for || [])].some(isLuxorMailboxRecipient)
     : senders.includes(address(event.data.from || ''))
 }
 
@@ -109,7 +109,7 @@ async function downloadProviderAttachment(urlValue: string, raw = false) {
 
 async function receiveEmail(providerId: string) {
   const email = await luxorResendApi<ReceivedEmail>(`/emails/receiving/${encodeURIComponent(providerId)}?html_format=cid`)
-  if (!email.to.some(isLuxorMailboxRecipient)) return null
+  if (![...email.to, ...(email.cc || [])].some(isLuxorMailboxRecipient)) return null
   const headers = Object.fromEntries(Object.entries(email.headers || {}).map(([key, value]) => [key.toLowerCase(), value]))
   const references = `${headers.references || ''} ${headers['in-reply-to'] || ''}`.match(/<[^<>\s]+>/g) || []
   let threadKey = ''

@@ -1,5 +1,5 @@
 import { after, NextRequest, NextResponse } from 'next/server'
-import { supabaseRest, supabaseRestStrict, SupabaseRestError } from '@/lib/supabaseRestServer'
+import { supabaseRest, supabaseRestStrict, supabaseRestCount, SupabaseRestError } from '@/lib/supabaseRestServer'
 import { getOperationsSession } from '@/lib/luxorOperationsAccess'
 import { isLuxorBillCategory } from '@/lib/luxorBillCategories'
 import { analyzeManualBill } from '@/lib/luxorManualBillAnalysisServer'
@@ -64,6 +64,22 @@ export type LuxorMaintenanceTask = {
   status: 'pending' | 'completed' | 'cancelled'
 }
 
+async function loadIntakesWithAttention(): Promise<LuxorBillIntake[]> {
+  const recentPath = 'luxor_bill_intakes?select=*&order=received_at.desc,id.asc&limit=100'
+  const attentionPath = 'luxor_bill_intakes?select=*&status=in.(received,processing,failed,ignored)&order=received_at.desc,id.asc'
+  const [recent, count] = await Promise.all([supabaseRestStrict<LuxorBillIntake[]>(recentPath), supabaseRestCount(attentionPath)])
+  const attention: LuxorBillIntake[] = []
+  for (let offset = 0; offset < count; offset += 500) {
+    const page = await supabaseRestStrict<LuxorBillIntake[]>(`${attentionPath}&limit=500&offset=${offset}`)
+    if (page.length !== Math.min(500, count - offset)) throw new Error('Invoice intake records changed while loading. Please retry.')
+    attention.push(...page)
+  }
+  if (attention.some((item) => !item.id) || new Set(attention.map((item) => item.id)).size !== count || await supabaseRestCount(attentionPath) !== count) throw new Error('Invoice intake records changed while loading. Please retry.')
+  const combined = new Map(recent.map((item) => [item.id, item]))
+  for (const item of attention) combined.set(item.id, item)
+  return [...combined.values()].sort((a, b) => String(b.received_at || '').localeCompare(String(a.received_at || '')) || a.id.localeCompare(b.id))
+}
+
 export async function GET(request: NextRequest) {
   try {
     const session = await getOperationsSession()
@@ -81,7 +97,7 @@ export async function GET(request: NextRequest) {
           `luxor_booking_expenses?select=id,source_bill_id&source_bill_id=in.(${billIds.join(',')})`,
         ),
       }),
-      supabaseRestStrict<LuxorBillIntake[]>('luxor_bill_intakes?select=*&order=received_at.desc&limit=100'),
+      loadIntakesWithAttention(),
       supabaseRest<LuxorInventoryItem[]>('luxor_inventory?select=*&order=name.asc').catch(() => []),
       supabaseRestStrict<LuxorVendor[]>('luxor_vendors?select=id,created_at,updated_at,archived_at,vendor_type,name,email,phone,rating,coi_active&order=name.asc'),
       supabaseRest<LuxorUtilityReading[]>('luxor_utility_readings?select=*&order=sensor_type.asc').catch(() => []),
@@ -91,7 +107,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       bills,
-      billIntakes, inventory, vendors, utilities, cleaning, tasks,
+      billIntakes, invoiceAnalysisConfigured: Boolean(process.env.OPEN_ROUTER_API_KEY?.trim()), resendReceivingConfigured: Boolean(process.env.RESEND_API_KEY?.trim() && process.env.RESEND_WEBHOOK_SECRET?.trim()), inventory, vendors, utilities, cleaning, tasks,
     })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to fetch operations data.'

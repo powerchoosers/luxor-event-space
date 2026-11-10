@@ -530,4 +530,198 @@ BEGIN
 END
 $$;
 SELECT 'synthetic lifecycle gates, pause/resume, version pinning, and custom-only archive: PASS';
+
+-- Exercise the later normalization patch against the real eligibility function.
+ALTER TABLE public.luxor_inquiries ADD COLUMN archived_at timestamptz;
+ALTER TABLE public.luxor_inquiries ADD COLUMN tour_attendance_status text;
+ALTER TABLE public.luxor_text_jobs ALTER COLUMN id SET DEFAULT gen_random_uuid();
+\ir ../../supabase/migrations/20261109211054_luxor_workflow_normalize_sms_recipients.sql
+DO $$
+DECLARE recipient uuid := gen_random_uuid();
+BEGIN
+  IF public.luxor_workflow_normalize_phone('(210) 555-0100') <> '+12105550100'
+    OR public.luxor_workflow_normalize_phone('+1 210 555 0100') <> '+12105550100'
+    OR public.luxor_workflow_normalize_phone('+442071234567') <> '+442071234567'
+    OR public.luxor_workflow_normalize_phone('555-0100') IS NOT NULL THEN
+    RAISE EXCEPTION 'Workflow phone normalization did not match the application rules';
+  END IF;
+  IF has_function_privilege('anon','public.luxor_workflow_normalize_phone(text)','EXECUTE')
+    OR has_function_privilege('authenticated','public.luxor_workflow_normalize_phone(text)','EXECUTE')
+    OR NOT has_function_privilege('service_role','public.luxor_workflow_normalize_phone(text)','EXECUTE') THEN
+    RAISE EXCEPTION 'Workflow phone helper ACL is incorrect';
+  END IF;
+  INSERT INTO public.luxor_inquiries(id,flow,status,phone,metadata) VALUES (recipient,'contact_form','new','(210) 555-0100','{}');
+  INSERT INTO public.luxor_sms_consents(phone_number,status,consent_scopes) VALUES ('+12105550100','opted_in',ARRAY['marketing']);
+  IF NOT public.luxor_custom_workflow_inquiry_is_eligible(recipient,'text') THEN
+    RAISE EXCEPTION 'Consented ten-digit number was rejected';
+  END IF;
+  UPDATE public.luxor_sms_consents SET status='opted_out' WHERE phone_number='+12105550100';
+  IF public.luxor_custom_workflow_inquiry_is_eligible(recipient,'text') THEN
+    RAISE EXCEPTION 'An opted-out number was accepted';
+  END IF;
+  UPDATE public.luxor_sms_consents SET status='opted_in',consent_scopes=ARRAY['customer_care'] WHERE phone_number='+12105550100';
+  IF public.luxor_custom_workflow_inquiry_is_eligible(recipient,'text') THEN
+    RAISE EXCEPTION 'A number without marketing consent was accepted';
+  END IF;
+END
+$$;
+SELECT 'workflow phone normalization and consent: PASS';
+DO $$
+DECLARE run_id uuid := gen_random_uuid(); enrollment_id uuid := gen_random_uuid(); workflow_id uuid := gen_random_uuid(); version_id uuid := gen_random_uuid(); source_id uuid; definition jsonb; outcome text; cause text;
+BEGIN
+  SELECT e.source_event_id, v.definition INTO source_id, definition FROM public.luxor_custom_workflow_step_runs sr JOIN public.luxor_custom_workflow_enrollments e ON e.id=sr.enrollment_id JOIN public.luxor_custom_workflow_versions v ON v.id=e.workflow_version_id WHERE sr.idempotency_key='synthetic-text-step';
+  definition := jsonb_set(jsonb_set(definition,'{steps,1,amount}','2'),'{steps,3,body}',to_jsonb('Luxor Events: Synthetic reminder. Reply STOP to opt out.'::text));
+  INSERT INTO public.luxor_custom_workflows(id,name,trigger_type,status,draft_definition,draft_revision,created_by,updated_by) VALUES (workflow_id,'Normalization test','contact_form_inquiry_created','draft',definition,1,'test@example.invalid','test@example.invalid');
+  INSERT INTO public.luxor_custom_workflow_versions(id,workflow_id,version_number,definition,created_by) VALUES (version_id,workflow_id,1,definition,'test@example.invalid');
+  UPDATE public.luxor_custom_workflows SET status='paused' WHERE status='active' AND trigger_type='contact_form_inquiry_created';
+  UPDATE public.luxor_custom_workflows SET status='active', current_version_id=version_id WHERE id=workflow_id;
+  INSERT INTO public.luxor_custom_workflow_enrollments(id,workflow_id,workflow_version_id,source_event_id,inquiry_id,status,current_step_id,next_run_at) VALUES (enrollment_id,workflow_id,version_id,source_id,'11111111-1111-4111-8111-111111111111','active','marketing-text',now()-interval '1 hour');
+  INSERT INTO public.luxor_custom_workflow_step_runs(id,enrollment_id,workflow_version_id,step_id,step_order,channel,status,idempotency_key,scheduled_for) VALUES (run_id,enrollment_id,version_id,'marketing-text',3,'text','scheduled','normalization-test',now()-interval '1 hour');
+  UPDATE public.luxor_inquiries SET phone='(602) 555-0101' WHERE id='11111111-1111-4111-8111-111111111111';
+  SELECT disposition,reason INTO outcome,cause FROM public.luxor_custom_workflow_enqueue_text_step(run_id,'+16025550101','Luxor Events: Synthetic reminder. Reply STOP to opt out.',1);
+  IF outcome <> 'queued' THEN RAISE EXCEPTION 'Ten-digit recipient did not queue: %, %', outcome, cause; END IF;
+  DELETE FROM public.luxor_text_jobs WHERE custom_workflow_step_run_id=run_id;
+  UPDATE public.luxor_custom_workflow_step_runs SET status='scheduled' WHERE id=run_id;
+  UPDATE public.luxor_sms_consents SET status='opted_out' WHERE phone_number='+16025550101';
+  SELECT disposition INTO outcome FROM public.luxor_custom_workflow_enqueue_text_step(run_id,'+16025550101','Luxor Events: Synthetic reminder. Reply STOP to opt out.',1);
+  IF outcome <> 'stopped' THEN RAISE EXCEPTION 'Opted-out recipient was not stopped: %', outcome; END IF;
+END
+$$;
+SELECT 'workflow queue normalization and STOP: PASS';
+
+-- Exercise tour capture through the real workflow queue and pre-send guards.
+ALTER TABLE public.luxor_inquiries ADD COLUMN current_tour_visit_id uuid;
+ALTER TABLE public.luxor_inquiries ADD COLUMN current_tour_visit_version integer NOT NULL DEFAULT 0;
+CREATE TABLE public.luxor_tour_visits (id uuid PRIMARY KEY, inquiry_id uuid NOT NULL, version integer NOT NULL, attendance_status text NOT NULL);
+\ir ../../supabase/migrations/20261030040000_luxor_custom_workflows_expansion.sql
+\ir ../../supabase/migrations/20261103130508_workflow_email_design_sender_context.sql
+\ir ../../supabase/migrations/20261103131459_workflow_trigger_aware_eligibility.sql
+\ir ../../supabase/migrations/20261103131607_workflow_manual_enrollment_and_call_tasks.sql
+\ir ../../supabase/migrations/20261103132905_workflow_enrollment_deduplication.sql
+\ir ../../supabase/migrations/20261109211054_luxor_workflow_normalize_sms_recipients.sql
+\ir ../../supabase/migrations/20261109213350_luxor_custom_workflow_tour_outbox.sql
+\ir ../../supabase/migrations/20261109213440_luxor_custom_workflow_tour_enrollment.sql
+\ir ../../supabase/migrations/20261109214052_luxor_custom_workflow_recipient_fence.sql
+DO $$
+<<test_tour>>
+DECLARE
+  inquiry_id uuid := gen_random_uuid(); visit_id uuid := gen_random_uuid(); workflow_id uuid := gen_random_uuid(); version_id uuid := gen_random_uuid();
+  second_inquiry uuid := gen_random_uuid(); second_visit uuid := gen_random_uuid();
+  third_inquiry uuid := gen_random_uuid(); third_visit uuid := gen_random_uuid();
+  enrollment_id uuid; run_id uuid; queued_id uuid; disposition text; allowed boolean; reason text; count_created integer;
+  definition jsonb := '{"schemaVersion":1,"trigger":"tour_attended","steps":[{"id":"text","type":"text","name":"Tour follow-up","body":"Luxor Events: Thanks for visiting. Reply STOP to opt out.","requiredConsentScope":"marketing"},{"id":"end","type":"end","name":"End"}]}'::jsonb;
+BEGIN
+  IF NOT public.luxor_custom_workflow_definition_is_runnable(definition) THEN RAISE EXCEPTION 'Tour workflow definition rejected'; END IF;
+  INSERT INTO public.luxor_inquiries(id,flow,status,email,phone,marketing_opt_in,tour_attendance_status,current_tour_visit_id,current_tour_visit_version)
+    VALUES(inquiry_id,'contact_form','tour_confirmed','tour@example.invalid','+12105550999',true,'pending',visit_id,1);
+  INSERT INTO public.luxor_tour_visits VALUES(visit_id,inquiry_id,2,'attended');
+  INSERT INTO public.luxor_sms_consents(phone_number,status,consent_scopes) VALUES ('+12105550999','opted_in',ARRAY['marketing']);
+  INSERT INTO public.luxor_custom_workflows(id,name,trigger_type,status,draft_definition,draft_revision,created_by,updated_by)
+    VALUES(workflow_id,'Synthetic completed tour','tour_attended','draft',definition,1,'test@example.invalid','test@example.invalid');
+  INSERT INTO public.luxor_custom_workflow_versions(id,workflow_id,version_number,definition,created_by)
+    VALUES(version_id,workflow_id,1,definition,'test@example.invalid');
+  UPDATE public.luxor_custom_workflows SET status='active',current_version_id=version_id WHERE id=workflow_id;
+  UPDATE public.luxor_inquiries SET tour_attendance_status='attended',current_tour_visit_version=2 WHERE id=inquiry_id;
+  SELECT enrollments_created INTO count_created FROM public.luxor_custom_workflow_consume_attended_tours(20);
+  IF count_created<>1 THEN RAISE EXCEPTION 'Tour consumer did not create one enrollment'; END IF;
+  SELECT e.id INTO enrollment_id FROM public.luxor_custom_workflow_enrollments e WHERE e.workflow_id=test_tour.workflow_id AND e.inquiry_id=test_tour.inquiry_id;
+  SELECT r.id INTO run_id FROM public.luxor_custom_workflow_step_runs r WHERE r.enrollment_id=test_tour.enrollment_id AND r.step_id='text';
+  SELECT q.job_id, q.disposition INTO queued_id,disposition FROM public.luxor_custom_workflow_enqueue_text_step(run_id,'+12105550999','Luxor Events: Thanks for visiting. Reply STOP to opt out.',1) q;
+  IF disposition<>'queued' OR queued_id IS NULL THEN RAISE EXCEPTION 'Tour text was not queued: %', disposition; END IF;
+  UPDATE public.luxor_text_jobs SET status='sending' WHERE id=queued_id;
+  UPDATE public.luxor_custom_workflow_step_runs SET status='sending' WHERE id=run_id;
+  SELECT a.allowed,a.reason INTO allowed,reason FROM public.luxor_custom_workflow_authorize_message_job_at(queued_id,'text','2026-06-01 16:00:00+00') a;
+  IF allowed IS NOT TRUE THEN RAISE EXCEPTION 'Valid tour text was blocked: %',reason; END IF;
+  UPDATE public.luxor_tour_visits SET attendance_status='no_show',version=3 WHERE id=visit_id;
+  SELECT a.allowed,a.reason INTO allowed,reason FROM public.luxor_custom_workflow_authorize_message_job_at(queued_id,'text','2026-06-01 16:00:00+00') a;
+  IF allowed OR reason<>'recipient_or_workflow_no_longer_eligible' THEN RAISE EXCEPTION 'Corrected tour dispatch not blocked: %, %',allowed,reason; END IF;
+  IF (SELECT status FROM public.luxor_text_jobs WHERE id=queued_id) <> 'cancelled' THEN RAISE EXCEPTION 'Obsolete queued message was not cancelled'; END IF;
+  INSERT INTO public.luxor_inquiries(id,flow,status,email,phone,marketing_opt_in,tour_attendance_status,current_tour_visit_id,current_tour_visit_version)
+    VALUES(second_inquiry,'contact_form','tour_confirmed','second-tour@example.invalid','+12105550998',true,'pending',second_visit,1);
+  INSERT INTO public.luxor_tour_visits VALUES(second_visit,second_inquiry,2,'attended');
+  INSERT INTO public.luxor_sms_consents(phone_number,status,consent_scopes) VALUES ('+12105550998','opted_in',ARRAY['marketing']);
+  UPDATE public.luxor_inquiries SET tour_attendance_status='attended',current_tour_visit_version=2 WHERE id=second_inquiry;
+  SELECT enrollments_created INTO count_created FROM public.luxor_custom_workflow_consume_attended_tours(20);
+  IF count_created<>1 THEN RAISE EXCEPTION 'Second tour enrollment missing'; END IF;
+  SELECT e.id INTO enrollment_id FROM public.luxor_custom_workflow_enrollments e WHERE e.workflow_id=test_tour.workflow_id AND e.inquiry_id=test_tour.second_inquiry;
+  SELECT r.id INTO run_id FROM public.luxor_custom_workflow_step_runs r WHERE r.enrollment_id=test_tour.enrollment_id AND r.step_id='text';
+  SELECT q.job_id,q.disposition INTO queued_id,disposition FROM public.luxor_custom_workflow_enqueue_text_step(run_id,'+12105550998','Luxor Events: Thanks for visiting. Reply STOP to opt out.',1) q;
+  IF disposition<>'queued' THEN RAISE EXCEPTION 'Second tour text not queued: %',disposition; END IF;
+  UPDATE public.luxor_text_jobs SET status='sending' WHERE id=queued_id;
+  UPDATE public.luxor_custom_workflow_step_runs SET status='sending' WHERE id=run_id;
+  UPDATE public.luxor_sms_consents SET status='opted_out' WHERE phone_number='+12105550998';
+  SELECT a.allowed,a.reason INTO allowed,reason FROM public.luxor_custom_workflow_authorize_message_job_at(queued_id,'text','2026-06-01 16:00:00+00') a;
+  IF allowed OR reason<>'recipient_or_workflow_no_longer_eligible' OR (SELECT status FROM public.luxor_text_jobs WHERE id=queued_id)<>'cancelled' THEN RAISE EXCEPTION 'Opt-out did not block queued tour text'; END IF;
+  INSERT INTO public.luxor_inquiries(id,flow,status,phone,marketing_opt_in,tour_attendance_status,current_tour_visit_id,current_tour_visit_version)
+    VALUES(third_inquiry,'contact_form','tour_confirmed','+12105550997',true,'pending',third_visit,1);
+  INSERT INTO public.luxor_tour_visits VALUES(third_visit,third_inquiry,2,'attended');
+  INSERT INTO public.luxor_sms_consents(phone_number,status,consent_scopes) VALUES ('+12105550997','opted_in',ARRAY['marketing']),('+12105550996','opted_in',ARRAY['marketing']);
+  UPDATE public.luxor_inquiries SET tour_attendance_status='attended',current_tour_visit_version=2 WHERE id=third_inquiry;
+  SELECT c.enrollments_created INTO count_created FROM public.luxor_custom_workflow_consume_attended_tours(20) c;
+  IF count_created<>1 THEN RAISE EXCEPTION 'Third tour enrollment missing'; END IF;
+  SELECT e.id INTO enrollment_id FROM public.luxor_custom_workflow_enrollments e WHERE e.workflow_id=test_tour.workflow_id AND e.inquiry_id=test_tour.third_inquiry;
+  SELECT r.id INTO run_id FROM public.luxor_custom_workflow_step_runs r WHERE r.enrollment_id=test_tour.enrollment_id AND r.step_id='text';
+  SELECT q.job_id,q.disposition INTO queued_id,disposition FROM public.luxor_custom_workflow_enqueue_text_step(run_id,'+12105550997','Luxor Events: Thanks for visiting. Reply STOP to opt out.',1) q;
+  IF disposition<>'queued' THEN RAISE EXCEPTION 'Third tour text not queued: %',disposition; END IF;
+  UPDATE public.luxor_text_jobs SET status='sending' WHERE id=queued_id;
+  UPDATE public.luxor_custom_workflow_step_runs SET status='sending' WHERE id=run_id;
+  UPDATE public.luxor_inquiries SET phone='+12105550996' WHERE id=third_inquiry;
+  SELECT a.allowed,a.reason INTO allowed,reason FROM public.luxor_custom_workflow_authorize_message_job_at(queued_id,'text','2026-06-01 16:00:00+00') a;
+  IF allowed OR reason<>'recipient_or_workflow_no_longer_eligible' OR (SELECT status FROM public.luxor_text_jobs WHERE id=queued_id)<>'cancelled' THEN RAISE EXCEPTION 'Changed phone did not block queued tour text'; END IF;
+END $$;
+SELECT 'attended tour real enrollment, text queue and correction, opt-out and changed-phone guards: PASS';
+
+ALTER TABLE public.luxor_email_jobs ALTER COLUMN id SET DEFAULT gen_random_uuid();
+DO $$
+<<test_tour_email>>
+DECLARE
+  inquiry_id uuid := gen_random_uuid(); visit_id uuid := gen_random_uuid(); workflow_id uuid := gen_random_uuid(); version_id uuid := gen_random_uuid();
+  second_inquiry uuid := gen_random_uuid(); second_visit uuid := gen_random_uuid();
+  enrollment_id uuid; run_id uuid; job_id uuid; disposition text; allowed boolean; reason text; count_created integer;
+  definition jsonb := '{"schemaVersion":1,"trigger":"tour_attended","steps":[{"id":"email","type":"email","mode":"marketing","name":"Tour follow-up","subject":"Thanks for visiting","previewText":"Following up","body":"Thanks for visiting.","ctaText":"","ctaUrl":""},{"id":"end","type":"end","name":"End"}]}'::jsonb;
+BEGIN
+  IF NOT public.luxor_custom_workflow_definition_is_runnable(definition) THEN RAISE EXCEPTION 'Tour email definition rejected'; END IF;
+  IF has_function_privilege('anon','public.luxor_custom_workflow_attended_tour_capability()','EXECUTE') OR has_function_privilege('authenticated','public.luxor_custom_workflow_attended_tour_capability()','EXECUTE') OR NOT has_function_privilege('service_role','public.luxor_custom_workflow_attended_tour_capability()','EXECUTE') OR public.luxor_custom_workflow_attended_tour_capability() IS NOT TRUE THEN RAISE EXCEPTION 'Unexpected capability access'; END IF;
+  UPDATE public.luxor_custom_workflows SET status='paused' WHERE status='active' AND trigger_type='tour_attended';
+  INSERT INTO public.luxor_inquiries(id,flow,status,email,marketing_opt_in,tour_attendance_status,current_tour_visit_id,current_tour_visit_version)
+    VALUES(inquiry_id,'contact_form','tour_confirmed','tour-email@example.invalid',true,'pending',visit_id,1);
+  INSERT INTO public.luxor_tour_visits VALUES(visit_id,inquiry_id,2,'attended');
+  INSERT INTO public.luxor_custom_workflows(id,name,trigger_type,status,draft_definition,draft_revision,created_by,updated_by)
+    VALUES(workflow_id,'Synthetic completed tour email','tour_attended','draft',definition,1,'test@example.invalid','test@example.invalid');
+  INSERT INTO public.luxor_custom_workflow_versions(id,workflow_id,version_number,definition,created_by)
+    VALUES(version_id,workflow_id,1,definition,'test@example.invalid');
+  UPDATE public.luxor_custom_workflows SET status='active',current_version_id=version_id WHERE id=workflow_id;
+  UPDATE public.luxor_inquiries SET tour_attendance_status='attended',current_tour_visit_version=2 WHERE id=inquiry_id;
+  SELECT c.enrollments_created INTO count_created FROM public.luxor_custom_workflow_consume_attended_tours(20) c;
+  IF count_created<>1 THEN RAISE EXCEPTION 'Tour email enrollment missing'; END IF;
+  SELECT e.id INTO enrollment_id FROM public.luxor_custom_workflow_enrollments e WHERE e.workflow_id=test_tour_email.workflow_id AND e.inquiry_id=test_tour_email.inquiry_id;
+  SELECT r.id INTO run_id FROM public.luxor_custom_workflow_step_runs r WHERE r.enrollment_id=test_tour_email.enrollment_id AND r.step_id='email';
+  SELECT q.job_id,q.disposition INTO job_id,disposition FROM public.luxor_custom_workflow_enqueue_email_step(run_id,'tour-email@example.invalid','Thanks for visiting','Synthetic body','Following up',repeat('a',64)) q;
+  IF disposition<>'queued' OR job_id IS NULL THEN RAISE EXCEPTION 'Tour email not queued: %',disposition; END IF;
+  IF NOT EXISTS (SELECT 1 FROM public.luxor_custom_workflow_unsubscribe_tokens t WHERE t.step_run_id=run_id) THEN RAISE EXCEPTION 'Marketing unsubscribe token missing'; END IF;
+  UPDATE public.luxor_email_jobs SET status='sending' WHERE id=job_id;
+  UPDATE public.luxor_custom_workflow_step_runs SET status='sending' WHERE id=run_id;
+  SELECT a.allowed,a.reason INTO allowed,reason FROM public.luxor_custom_workflow_authorize_message_job_at(job_id,'email',now()) a;
+  IF allowed IS NOT TRUE THEN RAISE EXCEPTION 'Valid tour email was blocked: %',reason; END IF;
+  UPDATE public.luxor_inquiries SET email='updated@example.invalid' WHERE id=inquiry_id;
+  SELECT a.allowed,a.reason INTO allowed,reason FROM public.luxor_custom_workflow_authorize_message_job_at(job_id,'email',now()) a;
+  IF allowed OR reason<>'recipient_or_workflow_no_longer_eligible' OR (SELECT status FROM public.luxor_email_jobs WHERE id=job_id)<>'cancelled' THEN RAISE EXCEPTION 'Changed email did not block queued message: %, %',allowed,reason; END IF;
+  INSERT INTO public.luxor_inquiries(id,flow,status,email,marketing_opt_in,tour_attendance_status,current_tour_visit_id,current_tour_visit_version)
+    VALUES(second_inquiry,'contact_form','tour_confirmed','tour-suppressed@example.invalid',true,'pending',second_visit,1);
+  INSERT INTO public.luxor_tour_visits VALUES(second_visit,second_inquiry,2,'attended');
+  UPDATE public.luxor_inquiries SET tour_attendance_status='attended',current_tour_visit_version=2 WHERE id=second_inquiry;
+  SELECT c.enrollments_created INTO count_created FROM public.luxor_custom_workflow_consume_attended_tours(20) c;
+  IF count_created<>1 THEN RAISE EXCEPTION 'Second tour email enrollment missing'; END IF;
+  SELECT e.id INTO enrollment_id FROM public.luxor_custom_workflow_enrollments e WHERE e.workflow_id=test_tour_email.workflow_id AND e.inquiry_id=test_tour_email.second_inquiry;
+  SELECT r.id INTO run_id FROM public.luxor_custom_workflow_step_runs r WHERE r.enrollment_id=test_tour_email.enrollment_id AND r.step_id='email';
+  SELECT q.job_id,q.disposition INTO job_id,disposition FROM public.luxor_custom_workflow_enqueue_email_step(run_id,'tour-suppressed@example.invalid','Thanks for visiting','Synthetic body','Following up',repeat('b',64)) q;
+  IF disposition<>'queued' THEN RAISE EXCEPTION 'Second tour email not queued: %',disposition; END IF;
+  UPDATE public.luxor_email_jobs SET status='sending' WHERE id=job_id;
+  UPDATE public.luxor_custom_workflow_step_runs SET status='sending' WHERE id=run_id;
+  INSERT INTO public.luxor_marketing_suppressions(email) VALUES ('tour-suppressed@example.invalid');
+  SELECT a.allowed,a.reason INTO allowed,reason FROM public.luxor_custom_workflow_authorize_message_job_at(job_id,'email',now()) a;
+  IF allowed OR reason<>'recipient_or_workflow_no_longer_eligible' OR (SELECT status FROM public.luxor_email_jobs WHERE id=job_id)<>'cancelled' THEN RAISE EXCEPTION 'Suppression did not block queued tour email: %, %',allowed,reason; END IF;
+END $$;
+SELECT 'attended tour email queue, unsubscribe token, changed recipient and pre-send suppression: PASS';
+
 ROLLBACK;

@@ -178,13 +178,13 @@ body {
 body[data-portal-theme='dark'] {
   --portal-bg: #080706;
   --portal-frame: #050505;
-  --portal-card: rgba(0, 0, 0, 0.36);
-  --portal-soft: rgba(9, 9, 11, 0.7);
+  --portal-card: #1a1816;
+  --portal-soft: #25221e;
   --portal-surface-elevated: rgba(14, 13, 11, 0.90);
   --portal-overlay-bg: rgba(14, 13, 11, 0.90);
   --portal-text: rgba(255, 255, 255, 0.9);
-  --portal-muted: #9696a1;
-  --portal-faint: #50505c;
+  --portal-muted: #b2aead;
+  --portal-faint: #918b85;
   --portal-border: rgba(202, 162, 76, 0.08);
 }
 

@@ -11,6 +11,7 @@ import {
 } from '@/lib/luxorLayoutReviewsServer'
 import { normalizeEmailAddress } from '@/lib/zohoMailServer'
 import { assertLuxorProductionSideEffectsAllowed } from '@/lib/luxorTestLeadServer'
+import { readLayoutReviewEmailSetting } from '@/lib/luxorLayoutReviewEmailCopyServer'
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
@@ -52,10 +53,15 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     }
 
     const reviewUrl = `${reviewOrigin(request)}/layout-review/${encodeURIComponent(revealLuxorLayoutReviewToken(review))}`
+    let copySettingsUnavailable = false
+    let copyOverride = null
+    try { copyOverride = (await readLayoutReviewEmailSetting()).setting.copy_override }
+    catch (error) { copySettingsUnavailable = true; console.error('Layout review email settings unavailable; using original wording:', error) }
     const email = buildLuxorLayoutReviewEmail({
       clientName: inquiry.full_name,
       review,
       reviewUrl,
+      copyOverride,
     })
     const result = await queueLuxorLayoutReviewEmail({
       inquiryId,
@@ -64,6 +70,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       subject: email.subject,
       body: email.body,
       requestedBy: session.email,
+      copySettingsUnavailable,
     })
 
     return NextResponse.json(result, {

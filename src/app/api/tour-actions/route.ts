@@ -25,6 +25,7 @@ import { saveLuxorTourSchedule } from '@/lib/luxorTourScheduleServer'
 import { isLuxorBookingDateWithinLimit } from '@/lib/publicEventDate'
 import { getActiveLuxorPhoneNumber } from '@/lib/luxorPhoneNumbersServer'
 import { cancelLuxorTestTour, ensureActiveLuxorTestRun, LuxorTestTourConflictError, recordLuxorTestTourOutcome, scheduleLuxorTestTour } from '@/lib/luxorTestLeadServer'
+import { readTourNoShowEmailSetting } from '@/lib/luxorTourNoShowEmailCopyServer'
 
 const PRE_PROPOSAL_STATUSES = new Set<LuxorInquiryStatus>(['new', 'contacted', 'tour_requested', 'tour_confirmed'])
 const PRE_PROPOSAL_STAGES = new Set<LuxorPipelineStage | null | undefined>([null, undefined, 'inquiry', 'tour'])
@@ -308,15 +309,22 @@ export async function POST(request: NextRequest) {
     if (action === 'send-email') {
       if (!inquiry.email) return NextResponse.json({ error: 'This lead does not have an email address.' }, { status: 400 })
       const jobType = String(body.jobType || 'tour_confirmation') as LuxorEmailJobKind
+      if (!['tour_confirmation', 'tour_reminder', 'tour_no_show_reschedule'].includes(jobType)) return NextResponse.json({ error: 'Unsupported tour email.' }, { status: 400 })
       const token = inquiry.tour_response_token || createPublicToken()
-      const email = buildTourEmail(jobType, inquiry, token)
+      let copySettingsUnavailable = false
+      let copyOverride = null
+      if (jobType === 'tour_no_show_reschedule') {
+        try { copyOverride = (await readTourNoShowEmailSetting()).setting.copy_override }
+        catch (error) { copySettingsUnavailable = true; console.error('Tour no-show settings unavailable; using original wording:', error) }
+      }
+      const email = buildTourEmail(jobType, inquiry, token, copyOverride)
       const job = await createLuxorEmailJob({
         inquiryId,
         jobType,
         recipientEmail: inquiry.email,
         subject: email.subject,
         body: email.body,
-        metadata: { manual: true, requestedBy: session.email },
+        metadata: { manual: true, requestedBy: session.email, ...(copySettingsUnavailable ? { copy_settings_unavailable: true } : {}) },
       })
       const marker: Record<string, unknown> = { tour_response_token: token }
       if (jobType === 'tour_confirmation') marker.tour_confirmed_at = new Date().toISOString()

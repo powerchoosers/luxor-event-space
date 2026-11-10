@@ -13,7 +13,12 @@ import { listUpcomingLuxorTourSlots } from '@/lib/luxorTourSlotsServer'
 import { getInvoice, listPaidPaymentsByInvoice } from '@/lib/luxorInvoicesServer'
 import { getLuxorInquiry } from '@/lib/luxorInquiriesServer'
 import { getLuxorBooking, listLuxorBookingsByInquiry } from '@/lib/luxorBookingsServer'
-import { getCustomWorkflowFeatureStatus } from '@/lib/luxorCustomWorkflowsServer'
+import { getCustomWorkflowFeatureStatus, listCustomWorkflows } from '@/lib/luxorCustomWorkflowsServer'
+import { matchWorkflowForChat } from '@/lib/luxorWorkflowChatLookup'
+import { workflowProgressForChat } from '@/lib/luxorWorkflowChatProgress'
+import { SYSTEM_WORKFLOWS, systemWorkflowChannelPermission } from '@/lib/luxorSystemWorkflowCatalog'
+import { findMessageWorkflows, type MessageWorkflowMatch } from '@/lib/luxorMessageWorkflowLookupServer'
+import { filterWorkflowMatches } from '@/lib/luxorWorkflowMatchPermissions'
 import { validateCustomWorkflowDefinition, type CustomWorkflowDefinition } from '@/lib/luxorCustomWorkflowDefinition'
 import { getLuxorAiVenueContext } from '@/lib/luxorAiContextServer'
 import { LUXOR_UNSLOP_CHAT_RULES, LUXOR_UNSLOP_COPY_RULES } from '@/lib/luxorUnslop'
@@ -97,6 +102,7 @@ type ChatMessage = {
     savedWorkflowId?: string
     savedWorkflowName?: string
   }
+  workflowLinks?: MessageWorkflowMatch[]
 }
 
 function hasLegacyConfirmation(query: unknown, summary: unknown): boolean {
@@ -404,6 +410,8 @@ Use permitted live CRM context and structured read tools. Never use SQL. Do not 
 - Limit output results when necessary (e.g. "LIMIT 10" or "LIMIT 5") to avoid blowing up context, unless requested.
 - When the owner asks you to create or draft a text campaign, call "create_text_campaign_draft". This prepares the Text Campaigns builder but never sends anything. Include "Luxor Event Space" and end the body with "Reply STOP to opt out." Never invent balances, dates, availability, or payment status.
 - When the owner asks you to create, build, or design a custom automation workflow, call "prepare_custom_workflow_draft". Include the full request: existing HTML template name, element copy and placement changes, chosen operator/Elena sender and approved delivery address, and whether each client needs a freshly generated message from a prompt. Workflow emails support both lightly styled personal notes and editable HTML designs. A per-client AI prompt is generated anew when each client reaches the step; it is separate from writing one fixed template. Return its reviewable workflow card in Elena Chat and keep it unsaved until the owner clicks Save draft. Explain that Save draft only stores an inactive draft; it does not activate the workflow, enroll leads, or send messages. Never say or imply that saving a draft activates it. Activation remains a separate owner action in the workflow library.
+- When asked who is in a workflow or where contacts are in it, use "read_workflow_progress". Ask which workflow when matches are ambiguous. Custom and brochure counts refer to enrollments; system-message counts refer to recorded message jobs or direct attempts, not enrollments or unique people. Only the returned page of contacts is available. When reporting a status breakdown, include all returned statuses, including zero counts. Brochure follow-ups may have multiple scheduled actions, so its displayed item is the earliest unresolved action, not an exclusive current step. Never claim a message was delivered from a queued or provider-accepted state.
+- When asked which workflow a sent text or email belongs to, call "find_message_workflow" with a distinctive verbatim excerpt from the message or email subject. Treat matching recorded jobs and linked direct-text automation events as evidence; if matches are ambiguous, capped, or unresolved, say so and ask for more wording. Do not invent an origin or claim that an unavailable editor is editable. Links supplied by the tool appear as workflow cards for the owner, including during voice chat.
 - Marketing email, newsletter, broadcast, promotion, nurture sequence, or email campaign requests are NOT one-to-one email drafts. Call "open_marketing_email_builder" immediately, even when the owner says only "write a campaign" or "make a marketing email." That tool opens the existing block-based Email Builder and asks its generator to produce an editable template with hero/content/CTA/footer blocks. Do not satisfy these requests with prose alone and do not call "prepare_email_draft" for them. A direct email to one lead whose saved address matches the record remains "prepare_email_draft".
 - To add a contact, direct the user to the Leads portal workflow. Contact creation through Elena is currently unavailable. Do not claim a contact was created or imply consent.
 - When asked to send a text, direct the owner to the existing Messages workspace; do not claim a text was sent.
@@ -442,6 +450,22 @@ const TOOLS_DEFINITION = [
         }
       }
     }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'find_message_workflow',
+      description: 'Find the workflow associated with recorded text or email wording, an email subject, or a linked directly sent phone automation text. Read-only. Use a distinctive verbatim excerpt; never infer a workflow from a generic greeting.',
+      parameters: { type: 'object', properties: { excerpt: { type: 'string', description: 'A distinctive verbatim excerpt, 12–200 characters, without wildcard characters.' }, channel: { type: 'string', enum: ['text', 'email'] } }, required: ['excerpt', 'channel'] },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'read_workflow_progress',
+      description: 'Read counts and one page of recorded contacts and progress for a named custom, brochure, or system-message workflow. System message records are jobs or direct attempts, not enrollments. Read-only. Ask the owner to clarify when more than one workflow matches.',
+      parameters: { type: 'object', properties: { workflowName: { type: 'string', description: 'Workflow name or distinctive part of the name given by the owner.' }, workflowId: { type: 'string', description: 'Optional ID from a previous matching result, only after the owner identifies the intended workflow.' }, page: { type: 'integer', description: 'Page of up to 25 enrollments, starting at 1.' } }, required: ['workflowName'] },
+    },
   },
   {
     type: 'function',
@@ -747,6 +771,8 @@ function toolActivityLabel(name: string) {
     lookup_luxor_lead: 'Checking the matching Luxor inquiry',
     search_luxor_emails: 'Checking Luxor mailbox and client replies',
     prepare_custom_workflow_draft: 'Building a workflow draft',
+    read_workflow_progress: 'Checking workflow progress',
+    find_message_workflow: 'Finding the message workflow',
     open_marketing_email_builder: 'Opening the email builder',
     create_text_campaign_draft: 'Preparing a text campaign draft',
     prepare_email_draft: 'Preparing an email draft',
@@ -1978,6 +2004,8 @@ ${can('planner') ? formatRows(bookings, ['client_name', 'event_type', 'event_dat
       prepare_task_card: ['leads', 'calendar'],
       prepare_email_draft: ['leads', 'emails'],
       prepare_custom_workflow_draft: ['marketing'],
+      read_workflow_progress: ['marketing', 'leads'],
+      find_message_workflow: ['marketing', 'messages', 'emails'],
       open_marketing_email_builder: ['marketing'],
       create_text_campaign_draft: ['marketing', 'messages'],
     }
@@ -2020,6 +2048,7 @@ ${can('planner') ? formatRows(bookings, ['client_name', 'event_type', 'event_dat
     let newContactCardPayload: ChatMessage['newContactCard'] | null = null
     let tourInviteCardPayload: ChatMessage['tourInviteCard'] | null = null
     let workflowDraftPayload: ChatMessage['workflowDraft'] | null = null
+    let workflowLinksPayload: MessageWorkflowMatch[] | null = null
     let navigationPayload: { href: string } | null = null
 
     while (loopCount < maxLoops) {
@@ -2160,6 +2189,49 @@ ${can('planner') ? formatRows(bookings, ['client_name', 'event_type', 'event_dat
                 name: 'search_luxor_emails',
                 content: JSON.stringify({ error: searchError instanceof Error ? searchError.message : 'Could not search Luxor emails.' }),
               })
+            }
+          }
+          else if (toolCall.function?.name === 'find_message_workflow') {
+            try {
+              const args = typeof toolCall.function.arguments === 'string' ? JSON.parse(toolCall.function.arguments) : toolCall.function.arguments
+              if (typeof args?.excerpt !== 'string' || !['text', 'email'].includes(args?.channel)) throw new Error('Provide the message excerpt and whether it was a text or email.')
+              const result = await findMessageWorkflows(args.excerpt, args.channel)
+              const visibleMatches = filterWorkflowMatches(result.matches, can, member.role === 'owner')
+              const restricted = visibleMatches.length !== result.matches.length
+              workflowLinksPayload = [...new Map([...(workflowLinksPayload || []), ...visibleMatches.filter((item) => item.href !== null)].map((item) => [item.href, item])).values()]
+              openrouterMessages.push({ role: 'tool', tool_call_id: toolCall.id, name: 'find_message_workflow', content: JSON.stringify(restricted ? { matches: visibleMatches, channel: result.channel, unresolved: true, capped: result.capped, note: 'Some results are unavailable with your current access.' } : result) })
+            } catch (error) {
+              openrouterMessages.push({ role: 'tool', tool_call_id: toolCall.id, name: 'find_message_workflow', content: JSON.stringify({ error: error instanceof Error && /distinctive excerpt|Provide the message/.test(error.message) ? error.message : 'Message origin could not be verified.' }) })
+            }
+          }
+          // Read only the same scoped progress data used by the portal.
+          else if (toolCall.function?.name === 'read_workflow_progress') {
+            try {
+              const args = typeof toolCall.function.arguments === 'string' ? JSON.parse(toolCall.function.arguments) : toolCall.function.arguments
+              const workflowName = typeof args?.workflowName === 'string' ? args.workflowName.trim() : ''
+              const page = args?.page === undefined ? 1 : args.page
+              if (!workflowName || workflowName.length > 120 || !Number.isInteger(page) || page < 1 || page > 1000) throw new Error('Provide a workflow name and a valid page number.')
+              const workflows = await listCustomWorkflows(session.email)
+              const systemChoices = SYSTEM_WORKFLOWS.filter(([id, name]) => can(systemWorkflowChannelPermission(id)) && filterWorkflowMatches([{ name, href: `/portal/marketing/custom-workflows/${id}`, note: '' }], can, member.role === 'owner').length > 0).map(([id, name]) => ({ id, name }))
+              const candidates = matchWorkflowForChat(workflowName, workflows, systemChoices)
+              const matches = typeof args?.workflowId === 'string' ? candidates.filter((candidate) => candidate.id === args.workflowId) : candidates
+              if (matches.length !== 1) {
+                openrouterMessages.push({ role: 'tool', tool_call_id: toolCall.id, name: 'read_workflow_progress', content: JSON.stringify({ matches, message: matches.length ? 'Ask the owner which workflow they mean.' : 'No matching workflow was found. Ask for its name.' }) })
+              } else {
+                const match = matches[0]
+                const path = match.kind === 'brochure' ? `/api/marketing/automation-contacts?id=brochure_lead&page=${page}` : match.kind === 'system' ? `/api/marketing/system-messages/contacts?workflow=${encodeURIComponent(match.id)}&page=${page}` : `/api/marketing/custom-workflows/${encodeURIComponent(match.id)}/contacts?page=${page}`
+                const response = await fetch(new URL(path, request.url), { headers: { cookie: request.headers.get('cookie') || '' }, cache: 'no-store' })
+                const result = await response.json().catch(() => ({})) as { contacts?: Array<Record<string, unknown>>; counts?: Record<string, number>; pageSize?: number; direct?: boolean; error?: string }
+                if (!response.ok || !Array.isArray(result.contacts) || !result.counts || !result.pageSize) throw new Error(result.error || 'Workflow progress is unavailable.')
+                const progress = workflowProgressForChat(match.kind, { contacts: result.contacts, counts: result.counts, pageSize: result.pageSize, direct: result.direct })
+                if (match.kind === 'system') {
+                  const links: MessageWorkflowMatch[] = [...(workflowLinksPayload || []), { name: match.name, href: `/portal/marketing/custom-workflows/${match.id}`, note: 'Open this workflow.' }]
+                  workflowLinksPayload = [...new Map(links.map((item) => [item.href, item] as const)).values()]
+                }
+                openrouterMessages.push({ role: 'tool', tool_call_id: toolCall.id, name: 'read_workflow_progress', content: JSON.stringify({ workflow: match, page, ...progress }) })
+              }
+            } catch (error) {
+              openrouterMessages.push({ role: 'tool', tool_call_id: toolCall.id, name: 'read_workflow_progress', content: JSON.stringify({ error: error instanceof Error ? error.message : 'Workflow progress is unavailable.' }) })
             }
           }
           // C. Prepare an owner-reviewed custom workflow draft in Elena Chat.
@@ -2659,6 +2731,7 @@ ${can('planner') ? formatRows(bookings, ['client_name', 'event_type', 'event_dat
         newContactCard: newContactCardPayload || undefined,
         tourInviteCard: tourInviteCardPayload || undefined,
         workflowDraft: workflowDraftPayload || undefined,
+        workflowLinks: workflowLinksPayload || undefined,
       }
     ]
 
@@ -2683,6 +2756,7 @@ ${can('planner') ? formatRows(bookings, ['client_name', 'event_type', 'event_dat
       newContactCard: newContactCardPayload || undefined,
       tourInviteCard: tourInviteCardPayload || undefined,
       workflowDraft: workflowDraftPayload || undefined,
+      workflowLinks: workflowLinksPayload || undefined,
       toolActivity,
       navigation: navigationPayload || undefined,
     })

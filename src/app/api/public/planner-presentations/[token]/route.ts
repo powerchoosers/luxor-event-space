@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
 import { createPresentationCode, createPresentationSession, encryptPresentationSecret, findPresentationByToken, hashPresentationCode, listPresentationFiles, presentationIsActive, sanitizePlannerPresentationSnapshot, verifyPresentationSession } from '@/lib/luxorPlannerSharingServer'
 import { buildPlannerPresentationCodeEmail } from '@/lib/luxorPlannerSharingServer'
+import { readPlannerVerificationSetting } from '@/lib/luxorPlannerVerificationCopyServer'
 import { createUniqueLuxorEmailJob } from '@/lib/luxorEmailJobsServer'
 import { getPublicRequestIp, hashPublicRequestIp } from '@/lib/luxorPublicEventsServer'
 import { supabaseRestStrict } from '@/lib/supabaseRestServer'
@@ -54,7 +55,11 @@ export async function POST(request: NextRequest, { params }: Context) {
         const tooMany = rpc?.reason === 'rate_limited' || rpc?.reason === 'too_soon'
         return NextResponse.json({ ok: false, error: tooMany ? 'Please wait before requesting another code.' : 'A verification code could not be issued.' }, { status: tooMany ? 429 : 410, headers: noStore })
       }
-      const email = buildPlannerPresentationCodeEmail('__PLANNER_CODE_AT_SEND__')
+      let verificationCopy = null
+      try { verificationCopy = (await readPlannerVerificationSetting()).setting.copy_override } catch (error) {
+        console.error('Planner verification copy unavailable; using original wording:', error)
+      }
+      const email = buildPlannerPresentationCodeEmail('__PLANNER_CODE_AT_SEND__', verificationCopy)
       await createUniqueLuxorEmailJob({ inquiryId: null, bookingId: presentation.booking_id, jobType: 'layout_review', recipientEmail: presentation.recipient_email, subject: email.subject, body: 'Your private Luxor presentation verification code will be inserted by the secure email worker.', metadata: { kind: 'planner_presentation_verification', planner_presentation_id: presentation.id, generation_id: generationId, code_hash: codeHash }, automationKey: `planner-presentation-code:${presentation.id}:${generationId}` })
       return NextResponse.json({ ok: true, generationId }, { headers: noStore })
     }

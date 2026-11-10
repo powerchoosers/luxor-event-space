@@ -278,13 +278,19 @@ export async function createLuxorInquiry(input: LuxorInquiryInput, userAgent?: s
       await updateLuxorInquiry(created.id, { tour_response_token: token })
 
       const { buildTourRequestReceivedEmailHtml, listQueuedLuxorEmailJobsByIds, processLuxorEmailJobs } = await import('./luxorEmailJobsServer')
-      const requestEmailHtml = buildTourRequestReceivedEmailHtml(created, token)
+      let copySettingsUnavailable = false
+      let override = null
+      try { override = (await (await import('./luxorReceiptEmailCopyServer')).readReceiptEmailCopy('tour_request_received')).setting.copy_override }
+      catch (error) { copySettingsUnavailable = true; console.error('Tour request email settings unavailable; using the original receipt:', error) }
+      const requestEmailHtml = buildTourRequestReceivedEmailHtml(created, token, override)
+      const customSubject = override ? (await import('./luxorInquiryEmailCopy')).renderInquiryEmailCopy(override, { first_name: created.full_name.split(' ')[0] || created.full_name, event_type: created.event_type || 'Private event', guest_count: created.guest_count ? String(created.guest_count) : 'Open' }).subject : null
       const job = await createLuxorEmailJob({
         inquiryId: created.id,
         jobType: 'tour_confirmation',
         recipientEmail: created.email,
-        subject: 'Your Luxor tour request is received',
+        subject: customSubject || 'Your Luxor tour request is received',
         body: requestEmailHtml,
+        metadata: { source: 'tour_request_received', ...(copySettingsUnavailable ? { copy_settings_unavailable: true } : {}) },
       })
 
       // Process tour request received email immediately for instant feedback
@@ -301,18 +307,35 @@ export async function createLuxorInquiry(input: LuxorInquiryInput, userAgent?: s
     try {
       const { buildNewsletterConfirmationEmailHtml, buildStandardInquiryEmailHtml, listQueuedLuxorEmailJobsByIds, processLuxorEmailJobs } = await import('./luxorEmailJobsServer')
       const newsletterSignup = created.flow === 'newsletter_signup'
-      const emailHtml = newsletterSignup ? buildNewsletterConfirmationEmailHtml(created) : buildStandardInquiryEmailHtml(created)
+      let copySettingsUnavailable = false
+      let override = null
+      if (newsletterSignup) {
+        try { override = (await (await import('./luxorReceiptEmailCopyServer')).readReceiptEmailCopy('newsletter_confirmation')).setting.copy_override }
+        catch (error) { copySettingsUnavailable = true; console.error('Newsletter email settings unavailable; using the original receipt:', error) }
+      } else {
+        try {
+          override = (await (await import('./luxorInquiryEmailCopyServer')).readInquiryEmailCopySetting()).setting.copy_override
+        } catch (error) {
+          // A settings outage must not lose the customer's inquiry receipt.
+          // Record the fallback on the queued job so it is distinguishable
+          // from a deliberate restore to default.
+          copySettingsUnavailable = true
+          console.error('Inquiry email settings unavailable; using the original receipt:', error)
+        }
+      }
+      const emailHtml = newsletterSignup ? buildNewsletterConfirmationEmailHtml(created, override) : buildStandardInquiryEmailHtml(created, override)
+      const customSubject = override ? (await import('./luxorInquiryEmailCopy')).renderInquiryEmailCopy(override, { first_name: newsletterSignup && created.full_name === 'Newsletter subscriber' ? 'there' : created.full_name.split(' ')[0] || created.full_name, event_type: created.event_type || 'Private event', guest_count: created.guest_count ? String(created.guest_count) : 'Open' }).subject : null
 
       const job = await createLuxorEmailJob({
         inquiryId: created.id,
         jobType: 'marketing_campaign',
         recipientEmail: created.email,
-        subject: newsletterSignup ? 'You’re on the Luxor list' : 'We have received your Luxor inquiry',
+        subject: customSubject || (newsletterSignup ? 'You’re on the Luxor list' : 'We have received your Luxor inquiry'),
         body: emailHtml,
         // This is a receipt for a newly submitted inquiry, not a promotional
         // campaign. A marketing opt-out must not hide that requested receipt;
         // hard-bounce/complaint blocks still remain enforced by the worker.
-        metadata: { ignore_suppressions: true, source: newsletterSignup ? 'newsletter_confirmation' : 'inquiry_acknowledgment' },
+        metadata: { ignore_suppressions: true, source: newsletterSignup ? 'newsletter_confirmation' : 'inquiry_acknowledgment', ...(copySettingsUnavailable ? { copy_settings_unavailable: true } : {}) },
       })
 
       // Send standard confirmation immediately

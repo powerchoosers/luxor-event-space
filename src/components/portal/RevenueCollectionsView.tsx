@@ -543,7 +543,7 @@ function PaymentHistoryView({ model }: { model: NonNullable<ReturnType<typeof us
   </div>
 }
 
-export function RevenueCollectionsView({ view, actorEmail, embedded = false }: { view: RevenueView; actorEmail: string | null; embedded?: boolean }) {
+export function RevenueCollectionsView({ view, actorEmail, embedded = false, active = true }: { view: RevenueView; actorEmail: string | null; embedded?: boolean; active?: boolean }) {
   const monthlyAnchorHandled = useRef(false)
   const [profit, setProfit] = useState<ProfitSnapshot | null>(null)
   const [profitError, setProfitError] = useState(false)
@@ -564,6 +564,15 @@ export function RevenueCollectionsView({ view, actorEmail, embedded = false }: {
   const [endDate, setEndDate] = useState('')
   const options = { preset, startDate, endDate }
   const { model, loading, error, refresh, scheduleRows } = useRevenueCollectionsModel(options)
+  const wasActive = useRef(active)
+  useEffect(() => {
+    const shouldRefresh = active && !wasActive.current && model && !loading
+    wasActive.current = active
+    if (shouldRefresh) {
+      const timer = window.setTimeout(() => { void refresh(); setProfitRevision((value) => value + 1) }, 0)
+      return () => window.clearTimeout(timer)
+    }
+  }, [active, model, loading, refresh])
   const periodFilter = <RevenuePeriodFilter preset={preset} setPreset={setPreset} startDate={startDate} setStartDate={setStartDate} endDate={endDate} setEndDate={setEndDate} />
   useEffect(() => {
     if (embedded && view === 'revenue' && model && !monthlyAnchorHandled.current && window.location.hash === '#monthly-collections') {

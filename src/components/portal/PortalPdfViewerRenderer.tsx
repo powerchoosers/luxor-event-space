@@ -79,7 +79,7 @@ function PdfDocumentViewer({ url, title }: PortalPdfViewerProps) {
   return (
     <section className="flex min-h-0 flex-1 flex-col overflow-hidden" aria-label={`${titleLabel} document preview`}>
       <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 py-2 sm:px-4">
-        <p className="min-w-[105px] text-[10px] font-black uppercase tracking-[0.14em] text-[color:var(--portal-muted)]" aria-live="polite">
+        <p className="min-w-[72px] text-[10px] font-black uppercase tracking-[0.14em] text-[color:var(--portal-muted)] sm:min-w-[105px]" aria-live="polite">
           {pageCount ? `Page ${currentPage} of ${pageCount}` : 'Loading pages'}
         </p>
         <div className="flex items-center gap-1" aria-label="PDF view controls">
@@ -87,7 +87,7 @@ function PdfDocumentViewer({ url, title }: PortalPdfViewerProps) {
             type="button"
             onClick={() => scrollToPage(Math.max(1, currentPage - 1))}
             disabled={currentPage <= 1 || !pageCount}
-            className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-[color:var(--portal-text)] transition hover:bg-[color:var(--portal-soft)] disabled:cursor-not-allowed disabled:opacity-35"
+            className="inline-flex h-11 w-11 items-center justify-center rounded-lg text-[color:var(--portal-text)] transition hover:bg-[color:var(--portal-soft)] disabled:cursor-not-allowed disabled:opacity-35"
             aria-label="Previous PDF page"
           >
             <ChevronLeft size={15} />
@@ -96,7 +96,7 @@ function PdfDocumentViewer({ url, title }: PortalPdfViewerProps) {
             type="button"
             onClick={() => scrollToPage(Math.min(pageCount, currentPage + 1))}
             disabled={currentPage >= pageCount || !pageCount}
-            className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-[color:var(--portal-text)] transition hover:bg-[color:var(--portal-soft)] disabled:cursor-not-allowed disabled:opacity-35"
+            className="inline-flex h-11 w-11 items-center justify-center rounded-lg text-[color:var(--portal-text)] transition hover:bg-[color:var(--portal-soft)] disabled:cursor-not-allowed disabled:opacity-35"
             aria-label="Next PDF page"
           >
             <ChevronRight size={15} />
@@ -106,7 +106,7 @@ function PdfDocumentViewer({ url, title }: PortalPdfViewerProps) {
             type="button"
             onClick={() => setZoom(ZOOM_STEPS[Math.max(0, zoomIndex - 1)])}
             disabled={zoomIndex === 0}
-            className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-[color:var(--portal-text)] transition hover:bg-[color:var(--portal-soft)] disabled:cursor-not-allowed disabled:opacity-35"
+            className="inline-flex h-11 w-11 items-center justify-center rounded-lg text-[color:var(--portal-text)] transition hover:bg-[color:var(--portal-soft)] disabled:cursor-not-allowed disabled:opacity-35"
             aria-label="Zoom out PDF"
           >
             <ZoomOut size={14} />
@@ -116,7 +116,7 @@ function PdfDocumentViewer({ url, title }: PortalPdfViewerProps) {
             type="button"
             onClick={() => setZoom(ZOOM_STEPS[Math.min(ZOOM_STEPS.length - 1, zoomIndex + 1)])}
             disabled={zoomIndex === ZOOM_STEPS.length - 1}
-            className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-[color:var(--portal-text)] transition hover:bg-[color:var(--portal-soft)] disabled:cursor-not-allowed disabled:opacity-35"
+            className="inline-flex h-11 w-11 items-center justify-center rounded-lg text-[color:var(--portal-text)] transition hover:bg-[color:var(--portal-soft)] disabled:cursor-not-allowed disabled:opacity-35"
             aria-label="Zoom in PDF"
           >
             <ZoomIn size={14} />

@@ -1,5 +1,5 @@
-import FinancialBills from '@/components/portal/FinancialBills'
+import { redirect } from 'next/navigation'
 
 export default function BillsPage() {
-  return <FinancialBills />
+  redirect('/portal/finances?view=bill-review')
 }

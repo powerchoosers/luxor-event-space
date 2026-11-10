@@ -8,6 +8,8 @@ import { getInvoice } from './luxorInvoicesServer'
 import { supabaseRest } from './supabaseRestServer'
 import { buildLuxorPaymentReceiptPdf } from './luxorPaymentReceiptPdf'
 import { luxorMailAddress } from './luxorMailConfig'
+import { readPaymentReceiptCopySetting } from './luxorPaymentReceiptCopyServer'
+import { paidInvoiceCopyHtml, renderPaidInvoiceEmailCopy } from './luxorPaidInvoiceEmailCopy'
 
 const escapeHtml = (value: unknown) => String(value ?? '').replace(/[&<>"']/g, (character) => ({
   '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
@@ -70,21 +72,24 @@ export async function getLuxorPaymentReceiptEmailContext(paymentId: string): Pro
 
   const eventName = invoice?.event_type || booking?.event_type || 'your event'
   const receiptNumber = payment.id.slice(0, 8).toUpperCase()
-  const subject = `Payment Receipt – ${eventName === 'your event' ? `Receipt ${receiptNumber}` : eventName}`
   const firstName = (inquiry?.full_name || booking?.client_name || 'there').trim().split(/\s+/)[0] || 'there'
+  const { setting } = await readPaymentReceiptCopySetting()
+  const copy = setting.copy_override ? renderPaidInvoiceEmailCopy(setting.copy_override, firstName) : null
+  const htmlCopy = copy ? paidInvoiceCopyHtml(copy) : null
+  const subject = copy?.subject || `Payment Receipt – ${eventName === 'your event' ? `Receipt ${receiptNumber}` : eventName}`
   const receivedAt = payment.received_date
     ? new Date(`${payment.received_date}T12:00:00.000Z`).toLocaleDateString('en-US', { dateStyle: 'long', timeZone: 'UTC' })
     : payment.paid_at || payment.created_at
   const amount = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(Number(payment.amount || 0))
   const receivedDate = payment.received_date || new Date(receivedAt).toLocaleDateString('en-US', { dateStyle: 'long', timeZone: 'America/Chicago' })
   const message = [
-    `Hi ${firstName},`,
+    copy?.greeting || `Hi ${firstName},`,
     '',
     `Thank you for your payment! We’ve successfully received ${amount} for ${eventName}.`,
     '',
     'Your payment receipt is attached to this email for your records.',
     '',
-    'Thank you for choosing Luxor at Las Palmas Events. We’re looking forward to helping make your event special.',
+    copy?.closing || 'Thank you for choosing Luxor at Las Palmas Events. We’re looking forward to helping make your event special.',
     '',
     'Best regards,',
     'Luxor at Las Palmas Events',
@@ -92,6 +97,11 @@ export async function getLuxorPaymentReceiptEmailContext(paymentId: string): Pro
     `Receipt ${receiptNumber} · Received ${receivedDate} · ${payment.payment_method || 'Payment method not recorded'}`,
   ].join('\n')
   const html = `<div style="font-family:Arial,sans-serif;max-width:620px;margin:auto;background:#fffdfa;color:#211b17;border:1px solid #ded6ca"><div style="padding:20px 24px;background:#101010;color:#d1ad61;font-family:Georgia,serif;letter-spacing:.12em">LUXOR AT LAS PALMAS EVENTS</div><div style="padding:28px 24px"><h1 style="margin:0 0 20px;color:#1b1713;font-family:Georgia,serif;font-size:24px">Payment received</h1><p>Hi ${escapeHtml(firstName)},</p><p>Thank you for your payment! We’ve successfully received <strong>${escapeHtml(amount)}</strong> for ${escapeHtml(eventName)}.</p><p>Your payment receipt is attached to this email for your records.</p><p>Thank you for choosing Luxor at Las Palmas Events. We’re looking forward to helping make your event special.</p><p style="margin-top:24px">Best regards,<br />Luxor at Las Palmas Events</p><p style="margin-top:24px;padding-top:14px;border-top:1px solid #e7dfd4;color:#756a5d;font-size:12px">Receipt ${receiptNumber} · Received ${escapeHtml(receivedDate)} · ${escapeHtml(payment.payment_method || 'Payment method not recorded')}</p></div></div>`
+  // Apply copy before fingerprinting so a change after review requires a new preview.
+  const renderedHtml = htmlCopy
+    ? html.replace(`<p>Hi ${escapeHtml(firstName)},</p>`, `<p>${htmlCopy.greeting}</p>`)
+      .replace('<p>Thank you for choosing Luxor at Las Palmas Events. We’re looking forward to helping make your event special.</p>', `<p>${htmlCopy.closing}</p>`)
+    : html
   const fingerprintSource = {
     payment: {
       id: payment.id, status: payment.status, amount: payment.amount, paid_at: payment.paid_at, received_date: payment.received_date,
@@ -106,9 +116,9 @@ export async function getLuxorPaymentReceiptEmailContext(paymentId: string): Pro
     booking: booking && { id: booking.id, event_type: booking.event_type, event_date: booking.event_date, client_name: booking.client_name },
     inquiry: inquiry && { id: inquiry.id, full_name: inquiry.full_name, email: inquiry.email, event_type: inquiry.event_type },
     invoice: invoice && { id: invoice.id, invoice_kind: invoice.invoice_kind, description: invoice.description, event_type: invoice.event_type },
-    recipient, subject, html, filename,
+    recipient, subject, html: renderedHtml, filename,
   }
   const fingerprint = crypto.createHash('sha256').update(JSON.stringify(fingerprintSource)).digest('hex')
 
-  return { payment, booking, inquiry, invoice, recipient, eventName, receiptNumber, subject, message, html, filename, fingerprint, pdf, pdfSha256 }
+  return { payment, booking, inquiry, invoice, recipient, eventName, receiptNumber, subject, message, html: renderedHtml, filename, fingerprint, pdf, pdfSha256 }
 }

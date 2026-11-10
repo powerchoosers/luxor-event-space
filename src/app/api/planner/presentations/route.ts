@@ -7,6 +7,7 @@ import { getPlannerBooking } from '@/lib/luxorPlannerServer'
 import { supabaseRestStrict } from '@/lib/supabaseRestServer'
 import { buildPlannerPresentationInvitation, createPresentationToken, decryptPresentationSecret, encryptPresentationSecret, hashPresentationToken, sanitizePlannerPresentationSnapshot } from '@/lib/luxorPlannerSharingServer'
 import { createUniqueLuxorEmailJob } from '@/lib/luxorEmailJobsServer'
+import { readPlannerInvitationSetting } from '@/lib/luxorPlannerInvitationCopyServer'
 
 type Row = Record<string, any>
 const privateHeaders = { 'Cache-Control': 'private, no-store' }
@@ -123,9 +124,13 @@ export async function POST(request: NextRequest) {
     const tokenToSend = reservation.created === true ? token : decryptPresentationSecret(String(current.token_ciphertext))
     const actualExpiry = String(current.expires_at || expiresAt)
     const base = process.env.NEXT_PUBLIC_SITE_URL || 'https://www.luxoratlaspalmas.com'
-    const invitation = buildPlannerPresentationInvitation({ name: String(inquiry.full_name || booking.client_name), url: `${base.replace(/\/$/, '')}/planner-review/${tokenToSend}`, expiresAt:actualExpiry })
+    let copySettingsUnavailable = false
+    let copyOverride = null
+    try { copyOverride = (await readPlannerInvitationSetting()).setting.copy_override }
+    catch (error) { copySettingsUnavailable = true; console.error('Planner invitation copy settings unavailable; using original wording:', error) }
+    const invitation = buildPlannerPresentationInvitation({ name: String(inquiry.full_name || booking.client_name), url: `${base.replace(/\/$/, '')}/planner-review/${tokenToSend}`, expiresAt:actualExpiry, copyOverride })
     invitationQueueAttempted = true
-    const emailJob = await createUniqueLuxorEmailJob({ inquiryId: booking.inquiry_id, bookingId, jobType: 'layout_review', recipientEmail: recipient, subject: invitation.subject, body: invitation.body, metadata: { kind: 'planner_presentation_invitation', planner_presentation_id: presentationId }, automationKey: `planner-presentation-invitation:${presentationId}` })
+    const emailJob = await createUniqueLuxorEmailJob({ inquiryId: booking.inquiry_id, bookingId, jobType: 'layout_review', recipientEmail: recipient, subject: invitation.subject, body: invitation.body, metadata: { kind: 'planner_presentation_invitation', planner_presentation_id: presentationId, ...(copySettingsUnavailable ? { copy_settings_unavailable: true } : {}) }, automationKey: `planner-presentation-invitation:${presentationId}` })
     await supabaseRestStrict<Row[]>(`luxor_planner_presentations?id=eq.${encodeURIComponent(presentationId)}&lifecycle_status=eq.ready`, { method:'PATCH', body:JSON.stringify({invitation_email_job_id:emailJob.id,lifecycle_status:'queued'}) })
     return NextResponse.json({ id:presentationId, expiresAt:actualExpiry, deliveryStatus:emailJob.status }, { status:reservation.reserved===true?201:200, headers:privateHeaders })
   } catch (error) {

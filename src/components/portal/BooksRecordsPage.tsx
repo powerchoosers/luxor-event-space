@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { ArrowClockwise, CaretDown, CaretUp, List } from '@phosphor-icons/react'
 import { PortalButton, PortalPageHeader } from '@/components/portal/PortalUI'
@@ -72,12 +72,22 @@ function CollapsibleSection({ title, description, children, defaultOpen = false 
   )
 }
 
-export function BooksRecordsPage({ embedded = false }: { embedded?: boolean }) {
+export function BooksRecordsPage({ embedded = false, active = true }: { embedded?: boolean; active?: boolean }) {
   const [browseOpen, setBrowseOpen] = useState(false)
   const [data, setData] = useState<LuxorBooksHealth | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [refreshing, setRefreshing] = useState(true)
   const [revision, setRevision] = useState(0)
   const [categoryNames, setCategoryNames] = useState<string[]>([])
+  const wasActive = useRef(active)
+  useEffect(() => {
+    const shouldRefresh = active && !wasActive.current && data
+    wasActive.current = active
+    if (shouldRefresh) {
+      const timer = window.setTimeout(() => { setRefreshing(true); setRevision((value) => value + 1) }, 0)
+      return () => window.clearTimeout(timer)
+    }
+  }, [active, data])
   useEffect(() => {
     const controller = new AbortController()
     fetch('/api/portal/books-health', { cache: 'no-store', signal: controller.signal })
@@ -92,6 +102,7 @@ export function BooksRecordsPage({ embedded = false }: { embedded?: boolean }) {
       .catch((cause) => {
         if (!controller.signal.aborted) setError(cause instanceof Error ? cause.message : 'Books health is unavailable.')
       })
+      .finally(() => { if (!controller.signal.aborted) setRefreshing(false) })
     return () => controller.abort()
   }, [revision])
   useEffect(() => {
@@ -116,7 +127,8 @@ export function BooksRecordsPage({ embedded = false }: { embedded?: boolean }) {
       </>}
       <div className="flex flex-wrap items-center gap-3">
         {!embedded && <Link href="/portal/finances" className="text-sm font-semibold text-[#9a712e] underline-offset-4 hover:underline dark:text-[#e6c77f]">Financial Center</Link>}
-        <PortalButton type="button" onClick={() => setRevision((value) => value + 1)}><ArrowClockwise size={15} weight="regular" /> Refresh</PortalButton>
+        <PortalButton type="button" onClick={() => { setRefreshing(true); setRevision((value) => value + 1) }}><ArrowClockwise size={15} weight="regular" /> Refresh</PortalButton>
+        {data && refreshing && <span role="status" className="text-xs text-[color:var(--portal-muted)]">Refreshing records…</span>}
       </div>
       {error ? (
         <p role="alert" className="text-sm text-[color:var(--portal-text)]">{error} <button type="button" className="underline" onClick={() => setRevision((value) => value + 1)}>Try again</button></p>

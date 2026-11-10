@@ -75,7 +75,7 @@ export function PortalPageHeader({
             </button>
           ) : null}
           {icon && isPortalHome ? <span className="shrink-0 text-[#caa24c]">{icon}</span> : null}
-          <h1 className={`font-sans font-bold tracking-tight leading-tight text-[color:var(--portal-text)] ${titleClassName || (mobileActionsInline ? 'whitespace-nowrap text-xl sm:text-2xl' : 'text-xl sm:text-2xl')}`}>
+          <h1 suppressHydrationWarning className={`font-sans font-bold tracking-tight leading-tight text-[color:var(--portal-text)] ${titleClassName || (mobileActionsInline ? 'whitespace-nowrap text-xl sm:text-2xl' : 'text-xl sm:text-2xl')}`}>
             {titleHref ? (
               <Link href={titleHref} className="no-underline transition-colors hover:text-[#a8792f] dark:hover:text-[#f1d27a]">
                 {title}
@@ -1144,6 +1144,11 @@ export function PortalModal({
     })
 
     const handleKeyDown = (event: KeyboardEvent) => {
+      // Only the topmost dialog may handle keyboard input. Nested dialogs are
+      // portaled to the document body, so their parent must not also close or
+      // trap focus when the user interacts with the child.
+      const dialogs = Array.from(document.querySelectorAll<HTMLElement>('[data-portal-dialog="true"]')).filter((dialog) => !dialog.closest('[inert]'))
+      if (dialogs[dialogs.length - 1] !== dialogRef.current) return
       if (event.key === 'Escape') {
         if (document.querySelector('[data-portal-popover="true"]')) return
         event.preventDefault()
@@ -1213,6 +1218,7 @@ export function PortalModal({
           <motion.div
             ref={dialogRef}
             role="dialog"
+            data-portal-dialog="true"
             aria-modal="true"
             aria-labelledby={title ? titleId : undefined}
             aria-label={title ? undefined : ariaLabel ?? 'Portal dialog'}

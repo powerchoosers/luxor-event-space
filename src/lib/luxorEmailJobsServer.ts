@@ -4,7 +4,7 @@ import 'server-only'
 import { LUXOR_GRAND_OPENING } from './luxorGrandOpening'
 
 import crypto from 'crypto'
-import { LuxorBooking, LuxorEmailJob, LuxorEmailJobKind, LuxorInquiry, LuxorPayment, LuxorSignatureRequest } from './luxorInquiryTypes'
+import { LuxorBooking, LuxorEmailJob, LuxorEmailJobKind, LuxorInquiry, LuxorInvoice, LuxorPayment, LuxorSignatureRequest } from './luxorInquiryTypes'
 import { supabaseRest, supabaseRestStrict } from './supabaseRestServer'
 import { sendLuxorZohoEmail } from './zohoMailServer'
 import { buildAiTailoredInvoiceReminderEmail } from './luxorLifecycleEmailsServer'
@@ -14,6 +14,15 @@ import { createLuxorPostContractCheckout, prepareLuxorDepositPaymentLink } from 
 import { getLuxorBooking } from './luxorBookingsServer'
 import { getLuxorInquiry } from './luxorInquiriesServer'
 import { renderLuxorSystemEmail } from './luxorEmailDesignSystem'
+import { renderInquiryEmailCopy, type InquiryEmailCopy } from './luxorInquiryEmailCopy'
+import { renderInstallmentReminderCopy, validateInstallmentReminderCopy, type InstallmentReminderCopy } from './luxorInstallmentReminderCopy'
+import { readInstallmentReminderSettings } from './luxorInstallmentReminderCopyServer'
+import { validateFinalPaymentReminderCopy } from './luxorFinalPaymentReminderCopy'
+import { validateOfferReminderCopy } from './luxorOfferReminderCopy'
+import { validatePaymentRequestReminderCopy } from './luxorPaymentRequestReminderCopy'
+import { renderTourNoShowEmailCopy, type TourNoShowEmailCopy } from './luxorTourNoShowEmailCopy'
+import { readFinalPaymentReminderSettings } from './luxorFinalPaymentReminderCopyServer'
+import { renderBrochureDeliveryCopy, type BrochureDeliveryCopy } from './luxorBrochureDeliveryCopy'
 import { isLuxorMarketingDeliveryBlocked, recordLuxorMarketingJobResult } from './luxorMarketingDeliveryServer'
 import { luxorMailProvider } from './luxorMailConfig'
 import { luxorTestEmailAcceptedPatch, sendLuxorTestEmail } from './luxorTestEmailDelivery'
@@ -78,19 +87,20 @@ export function getTourResponseLinks(token: string) {
   }
 }
 
-export function buildTourEmail(kind: LuxorEmailJobKind, inquiry: LuxorInquiry, token: string) {
+export function buildTourEmail(kind: LuxorEmailJobKind, inquiry: LuxorInquiry, token: string, copyOverride?: TourNoShowEmailCopy | null) {
   const eventLine = `${inquiry.event_type || 'Event'}${inquiry.guest_count ? ` for ${inquiry.guest_count} guests` : ''}`
   const dateLine = `${inquiry.preferred_tour_date || 'your selected date'}${inquiry.preferred_tour_time ? ` at ${inquiry.preferred_tour_time}` : ''}`
   const links = getTourResponseLinks(token)
 
   if (kind === 'tour_no_show_reschedule') {
+    const name = inquiry.full_name || 'there'
+    const copy = copyOverride ? renderTourNoShowEmailCopy(copyOverride, { full_name: name, first_name: name.trim().split(/\s+/)[0] || 'there', event_details: eventLine }) : null
     return {
-      subject: 'Want to reschedule your Luxor tour?',
+      subject: copy?.subject || 'Want to reschedule your Luxor tour?',
       body: [
-        `Hi ${inquiry.full_name},`,
-        `We missed you for your Luxor at Las Palmas Events tour for ${eventLine}.`,
-        'If you still want to see the space, use the reschedule link below and we will help find a better time.',
-        `Reschedule: ${links.rescheduleUrl}`,
+        copy?.greeting || `Hi ${inquiry.full_name},`,
+        copy?.body || `We missed you for your Luxor at Las Palmas Events tour for ${eventLine}.`,
+        'If you still want to see the space, reply to this email and we will help find a better time.',
         inquiry.message ? `Your event notes: ${inquiry.message}` : '',
         ...plainTextEmailFooter(),
       ].filter(Boolean).join('\n\n'),
@@ -128,14 +138,15 @@ export function buildTourEmail(kind: LuxorEmailJobKind, inquiry: LuxorInquiry, t
   }
 }
 
-export function buildTourRequestReceivedEmailHtml(inquiry: LuxorInquiry, token: string) {
+export function buildTourRequestReceivedEmailHtml(inquiry: LuxorInquiry, token: string, override?: InquiryEmailCopy | null) {
   const firstName = inquiry.full_name.split(' ')[0] || inquiry.full_name
+  const copy = override ? renderInquiryEmailCopy(override, { first_name: firstName, event_type: inquiry.event_type || 'Private event', guest_count: inquiry.guest_count ? String(inquiry.guest_count) : 'Open' }) : null
   return renderLuxorSystemEmail({
-    previewText: 'We received your Schedule a Visit request and are reviewing the details.',
+    previewText: copy ? escapeHtml(copy.preview) : 'We received your Schedule a Visit request and are reviewing the details.',
     eyebrow: 'Tour request received',
-    title: 'Thanks for your request',
-    greeting: `Hi ${escapeHtml(firstName)},`,
-    bodyHtml: '<p style="margin:0">Thank you for scheduling a visit to Luxor Event Space. Our team is reviewing your preferred date and time and will send an official confirmation with calendar details once it is accepted.</p>',
+    title: copy ? escapeHtml(copy.title) : 'Thanks for your request',
+    greeting: copy ? escapeHtml(copy.greeting) : `Hi ${escapeHtml(firstName)},`,
+    bodyHtml: copy ? `<p style="margin:0;white-space:pre-line">${escapeHtml(copy.body).replace(/\r?\n/g, '<br />')}</p>` : '<p style="margin:0">Thank you for scheduling a visit to Luxor Event Space. Our team is reviewing your preferred date and time and will send an official confirmation with calendar details once it is accepted.</p>',
     details: [
       { label: 'Requested date', value: escapeHtml(inquiry.preferred_tour_date || 'Pending') },
       { label: 'Requested time', value: escapeHtml(inquiry.preferred_tour_time || 'Pending') },
@@ -146,22 +157,23 @@ export function buildTourRequestReceivedEmailHtml(inquiry: LuxorInquiry, token: 
       { label: 'Explore our spaces', url: absoluteUrl('/spaces') },
       { label: 'Schedule a visit', url: absoluteUrl('/visit'), tone: 'secondary' },
     ],
-    note: `Reference: ${escapeHtml(token.slice(0, 8).toUpperCase())}. Reply to this email if you need to adjust your request.`,
+    note: copy ? `${escapeHtml(copy.note).replace(/\r?\n/g, '<br />')} Reference: ${escapeHtml(token.slice(0, 8).toUpperCase())}.` : `Reference: ${escapeHtml(token.slice(0, 8).toUpperCase())}. Reply to this email if you need to adjust your request.`,
     theme: 'brand',
   })
 }
 
-export function buildBrochureDeliveryEmailHtml(inquiry: LuxorInquiry) {
+export function buildBrochureDeliveryEmailHtml(inquiry: LuxorInquiry, override?: BrochureDeliveryCopy | null) {
   const firstName = inquiry.full_name ? inquiry.full_name.split(' ')[0] : ''
+  const copy = override ? renderBrochureDeliveryCopy(override, { first_name: firstName || 'there', event_type: inquiry.event_type || 'event', guest_count: inquiry.guest_count ? String(inquiry.guest_count) : '' }) : null
   const brochureUrl = absoluteUrl('/api/brochure/download')
   const visitUrl = absoluteUrl('/visit')
 
   return renderLuxorSystemEmail({
-    previewText: 'Your free Luxor at Las Palmas venue brochure is ready.',
+    previewText: copy ? escapeHtml(copy.preview) : 'Your free Luxor at Las Palmas venue brochure is ready.',
     eyebrow: 'Venue Brochure',
-    title: 'Your Luxor Venue Brochure',
-    greeting: firstName ? `Hi ${escapeHtml(firstName)},` : 'Hello,',
-    bodyHtml: `
+    title: copy ? escapeHtml(copy.title) : 'Your Luxor Venue Brochure',
+    greeting: copy ? escapeHtml(copy.greeting) : firstName ? `Hi ${escapeHtml(firstName)},` : 'Hello,',
+    bodyHtml: copy ? `<p style="margin:0;white-space:pre-line">${escapeHtml(copy.body).replace(/\r?\n/g, '<br />')}</p>` : `
       <p style="margin:0 0 16px;">Thank you for your interest in Luxor at Las Palmas Events! We are delighted to share our official venue brochure with you.</p>
       <p style="margin:0 0 16px;">Inside, you’ll find floor plans, included amenities, spaces, and planning details for weddings, quinceañeras, and private celebrations.</p>
       <p style="margin:0;">Whenever you are ready to walk the room in person and talk through your date, we invite you to schedule a visit.</p>
@@ -170,7 +182,7 @@ export function buildBrochureDeliveryEmailHtml(inquiry: LuxorInquiry) {
       { label: 'Download Venue Brochure', url: brochureUrl },
       { label: 'Schedule a Visit', url: visitUrl, tone: 'secondary' },
     ],
-    note: 'If you have questions or would like to check a specific date, you can also reach us directly at (210) 906-8803 or reply to this email.',
+    note: copy ? escapeHtml(copy.note).replace(/\r?\n/g, '<br />') : 'If you have questions or would like to check a specific date, you can also reach us directly at (210) 906-8803 or reply to this email.',
     theme: 'brand',
   })
 }
@@ -517,14 +529,15 @@ export function buildGrandOpeningRsvpEmailHtmlLegacy(inquiry: LuxorInquiry) {
 </html>`
 }
 
-export function buildStandardInquiryEmailHtml(inquiry: LuxorInquiry) {
+export function buildStandardInquiryEmailHtml(inquiry: LuxorInquiry, override?: InquiryEmailCopy | null) {
   const firstName = inquiry.full_name.split(' ')[0] || inquiry.full_name
+  const copy = override ? renderInquiryEmailCopy(override, { first_name: firstName, event_type: inquiry.event_type || 'Private event', guest_count: inquiry.guest_count ? String(inquiry.guest_count) : 'Open' }) : null
   return renderLuxorSystemEmail({
-    previewText: 'We received your Luxor inquiry and will connect with you shortly.',
+    previewText: copy ? escapeHtml(copy.preview) : 'We received your Luxor inquiry and will connect with you shortly.',
     eyebrow: 'Inquiry received',
-    title: 'Your celebration starts here',
-    greeting: `Hi ${escapeHtml(firstName)},`,
-    bodyHtml: '<p style="margin:0">Thank you for reaching out to Luxor Event Space. Our team is reviewing your event details so we can prepare useful package options and thoughtful next steps.</p>',
+    title: copy ? escapeHtml(copy.title) : 'Your celebration starts here',
+    greeting: copy ? escapeHtml(copy.greeting) : `Hi ${escapeHtml(firstName)},`,
+    bodyHtml: copy ? `<p style="margin:0;white-space:pre-line">${escapeHtml(copy.body)}</p>` : '<p style="margin:0">Thank you for reaching out to Luxor Event Space. Our team is reviewing your event details so we can prepare useful package options and thoughtful next steps.</p>',
     details: [
       { label: 'Event type', value: escapeHtml(inquiry.event_type || 'Private event') },
       { label: 'Guest count', value: escapeHtml(inquiry.guest_count ? String(inquiry.guest_count) : 'Open') },
@@ -532,14 +545,15 @@ export function buildStandardInquiryEmailHtml(inquiry: LuxorInquiry) {
     actions: [
       { label: 'Schedule a visit', url: absoluteUrl('/visit') },
     ],
-    note: 'A coordinator will connect with you shortly. Reply to this email at any time if there is another detail we should know.',
+    note: copy ? escapeHtml(copy.note).replace(/\r?\n/g, '<br />') : 'A coordinator will connect with you shortly. Reply to this email at any time if there is another detail we should know.',
     theme: 'light',
   })
 }
 
-export function buildNewsletterConfirmationEmailHtml(inquiry: LuxorInquiry) {
+export function buildNewsletterConfirmationEmailHtml(inquiry: LuxorInquiry, override?: InquiryEmailCopy | null) {
   const firstName = inquiry.full_name === 'Newsletter subscriber' ? '' : inquiry.full_name.split(' ')[0]
-  return renderLuxorSystemEmail({ previewText: 'You are on the Luxor Event Space newsletter list.', eyebrow: 'Welcome to Luxor', title: 'You’re on the list', greeting: firstName ? `Hi ${escapeHtml(firstName)},` : undefined, bodyHtml: '<p style="margin:0">Thank you for joining Luxor’s newsletter. We’ll share occasional open-house invitations, venue news, and practical ideas for planning a celebration that feels like yours.</p>', actions: [{ label: 'Explore Luxor', url: absoluteUrl('/') }, { label: 'Schedule a visit', url: absoluteUrl('/visit'), tone: 'secondary' }], note: 'You can unsubscribe from any marketing email at any time.', theme: 'brand' })
+  const copy = override ? renderInquiryEmailCopy(override, { first_name: firstName || 'there', event_type: inquiry.event_type || 'Private event', guest_count: inquiry.guest_count ? String(inquiry.guest_count) : 'Open' }) : null
+  return renderLuxorSystemEmail({ previewText: copy ? escapeHtml(copy.preview) : 'You are on the Luxor Event Space newsletter list.', eyebrow: 'Welcome to Luxor', title: copy ? escapeHtml(copy.title) : 'You’re on the list', greeting: copy ? escapeHtml(copy.greeting) : firstName ? `Hi ${escapeHtml(firstName)},` : undefined, bodyHtml: copy ? `<p style="margin:0;white-space:pre-line">${escapeHtml(copy.body).replace(/\r?\n/g, '<br />')}</p>` : '<p style="margin:0">Thank you for joining Luxor’s newsletter. We’ll share occasional open-house invitations, venue news, and practical ideas for planning a celebration that feels like yours.</p>', actions: [{ label: 'Explore Luxor', url: absoluteUrl('/') }, { label: 'Schedule a visit', url: absoluteUrl('/visit'), tone: 'secondary' }], note: copy ? `${escapeHtml(copy.note).replace(/\r?\n/g, '<br />')} You can unsubscribe from any marketing email at any time.` : 'You can unsubscribe from any marketing email at any time.', theme: 'brand' })
 }
 
 export function buildStandardInquiryEmailHtmlLegacy(inquiry: LuxorInquiry) {
@@ -891,6 +905,65 @@ const POST_CONTRACT_PAYMENT_REMINDER_TYPES = new Set<LuxorEmailJobKind>([
 ])
 
 class BookingFollowUpEligibilityError extends Error {}
+class OfferEligibilityError extends Error {}
+
+/** A failed invoice or payment read must never be interpreted as an unpaid offer. */
+export async function isOfferReminderIneligible(invoiceId: string) {
+  try {
+    const [invoice] = await supabaseRestStrict<LuxorInvoice[]>(`luxor_invoices?select=*&id=eq.${encodeURIComponent(invoiceId)}&limit=1`)
+    if (!invoice || invoice.status === 'cancelled' || invoice.status === 'paid' || isLuxorOfferExpired(invoice)) return true
+    const payments = await supabaseRestStrict<Array<{ id: string }>>(`luxor_payments?select=id&invoice_id=eq.${encodeURIComponent(invoiceId)}&status=eq.paid&limit=1`)
+    return payments.length > 0
+  } catch {
+    throw new OfferEligibilityError('Reminder held because offer and payment eligibility could not be verified.')
+  }
+}
+
+/** Recheck the exact agreement after a reminder is claimed and before delivery. */
+export async function cancelIneligibleAgreementReminder(job: LuxorEmailJob) {
+  if (!['contract_view_reminder', 'contract_signature_reminder'].includes(job.job_type) || job.test_run_id || job.custom_workflow_step_run_id || typeof job.metadata?.corrected_email_resend_request_id === 'string') return false
+  if (!job.signature_request_id || !job.inquiry_id) throw new BookingFollowUpEligibilityError('Agreement reminder held because its agreement could not be verified.')
+  let signatures: Array<{ status: string; signed_at: string | null }>
+  try {
+    signatures = await supabaseRestStrict<Array<{ status: string; signed_at: string | null }>>(`luxor_signature_requests?select=status,signed_at&id=eq.${encodeURIComponent(job.signature_request_id)}&inquiry_id=eq.${encodeURIComponent(job.inquiry_id)}&limit=1`)
+  } catch {
+    throw new BookingFollowUpEligibilityError('Agreement reminder held because its agreement could not be verified.')
+  }
+  const signature = signatures[0]
+  if (!signature) throw new BookingFollowUpEligibilityError('Agreement reminder held because its agreement could not be verified.')
+  if (signature.status === 'signed' || signature.status === 'void' || signature.signed_at) {
+    await supabaseRest(`luxor_email_jobs?id=eq.${encodeURIComponent(job.id)}&status=eq.sending`, {
+      method: 'PATCH', body: JSON.stringify({ status: 'cancelled', last_error: 'Agreement reminder stopped because the agreement was signed or voided.', updated_at: new Date().toISOString() }),
+    })
+    return true
+  }
+  if (!['sent', 'viewed'].includes(signature.status)) throw new BookingFollowUpEligibilityError('Agreement reminder held because the agreement is not ready for delivery.')
+  return false
+}
+
+/** Stop stale event emails immediately before delivery; never infer eligibility from a failed read. */
+export async function cancelIneligibleEventEmail(job: LuxorEmailJob) {
+  if (!['event_details_reminder', 'event_day_reminder', 'post_event_follow_up'].includes(job.job_type) || job.test_run_id || job.custom_workflow_step_run_id || typeof job.metadata?.corrected_email_resend_request_id === 'string') return false
+  if (!job.booking_id || !job.inquiry_id) throw new BookingFollowUpEligibilityError('Event email held because its booking could not be verified.')
+  let bookings: Array<Pick<LuxorBooking, 'id' | 'inquiry_id' | 'status' | 'event_date'>>
+  try {
+    bookings = await supabaseRestStrict<Array<Pick<LuxorBooking, 'id' | 'inquiry_id' | 'status' | 'event_date'>>>(`luxor_bookings?select=id,inquiry_id,status,event_date&id=eq.${encodeURIComponent(job.booking_id)}&inquiry_id=eq.${encodeURIComponent(job.inquiry_id)}&limit=1`)
+  } catch {
+    throw new BookingFollowUpEligibilityError('Event email held because its booking could not be verified.')
+  }
+  const booking = bookings[0]
+  const isBeforeEvent = job.job_type !== 'post_event_follow_up'
+  const savedDate = typeof job.metadata?.event_date === 'string' ? job.metadata.event_date : ''
+  if (isBeforeEvent && !savedDate) throw new BookingFollowUpEligibilityError('Event email held because its original event date is missing.')
+  const reason = !booking || booking.status === 'cancelled' ? 'Event email stopped because the booking is cancelled or unavailable.'
+    : isBeforeEvent && booking.status === 'completed' ? 'Event reminder stopped because the event is complete.'
+    : isBeforeEvent && booking.event_date !== savedDate ? 'Event reminder stopped because the event date changed.' : null
+  if (!reason) return false
+  await supabaseRest(`luxor_email_jobs?id=eq.${encodeURIComponent(job.id)}&status=eq.sending`, {
+    method: 'PATCH', body: JSON.stringify({ status: 'cancelled', last_error: reason, updated_at: new Date().toISOString() }),
+  })
+  return true
+}
 
 /** Guard only sales follow-ups; booking, payment and event communications remain deliverable. */
 async function cancelFollowUpForSignedBooking(job: LuxorEmailJob) {
@@ -924,7 +997,7 @@ async function cancelFollowUpForSignedBooking(job: LuxorEmailJob) {
  * also prevents any legacy queued payment reminder from bypassing the signed
  * agreement gate.
  */
-async function preparePostContractPaymentReminder(job: LuxorEmailJob): Promise<LuxorEmailJob | null> {
+export async function preparePostContractPaymentReminder(job: LuxorEmailJob): Promise<LuxorEmailJob | null> {
   if (!POST_CONTRACT_PAYMENT_REMINDER_TYPES.has(job.job_type)) return job
   const metadata = job.metadata && typeof job.metadata === 'object' ? job.metadata : {}
   if (job.job_type === 'installment_payment_reminder') return prepareInstallmentPaymentReminder(job, metadata)
@@ -988,6 +1061,9 @@ async function preparePostContractPaymentReminder(job: LuxorEmailJob): Promise<L
     balanceDue: checkout.paymentAmount,
     dueDate: finalBalance ? booking.final_payment_due_date : invoice.due_date || null,
     kind: finalBalance ? 'final_payment' : 'unpaid_invoice',
+    copyOverride: finalBalance && metadata.final_payment_copy_snapshot != null ? validateFinalPaymentReminderCopy(metadata.final_payment_copy_snapshot)
+      : metadata.offer_reminder === true && metadata.offer_copy_snapshot != null ? validateOfferReminderCopy(metadata.offer_copy_snapshot)
+      : metadata.payment_request_reminder === true && metadata.payment_request_copy_snapshot != null ? validatePaymentRequestReminderCopy(metadata.payment_request_copy_snapshot) : null,
   })
   const refreshedMetadata: Record<string, unknown> = {
     ...metadata,
@@ -1015,27 +1091,29 @@ async function finalBalanceRemaining(bookingId: string) {
   return Math.max(0, Math.round((Number(invoice.total || 0) - payments.reduce((sum, payment) => sum + Number(payment.amount || 0), 0)) * 100) / 100)
 }
 
-function installmentReminderContent(inquiry: LuxorInquiry, installment: { label: string; amount: number; due_at: string | null }, remaining: number, overdue: boolean) {
+export function installmentReminderContent(inquiry: LuxorInquiry, installment: { label: string; amount: number; due_at: string | null }, remaining: number, overdue: boolean, override?: InstallmentReminderCopy | null) {
   const label = installment.label || 'Scheduled payment'
   const dueDate = installment.due_at?.slice(0, 10) || 'the date shown in your payment plan'
-  const subject = overdue ? `Payment follow-up: ${label}` : `Upcoming payment reminder: ${label}`
+  const firstName = inquiry.full_name.trim().split(/\s+/)[0] || 'there'
+  const copy = override ? renderInstallmentReminderCopy(override, { first_name: firstName, payment_label: label }) : null
+  const subject = copy?.subject || (overdue ? `Payment follow-up: ${label}` : `Upcoming payment reminder: ${label}`)
   const html = renderLuxorSystemEmail({
     eyebrow: 'Payment plan reminder',
-    title: overdue ? 'A scheduled payment is still due' : 'An upcoming payment is on your plan',
-    greeting: `Hi ${escapeHtml(inquiry.full_name.trim().split(/\s+/)[0] || 'there')},`,
-    bodyHtml: `<p style="margin:0">${overdue ? 'Our records show this scheduled payment still has a balance.' : 'This is a reminder about an upcoming payment in your event plan.'} If you have already paid, please reply so we can update our records.</p>`,
+    title: copy ? escapeHtml(copy.title) : overdue ? 'A scheduled payment is still due' : 'An upcoming payment is on your plan',
+    greeting: copy ? escapeHtml(copy.greeting) : `Hi ${escapeHtml(firstName)},`,
+    bodyHtml: copy ? `<p style="margin:0;white-space:pre-line">${escapeHtml(copy.body).replace(/\r?\n/g, '<br />')}</p>` : `<p style="margin:0">${overdue ? 'Our records show this scheduled payment still has a balance.' : 'This is a reminder about an upcoming payment in your event plan.'} If you have already paid, please reply so we can update our records.</p>`,
     details: [
       { label: 'Payment', value: escapeHtml(label) },
       { label: 'Remaining amount', value: escapeHtml(remaining.toLocaleString('en-US', { style: 'currency', currency: 'USD' })) },
       { label: 'Due date', value: escapeHtml(dueDate) },
     ],
-    note: 'Questions or changes? Reply to this email and the Luxor team will help.',
+    note: copy ? escapeHtml(copy.note).replace(/\r?\n/g, '<br />') : 'Questions or changes? Reply to this email and the Luxor team will help.',
     theme: 'brand',
   })
   return { subject, body: html }
 }
 
-async function prepareInstallmentPaymentReminder(job: LuxorEmailJob, metadata: Record<string, unknown>): Promise<LuxorEmailJob | null> {
+export async function prepareInstallmentPaymentReminder(job: LuxorEmailJob, metadata: Record<string, unknown>): Promise<LuxorEmailJob | null> {
   const pause = async (message: string) => {
     await updateLuxorEmailJob(job.id, { status: 'cancelled', last_error: message })
     return null
@@ -1075,7 +1153,8 @@ async function prepareInstallmentPaymentReminder(job: LuxorEmailJob, metadata: R
   const paid = installmentPaidAmount(installment, payments)
   const remaining = Math.max(0, Math.round((Number(installment.amount) - paid) * 100) / 100)
   if (remaining <= 0 || installment.status === 'paid') return pause('The installment has already been paid.')
-  const email = installmentReminderContent(inquiry, installment, remaining, milestone === 'installment_1_day_overdue')
+  const snapshot = metadata.installment_copy_snapshot == null ? null : validateInstallmentReminderCopy(metadata.installment_copy_snapshot)
+  const email = installmentReminderContent(inquiry, installment, remaining, milestone === 'installment_1_day_overdue', snapshot)
   const refreshed = { ...metadata, balance_due: remaining, amount_due: remaining, due_date: dueDate }
   await updateLuxorEmailJob(job.id, { subject: email.subject, body: email.body, metadata: refreshed })
   return { ...job, subject: email.subject, body: email.body, metadata: refreshed }
@@ -1297,9 +1376,7 @@ export async function processLuxorEmailJobs(
       const senderName = typeof metadata.sender_name === 'string' ? metadata.sender_name : 'Luxor Event Space'
       const offerInvoiceId = typeof metadata.invoice_id === 'string' ? metadata.invoice_id : null
       if (typeof metadata.offer_expires_at === 'string' && offerInvoiceId) {
-        const invoice = await getInvoice(offerInvoiceId)
-        const paidPayments = invoice ? await listPaidPaymentsByInvoice(invoice.id).catch(() => []) : []
-        if (!invoice || invoice.status === 'cancelled' || invoice.status === 'paid' || paidPayments.length > 0 || isLuxorOfferExpired(invoice)) {
+        if (await isOfferReminderIneligible(offerInvoiceId)) {
           await updateLuxorEmailJob(job.id, { status: 'cancelled', last_error: 'Offer is no longer active; reminder was not sent.' })
           results.push({ id: job.id, status: 'skipped' })
           continue
@@ -1420,9 +1497,14 @@ export async function processLuxorEmailJobs(
           }
           plannerCodeClaim = { presentationId: plannerPresentationId, generationId, codeHash }
           const sharing = await import('./luxorPlannerSharingServer')
+          const { readPlannerVerificationSetting } = await import('./luxorPlannerVerificationCopyServer')
           const code = sharing.decryptPresentationSecret(claim.code_ciphertext)
           if (!/^\d{6}$/.test(code)) throw new Error('Planner verification code was invalid.')
-          const email = sharing.buildPlannerPresentationCodeEmail(code)
+          let verificationCopy = null
+          try { verificationCopy = (await readPlannerVerificationSetting()).setting.copy_override } catch (error) {
+            console.error('Planner verification copy unavailable; using original wording:', error)
+          }
+          const email = sharing.buildPlannerPresentationCodeEmail(code, verificationCopy)
           job = { ...job, subject: email.subject, body: email.body }
         }
       }
@@ -1432,6 +1514,14 @@ export async function processLuxorEmailJobs(
         continue
       }
       if (!isCustomWorkflowJob && await cancelFollowUpForSignedBooking(job)) {
+        results.push({ id: job.id, status: 'skipped' })
+        continue
+      }
+      if (!isCustomWorkflowJob && await cancelIneligibleEventEmail(job)) {
+        results.push({ id: job.id, status: 'skipped' })
+        continue
+      }
+      if (!isCustomWorkflowJob && await cancelIneligibleAgreementReminder(job)) {
         results.push({ id: job.id, status: 'skipped' })
         continue
       }
@@ -1510,6 +1600,15 @@ export async function processLuxorEmailJobs(
       results.push({ id: job.id, status: 'sent' })
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Email send failed.'
+      if (error instanceof OfferEligibilityError && !providerAttemptStarted && !providerAccepted) {
+        const heldStatus = job.status === 'sending' ? 'sending' : 'queued'
+        await supabaseRest(`luxor_email_jobs?id=eq.${encodeURIComponent(job.id)}&status=eq.${heldStatus}`, {
+          method: 'PATCH',
+          body: JSON.stringify({ status: 'queued', last_error: message, scheduled_for: new Date(Date.now() + 5 * 60_000).toISOString(), updated_at: new Date().toISOString() }),
+        })
+        results.push({ id: job.id, status: 'skipped', error: message })
+        continue
+      }
       if (error instanceof BookingFollowUpEligibilityError && !providerAttemptStarted && !providerAccepted) {
         await supabaseRest(`luxor_email_jobs?id=eq.${encodeURIComponent(job.id)}&status=eq.sending`, {
           method: 'PATCH',
@@ -1628,6 +1727,11 @@ export async function queueUpcoming60DayInvoiceReminders() {
 
     if (!Array.isArray(activeBookings) || !activeBookings.length) return
 
+    let copySettingsUnavailable = false
+    let copySettings: Awaited<ReturnType<typeof readFinalPaymentReminderSettings>>['settings'] = []
+    try { copySettings = (await readFinalPaymentReminderSettings()).settings }
+    catch (error) { copySettingsUnavailable = true; console.error('Final payment reminder settings unavailable; using the original wording:', error) }
+
     const nowMs = Date.now()
 
     for (const booking of activeBookings) {
@@ -1658,7 +1762,8 @@ export async function queueUpcoming60DayInvoiceReminders() {
       let invoice = await getInvoiceByBookingAndKind(booking.id, 'final_balance')
       invoice ||= await ensureLuxorFinalBalanceInvoice({ masterInvoice, bookingId: booking.id, dueDate, depositPaid: Number(booking.deposit_required || 0), securityDepositAmount: booking.security_deposit_amount })
 
-      const paidPayments = await listPaidPaymentsByInvoice(invoice.id).catch(() => [])
+      // An unavailable payment ledger is not evidence that nothing was paid.
+      const paidPayments = await listPaidPaymentsByInvoice(invoice.id)
       const paidTotal = paidPayments.reduce((sum, p) => sum + Number(p.amount || 0), 0)
       const balanceDue = Math.max(0, Math.round((Number(invoice.total) - paidTotal) * 100) / 100)
       if (balanceDue <= 0) continue
@@ -1680,6 +1785,7 @@ export async function queueUpcoming60DayInvoiceReminders() {
         stripe_checkout_url: checkout.checkoutUrl,
       }) || invoice
       const reviewUrl = checkout.checkoutUrl
+      const copyOverride = copySettings.find((setting) => setting.key === milestone)?.copy_override || null
 
       const email = await buildAiTailoredInvoiceReminderEmail({
         inquiry,
@@ -1689,6 +1795,7 @@ export async function queueUpcoming60DayInvoiceReminders() {
         balanceDue: checkout.paymentAmount,
         dueDate,
         kind: 'final_payment',
+        copyOverride,
       })
 
       const jobType: LuxorEmailJobKind = milestone === 'payment_request' ? 'final_payment_request' : 'final_payment_reminder'
@@ -1710,6 +1817,8 @@ export async function queueUpcoming60DayInvoiceReminders() {
           checkout_session_id: checkout.checkoutId,
           flow_stage: 'post_signature_payment',
           ai_generated: email.aiGenerated,
+          ...(copyOverride ? { final_payment_copy_snapshot: copyOverride } : {}),
+          ...(copySettingsUnavailable ? { copy_settings_unavailable: true } : {}),
         },
       })
     }
@@ -1718,9 +1827,13 @@ export async function queueUpcoming60DayInvoiceReminders() {
   }
 }
 
-async function queueInstallmentPaymentReminders() {
+export async function queueInstallmentPaymentReminders() {
   if (process.env.LUXOR_PAYMENT_INSTALLMENT_ALLOCATIONS_READY !== 'true'
     || process.env.LUXOR_PAYMENT_INSTALLMENT_REMINDERS_READY !== 'true') return
+  let copySettingsUnavailable = false
+  let copySettings: Awaited<ReturnType<typeof readInstallmentReminderSettings>>['settings'] = []
+  try { copySettings = (await readInstallmentReminderSettings()).settings }
+  catch (error) { copySettingsUnavailable = true; console.error('Installment reminder settings unavailable; using the original wording:', error) }
   const now = new Date()
   const today = luxorCalendarDate(now)
   const activeBookings = await supabaseRest<LuxorBooking[]>('luxor_bookings?select=*&status=in.(tentative,confirmed)&contract_status=eq.signed&limit=1000')
@@ -1775,7 +1888,8 @@ async function queueInstallmentPaymentReminders() {
         const scheduledTime = zonedTourDateTimeToUtc(scheduledLocalDate, '10:00')
         if (hasLuxorReminderSendWindowPassed(scheduledTime, now)) continue
         const scheduledFor = scheduledTime.toISOString()
-        const email = installmentReminderContent(inquiry, installment, remaining, planned.overdue)
+        const copy = copySettings.find((setting) => setting.key === planned.milestone)?.copy_override || null
+        const email = installmentReminderContent(inquiry, installment, remaining, planned.overdue, copy)
         const automationKey = installmentReminderAutomationKey(booking.id, installment.id, dueDate, planned.milestone)
         await createUniqueLuxorEmailJob({
           inquiryId: inquiry.id,
@@ -1797,6 +1911,8 @@ async function queueInstallmentPaymentReminders() {
             amount_due: remaining,
             due_date: dueDate,
             timezone: 'America/Chicago',
+            ...(copy ? { installment_copy_snapshot: copy } : {}),
+            ...(copySettingsUnavailable ? { copy_settings_unavailable: true } : {}),
           },
         })
       }

@@ -27,6 +27,7 @@ import {
 } from '@/lib/luxorFinanceReporting'
 import type { LuxorBill, LuxorPayment, LuxorPaymentInstallment } from '@/lib/luxorInquiryTypes'
 import { chicagoCalendarDate, installmentDisplayState, invoiceEventObligation, isBookingPaymentMilestone, isFinalPaymentMilestone } from '@/lib/luxorPaymentDashboardModel'
+import { expenseCategoryColors } from '@/lib/luxorExpenseChartColors'
 
 type Overview = ReturnType<typeof getLuxorFinanceOverview>
 type Expenses = ReturnType<typeof getLuxorPaidExpenseBreakdown>
@@ -380,19 +381,30 @@ function PaymentScheduleDrawer({
   )
 }
 
-function CategoryChart({ values, label }: { values: Array<{ category: string; amount: number }>; label: string }) {
+function EmptyCategoryChart({ message, amount = 0 }: { message: string; amount?: number }) {
+  return <div className="mt-4 flex flex-wrap items-center gap-5">
+    <div className="grid h-28 w-28 shrink-0 place-items-center rounded-full border-[16px] border-[color:var(--portal-border)] dark:border-[#887c68]" aria-hidden="true">
+      <span className="text-xs font-semibold tabular-nums text-[color:var(--portal-text)]">{currency(amount)}</span>
+    </div>
+    <p className="min-w-[10rem] flex-1 text-xs text-[color:var(--portal-muted)]">{message}</p>
+  </div>
+}
+
+function CategoryChart({ values, label, tone = 'revenue' }: { values: Array<{ category: string; amount: number }>; label: string; tone?: 'revenue' | 'expense' }) {
   const positiveValues = values.filter((row) => row.amount > 0)
   const refunds = values.filter((row) => row.amount < 0)
   const data = getLuxorCategoryShares(positiveValues)
   const netTotal = values.reduce((sum, row) => sum + row.amount, 0)
   const colors = ['#a87827', '#c49650', '#dbb47b', '#e8cba2', '#b9a380', '#83725e', '#cfb18b', '#e5d7c2', '#8d7f6c', '#d0c0a8']
+  const expenseColors = expenseCategoryColors(data.rows.map((row) => row.category))
+  const colorFor = (category: string, index: number) => tone === 'expense' ? expenseColors.get(category)! : colors[index % colors.length]
   const stops = data.rows
     .map((row, index) => {
       const start = data.rows.slice(0, index).reduce((sum, item) => sum + item.percent, 0)
-      return `${colors[index % colors.length]} ${start}% ${start + row.percent}%`
+      return `${colorFor(row.category, index)} ${start}% ${start + row.percent}%`
     })
     .join(', ')
-  if (!data.total) return <p className={`${muted} mt-3`}>{refunds.length ? `Refunds exceed ${label.toLowerCase()} paid in this period.` : `No ${label.toLowerCase()} recorded for this period ($0.00).`}</p>
+  if (!data.total) return <EmptyCategoryChart amount={netTotal} message={refunds.length ? `Refunds and reversals: ${currency(netTotal)}.` : `No ${label.toLowerCase()} recorded for this period ($0.00).`} />
   return (
     <div className="mt-4 flex flex-wrap items-center gap-5">
       <motion.div
@@ -404,22 +416,22 @@ function CategoryChart({ values, label }: { values: Array<{ category: string; am
         viewport={{ once: true, margin: '0px' }}
         transition={{ duration: 0.55, ease: [0.23, 1, 0.32, 1] }}
       >
-        <div className="grid h-20 w-20 place-items-center rounded-full bg-[color:var(--portal-bg)] text-center text-xs font-semibold text-[color:var(--portal-text)]">
+        <div className="grid h-20 w-20 place-items-center rounded-full bg-[color:var(--portal-card)] text-center text-xs font-semibold tabular-nums text-[color:var(--portal-text)]">
           <AnimatedAmount value={netTotal} />
         </div>
       </motion.div>
-      <ul className="min-w-0 flex-1 space-y-2">
+      <ul className="min-w-[10rem] flex-1 space-y-2">
         {data.rows.map((row, index) => (
           <li key={row.category} className="flex items-start justify-between gap-3 text-xs text-[color:var(--portal-text)]">
             <span>
               <span
                 aria-hidden="true"
                 className="mr-2 inline-block h-2 w-2 rounded-full"
-                style={{ backgroundColor: colors[index % colors.length] }}
+                style={{ backgroundColor: colorFor(row.category, index) }}
               />
               {row.category}
             </span>
-            <span className="shrink-0">
+            <span className="shrink-0 tabular-nums">
               <AnimatedAmount value={row.amount} /> · {Math.round(row.percent)}%
             </span>
           </li>
@@ -457,7 +469,7 @@ export default function FinancialOverview({
 }) {
   const scrollFrame = useRef<number | null>(null)
   useEffect(() => () => { if (scrollFrame.current !== null) cancelAnimationFrame(scrollFrame.current) }, [])
-  const scrollToView = (button: HTMLButtonElement, view: 'receivables' | 'revenue' | 'invoices') => {
+  const scrollToView = (button: HTMLButtonElement, view: 'receivables' | 'revenue' | 'invoices' | 'expenses' | 'payments') => {
     if (scrollFrame.current !== null) return
     const scrollers: Array<{ element: HTMLElement; top: number }> = []
     for (let element = button.parentElement; element; element = element.parentElement) {
@@ -719,17 +731,6 @@ export default function FinancialOverview({
     return [...totals].map(([category, amount]) => ({ category, amount }))
   }, [overview, range.start, range.end])
 
-  const allTimeRevenueCategories = useMemo(() => {
-    if (!overview?.categoryByMonth) return []
-    const totals = new Map<string, number>()
-    for (const monthObj of Object.values(overview.categoryByMonth)) {
-      for (const [cat, amt] of Object.entries(monthObj)) {
-        totals.set(cat, (totals.get(cat) || 0) + amt)
-      }
-    }
-    return [...totals.entries()].map(([category, amount]) => ({ category, amount }))
-  }, [overview?.categoryByMonth])
-
   const expenseMonthCategories = rangeExpenses?.categories || []
 
   return (
@@ -842,9 +843,9 @@ export default function FinancialOverview({
           <button
             type="button"
             onClick={(event) => scrollToView(event.currentTarget, 'receivables')}
-            className="inline-flex min-h-9 items-center gap-1 text-sm font-semibold text-[#a8792f] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/50 dark:text-[#e6c77f]"
+            className="group inline-flex min-h-9 items-center gap-1 text-sm font-semibold text-[#a8792f] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/50 dark:text-[#e6c77f]"
           >
-            All payment schedules <ArrowUpRight aria-hidden="true" size={15} weight="regular" />
+            All payment schedules <ArrowUpRight aria-hidden="true" size={15} weight="regular" className="transition-transform duration-200 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 motion-reduce:transform-none motion-reduce:transition-none" />
           </button>
         </div>
 
@@ -970,15 +971,15 @@ export default function FinancialOverview({
                       {plan.inquiryId ? (
                         <Link
                           href={`/portal/leads/${encodeURIComponent(plan.inquiryId)}`}
-                          className="inline-flex min-h-9 items-center gap-1 text-xs font-semibold text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]"
+                          className="group inline-flex min-h-9 items-center gap-1 text-xs font-semibold text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]"
                         >
-                          Open client lead <ArrowUpRight size={13} weight="regular" />
+                          Open client lead <ArrowUpRight aria-hidden="true" size={13} weight="regular" className="transition-transform duration-200 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 motion-reduce:transform-none motion-reduce:transition-none" />
                         </Link>
                       ) : null}
                     </div>
                   </article>
                 ))}
-                {clientPaymentPlans.active.length % 2 === 1 && <div aria-hidden="true" className="hidden rounded-xl border-2 border-dotted border-[color:color-mix(in_srgb,var(--portal-muted)_38%,transparent)] dark:border-[#c6ad80]/35 dark:bg-[color:var(--portal-bg)]/60 xl:block" />}
+                {clientPaymentPlans.active.length % 2 === 1 && <div className="hidden items-center justify-center rounded-xl border-2 border-dotted border-[color:color-mix(in_srgb,var(--portal-muted)_38%,transparent)] p-4 text-center text-xs text-[color:var(--portal-muted)] dark:border-[#c6ad80]/35 dark:bg-[color:var(--portal-bg)]/60 lg:flex">Additional active schedules appear here.</div>}
               </div>
             )}
 
@@ -1031,15 +1032,15 @@ export default function FinancialOverview({
                         {item.inquiryId ? (
                           <Link
                             href={`/portal/leads/${encodeURIComponent(item.inquiryId)}`}
-                            className="font-semibold text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]"
+                            className="group inline-flex items-center gap-1 font-semibold text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]"
                           >
-                            Open client lead ↗
+                            Open client lead <ArrowUpRight aria-hidden="true" size={13} weight="regular" className="transition-transform duration-200 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 motion-reduce:transform-none motion-reduce:transition-none" />
                           </Link>
                         ) : null}
                       </div>
                     </article>
                   ))}
-                  {clientPaymentPlans.pending.length % 2 === 1 && <div aria-hidden="true" className="hidden rounded-xl border-2 border-dotted border-[color:color-mix(in_srgb,var(--portal-muted)_38%,transparent)] dark:border-[#c6ad80]/35 dark:bg-[color:var(--portal-bg)]/60 xl:block" />}
+                  {clientPaymentPlans.pending.length % 2 === 1 && <div className="hidden items-center justify-center rounded-xl border-2 border-dotted border-[color:color-mix(in_srgb,var(--portal-muted)_38%,transparent)] p-4 text-center text-xs text-[color:var(--portal-muted)] dark:border-[#c6ad80]/35 dark:bg-[color:var(--portal-bg)]/60 lg:flex">Additional drafts appear here.</div>}
                 </div>
               </div>
             )}
@@ -1050,7 +1051,7 @@ export default function FinancialOverview({
       {/* Middle Row: Monthly Revenue & Collections + Collections Year Chart */}
       <div className="grid gap-4 xl:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)]">
         {/* Monthly Revenue & Collections */}
-        <section className={card}>
+        <section className={`${card} flex flex-col`}>
           <h3 className="text-base font-semibold text-[color:var(--portal-text)]">Revenue &amp; Collections</h3>
           <p className={muted}>{monthName}</p>
           <div className="mt-5 flex min-h-[36px] items-center">
@@ -1086,9 +1087,9 @@ export default function FinancialOverview({
           <button
             type="button"
             onClick={(event) => scrollToView(event.currentTarget, 'revenue')}
-            className="mt-4 ml-auto flex min-h-10 w-fit items-center gap-1 font-semibold text-[#a8792f] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/50 dark:text-[#e6c77f]"
+            className="group ml-auto mt-auto flex min-h-10 w-fit items-center gap-1 pt-4 text-sm font-semibold text-[#a8792f] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/50 dark:text-[#e6c77f]"
           >
-            View revenue <ArrowUpRight aria-hidden="true" size={15} weight="regular" />
+            View revenue <ArrowUpRight aria-hidden="true" size={15} weight="regular" className="transition-transform duration-200 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 motion-reduce:transform-none motion-reduce:transition-none" />
           </button>
         </section>
 
@@ -1170,7 +1171,7 @@ export default function FinancialOverview({
       {/* Row 3: Revenue by category + Expense breakdown */}
       <div className="grid gap-4 lg:grid-cols-2">
         {/* Revenue by category */}
-        <section className={card}>
+        <section className={`${card} flex flex-col`}>
           <h3 className="font-semibold text-[color:var(--portal-text)]">Revenue by category</h3>
           <p className={muted}>{monthName}</p>
           {loading ? (
@@ -1193,23 +1194,15 @@ export default function FinancialOverview({
               <p className="mt-3 text-xs text-[color:var(--portal-muted)]">Refundable security deposits are tracked separately from revenue.</p>
             </>
           ) : (
-            <>
-              <p className={`${muted} mt-3`}>No revenue receipts recorded in {monthName} ($0.00).</p>
-              {allTimeRevenueCategories.length > 0 && (
-                <div className="mt-3 border-t border-[color:var(--portal-border)] pt-3">
-                  <p className="text-xs font-medium text-[color:var(--portal-muted)]">All-time collected revenue by category</p>
-                  <CategoryChart label="all-time revenue" values={allTimeRevenueCategories} />
-                </div>
-              )}
-            </>
+            <EmptyCategoryChart message="No revenue receipts recorded in this period ($0.00)." />
           )}
-          <button type="button" className="mt-4 ml-auto flex min-h-10 w-fit items-center gap-1 text-sm font-semibold text-[#a8792f] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/50 dark:text-[#e6c77f]" onClick={(event) => scrollToView(event.currentTarget, 'invoices')}>
-            Open invoices ledger <ArrowUpRight aria-hidden="true" size={15} weight="regular" />
+          <button type="button" className="group ml-auto mt-auto flex min-h-10 w-fit items-center gap-1 pt-4 text-sm font-semibold text-[#a8792f] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/50 dark:text-[#e6c77f]" onClick={(event) => scrollToView(event.currentTarget, 'invoices')}>
+            Open invoices ledger <ArrowUpRight aria-hidden="true" size={15} weight="regular" className="transition-transform duration-200 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 motion-reduce:transform-none motion-reduce:transition-none" />
           </button>
         </section>
 
         {/* Expense breakdown */}
-        <section className={card}>
+        <section className={`${card} flex flex-col`}>
           <h3 className="font-semibold text-[color:var(--portal-text)]">Expense breakdown</h3>
           <p className={muted}>{monthName}</p>
           {loading ? (
@@ -1228,22 +1221,14 @@ export default function FinancialOverview({
             <p className={`${muted} mt-3`}>Paid expense details are unavailable until the records are verified.</p>
           ) : expenseMonthCategories.length > 0 ? (
             <>
-              <CategoryChart label="expenses" values={expenseMonthCategories} />
+              <CategoryChart label="expenses" values={expenseMonthCategories} tone="expense" />
               <p className="mt-3 text-xs text-[color:var(--portal-muted)]">Showing expense payments and refunds recorded in {monthName}.</p>
             </>
-          ) : expenses?.available && expenses.categories.length > 0 ? (
-            <>
-              <p className={`${muted} mt-3`}>No paid expenses recorded in {monthName} ($0.00).</p>
-              <div className="mt-3 border-t border-[color:var(--portal-border)] pt-3">
-                <p className="text-xs font-medium text-[color:var(--portal-muted)]">All-time paid expenses</p>
-                <CategoryChart label="paid expenses" values={expenses.categories} />
-              </div>
-            </>
           ) : (
-            <p className={`${muted} mt-3`}>No paid expenses recorded for {monthName} ($0.00).</p>
+            <EmptyCategoryChart message="No paid expenses recorded in this period ($0.00)." />
           )}
-          <button type="button" className="mt-4 text-sm font-semibold text-[#a8792f] dark:text-[#e6c77f]" onClick={() => openView('expenses')}>
-            Open expense ledger
+          <button type="button" className="group ml-auto mt-auto flex min-h-10 w-fit items-center gap-1 pt-4 text-sm font-semibold text-[#a8792f] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/50 dark:text-[#e6c77f]" onClick={(event) => scrollToView(event.currentTarget, 'expenses')}>
+            Open expense ledger <ArrowUpRight aria-hidden="true" size={15} weight="regular" className="transition-transform duration-200 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 motion-reduce:transform-none motion-reduce:transition-none" />
           </button>
         </section>
       </div>
@@ -1295,7 +1280,7 @@ export default function FinancialOverview({
         <section className={card}>
           <div className="flex justify-between gap-2">
             <h3 className="font-semibold text-[color:var(--portal-text)]">Upcoming bills</h3>
-            <Link className="text-sm font-semibold text-[#a8792f] dark:text-[#e6c77f]" href="/portal/operations?tab=bills">
+            <Link className="text-sm font-semibold text-[#a8792f] dark:text-[#e6c77f]" href="/portal/finances?view=bill-review">
               View all
             </Link>
           </div>
@@ -1320,7 +1305,7 @@ export default function FinancialOverview({
               {unpaid.map((bill) => (
                 <li key={bill.id} className="py-3 text-sm">
                   <Link
-                    href={`/portal/operations?tab=bills&bill=${encodeURIComponent(bill.id)}`}
+                    href={`/portal/finances?view=bill-review&bill=${encodeURIComponent(bill.id)}`}
                     className="block rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#a8792f]"
                   >
                     <div className="flex justify-between gap-2 text-[color:var(--portal-text)]">
@@ -1334,7 +1319,7 @@ export default function FinancialOverview({
                   </Link>
                   {bill.vendor_id && (
                     <Link
-                      href={`/portal/operations?tab=bills&company=${encodeURIComponent(bill.vendor_id)}`}
+                      href={`/portal/finances?view=bill-review&company=${encodeURIComponent(bill.vendor_id)}`}
                       className="mt-1 inline-block text-xs font-semibold text-[#a8792f] dark:text-[#e6c77f]"
                     >
                       Company history
@@ -1350,8 +1335,8 @@ export default function FinancialOverview({
         <section className={card}>
           <div className="flex justify-between gap-2">
             <h3 className="font-semibold text-[color:var(--portal-text)]">Recent financial activity</h3>
-            <button type="button" className="text-sm font-semibold text-[#a8792f] dark:text-[#e6c77f]" onClick={() => openView('payments')}>
-              View payments
+            <button type="button" className="group inline-flex min-h-9 items-center gap-1 text-sm font-semibold text-[#a8792f] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/50 dark:text-[#e6c77f]" onClick={(event) => scrollToView(event.currentTarget, 'payments')}>
+              View payments <ArrowUpRight aria-hidden="true" size={15} weight="regular" className="transition-transform duration-200 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 motion-reduce:transform-none motion-reduce:transition-none" />
             </button>
           </div>
           {loading ? (

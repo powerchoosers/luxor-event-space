@@ -36,8 +36,22 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     if (!current) throw new LuxorExpenseRequestError('Recurring expense template not found.', 404)
     const body = objectBody(await request.json())
     if (!body) throw new LuxorExpenseRequestError('Invalid recurring expense update.')
+    if (body.expected_updated_at !== undefined && body.expected_updated_at !== current.updated_at) throw new LuxorExpenseRequestError('This schedule changed. Refresh and review it before linking.', 409)
 
     const patch: Partial<LuxorExpenseTemplate> = { updated_by: session.email }
+    if (body.vendor_id !== undefined) {
+      const vendorId = body.vendor_id === '' ? null : body.vendor_id
+      if (current.vendor_id && current.vendor_id !== vendorId && (body.confirm_provider_change !== true || body.expected_updated_at === undefined)) throw new LuxorExpenseRequestError('Review and confirm the provider change after refreshing this schedule.', 409)
+      if (vendorId !== null) {
+        if (!isExpenseUuid(vendorId)) throw new LuxorExpenseRequestError('Choose a valid provider.')
+        const [provider] = await supabaseRestStrict<Array<{ id: string; name: string; archived_at: string | null }>>(`luxor_vendors?select=id,name,archived_at&id=eq.${encodeURIComponent(vendorId)}&limit=1`)
+        if (!provider || provider.archived_at) throw new LuxorExpenseRequestError('Choose an active provider.')
+        patch.vendor_id = provider.id
+        patch.vendor_name = provider.name
+      } else {
+        patch.vendor_id = null
+      }
+    }
     if (body.is_active !== undefined) {
       if (typeof body.is_active !== 'boolean') throw new LuxorExpenseRequestError('Choose an active or inactive template state.')
       patch.is_active = body.is_active
@@ -79,16 +93,24 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
         payment_method: paymentMethod as LuxorExpenseTemplate['payment_method'],
         notes: clean(merged.notes, 4000) || null,
       })
+      const effectiveVendorId = body.vendor_id === undefined ? current.vendor_id : patch.vendor_id
+      if (effectiveVendorId) {
+        const [provider] = await supabaseRestStrict<Array<{ name: string }>>(`luxor_vendors?select=name&id=eq.${encodeURIComponent(effectiveVendorId)}&limit=1`)
+        if (provider) patch.vendor_name = provider.name
+      }
     }
     if (Object.keys(patch).length === 1) throw new LuxorExpenseRequestError('Choose template details or active state to update.')
 
-    const [saved] = await supabaseRestStrict<LuxorExpenseTemplate[]>(`luxor_expense_templates?select=*&id=eq.${encodeURIComponent(id)}`, {
+    const providerFence = body.vendor_id !== undefined ? current.vendor_id ? `&vendor_id=eq.${encodeURIComponent(current.vendor_id)}` : '&vendor_id=is.null' : ''
+    const versionFence = body.expected_updated_at !== undefined ? `&updated_at=eq.${encodeURIComponent(current.updated_at)}` : ''
+    const [saved] = await supabaseRestStrict<LuxorExpenseTemplate[]>(`luxor_expense_templates?select=*&id=eq.${encodeURIComponent(id)}${providerFence}${versionFence}`, {
       method: 'PATCH', headers: { Prefer: 'return=representation' }, body: JSON.stringify(patch),
     })
-    if (!saved) throw new LuxorExpenseRequestError('Recurring expense template not found.', 404)
-    const generation = saved.is_active ? await generateLuxorExpenseOccurrences(new Date(), saved.id) : { inserted: 0 }
+    if (!saved) throw new LuxorExpenseRequestError('This schedule changed. Refresh and review it before saving.', 409)
+    const generation = saved.is_active && (hasTemplateFields || body.is_active === true) ? await generateLuxorExpenseOccurrences(new Date(), saved.id) : { inserted: 0 }
     return NextResponse.json({ template: saved, generated_count: generation.inserted }, { headers: { 'Cache-Control': 'no-store' } })
   } catch (error) {
+    if (error instanceof SupabaseRestError && error.code === '55000') return NextResponse.json({ error: error.message }, { status: 409 })
     if (error instanceof SupabaseRestError && error.code === '23505') return NextResponse.json({ error: 'A recurring expense already exists for that billing period.' }, { status: 409 })
     const result = toExpenseErrorResponse(error)
     if (result.status === 500) console.error('Recurring expense template could not be updated:', error)

@@ -6,6 +6,13 @@ const path = require('node:path')
 const Module = require('node:module')
 const ts = require('typescript')
 
+const previousSendGate = process.env.LUXOR_FOLLOW_UP_SENDS_ENABLED
+test.before(() => { process.env.LUXOR_FOLLOW_UP_SENDS_ENABLED = 'true' })
+test.after(() => {
+  if (previousSendGate === undefined) delete process.env.LUXOR_FOLLOW_UP_SENDS_ENABLED
+  else process.env.LUXOR_FOLLOW_UP_SENDS_ENABLED = previousSendGate
+})
+
 const root = path.resolve(__dirname, '..')
 let state
 

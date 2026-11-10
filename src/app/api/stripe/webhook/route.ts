@@ -20,9 +20,21 @@ import { assertLuxorProductionSideEffectsAllowed } from '@/lib/luxorTestLeadServ
 import { syncLuxorPaymentInstallments, usesFirstDepositScheduleAnchor } from '@/lib/luxorPaymentInstallmentsServer'
 import { recordClaimedDeposit, recordClaimedSameDayDeposit, recordUnmatchedDepositReview, updateDepositCheckoutClaim } from '@/lib/luxorDepositClaimsServer'
 import { allocateExistingPayment, drainPendingPaymentAllocations, existingPaymentAllocationPending, pendingExistingPaymentAllocation } from '@/lib/luxorExistingPaymentAllocationServer'
+import { readPaidInvoiceEmailSetting } from '@/lib/luxorPaidInvoiceEmailCopyServer'
+import { paidInvoiceCopyHtml, renderPaidInvoiceEmailCopy, type PaidInvoiceEmailCopy } from '@/lib/luxorPaidInvoiceEmailCopy'
 
 function escapeNoticeHtml(value: string) {
   return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;')
+}
+
+async function paidInvoiceCopyForQueue(fullName: string): Promise<PaidInvoiceEmailCopy | null> {
+  try {
+    const { setting } = await readPaidInvoiceEmailSetting()
+    return setting.copy_override ? paidInvoiceCopyHtml(renderPaidInvoiceEmailCopy(setting.copy_override, fullName.trim().split(/\s+/)[0] || 'there')) : null
+  } catch (error) {
+    console.error('Paid-invoice email settings unavailable; using original wording:', error)
+    return null
+  }
 }
 
 function paymentKind(label: string | undefined, invoiceKind?: string) {
@@ -243,9 +255,10 @@ async function recordPaidCheckoutSession(session: Stripe.Checkout.Session, event
     if (currentInquiry?.email) {
       const pdf = await buildLuxorInvoicePdf(paidInvoice, currentInquiry)
       await saveLuxorInvoicePdf({ invoice: paidInvoice, inquiryId: currentInquiry.id, pdf, createdBy: 'Stripe Automation' })
+      const copy = await paidInvoiceCopyForQueue(currentInquiry.full_name)
       await queueLuxorTransactionalNotice({ kind: 'paid_invoice', sourceId: session.id, inquiryId: currentInquiry.id,
-        bookingId: currentBooking.id, recipient: currentInquiry.email, subject: 'Your Luxor payment receipt',
-        html: `<div style="font-family:Arial,sans-serif;max-width:620px;margin:auto"><h1>Payment received</h1><p>Hi ${escapeNoticeHtml(currentInquiry.full_name.split(/\s+/)[0] || currentInquiry.full_name)},</p><p>We received your booking payment of <strong>${formatMoney(recorded.payment.amount)}</strong>. Your paid invoice is attached.</p><p>Please contact Luxor if you have questions about your booking.</p></div>`,
+        bookingId: currentBooking.id, recipient: currentInquiry.email, subject: copy?.subject || 'Your Luxor payment receipt',
+        html: `<div style="font-family:Arial,sans-serif;max-width:620px;margin:auto"><h1>Payment received</h1><p>${copy ? copy.greeting : `Hi ${escapeNoticeHtml(currentInquiry.full_name.split(/\s+/)[0] || currentInquiry.full_name)},`}</p><p>We received your booking payment of <strong>${formatMoney(recorded.payment.amount)}</strong>. Your paid invoice is attached.</p><p>${copy ? copy.closing : 'Please contact Luxor if you have questions about your booking.'}</p></div>`,
         scheduledFor: recorded.payment.paid_at || paidAt, pdf,
         filename: `Luxor-Paid-Booking-Payment-Invoice-${paidInvoice.id.slice(0, 8)}.pdf`,
         legacyAutomationKey: `deposit_payment_confirmation:${session.id}` })
@@ -526,11 +539,12 @@ async function recordPaidCheckoutSession(session: Stripe.Checkout.Session, event
               : `We received your initial booking payment of <strong>${formatMoney(paymentBreakdown.total)}</strong>.`
             const pdf = await buildLuxorInvoicePdf(paidInvoice, inquiry)
             await saveLuxorInvoicePdf({ invoice: paidInvoice, inquiryId: inquiry.id, pdf, createdBy: 'Stripe Automation' })
+            const copy = await paidInvoiceCopyForQueue(inquiry.full_name)
             await queueLuxorTransactionalNotice({
               kind: 'paid_invoice', sourceId: session.id,
               inquiryId: inquiry.id, bookingId: booking.id, recipient: inquiry.email,
-              subject: reservationConfirmed ? 'Your Luxor date is officially reserved' : 'Your Luxor booking payment is confirmed',
-              html: `<div style="font-family:Arial,sans-serif;width:100%;box-sizing:border-box;overflow-wrap:anywhere;max-width:620px;margin:auto;background:#f8f3e9;color:#221d18;padding:36px;border-top:4px solid #b98a3d"><p style="letter-spacing:.22em;text-transform:uppercase;color:#9b6d24;font-size:11px;font-weight:700">Luxor Event Space</p><h1 style="font-family:Georgia,serif;font-size:32px">${reservationConfirmed ? 'Your date is officially reserved' : 'Your booking payment is confirmed'}</h1><p>Hi ${escapeNoticeHtml(inquiry.full_name.split(/\s+/)[0] || inquiry.full_name)},</p><p>${paymentExplanation}</p><p>${reservationConfirmed ? 'Your signed agreement and payment are complete, so your event date is officially reserved. We will continue with planning next.' : 'Your date remains pending until the agreement is signed.'}</p>${securedOfferMessage}${taxCoverageReceipt}<p>Your paid booking-payment invoice is attached for your records.</p></div>`,
+              subject: copy?.subject || (reservationConfirmed ? 'Your Luxor date is officially reserved' : 'Your Luxor booking payment is confirmed'),
+              html: `<div style="font-family:Arial,sans-serif;width:100%;box-sizing:border-box;overflow-wrap:anywhere;max-width:620px;margin:auto;background:#f8f3e9;color:#221d18;padding:36px;border-top:4px solid #b98a3d"><p style="letter-spacing:.22em;text-transform:uppercase;color:#9b6d24;font-size:11px;font-weight:700">Luxor Event Space</p><h1 style="font-family:Georgia,serif;font-size:32px">${reservationConfirmed ? 'Your date is officially reserved' : 'Your booking payment is confirmed'}</h1><p>${copy ? copy.greeting : `Hi ${escapeNoticeHtml(inquiry.full_name.split(/\s+/)[0] || inquiry.full_name)},`}</p><p>${paymentExplanation}</p><p>${reservationConfirmed ? 'Your signed agreement and payment are complete, so your event date is officially reserved. We will continue with planning next.' : 'Your date remains pending until the agreement is signed.'}</p>${securedOfferMessage}${taxCoverageReceipt}<p>Your paid booking-payment invoice is attached for your records.</p>${copy ? `<p>${copy.closing}</p>` : ''}</div>`,
               scheduledFor: paidAt, pdf,
               filename: `Luxor-Paid-Booking-Payment-Invoice-${paidInvoice.id.slice(0, 8)}.pdf`,
               legacyAutomationKey: `deposit_payment_confirmation:${session.id}`,

@@ -1,0 +1,2 @@
+create index luxor_paid_bill_provider_events_bill_idx on public.luxor_paid_bill_provider_events (bill_id);
+create index luxor_paid_bill_provider_events_vendor_idx on public.luxor_paid_bill_provider_events (vendor_id);

@@ -7,7 +7,8 @@ import { createNote } from './luxorNotesServer'
 import { getLuxorInquiry, updateLuxorInquiry } from './luxorInquiriesServer'
 import { buildLuxorInvoicePdf } from './luxorInvoicePdfServer'
 import { getInvoice } from './luxorInvoicesServer'
-import { buildLuxorProposalContractEmail } from './luxorProposalEmailServer'
+import { agreementPackageCopyFromJobMetadata, buildLuxorProposalContractEmail } from './luxorProposalEmailServer'
+import { readAgreementPackageCopy } from './luxorAgreementPackageCopyServer'
 import {
   claimLuxorSignatureAgreementDelivery,
   getLuxorSignatureRequestById,
@@ -144,7 +145,8 @@ export async function deliverLuxorAgreementEmailJob(job: LuxorEmailJob): Promise
     downloadLuxorPrivatePdf(claimedSignature.guest_guide_path || ''),
   ])
   const signingUrl = `${(process.env.NEXT_PUBLIC_SITE_URL || 'https://www.luxoratlaspalmas.com').replace(/\/$/, '')}/secure-portal/sign/${claimedSignature.token}`
-  const email = await buildLuxorProposalContractEmail({ invoice, inquiry, booking, signingUrl })
+  const copyOverride = agreementPackageCopyFromJobMetadata(jobMetadata(job)) || await readAgreementPackageCopy()
+  const email = await buildLuxorProposalContractEmail({ invoice, inquiry, booking, signingUrl, copyOverride })
   const receipt = await sendLuxorZohoEmail({
     idempotencyKey: `agreement-job/${job.id}`,
     to: inquiry.email,

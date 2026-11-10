@@ -8,6 +8,7 @@ import { SAME_DAY_BOOKING_TERMS, SAME_DAY_CARD_CUTOFF_TERMS, type LuxorSameDayBo
 import { formatLuxorCustomRentalPriceBreakdown, getLuxorCustomRentalSnapshot, type LuxorCustomRentalSnapshot } from './luxorCustomRentalSnapshot'
 import { getLuxorAiVenueContext } from './luxorAiContextServer'
 import { LUXOR_UNSLOP_COPY_RULES } from './luxorUnslop'
+import { renderAgreementPackageCopy, validateAgreementPackageCopy, type AgreementPackageCopy } from './luxorAgreementPackageCopy'
 
 const money = (value: number) => `$${Number(value || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 const LUXOR_STANDARD_REFUNDABLE_SECURITY_DEPOSIT = 750
@@ -531,24 +532,60 @@ export async function buildLuxorProposalContractEmail(input: {
   signingUrl: string
   notes?: LuxorNote[]
   introductionOverride?: string
+  copyOverride?: AgreementPackageCopy | null
 }) {
   const firstName = input.inquiry.full_name.split(/\s+/)[0] || input.inquiry.full_name
-  const introduction = input.introductionOverride
-    ? { copy: input.introductionOverride, aiGenerated: false }
-    : await generateProposalContractIntroduction(input)
   const summary = getLuxorProposalPricingSummary(input.invoice)
   const packageName = summary.packageName || input.booking.package_name || input.inquiry.package_interest || 'Custom Luxor package'
   const offerDisclosure = offerDisclosureHtml(input.invoice, summary, 'accepted')
   const finalDueDate = input.booking.final_payment_due_date
     ? displayEventDate(input.booking.final_payment_due_date)
     : null
-  const paymentScheduleCopy = finalDueDate
+  const finalBalanceSchedule = finalDueDate
+    ? `, with the final event balance due ${finalDueDate}`
+  : ', with payment timing recorded in your booking'
+  let subject = 'Your Luxor Event Agreement is ready to sign'
+  let title = 'Your Event Agreement is ready to sign'
+  let greetingLine = `Hi ${escapeHtml(firstName)},`
+  let introductionCopy = ''
+  let nextStepsCopy = finalDueDate
     ? `Your agreement includes the remaining-balance schedule, with the final event balance due ${finalDueDate}.`
     : 'Your agreement includes the payment timing for the final event balance.'
+  let aiGenerated = false
+  if (input.copyOverride) {
+    const rendered = renderAgreementPackageCopy(input.copyOverride, { first_name: firstName, final_balance_schedule: finalBalanceSchedule })
+    subject = rendered.subject
+    title = rendered.title
+    greetingLine = escapeHtml(rendered.greeting.replace(/\{\{first_name\}\}/g, firstName))
+    introductionCopy = rendered.introduction
+    nextStepsCopy = rendered.nextSteps
+  } else if (input.introductionOverride) {
+    introductionCopy = input.introductionOverride
+  } else {
+    const introduction = await generateProposalContractIntroduction(input)
+    introductionCopy = introduction.copy
+    aiGenerated = introduction.aiGenerated
+  }
+  if (!input.copyOverride) {
+    nextStepsCopy = `${nextStepsCopy} No payment is requested in this email. After the agreement is signed, Luxor will email the secure Stripe link for the applicable booking payment.`
+  }
   return {
-    subject: `Your Luxor Event Agreement is ready to sign`,
-    html: `<!doctype html><html lang="en"><head><meta charset="UTF-8" /><meta name="viewport" content="width=device-width,initial-scale=1.0" /><title>Luxor Event Agreement</title></head><body style="margin:0;padding:0;background:#050505;color:#f7efe3;font-family:Arial,'Helvetica Neue',sans-serif"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#050505"><tr><td align="center" style="padding:28px 14px"><table role="presentation" width="620" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:620px;background:#0a0807;border:1px solid rgba(202,162,76,.32);border-collapse:collapse"><tr><td style="height:4px;background:#caa24c;font-size:1px;line-height:1px">&nbsp;</td></tr><tr><td align="center" style="padding:30px 40px 26px;border-bottom:1px solid rgba(202,162,76,.18)"><p style="margin:0;font-family:Georgia,'Times New Roman',serif;color:#caa24c;font-size:31px;font-weight:700;letter-spacing:.18em;text-transform:uppercase">Luxor</p><p style="margin:7px 0 0;color:#8c754f;font-size:8px;font-weight:700;letter-spacing:.39em;text-transform:uppercase">At Las Palmas Events</p></td></tr><tr><td style="padding:42px 40px 20px"><p style="margin:0 0 13px;color:#caa24c;font-size:10px;font-weight:800;letter-spacing:.24em;text-transform:uppercase">Event agreement</p><h1 style="margin:0;font-family:Georgia,'Times New Roman',serif;color:#f7efe3;font-size:35px;font-weight:600;line-height:1.13">Your Event Agreement is ready to sign</h1><p style="margin:18px 0 0;color:#d7c29a;font-size:15px;line-height:1.75">Hi ${escapeHtml(firstName)}, ${escapeHtml(introduction.copy)}</p></td></tr><tr><td style="padding:7px 40px 22px"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#120d0a;border:1px solid rgba(202,162,76,.2)"><tr><td style="padding:18px 20px"><p style="margin:0 0 7px;color:#caa24c;font-size:9px;font-weight:800;letter-spacing:.18em;text-transform:uppercase">Accepted package</p><p style="margin:0;color:#f7efe3;font-family:Georgia,'Times New Roman',serif;font-size:20px">${escapeHtml(packageName)}</p></td><td align="right" style="padding:18px 20px"><p style="margin:0 0 7px;color:#caa24c;font-size:9px;font-weight:800;letter-spacing:.18em;text-transform:uppercase">Final event price</p><p style="margin:0;color:#f1d27a;font-family:Georgia,'Times New Roman',serif;font-size:22px;font-weight:700">${money(summary.finalEventPrice)}</p></td></tr></table></td></tr><tr><td style="padding:10px 40px 0"><p style="margin:0 0 13px;color:#caa24c;font-size:10px;font-weight:800;letter-spacing:.22em;text-transform:uppercase">Accepted package breakdown</p>${proposalBreakdownHtml(summary)}${proposalFinancialSummaryHtml(summary)}${offerDisclosure}</td></tr><tr><td style="padding:21px 40px 8px"><p style="margin:0;padding:17px 18px;border:1px solid rgba(202,162,76,.18);background:#0d0b09;color:#d7c29a;font-size:12px;line-height:1.7"><span style="display:block;margin-bottom:7px;color:#caa24c;font-size:9px;font-weight:800;letter-spacing:.16em;text-transform:uppercase">What happens next</span>${escapeHtml(paymentScheduleCopy)} No payment is requested in this email. After the agreement is signed, Luxor will email the secure Stripe link for the applicable booking payment.</p></td></tr><tr><td align="center" style="padding:24px 40px 42px"><a href="${escapeHtml(input.signingUrl)}" target="_blank" style="display:inline-block;background:#caa24c;color:#17120c;text-decoration:none;padding:16px 26px;border:1px solid #f1d27a;font-size:11px;font-weight:800;letter-spacing:.15em;text-transform:uppercase">Review and sign agreement</a><p style="margin:18px 0 0;color:#8c754f;font-size:11px;line-height:1.65">Your finalized proposal PDF and Guest Guide are attached for reference.</p></td></tr><tr><td align="center" style="padding:27px 40px 31px;border-top:1px solid rgba(202,162,76,.14);background:#080605"><p style="margin:0;color:#caa24c;font-family:Georgia,'Times New Roman',serif;font-size:21px;letter-spacing:.14em;text-transform:uppercase">Luxor</p><p style="margin:9px 0 0;color:#8c754f;font-size:10px;line-height:1.7">${escapeHtml(LUXOR_VENUE_ADDRESS)}<br /><a href="mailto:${escapeHtml(LUXOR_BOOKING_EMAIL)}" style="color:#caa24c;text-decoration:none">${escapeHtml(LUXOR_BOOKING_EMAIL)}</a></p></td></tr></table></td></tr></table></body></html>`,
-    aiGenerated: introduction.aiGenerated,
+    subject,
+    html: `<!doctype html><html lang="en"><head><meta charset="UTF-8" /><meta name="viewport" content="width=device-width,initial-scale=1.0" /><title>Luxor Event Agreement</title></head><body style="margin:0;padding:0;background:#050505;color:#f7efe3;font-family:Arial,'Helvetica Neue',sans-serif"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#050505"><tr><td align="center" style="padding:28px 14px"><table role="presentation" width="620" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:620px;background:#0a0807;border:1px solid rgba(202,162,76,.32);border-collapse:collapse"><tr><td style="height:4px;background:#caa24c;font-size:1px;line-height:1px">&nbsp;</td></tr><tr><td align="center" style="padding:30px 40px 26px;border-bottom:1px solid rgba(202,162,76,.18)"><p style="margin:0;font-family:Georgia,'Times New Roman',serif;color:#caa24c;font-size:31px;font-weight:700;letter-spacing:.18em;text-transform:uppercase">Luxor</p><p style="margin:7px 0 0;color:#8c754f;font-size:8px;font-weight:700;letter-spacing:.39em;text-transform:uppercase">At Las Palmas Events</p></td></tr><tr><td style="padding:42px 40px 20px"><p style="margin:0 0 13px;color:#caa24c;font-size:10px;font-weight:800;letter-spacing:.24em;text-transform:uppercase">Event agreement</p><h1 style="margin:0;font-family:Georgia,'Times New Roman',serif;color:#f7efe3;font-size:35px;font-weight:600;line-height:1.13">${escapeHtml(title)}</h1><p style="margin:18px 0 0;color:#d7c29a;font-size:15px;line-height:1.75">${greetingLine} ${escapeHtml(introductionCopy)}</p></td></tr><tr><td style="padding:7px 40px 22px"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#120d0a;border:1px solid rgba(202,162,76,.2)"><tr><td style="padding:18px 20px"><p style="margin:0 0 7px;color:#caa24c;font-size:9px;font-weight:800;letter-spacing:.18em;text-transform:uppercase">Accepted package</p><p style="margin:0;color:#f7efe3;font-family:Georgia,'Times New Roman',serif;font-size:20px">${escapeHtml(packageName)}</p></td><td align="right" style="padding:18px 20px"><p style="margin:0 0 7px;color:#caa24c;font-size:9px;font-weight:800;letter-spacing:.18em;text-transform:uppercase">Final event price</p><p style="margin:0;color:#f1d27a;font-family:Georgia,'Times New Roman',serif;font-size:22px;font-weight:700">${money(summary.finalEventPrice)}</p></td></tr></table></td></tr><tr><td style="padding:10px 40px 0"><p style="margin:0 0 13px;color:#caa24c;font-size:10px;font-weight:800;letter-spacing:.22em;text-transform:uppercase">Accepted package breakdown</p>${proposalBreakdownHtml(summary)}${proposalFinancialSummaryHtml(summary)}${offerDisclosure}</td></tr><tr><td style="padding:21px 40px 8px"><p style="margin:0;padding:17px 18px;border:1px solid rgba(202,162,76,.18);background:#0d0b09;color:#d7c29a;font-size:12px;line-height:1.7"><span style="display:block;margin-bottom:7px;color:#caa24c;font-size:9px;font-weight:800;letter-spacing:.16em;text-transform:uppercase">What happens next</span>${escapeHtml(nextStepsCopy)}</p></td></tr><tr><td align="center" style="padding:24px 40px 42px"><a href="${escapeHtml(input.signingUrl)}" target="_blank" style="display:inline-block;background:#caa24c;color:#17120c;text-decoration:none;padding:16px 26px;border:1px solid #f1d27a;font-size:11px;font-weight:800;letter-spacing:.15em;text-transform:uppercase">Review and sign agreement</a><p style="margin:18px 0 0;color:#8c754f;font-size:11px;line-height:1.65">Your finalized proposal PDF and Guest Guide are attached for reference.</p></td></tr><tr><td align="center" style="padding:27px 40px 31px;border-top:1px solid rgba(202,162,76,.14);background:#080605"><p style="margin:0;color:#caa24c;font-family:Georgia,'Times New Roman',serif;font-size:21px;letter-spacing:.14em;text-transform:uppercase">Luxor</p><p style="margin:9px 0 0;color:#8c754f;font-size:10px;line-height:1.7">${escapeHtml(LUXOR_VENUE_ADDRESS)}<br /><a href="mailto:${escapeHtml(LUXOR_BOOKING_EMAIL)}" style="color:#caa24c;text-decoration:none">${escapeHtml(LUXOR_BOOKING_EMAIL)}</a></p></td></tr></table></td></tr></table></body></html>`,
+    aiGenerated,
+  }
+}
+
+export function agreementPackageCopyFromJobMetadata(metadata: Record<string, unknown> | null | undefined) {
+  const snapshot = metadata?.agreement_package_copy_snapshot
+  return snapshot ? validateAgreementPackageCopyFromMetadata(snapshot) : null
+}
+
+function validateAgreementPackageCopyFromMetadata(snapshot: unknown): AgreementPackageCopy | null {
+  try {
+    return validateAgreementPackageCopy(snapshot)
+  } catch {
+    return null
   }
 }
 

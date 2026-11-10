@@ -9,6 +9,7 @@ import { listNotesByInquiry, createNote } from '@/lib/luxorNotesServer'
 import { sendLuxorZohoEmail } from '@/lib/zohoMailServer'
 import { createLuxorEmailJob, updateLuxorEmailJob, processLuxorEmailJobs, listLuxorEmailJobsForInquiry } from '@/lib/luxorEmailJobsServer'
 import { buildAiTailoredInvoiceReminderEmail } from '@/lib/luxorLifecycleEmailsServer'
+import { readManualInvoiceReminderCopy } from '@/lib/luxorManualInvoiceReminderCopyServer'
 import { createLuxorPostContractCheckout, prepareLuxorDepositPaymentLink } from '@/lib/luxorStripeCheckoutServer'
 import { getLuxorPaymentReminderBookingLookup, getLuxorPaymentReminderDueDate } from '@/lib/luxorPaymentReminderDueDate'
 import { assertLuxorProductionSideEffectsAllowed } from '@/lib/luxorTestLeadServer'
@@ -91,6 +92,10 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       : body.kind === 'unpaid_invoice'
         ? 'unpaid_invoice'
         : 'unpaid_invoice'
+    let copyOverride = null
+    try { copyOverride = await readManualInvoiceReminderCopy(reminderKind) } catch (error) {
+      console.error('Manual invoice reminder copy unavailable; using original wording:', error)
+    }
 
     if (body.correctedEmailResend) {
       if (!body.sourceJobId || !/^[0-9a-f-]{8}-[0-9a-f-]{4}-[0-9a-f-]{4}-[0-9a-f-]{4}-[0-9a-f-]{12}$/i.test(body.sourceJobId)) {
@@ -118,7 +123,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
           if (!checkout) throw new Error('This payment invoice no longer has a balance due.')
           const email = await buildAiTailoredInvoiceReminderEmail({
             inquiry, invoice, booking, reviewUrl: checkout.checkoutUrl, balanceDue: checkout.paymentAmount,
-            dueDate, notes, kind: reminderKind,
+            dueDate, notes, kind: reminderKind, copyOverride,
           })
           return { subject: email.subject, body: email.body, checkoutSessionId: checkout.checkoutId, balanceDue: checkout.paymentAmount }
         },
@@ -175,6 +180,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       dueDate,
       notes,
       kind: reminderKind,
+      copyOverride,
     })
 
     const job = await createLuxorEmailJob({
@@ -192,6 +198,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         balance_due: balanceDue,
         ...(checkoutId ? { checkout_session_id: checkoutId, flow_stage: 'post_signature_payment' } : {}),
         ai_generated: email.aiGenerated,
+        ...(copyOverride ? { manual_invoice_copy_snapshot: copyOverride } : {}),
       },
     })
 

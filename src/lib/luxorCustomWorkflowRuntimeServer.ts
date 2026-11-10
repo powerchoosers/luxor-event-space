@@ -9,8 +9,9 @@ import { hydrateWorkflowEmailTemplates, renderCustomWorkflowEmail, mergeWorkflow
 import { generateWorkflowMessage } from './luxorWorkflowAiServer'
 import { getPublicLuxorPhoneNumber } from './luxorPhoneNumbersServer'
 import { luxorEmailHtmlToPlainText } from './luxorConversationalEmailServer'
-import { supabaseRest } from './supabaseRestServer'
+import { supabaseRest, supabaseRestStrict } from './supabaseRestServer'
 import { getWorkflowRecentClientMessages } from './luxorWorkflowClientContextServer'
+import { consumeAttendedTourEvents, type AttendedTourConsumption } from './luxorCustomWorkflowTourOrchestrationServer'
 
 export type CustomWorkflowRuntimeSummary = {
   enabled: boolean
@@ -28,6 +29,7 @@ export type CustomWorkflowRuntimeSummary = {
   queuedTextSteps: number
   ineligibleStepsStopped: number
   staleDispatchesHeld: number
+  attendedTours: AttendedTourConsumption | null
 }
 
 /**
@@ -53,6 +55,7 @@ export async function processDueLuxorCustomWorkflowOrchestration(limit = 20): Pr
     queuedTextSteps: 0,
     ineligibleStepsStopped: 0,
     staleDispatchesHeld: 0,
+    attendedTours: null,
   }
   if (!CUSTOM_WORKFLOW_EXECUTION_ENABLED) return disabled
 
@@ -83,6 +86,7 @@ export async function processDueLuxorCustomWorkflowOrchestration(limit = 20): Pr
     method: 'POST',
     body: JSON.stringify({ p_limit: batchSize }),
   })
+  const attendedTours = await consumeAttendedTourEvents(batchSize)
   const acknowledgments = await supabaseRest<number>(
     'rpc/luxor_custom_workflow_reconcile_acknowledgments',
     { method: 'POST', body: JSON.stringify({ p_limit: batchSize }) },
@@ -111,7 +115,8 @@ export async function processDueLuxorCustomWorkflowOrchestration(limit = 20): Pr
       if (needsGeneration) generatedMessages += 1
       // Read current client details at execution, rather than generating from a
       // generic example or the event payload captured days earlier.
-      const [currentInquiry] = await supabaseRest<Array<Record<string, unknown>>>(`luxor_inquiries?select=full_name,event_type,guest_count,target_date,preferred_tour_date,preferred_tour_time,budget,package_interest,message,status&id=eq.${encodeURIComponent(item.inquiry_id)}&limit=1`)
+      const [currentInquiry] = await supabaseRestStrict<Array<Record<string, unknown>>>(`luxor_inquiries?select=email,phone,full_name,event_type,guest_count,target_date,preferred_tour_date,preferred_tour_time,budget,package_interest,message,status&id=eq.${encodeURIComponent(item.inquiry_id)}&limit=1`)
+      if (!currentInquiry) throw new Error('The current contact could not be verified; the workflow step remains due.')
       const clientContext = { ...item.inquiry_context, ...currentInquiry }
       if (needsGeneration) {
         const [notes, priorEmails, clientMessages] = await Promise.all([
@@ -146,7 +151,7 @@ export async function processDueLuxorCustomWorkflowOrchestration(limit = 20): Pr
             method: 'POST',
             body: JSON.stringify({
               p_step_run_id: item.step_run_id,
-              p_recipient_email: item.inquiry_context.email || '',
+              p_recipient_email: typeof currentInquiry.email === 'string' ? currentInquiry.email : '',
               p_subject: rendered.subject,
               p_body: rendered.body,
               p_preview_text: rendered.previewText,
@@ -164,7 +169,7 @@ export async function processDueLuxorCustomWorkflowOrchestration(limit = 20): Pr
           step = generated.step
         }
         const rendered = await renderCustomWorkflowText(step, clientContext)
-        const phone = normalizePhoneNumber(item.inquiry_context.phone) || ''
+        const phone = normalizePhoneNumber(typeof currentInquiry.phone === 'string' ? currentInquiry.phone : '') || ''
         const [result] = await supabaseRest<CustomWorkflowEnqueueResult[]>(
           'rpc/luxor_custom_workflow_enqueue_text_step',
           {
@@ -205,6 +210,7 @@ export async function processDueLuxorCustomWorkflowOrchestration(limit = 20): Pr
     queuedTextSteps: enqueued.text,
     ineligibleStepsStopped: Number(ineligibleStepsStopped || 0),
     staleDispatchesHeld: Number(staleDispatchesHeld || 0),
+    attendedTours,
   }
 }
 

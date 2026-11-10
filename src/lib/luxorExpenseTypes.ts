@@ -121,6 +121,7 @@ export type LuxorExpenseRecord = {
 
 export type LuxorExpenseTemplate = {
   id: string
+  vendor_id?: string | null
   name: string
   category: string
   category_id: string | null

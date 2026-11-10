@@ -5,6 +5,11 @@ import { formatLuxorOfferExpiry, hasLuxorOffer, luxorOfferSnapshot } from './lux
 import { renderLuxorSystemEmail } from './luxorEmailDesignSystem'
 import { getLuxorAiVenueContext } from './luxorAiContextServer'
 import { LUXOR_UNSLOP_COPY_RULES } from './luxorUnslop'
+import { renderFinalPaymentReminderCopy, type FinalPaymentReminderCopy } from './luxorFinalPaymentReminderCopy'
+import { renderEventEmailCopy, type EventEmailCopy } from './luxorEventEmailCopy'
+import { renderAgreementReminderCopy, type AgreementReminderCopy } from './luxorAgreementReminderCopy'
+import { renderOfferReminderCopy, type OfferReminderCopy } from './luxorOfferReminderCopy'
+import { renderPaymentRequestReminderCopy, type PaymentRequestReminderCopy } from './luxorPaymentRequestReminderCopy'
 
 const SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL || 'https://www.luxoratlaspalmas.com').replace(/\/$/, '')
 
@@ -58,12 +63,20 @@ export async function buildAiOfferReminderEmail(input: {
   reviewUrl: string
   reminderNumber: number
   notes?: LuxorNote[]
+  copyOverride?: OfferReminderCopy | null
 }) {
   const offer = luxorOfferSnapshot(input.invoice)
   const expiry = formatLuxorOfferExpiry(input.invoice.offer_expires_at) || 'the stated deadline'
   const fallback = hasLuxorOffer(input.invoice)
     ? `Your ${offer.percent}% approved adjustment is still available for your ${input.inquiry.event_type || 'event'}. Review and accept the final proposal by ${expiry}; Luxor will send the Event Agreement next.`
     : `Your Luxor proposal is still available for your ${input.inquiry.event_type || 'event'}. Review and accept it by ${expiry}; Luxor will send the Event Agreement next.`
+  const detail = hasLuxorOffer(input.invoice)
+    ? `Regular price: ${money(offer.originalTotal)} · Your offer: ${money(offer.discountedTotal)} · Save ${money(offer.savings)} (${offer.percent}%) · Expires: ${expiry}`
+    : `Proposal total: ${money(input.invoice.total)} · Expires: ${expiry}`
+  if (input.copyOverride) {
+    const custom = renderOfferReminderCopy(input.copyOverride, firstName(input.inquiry.full_name))
+    return { subject: custom.subject, body: brandedEmail({ eyebrow: hasLuxorOffer(input.invoice) ? 'Limited-time event offer' : 'Event proposal reminder', title: custom.title, greeting: custom.greeting, copy: custom.body, detail, buttonLabel: 'Review offer & secure date', buttonUrl: input.reviewUrl }), aiGenerated: false }
+  }
   const apiKey = process.env.OPEN_ROUTER_API_KEY
   let copy = fallback
   let aiGenerated = false
@@ -104,9 +117,6 @@ export async function buildAiOfferReminderEmail(input: {
       console.warn('AI offer reminder copy fell back to approved copy:', error instanceof Error ? error.message : error)
     }
   }
-  const detail = hasLuxorOffer(input.invoice)
-    ? `Regular price: ${money(offer.originalTotal)} · Your offer: ${money(offer.discountedTotal)} · Save ${money(offer.savings)} (${offer.percent}%) · Expires: ${expiry}`
-    : `Proposal total: ${money(input.invoice.total)} · Expires: ${expiry}`
   return {
     subject: hasLuxorOffer(input.invoice)
       ? `Reminder: your ${offer.percent}% Luxor offer ends ${expiry}`
@@ -124,14 +134,15 @@ export async function buildAiOfferReminderEmail(input: {
   }
 }
 
-export function buildPaymentReminderEmail(input: { inquiry: LuxorInquiry; reviewUrl: string; paymentAmount: number; paymentLabel: string }) {
+export function buildPaymentReminderEmail(input: { inquiry: LuxorInquiry; reviewUrl: string; paymentAmount: number; paymentLabel: string; copyOverride?: PaymentRequestReminderCopy | null }) {
+  const custom = input.copyOverride ? renderPaymentRequestReminderCopy(input.copyOverride, firstName(input.inquiry.full_name)) : null
   return {
-    subject: `Reminder: your Luxor ${input.paymentLabel.toLowerCase()} is ready`,
+    subject: custom?.subject || `Reminder: your Luxor ${input.paymentLabel.toLowerCase()} is ready`,
     body: brandedEmail({
       eyebrow: 'Agreement signed · payment pending',
-      title: 'Your secure payment is ready',
-      greeting: `Hi ${firstName(input.inquiry.full_name)},`,
-      copy: `Your Luxor agreement is complete. The next step is your ${input.paymentLabel.toLowerCase()}, which can be paid securely from your event page.`,
+      title: custom?.title || 'Your secure payment is ready',
+      greeting: custom?.greeting || `Hi ${firstName(input.inquiry.full_name)},`,
+      copy: custom?.body || `Your Luxor agreement is complete. The next step is your ${input.paymentLabel.toLowerCase()}, which can be paid securely from your event page.`,
       detail: `${input.paymentLabel}: ${money(input.paymentAmount)}`,
       buttonLabel: 'Pay securely with Stripe',
       buttonUrl: input.reviewUrl,
@@ -139,17 +150,18 @@ export function buildPaymentReminderEmail(input: { inquiry: LuxorInquiry; review
   }
 }
 
-export function buildContractReminderEmail(input: { signature: LuxorSignatureRequest; kind: 'view' | 'sign' }) {
+export function buildContractReminderEmail(input: { signature: LuxorSignatureRequest; kind: 'view' | 'sign'; copyOverride?: AgreementReminderCopy | null }) {
   const viewReminder = input.kind === 'view'
+  const custom = input.copyOverride ? renderAgreementReminderCopy(input.copyOverride, firstName(input.signature.client_name)) : null
   return {
-    subject: viewReminder ? 'Your Luxor agreement is ready to review' : 'Reminder: your Luxor agreement is awaiting signature',
+    subject: custom?.subject || (viewReminder ? 'Your Luxor agreement is ready to review' : 'Reminder: your Luxor agreement is awaiting signature'),
     body: brandedEmail({
       eyebrow: 'Event agreement',
-      title: viewReminder ? 'Your agreement is ready' : 'One step remains',
-      greeting: `Hi ${firstName(input.signature.client_name)},`,
-      copy: viewReminder
+      title: custom?.title || (viewReminder ? 'Your agreement is ready' : 'One step remains'),
+      greeting: custom?.greeting || `Hi ${firstName(input.signature.client_name)},`,
+      copy: custom?.body || (viewReminder
         ? 'Your Luxor Event Space agreement and Guest Guide are ready in the secure signing portal.'
-        : 'Your agreement has been opened but is not signed yet. Please review the final details and sign when you are ready.',
+        : 'Your agreement has been opened but is not signed yet. Please review the final details and sign when you are ready.'),
       buttonLabel: 'Review & sign agreement',
       buttonUrl: `${SITE_URL}/secure-portal/sign/${input.signature.token}`,
     }),
@@ -171,8 +183,12 @@ export function buildFinalPaymentReminderEmail(input: { inquiry: LuxorInquiry; i
   }
 }
 
-export function buildEventEmail(input: { inquiry: LuxorInquiry; booking: LuxorBooking; kind: 'details' | 'day' | 'thanks' }) {
+export function buildEventEmail(input: { inquiry: LuxorInquiry; booking: LuxorBooking; kind: 'details' | 'day' | 'thanks'; copyOverride?: EventEmailCopy | null }) {
   const eventDate = input.booking.event_date || input.inquiry.target_date || 'your event date'
+  if (input.copyOverride) {
+    const copy = renderEventEmailCopy(input.copyOverride, { first_name: firstName(input.inquiry.full_name), event_type: input.inquiry.event_type || 'celebration' })
+    return { subject: copy.subject, body: brandedEmail({ eyebrow: input.kind === 'thanks' ? 'Thank you' : input.kind === 'details' ? 'Planning check-in' : 'Event reminder', title: copy.title, greeting: copy.greeting, copy: copy.body, ...(input.kind === 'thanks' ? {} : { detail: `Event date: ${eventDate}` }) }) }
+  }
   if (input.kind === 'thanks') {
     return {
       subject: 'Thank you for celebrating at Luxor',
@@ -274,8 +290,11 @@ export async function buildAiTailoredInvoiceReminderEmail(input: {
   dueDate?: string | null
   notes?: LuxorNote[]
   kind?: 'unpaid_invoice' | 'final_payment'
+  copyOverride?: FinalPaymentReminderCopy | null
 }) {
-  const { copy, aiGenerated } = await generateAiInvoiceReminderCopy(input)
+  const custom = input.copyOverride ? renderFinalPaymentReminderCopy(input.copyOverride, firstName(input.inquiry.full_name)) : null
+  const generated = custom ? { copy: custom.body, aiGenerated: false } : await generateAiInvoiceReminderCopy(input)
+  const { copy, aiGenerated } = generated
   const eventDate = input.booking?.event_date || input.inquiry.target_date
 
   const finalPayment = input.kind === 'final_payment'
@@ -299,12 +318,12 @@ export async function buildAiTailoredInvoiceReminderEmail(input: {
     .join(' · ')
 
   return {
-    subject,
+    subject: custom?.subject || subject,
     aiGenerated,
     body: brandedEmail({
       eyebrow,
-      title,
-      greeting: `Hi ${firstName(input.inquiry.full_name)},`,
+      title: custom?.title || title,
+      greeting: custom?.greeting || `Hi ${firstName(input.inquiry.full_name)},`,
       copy,
       detail: detailText,
       buttonLabel: 'Review & Pay Balance Securely',

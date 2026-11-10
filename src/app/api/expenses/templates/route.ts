@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseRestStrict } from '@/lib/supabaseRestServer'
+import { createHash } from 'node:crypto'
+import { supabaseRestStrict, SupabaseRestError } from '@/lib/supabaseRestServer'
 import {
   authorizeLuxorExpenseRequest,
   generateLuxorExpenseOccurrences,
   getLuxorExpenseCategoryByName,
+  isExpenseUuid,
   isDateKey,
   LUXOR_EXPENSE_PAYMENT_METHODS,
   LuxorExpenseRequestError,
@@ -91,22 +93,56 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
+  let requestId: string | null = null
+  let fingerprint: string | null = null
+  async function finish(created: LuxorExpenseTemplate) {
+    try {
+      const generation = await generateLuxorExpenseOccurrences(new Date(), created.id)
+      return NextResponse.json({ template: created, generated_count: generation.inserted, generation_pending: false }, { status: 201 })
+    } catch {
+      // Saving the schedule succeeded. The scheduled worker can safely retry
+      // occurrence generation; reporting a failed save would invite duplicates.
+      return NextResponse.json({ template: created, generated_count: null, generation_pending: true }, { status: 201 })
+    }
+  }
   try {
     const { session } = await authorizeLuxorExpenseRequest()
     const payload = record(await request.json())
     if (!payload) throw new LuxorExpenseRequestError('Invalid recurring expense template.')
     const fields = validation(payload)
+    if (payload.client_request_id != null && payload.client_request_id !== '') {
+      if (!isExpenseUuid(payload.client_request_id)) throw new LuxorExpenseRequestError('Refresh the recurring cost form before saving.')
+      requestId = payload.client_request_id as string
+      fingerprint = createHash('sha256').update(JSON.stringify({ fields, vendor_id: payload.vendor_id || null, actor: session.email.toLowerCase() })).digest('hex')
+      const [prior] = await supabaseRestStrict<Array<LuxorExpenseTemplate & { client_request_fingerprint: string | null }>>(`luxor_expense_templates?select=*&client_request_id=eq.${encodeURIComponent(requestId)}&limit=1`)
+      if (prior) {
+        if (prior.client_request_fingerprint !== fingerprint) throw new LuxorExpenseRequestError('This recurring cost request was already used for different details.', 409)
+        return await finish(prior)
+      }
+    }
+    let provider: { id: string; name: string; archived_at: string | null } | undefined
+    if (payload.vendor_id != null && payload.vendor_id !== '') {
+      if (!isExpenseUuid(payload.vendor_id)) throw new LuxorExpenseRequestError('Choose a valid provider.')
+      ;[provider] = await supabaseRestStrict<Array<{ id: string; name: string; archived_at: string | null }>>(`luxor_vendors?select=id,name,archived_at&id=eq.${encodeURIComponent(payload.vendor_id)}&limit=1`)
+      if (!provider || provider.archived_at) throw new LuxorExpenseRequestError('Choose an active provider.')
+    }
     const category = await getLuxorExpenseCategoryByName(fields.category)
     if (!category) throw new LuxorExpenseRequestError('That category is inactive or unavailable. Refresh the category list.')
     const [created] = await supabaseRestStrict<LuxorExpenseTemplate[]>('luxor_expense_templates?select=*', {
       method: 'POST',
       headers: { Prefer: 'return=representation' },
-      body: JSON.stringify({ ...fields, category_id: category.id, created_by: session.email, updated_by: session.email }),
+      body: JSON.stringify({ ...fields, ...(provider ? { vendor_id: provider.id, vendor_name: provider.name } : {}), ...(requestId ? { client_request_id: requestId, client_request_fingerprint: fingerprint } : {}), category_id: category.id, created_by: session.email, updated_by: session.email }),
     })
     if (!created) throw new Error('Recurring expense template was not saved.')
-    const generation = await generateLuxorExpenseOccurrences(new Date(), created.id)
-    return NextResponse.json({ template: created, generated_count: generation.inserted }, { status: 201 })
+    return await finish(created)
   } catch (error) {
+    if (requestId && fingerprint && error instanceof SupabaseRestError && error.code === '23505') {
+      try {
+        const [prior] = await supabaseRestStrict<Array<LuxorExpenseTemplate & { client_request_fingerprint: string | null }>>(`luxor_expense_templates?select=*&client_request_id=eq.${encodeURIComponent(requestId)}&limit=1`)
+        if (prior && prior.client_request_fingerprint === fingerprint) return await finish(prior)
+        if (prior) return NextResponse.json({ error: 'This recurring cost request was already used for different details.' }, { status: 409 })
+      } catch { /* A retry can resolve an uncertain result using the same key. */ }
+    }
     const result = toExpenseErrorResponse(error)
     if (result.status === 500) console.error('Recurring expense template could not be saved:', error)
     return NextResponse.json({ error: result.message }, { status: result.status })

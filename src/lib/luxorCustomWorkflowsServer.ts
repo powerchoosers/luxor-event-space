@@ -11,6 +11,7 @@ import {
   type CustomWorkflowDefinition,
   type CustomWorkflowEmailSettings,
   type CustomWorkflowStep,
+  type CustomWorkflowTrigger,
   validateCustomWorkflowDefinition,
   CUSTOM_WORKFLOW_RUNTIME_TRIGGERS,
 } from './luxorCustomWorkflowDefinition'
@@ -55,6 +56,7 @@ export type CustomWorkflowFeatureStatus = {
   authoringEnabled: boolean
   executionEnabled: boolean
   activationEnabled: boolean
+  connectedTriggers: CustomWorkflowTrigger[]
 }
 
 export class CustomWorkflowServiceError extends Error {
@@ -79,15 +81,28 @@ async function getCustomWorkflowRuntimeControls() {
   return controls
 }
 
+/** Capability is provided only by the completed attended-tour migration. */
+export async function getConnectedCustomWorkflowTriggers(): Promise<CustomWorkflowTrigger[]> {
+  const triggers: CustomWorkflowTrigger[] = [...CUSTOM_WORKFLOW_RUNTIME_TRIGGERS]
+  try {
+    if (await supabaseRest<boolean>('rpc/luxor_custom_workflow_attended_tour_capability', { method: 'POST', body: '{}' }) === true) triggers.push('tour_attended')
+  } catch {
+    // Fail closed for optional or temporarily unavailable schema.
+  }
+  return triggers
+}
+
 export async function getCustomWorkflowFeatureStatus(actorEmail: string): Promise<CustomWorkflowFeatureStatus> {
   await requireCustomWorkflowOperator(actorEmail)
   const controls = await getCustomWorkflowRuntimeControls()
   const authoringEnabled = CUSTOM_WORKFLOW_AUTHORING_ENABLED && controls?.authoring_enabled === true
   const executionEnabled = CUSTOM_WORKFLOW_EXECUTION_ENABLED && controls?.execution_enabled === true
+  const connectedTriggers = await getConnectedCustomWorkflowTriggers()
   return {
     authoringEnabled,
     executionEnabled,
     activationEnabled: authoringEnabled && executionEnabled && controls?.activation_enabled === true,
+    connectedTriggers,
   }
 }
 
@@ -178,7 +193,10 @@ export async function changeCustomWorkflowLifecycle(input: {
   assertId(input.id)
   if (input.action === 'activate' || input.action === 'resume') {
     const { definition } = await getCustomWorkflow(input.id, verifiedActorEmail)
-    if (!CUSTOM_WORKFLOW_RUNTIME_TRIGGERS.includes(definition.trigger)) throw new CustomWorkflowServiceError('Automatic enrollment for this trigger is not connected yet. Change the draft to Manual enrollment or Contact form inquiry before activating.', 409)
+    if (!(await getConnectedCustomWorkflowTriggers()).includes(definition.trigger)) throw new CustomWorkflowServiceError('Automatic enrollment for this trigger is not connected yet. Change the draft to a connected trigger before activating.', 409)
+    if (definition.trigger === 'tour_attended' && definition.steps.some((step) => step.type === 'email' && step.mode === 'existing_inquiry_acknowledgment')) throw new CustomWorkflowServiceError('The inquiry acknowledgment belongs to contact-form workflows. Remove it before activating a completed-tour workflow.', 409)
+    const first = definition.steps[0]
+    if (definition.trigger === 'contact_form_inquiry_created' && (first?.type !== 'email' || first.id !== 'inquiry-acknowledgment' || first.mode !== 'existing_inquiry_acknowledgment')) throw new CustomWorkflowServiceError('Contact-form workflows must begin with the existing inquiry acknowledgment. Select the contact-form trigger again before activating.', 409)
   }
   const controls = await getCustomWorkflowRuntimeControls()
   const decision = evaluateCustomWorkflowLifecycleAction({

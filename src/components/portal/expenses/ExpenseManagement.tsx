@@ -34,6 +34,7 @@ import {
 } from '@/components/portal/PortalUI'
 import { FinanceBrowseViews, type FinanceBrowseView } from '@/components/portal/FinanceBrowseViews'
 import { getLuxorExpenseCashActivityInPeriod } from '@/lib/luxorFinanceReporting'
+import { expenseCategoryColors } from '@/lib/luxorExpenseChartColors'
 import { getLuxorExpensePaymentPostFailureDisposition, reconcileLuxorExpensePaymentRetry } from '@/lib/luxorExpenseTypes'
 import type { LuxorBooking, LuxorInvoice, LuxorPayment, LuxorPaymentInstallment, LuxorPaymentRefundView } from '@/lib/luxorInquiryTypes'
 
@@ -72,6 +73,7 @@ type ExpenseRow = {
   payment_method?: string | null
   reference_number?: string | null
   source_bill_id?: string | null
+  matched_expense_id?: string | null
   tax_amount?: number | null
   paid_amount: number
   remaining_balance: number | null
@@ -80,6 +82,7 @@ type ExpenseRow = {
 }
 type ExpenseTemplate = {
   id: string
+  vendor_id?: string | null
   name: string
   category: string
   vendor_name: string | null
@@ -107,6 +110,7 @@ type ExpenseBooking = {
 }
 type ExpenseBill = {
   id: string
+  vendor_id?: string | null
   service: string
   provider: string
   amount: number
@@ -147,6 +151,7 @@ type PendingExpenseRequest = {
   form_snapshot: Record<string, unknown>
   first_payment_payload: Record<string, unknown> | null
 }
+type PendingTemplateRequest = { payload: Record<string, unknown>; form_snapshot: Record<string, unknown> }
 type FinanceLedgerData = {
   payments: LuxorPayment[]
   invoices: LuxorInvoice[]
@@ -297,7 +302,7 @@ function EmptyState({ title, detail }: { title: string; detail: string }) {
   return <div className="rounded-2xl border border-dashed border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/35 px-5 py-10 text-center"><p className="font-semibold text-[color:var(--portal-text)]">{title}</p><p className="mx-auto mt-1 max-w-md text-sm leading-6 text-[color:var(--portal-muted)]">{detail}</p></div>
 }
 
-export default function ExpenseManagement({ view, expenseId, embedded = false }: { view: ExpenseManagementView; expenseId?: string; embedded?: boolean }) {
+export default function ExpenseManagement({ view, expenseId, embedded = false, selectedRange, provider }: { view: ExpenseManagementView; expenseId?: string; embedded?: boolean; selectedRange?: { start: string; end: string }; provider?: { id: string; name: string } }) {
   const router = useRouter()
   const [data, setData] = useState<ExpenseManagementData>({ expenses: [], templates: [], categories: [], bookings: [], bills: [], receipts: [] })
   const [ledger, setLedger] = useState<FinanceLedgerData>({ payments: [], invoices: [], bookings: [], installments: [], refunds: [], eventPaymentsReceivedByBooking: null, eventPaymentsVerified: false })
@@ -325,6 +330,8 @@ export default function ExpenseManagement({ view, expenseId, embedded = false }:
   const [receiptEnd, setReceiptEnd] = useState('')
   const [expenseModalOpen, setExpenseModalOpen] = useState(false)
   const [templateModalOpen, setTemplateModalOpen] = useState(false)
+  const [separateConfirmed, setSeparateConfirmed] = useState(false)
+  const [pendingExpenseAction, setPendingExpenseAction] = useState<{ kind: 'cancel' | 'skip'; expense: ExpenseRow } | null>(null)
   const [categoryModalOpen, setCategoryModalOpen] = useState(false)
   const [editExpense, setEditExpense] = useState<ExpenseRow | null>(null)
   const [editTemplate, setEditTemplate] = useState<ExpenseTemplate | null>(null)
@@ -338,6 +345,9 @@ export default function ExpenseManagement({ view, expenseId, embedded = false }:
     name: '', category: '', vendor_name: '', expected_amount: '', is_variable: false, frequency: 'monthly', custom_interval: '1', custom_unit: 'months',
     first_due_date: '', start_date: '', end_date: '', payment_method: '', notes: '',
   })
+  const [pendingTemplateRequest, setPendingTemplateRequest] = useState<PendingTemplateRequest | null>(null)
+  const templateSubmitInFlight = useRef(false)
+  const templateRetryKey = `luxor-recurring-cost-retry:${provider?.id || 'unassigned'}`
   const [paymentForm, setPaymentForm] = useState({ amount: '', payment_date: '', payment_method: '', transaction_type: 'payment', reference_number: '', notes: '', idempotency_key: '' })
   const [paymentOpen, setPaymentOpen] = useState(false)
   const [paymentRetryLocked, setPaymentRetryLocked] = useState(false)
@@ -397,6 +407,21 @@ export default function ExpenseManagement({ view, expenseId, embedded = false }:
   useEffect(() => { void loadData() }, [loadData])
 
   useEffect(() => {
+    if (view !== 'recurring') return
+    try {
+      const stored = window.sessionStorage.getItem(templateRetryKey)
+      if (!stored) return
+      const pending = JSON.parse(stored) as PendingTemplateRequest
+      if (!pending.payload || typeof pending.payload.client_request_id !== 'string' || !pending.form_snapshot) return
+      setPendingTemplateRequest(pending)
+      setTemplateForm((current) => ({ ...current, ...pending.form_snapshot }) as typeof current)
+      setEditTemplate(null)
+      setTemplateModalOpen(true)
+      setNotice('A recurring cost save may have completed. Retry the unchanged request to resolve it safely.')
+    } catch { /* In-memory retry remains available if storage is unavailable. */ }
+  }, [templateRetryKey, view])
+
+  useEffect(() => {
     try {
       const stored = window.sessionStorage.getItem(expenseCreateRetryStorageKey())
       if (!stored) return
@@ -445,7 +470,11 @@ export default function ExpenseManagement({ view, expenseId, embedded = false }:
   const categories = useMemo(() => activeCategories(data.categories), [data.categories])
   const categoryOptions = useMemo(() => categories.map((name) => ({ value: name, label: name })), [categories])
   const approvedBills = useMemo(() => data.bills.filter((bill) => bill.payment_ready_at && bill.extraction_status === 'ready' && bill.amount_state === 'known' && Number.isFinite(Number(bill.amount)) && Number(bill.amount) >= 0 && bill.status !== 'paid' && !data.expenses.some((expense) => expense.source_bill_id === bill.id)), [data.bills, data.expenses])
-  const variableOccurrenceOptions = useMemo(() => data.expenses.filter((expense) => !hasKnownAmount(expense) && !expense.source_bill_id && expense.status !== 'cancelled' && Boolean(expense.recurring_template_id) && data.templates.some((template) => template.id === expense.recurring_template_id && template.is_variable)).map((expense) => ({ value: expense.id, label: `${expense.description || expense.category} · ${formatDate(expense.due_date || expense.incurred_on)} · ${expense.vendor_name || 'Vendor not set'}` })), [data.expenses, data.templates])
+  const occurrenceOptions = useMemo(() => {
+    const bill = data.bills.find((item) => item.id === expenseForm.source_bill_id)
+    if (!bill?.vendor_id) return []
+    return data.expenses.filter((expense) => !expense.source_bill_id && expense.status !== 'cancelled' && expense.status !== 'paid' && expense.payments.length === 0 && (expense.paid_amount === 0 || (!hasKnownAmount(expense) && expense.metadata?.amount_state === 'variable' && !Object.hasOwn(expense.metadata, 'legacy_paid_amount'))) && data.templates.some((template) => template.id === expense.recurring_template_id && template.vendor_id === bill.vendor_id)).map((expense) => ({ value: expense.id, label: `${expense.description || expense.category} · due ${formatDate(expense.due_date || expense.incurred_on)} · ${expense.vendor_name || 'Provider'}` }))
+  }, [data.expenses, data.templates, data.bills, expenseForm.source_bill_id])
   const selectedExpense = useMemo(() => data.expenses.find((expense) => expense.id === expenseId) || null, [data.expenses, expenseId])
   const selectedExpenseId = selectedExpense?.id
   const bookingById = useMemo(() => new Map(data.bookings.map((booking) => [booking.id, booking])), [data.bookings])
@@ -464,9 +493,10 @@ export default function ExpenseManagement({ view, expenseId, embedded = false }:
     } catch { /* Ignore unavailable or invalid session storage. */ }
   }, [view, selectedExpenseId])
 
-  const periodRange = useMemo(() => periodBounds(period, customStart, customEnd), [period, customStart, customEnd])
+  const periodRange = useMemo(() => selectedRange ?? periodBounds(period, customStart, customEnd), [selectedRange, period, customStart, customEnd])
   const periodExpenses = useMemo(() => data.expenses.filter((expense) => expense.status !== 'cancelled' && expenseDateInPeriod(expense, periodRange.start, periodRange.end)), [data.expenses, periodRange])
   const paidSummary = useMemo(() => data.expenses.reduce((summary, expense) => {
+    if (expense.matched_expense_id) return summary
     const net = paidInPeriod(expense, periodRange.start, periodRange.end)
     if (net === null) return { total: summary.total, excluded: summary.excluded + 1 }
     return { total: summary.total + net, excluded: summary.excluded }
@@ -481,7 +511,10 @@ export default function ExpenseManagement({ view, expenseId, embedded = false }:
     const multiplier: Record<string, number> = { weekly: 52 / 12, biweekly: 26 / 12, monthly: 1, quarterly: 1 / 3, annually: 1 / 12, custom: template.custom_unit === 'days' ? 30 / Math.max(1, Number(template.custom_interval) || 1) : template.custom_unit === 'weeks' ? 4.33 / Math.max(1, Number(template.custom_interval) || 1) : template.custom_unit === 'years' ? 1 / (12 * Math.max(1, Number(template.custom_interval) || 1)) : 1 / (Math.max(1, Number(template.custom_interval) || 1) * 12) }
     return sum + amount * (multiplier[template.frequency] ?? 1)
   }, 0), [data.templates])
-  const variableTotal = useMemo(() => periodExpenses.filter((expense) => hasKnownAmount(expense) && expense.recurring_template_id && data.templates.find((template) => template.id === expense.recurring_template_id)?.is_variable).reduce((sum, expense) => sum + Math.max(0, Number(expense.amount) || 0), 0), [periodExpenses, data.templates])
+  const variableTotal = useMemo(() => periodExpenses.filter((expense) => {
+    const templateId = expense.recurring_template_id || data.expenses.find((period) => period.matched_expense_id === expense.id)?.recurring_template_id
+    return hasKnownAmount(expense) && templateId && data.templates.find((template) => template.id === templateId)?.is_variable
+  }).reduce((sum, expense) => sum + Math.max(0, Number(expense.amount) || 0), 0), [periodExpenses, data.templates, data.expenses])
   const unknownVariableCount = useMemo(() => periodExpenses.filter((expense) => !hasKnownAmount(expense) && expense.recurring_template_id && data.templates.find((template) => template.id === expense.recurring_template_id)?.is_variable).length, [periodExpenses, data.templates])
   const eventTotal = useMemo(() => periodExpenses.filter((expense) => hasKnownAmount(expense) && (expense.expense_type === 'event' || expense.booking_id)).reduce((sum, expense) => sum + Math.max(0, Number(expense.amount) || 0), 0), [periodExpenses])
   const recentExpenses = useMemo(() => [...data.expenses].filter((expense) => expense.status !== 'cancelled').sort((a, b) => String(b.created_at).localeCompare(String(a.created_at))).slice(0, 6), [data.expenses])
@@ -489,6 +522,7 @@ export default function ExpenseManagement({ view, expenseId, embedded = false }:
   const refresh = () => { void loadData(true) }
   const setExpenseField = <K extends keyof typeof expenseForm>(key: K, value: (typeof expenseForm)[K]) => {
     if (pendingExpenseRequest) return
+    if (key === 'source_bill_id' || key === 'source_bill_occurrence_id') setSeparateConfirmed(false)
     setExpenseClientRequestId(crypto.randomUUID())
     setFirstPaymentIdempotencyKey(crypto.randomUUID())
     setExpenseForm((current) => ({ ...current, [key]: value }))
@@ -542,9 +576,22 @@ export default function ExpenseManagement({ view, expenseId, embedded = false }:
     event.preventDefault()
     const matchedOccurrence = expenseForm.source_bill_occurrence_id ? data.expenses.find((expense) => expense.id === expenseForm.source_bill_occurrence_id) || null : null
     const targetExpense = editExpense || matchedOccurrence
+    if (expenseForm.source_bill_id && !expenseForm.bill_review_confirmed) { setNotice('Confirm that you reviewed this bill before linking it.'); return }
+    if (matchedOccurrence) {
+      if (expenseForm.payment_choice !== 'unpaid') { setNotice('Match the bill first, then record the actual payment on the expense.'); return }
+      setBusy(true); setNotice(null)
+      try {
+        const response = await fetch(`/api/expenses/${encodeURIComponent(matchedOccurrence.id)}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ source_bill_id: expenseForm.source_bill_id, confirm_source_bill: true, expected_updated_at: matchedOccurrence.updated_at, amount: Number(expenseForm.amount), due_date: expenseForm.due_date || null }) })
+        const result = await response.json()
+        if (!response.ok) throw new Error(result.error || 'The match could not be saved.')
+        setExpenseModalOpen(false); setNotice('Bill matched to the expected period. No payment was recorded.'); await loadData(true)
+      } catch (cause) { setNotice(cause instanceof Error ? cause.message : 'The match could not be confirmed. Refresh before retrying.') }
+      finally { setBusy(false) }
+      return
+    }
     if (!expenseForm.incurred_on || !expenseForm.category || !expenseForm.vendor_name.trim() || !expenseForm.payment_method) { setNotice('Enter the expense date, category, vendor, and payment method before saving.'); return }
     if (expenseForm.expense_type === 'event' && !expenseForm.booking_id) { setNotice('Choose the booking for this event expense.'); return }
-    if (expenseForm.source_bill_id && !expenseForm.bill_review_confirmed) { setNotice('Confirm that you reviewed this bill before linking it.'); return }
+    if (!editExpense && expenseForm.source_bill_id && occurrenceOptions.length && !separateConfirmed) { setNotice('Confirm that this is a separate expense or choose an expected period.'); return }
     if ((expenseForm.payment_choice === 'paid' || expenseForm.payment_choice === 'partial') && !expenseForm.first_payment_date) { setNotice('Choose the date the initial payment was actually made.'); return }
     if (expenseForm.first_payment_date && expenseForm.first_payment_date > todayKey()) { setNotice('A future date cannot be recorded as a completed payment.'); return }
     const sourceBillChanged = Boolean(expenseForm.source_bill_id && expenseForm.source_bill_id !== targetExpense?.source_bill_id)
@@ -666,25 +713,41 @@ export default function ExpenseManagement({ view, expenseId, embedded = false }:
   }
 
   async function submitTemplate(event: React.FormEvent) {
-    event.preventDefault(); setBusy(true); setNotice(null)
-    const payload = {
-      name: templateForm.name.trim(), category: templateForm.category, vendor_name: templateForm.vendor_name || null,
+    event.preventDefault()
+    if (templateSubmitInFlight.current) return
+    templateSubmitInFlight.current = true
+    setBusy(true); setNotice(null)
+    const fields = {
+      name: templateForm.name.trim(), category: templateForm.category, vendor_name: provider?.name || templateForm.vendor_name || null,
+      ...(provider ? { vendor_id: provider.id } : {}),
       expected_amount: templateForm.is_variable ? null : Number(templateForm.expected_amount), is_variable: templateForm.is_variable,
       frequency: templateForm.frequency, custom_interval: templateForm.frequency === 'custom' ? Number(templateForm.custom_interval) : null,
       custom_unit: templateForm.frequency === 'custom' ? templateForm.custom_unit : null, first_due_date: templateForm.first_due_date,
       start_date: templateForm.start_date, end_date: templateForm.end_date || null, payment_method: templateForm.payment_method || null,
       notes: templateForm.notes || null,
     }
+    const pending = !editTemplate ? pendingTemplateRequest || { payload: { ...fields, client_request_id: crypto.randomUUID() }, form_snapshot: { ...templateForm } } : null
+    if (pending) {
+      setPendingTemplateRequest(pending)
+      try { window.sessionStorage.setItem(templateRetryKey, JSON.stringify(pending)) } catch { /* In-memory retry still uses the same request. */ }
+    }
     try {
       const response = await fetch(editTemplate ? `/api/expenses/templates/${encodeURIComponent(editTemplate.id)}` : '/api/expenses/templates', {
-        method: editTemplate ? 'PATCH' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
+        method: editTemplate ? 'PATCH' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(pending?.payload || fields),
       })
-      const result = await response.json()
-      if (!response.ok) throw new Error(result.error || 'Recurring template could not be saved.')
-      setTemplateModalOpen(false); setEditTemplate(null); setNotice(editTemplate ? 'Template updated for future occurrences.' : 'Recurring template saved; upcoming occurrences are being generated.')
+      const result = await response.json().catch(() => ({})) as { error?: string; template?: { id?: string }; generation_pending?: boolean }
+      if (!response.ok) {
+        if (pending && response.status >= 500) { setNotice('The save result is uncertain. Retry the unchanged request to prevent a duplicate.'); return }
+        if (pendingTemplateRequest || (pending && response.status === 409)) { setNotice(result.error || 'The previous save is still unresolved. Retry the same request after checking access.'); return }
+        if (pending) { try { window.sessionStorage.removeItem(templateRetryKey) } catch { /* storage may be unavailable */ }; setPendingTemplateRequest(null) }
+        setNotice(result.error || 'Recurring cost could not be saved.'); return
+      }
+      if (pending && !result.template?.id) { setNotice('The saved cost could not be confirmed. Retry the unchanged request to prevent a duplicate.'); return }
+      if (pending) { try { window.sessionStorage.removeItem(templateRetryKey) } catch { /* storage may be unavailable */ }; setPendingTemplateRequest(null) }
+      setTemplateModalOpen(false); setEditTemplate(null); setNotice(editTemplate ? 'Recurring cost updated for future periods.' : result.generation_pending ? 'Recurring cost saved. Expected periods will be generated when the scheduler retries.' : 'Recurring cost saved and expected periods generated.')
       await loadData(true)
-    } catch (cause) { setNotice(cause instanceof Error ? cause.message : 'Recurring template could not be saved.') }
-    finally { setBusy(false) }
+    } catch (cause) { setNotice(pending ? 'The save result is uncertain. Retry the unchanged request to prevent a duplicate.' : cause instanceof Error ? cause.message : 'Recurring cost could not be saved.') }
+    finally { templateSubmitInFlight.current = false; setBusy(false) }
   }
 
   async function toggleTemplate(template: ExpenseTemplate) {
@@ -743,8 +806,7 @@ export default function ExpenseManagement({ view, expenseId, embedded = false }:
     finally { setBusy(false) }
   }
 
-  async function cancelExpense(expense: ExpenseRow) {
-    if (!window.confirm(`Cancel “${expense.description || 'this expense'}”? It will remain in the ledger history.`)) return
+  async function cancelExpenseConfirmed(expense: ExpenseRow) {
     setBusy(true); setNotice(null)
     try {
       const response = await fetch(`/api/expenses/${encodeURIComponent(expense.id)}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'cancelled' }) })
@@ -755,6 +817,7 @@ export default function ExpenseManagement({ view, expenseId, embedded = false }:
     } catch (cause) { setNotice(cause instanceof Error ? cause.message : 'Expense could not be canceled.') }
     finally { setBusy(false) }
   }
+  function cancelExpense(expense: ExpenseRow) { setPendingExpenseAction({ kind: 'cancel', expense }) }
 
   async function submitReceipt(event: React.FormEvent) {
     event.preventDefault()
@@ -847,6 +910,7 @@ export default function ExpenseManagement({ view, expenseId, embedded = false }:
       setNotice('Resolve the existing expense save before starting another expense.')
       return
     }
+    setSeparateConfirmed(false)
     resetExpenseForm(expenseType, bill || null)
     setFirstPaymentIdempotencyKey(crypto.randomUUID())
     setExpenseClientRequestId(crypto.randomUUID())
@@ -875,9 +939,8 @@ export default function ExpenseManagement({ view, expenseId, embedded = false }:
     setExpenseModalOpen(true)
   }
 
-  async function skipOccurrence(expense: ExpenseRow) {
+  async function skipOccurrenceConfirmed(expense: ExpenseRow) {
     if (expense.paid_amount > 0) { setNotice('An occurrence with recorded payments cannot be skipped. Record an appropriate adjustment instead.'); return }
-    if (!window.confirm(`Skip the ${expense.description || 'recurring expense'} period due ${formatDate(expense.due_date)}? The template and history will remain.`)) return
     setBusy(true); setNotice(null)
     try {
       const response = await fetch(`/api/expenses/${encodeURIComponent(expense.id)}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'cancelled' }) })
@@ -888,8 +951,11 @@ export default function ExpenseManagement({ view, expenseId, embedded = false }:
     } catch (cause) { setNotice(cause instanceof Error ? cause.message : 'Occurrence could not be skipped.') }
     finally { setBusy(false) }
   }
+  function skipOccurrence(expense: ExpenseRow) { setPendingExpenseAction({ kind: 'skip', expense }) }
 
   function openNewTemplate(template?: ExpenseTemplate) {
+    if (pendingTemplateRequest) { setTemplateModalOpen(true); setNotice('Resolve the previous recurring cost save before starting another.'); return }
+    setNotice(null)
     setEditTemplate(template || null)
     setTemplateForm(template ? {
       name: template.name, category: template.category, vendor_name: template.vendor_name || '', expected_amount: template.expected_amount === null ? '' : String(template.expected_amount), is_variable: template.is_variable, frequency: template.frequency,
@@ -906,13 +972,13 @@ export default function ExpenseManagement({ view, expenseId, embedded = false }:
   }
 
   const headerActions = <div className="flex flex-wrap items-center justify-end gap-2">
-    <button type="button" onClick={() => setBrowseOpen(true)} aria-haspopup="dialog" aria-expanded={browseOpen} aria-label={`Browse views. Currently viewing ${page.title}`} className="hidden min-h-10 items-center gap-2.5 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3.5 py-1.5 text-left text-[color:var(--portal-text)] transition-colors hover:border-[#caa24c]/45 hover:bg-[color:var(--portal-soft)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 md:inline-flex xl:hidden">
+    <button type="button" onClick={() => setBrowseOpen(true)} aria-haspopup="dialog" aria-expanded={browseOpen} aria-label={`Browse views. Currently viewing ${page.title}`} className={`${embedded ? 'hidden' : 'hidden md:inline-flex xl:hidden'} min-h-10 items-center gap-2.5 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3.5 py-1.5 text-left text-[color:var(--portal-text)] transition-colors hover:border-[#caa24c]/45 hover:bg-[color:var(--portal-soft)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45`}>
       <CalendarBlank size={16} className="shrink-0 text-[#a8792f]" aria-hidden="true" />
       <span className="min-w-0"><span className="block text-[8px] font-black uppercase tracking-[0.14em] text-[color:var(--portal-faint)]">Browse views</span><span className="mt-0.5 block max-w-[170px] truncate text-xs font-bold leading-tight">{page.title}</span></span>
       <span aria-hidden="true" className="text-[color:var(--portal-muted)]">⌄</span>
     </button>
     <PortalButton type="button" onClick={refresh} disabled={refreshing} aria-label="Refresh expense records"><ArrowClockwise size={15} className={refreshing ? 'animate-spin' : ''} /> Refresh</PortalButton>
-    {view === 'recurring' ? <PortalButton type="button" variant="primary" onClick={() => openNewTemplate()}><Plus size={15} /> Add template</PortalButton> : null}
+    {view === 'recurring' ? <PortalButton type="button" variant="primary" onClick={() => openNewTemplate()}><Plus size={15} /> Add recurring cost</PortalButton> : null}
     {view === 'business' || view === 'dashboard' ? <PortalButton type="button" variant="primary" onClick={() => openNewExpense('business')}><Plus size={15} /> Log expense</PortalButton> : null}
     {view === 'events' ? <PortalButton type="button" variant="primary" onClick={() => openNewExpense('event')}><Plus size={15} /> Add event expense</PortalButton> : null}
     {view === 'receipts' ? <PortalButton type="button" variant="primary" onClick={() => document.getElementById('expense-receipt-file')?.click()}><UploadSimple size={15} /> Upload receipt</PortalButton> : null}
@@ -920,7 +986,7 @@ export default function ExpenseManagement({ view, expenseId, embedded = false }:
 
   const detailName = selectedExpense?.description || 'Expense detail'
 
-  return <PortalPageFrame className="flex h-full min-h-0 flex-col gap-4 overflow-hidden max-md:pt-4">
+  return <PortalPageFrame className={provider ? 'flex min-w-0 flex-col gap-4' : 'flex h-full min-h-0 flex-col gap-4 overflow-hidden max-md:pt-4'}>
     {!embedded && <PortalPageHeader icon={page.icon} title={view === 'detail' ? detailName : page.title} description={page.description} mobileActionsInline actions={headerActions} />}
     {!embedded && <div className="md:hidden">
       <button type="button" onClick={() => setBrowseOpen(true)} aria-haspopup="dialog" aria-expanded={browseOpen} className="flex w-full items-center gap-3 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-4 py-3 text-left text-[color:var(--portal-text)] transition-colors hover:border-[#caa24c]/45">
@@ -930,7 +996,7 @@ export default function ExpenseManagement({ view, expenseId, embedded = false }:
       </button>
     </div>}
     <FinanceBrowseViews open={browseOpen} close={() => setBrowseOpen(false)} currentView={page.browse} />
-    {embedded && <div className="flex justify-end">{headerActions}</div>}
+    {embedded && !provider && <div className="flex justify-end">{headerActions}</div>}
     {!embedded && <nav aria-label="Expense management views" className="hidden xl:block">
       <PortalAnimatedTabs tabs={EXPENSE_TABS} activeTab={activeView as Exclude<ExpenseManagementView, 'detail'>} onTabChange={navigateTab} ariaLabel="Expense management views" className="flex min-w-max items-center gap-1 overflow-x-auto portal-scrollbar" />
     </nav>}
@@ -939,8 +1005,8 @@ export default function ExpenseManagement({ view, expenseId, embedded = false }:
       {error ? <div role="alert" className="mb-4 rounded-xl border border-rose-500/20 bg-rose-500/5 p-4 text-sm text-rose-700 dark:text-rose-300"><p className="font-semibold">Expense records are unavailable</p><p className="mt-1">{error}</p><button type="button" onClick={refresh} className="mt-3 font-semibold underline underline-offset-2">Try again</button></div> : null}
       {loading && !data.expenses.length ? <div className="space-y-4"><div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">{Array.from({ length: 4 }, (_, i) => <div key={i} className={`${CARD_CLASS} p-5`}><PortalSkeleton className="h-3 w-28 rounded" /><PortalSkeleton className="mt-4 h-7 w-32 rounded" /><PortalSkeleton className="mt-3 h-3 w-40 rounded" /></div>)}</div><div className={`${CARD_CLASS} p-5`}><PortalSkeleton className="h-5 w-48 rounded" /><PortalSkeleton className="mt-5 h-52 w-full rounded-xl" /></div></div> : null}
       {!loading && !error ? <PortalTabTransition activeKey={view}>
-        {view === 'dashboard' ? <DashboardView data={data} period={period} setPeriod={setPeriod} periodRange={periodRange} customStart={customStart} setCustomStart={setCustomStart} customEnd={customEnd} setCustomEnd={setCustomEnd} trendPeriod={trendPeriod} setTrendPeriod={setTrendPeriod} paidTotal={paidTotal} paidExcluded={paidExcluded} unpaidTotal={unpaidTotal} overdueTotal={overdueTotal} upcomingTotal={upcomingTotal} monthlyFixed={monthlyFixed} variableTotal={variableTotal} unknownVariableCount={unknownVariableCount} eventTotal={eventTotal} recentExpenses={recentExpenses} bookingById={bookingById} /> : null}
-        {view === 'recurring' ? <RecurringView data={data} busy={busy} onAdd={() => openNewTemplate()} onEdit={openNewTemplate} onToggle={toggleTemplate} onViewExpense={(id) => router.push(`/portal/finances/expenses/${encodeURIComponent(id)}`)} onEditExpense={openEditExpense} onSkip={skipOccurrence} /> : null}
+        {view === 'dashboard' ? <DashboardView data={data} period={period} setPeriod={setPeriod} periodRange={periodRange} externalRange={Boolean(selectedRange)} customStart={customStart} setCustomStart={setCustomStart} customEnd={customEnd} setCustomEnd={setCustomEnd} trendPeriod={trendPeriod} setTrendPeriod={setTrendPeriod} paidTotal={paidTotal} paidExcluded={paidExcluded} unpaidTotal={unpaidTotal} overdueTotal={overdueTotal} upcomingTotal={upcomingTotal} monthlyFixed={monthlyFixed} variableTotal={variableTotal} unknownVariableCount={unknownVariableCount} eventTotal={eventTotal} recentExpenses={recentExpenses} bookingById={bookingById} /> : null}
+        {view === 'recurring' ? <RecurringView providerMode={Boolean(provider)} data={provider ? { ...data, templates: data.templates.filter((template) => template.vendor_id === provider.id), expenses: data.expenses.filter((expense) => data.templates.some((template) => template.id === expense.recurring_template_id && template.vendor_id === provider.id)) } : data} busy={busy} onAdd={() => openNewTemplate()} onEdit={openNewTemplate} onToggle={toggleTemplate} onViewExpense={(id) => router.push(`/portal/finances/expenses/${encodeURIComponent(id)}`)} onEditExpense={openEditExpense} onSkip={skipOccurrence} /> : null}
         {view === 'business' ? <BusinessView data={data} categoryOptions={categoryOptions} categoryFilter={categoryFilter} setCategoryFilter={setCategoryFilter} statusFilter={statusFilter} setStatusFilter={setStatusFilter} query={query} setQuery={setQuery} onAdd={() => openNewExpense('business')} onImportBill={(bill) => openNewExpense('business', bill)} onEdit={openEditExpense} onCancel={cancelExpense} onOpen={(id) => router.push(`/portal/finances/expenses/${encodeURIComponent(id)}`)} onManageCategories={() => setCategoryModalOpen(true)} loading={loading} /> : null}
         {view === 'events' ? <EventExpensesView data={data} ledger={ledger} selectedBooking={selectedBooking} setSelectedBooking={setSelectedBooking} onAdd={(id) => { if (!id) { setNotice('Choose a booking before adding an event expense.'); return } if (pendingExpenseRequest) { setExpenseModalOpen(true); setNotice('Resolve the existing expense save before starting another expense.'); return } openNewExpense('event'); setExpenseField('booking_id', id) }} /> : null}
         {view === 'receipts' ? <ReceiptsView data={data} categories={categoryOptions} receiptQuery={receiptQuery} setReceiptQuery={setReceiptQuery} vendorFilter={receiptVendorFilter} setVendorFilter={setReceiptVendorFilter} categoryFilter={receiptCategoryFilter} setCategoryFilter={setReceiptCategoryFilter} bookingFilter={receiptBookingFilter} setBookingFilter={setReceiptBookingFilter} start={receiptStart} setStart={setReceiptStart} end={receiptEnd} setEnd={setReceiptEnd} form={receiptForm} setForm={setReceiptForm} onSubmit={submitReceipt} receiptReview={receiptReview} setReceiptReview={setReceiptReview} onSaveReview={saveReceiptReview} busy={busy} /> : null}
@@ -948,8 +1014,13 @@ export default function ExpenseManagement({ view, expenseId, embedded = false }:
       </PortalTabTransition> : null}
     </div>
 
+    <PortalModal isOpen={Boolean(pendingExpenseAction)} onClose={() => { if (!busy) setPendingExpenseAction(null) }} title={pendingExpenseAction?.kind === 'skip' ? 'Skip this period?' : 'Cancel this expense?'} description="The record and its history remain available.">
+      <p className="text-sm text-[color:var(--portal-text)]">{pendingExpenseAction?.expense.description || 'Expense'}{pendingExpenseAction?.kind === 'skip' ? ` · due ${formatDate(pendingExpenseAction.expense.due_date)}` : ''}</p><div className="mt-5 flex justify-end gap-2"><PortalButton disabled={busy} onClick={() => setPendingExpenseAction(null)}>Keep it</PortalButton><PortalButton variant="primary" disabled={busy} onClick={() => { const action = pendingExpenseAction; setPendingExpenseAction(null); if (action) void (action.kind === 'skip' ? skipOccurrenceConfirmed(action.expense) : cancelExpenseConfirmed(action.expense)) }}>Confirm</PortalButton></div>
+    </PortalModal>
     <PortalModal isOpen={expenseModalOpen} onClose={() => { setExpenseModalOpen(false); setEditExpense(null) }} title={pendingExpenseRequest ? 'Resolve expense save' : editExpense ? 'Edit expense' : expenseForm.expense_type === 'event' ? 'Add event expense' : 'Log business expense'} description={pendingExpenseRequest ? 'The saved form is locked until the same request is confirmed.' : editExpense ? 'Corrections are recorded alongside the saved expense history.' : 'Save the expense first. Payments are recorded as separate transactions.'} maxWidth="max-w-2xl" fullScreenOnMobile>
       <form onSubmit={submitExpense} className="space-y-4">
+        {notice ? <p role="alert" className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-3 text-sm text-[color:var(--portal-text)]">{notice}</p> : null}
+        {!editExpense && expenseForm.source_bill_id && !expenseForm.source_bill_occurrence_id && occurrenceOptions.length ? <label className="flex items-start gap-2 text-sm text-[color:var(--portal-text)]"><input type="checkbox" checked={separateConfirmed} onChange={(event) => setSeparateConfirmed(event.target.checked)} className="mt-1" /><span>I reviewed the expected periods and this is a separate expense.</span></label> : null}
         {pendingExpenseRequest ? <p role="status" className="rounded-xl border border-amber-500/25 bg-amber-500/5 p-3 text-xs leading-5 text-[color:var(--portal-text)]">This submission may already have been saved. The form is locked to its original values; retrying sends the same request key and payload so the server can return the original expense instead of creating a duplicate.</p> : null}
         <fieldset disabled={Boolean(pendingExpenseRequest)} className="grid min-w-0 gap-4 sm:grid-cols-2">
           <Field label="Expense description"><Input required maxLength={200} value={expenseForm.description} onChange={(event) => setExpenseField('description', event.target.value)} placeholder="e.g. Cleaning supplies" /></Field>
@@ -963,7 +1034,7 @@ export default function ExpenseManagement({ view, expenseId, embedded = false }:
           {expenseForm.payment_choice === 'partial' && !editExpense ? <Field label="Amount paid now (USD)"><Input required min="0.01" step="0.01" type="number" value={expenseForm.first_payment} onChange={(event) => setExpenseField('first_payment', event.target.value)} placeholder="0.00" /></Field> : null}
           {!editExpense && (expenseForm.payment_choice === 'paid' || expenseForm.payment_choice === 'partial') ? <Field label="Date paid"><PortalDatePicker value={expenseForm.first_payment_date} onChange={(value) => setExpenseField('first_payment_date', value)} placeholder="Select actual payment date" timeZone="America/Chicago" /></Field> : null}
           {expenseForm.expense_type === 'event' ? <Field label="Booking"><PortalSelect value={expenseForm.booking_id} onChange={(value) => setExpenseField('booking_id', value)} options={[{ value: '', label: 'Choose booking' }, ...data.bookings.map((booking) => ({ value: booking.id, label: `${booking.client_name} · ${booking.event_type || 'Event'}${booking.event_date ? ` · ${formatDate(booking.event_date)}` : ''}` }))]} buttonClassName="min-h-11 w-full" /></Field> : null}
-          {!editExpense && approvedBills.length ? <Field label="Reviewed bill (optional)"><PortalSelect value={expenseForm.source_bill_id} onChange={(value) => { const bill = data.bills.find((item) => item.id === value); setExpenseField('source_bill_id', value); setExpenseField('source_bill_occurrence_id', ''); setExpenseField('bill_review_confirmed', false); if (bill) { setExpenseField('description', bill.service); setExpenseField('vendor_name', bill.provider); setExpenseField('amount', String(bill.amount)); setExpenseField('incurred_on', bill.issue_date || bill.due_date || ''); setExpenseField('due_date', bill.due_date || ''); setExpenseField('category', bill.bill_category || '') } }} options={[{ value: '', label: 'No linked bill' }, ...approvedBills.map((bill) => ({ value: bill.id, label: `${bill.provider} · ${bill.service} · ${money(bill.amount)}` }))]} buttonClassName="min-h-11 w-full" /></Field> : null}           {expenseForm.source_bill_id ? <div className="space-y-3 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/55 p-3 sm:col-span-2">             <p className="text-xs leading-5 text-[color:var(--portal-muted)]">Review the vendor, amount, and dates above. If this bill belongs to an existing variable recurring period, link that occurrence instead of creating a second expense.</p>             {variableOccurrenceOptions.length ? <Field label="Match an existing variable occurrence (optional)"><PortalSelect value={expenseForm.source_bill_occurrence_id} onChange={(value) => setExpenseField('source_bill_occurrence_id', value)} options={[{ value: '', label: 'Create a new expense record' }, ...variableOccurrenceOptions]} buttonClassName="min-h-11 w-full" /></Field> : <p className="text-xs text-[color:var(--portal-muted)]">No unfilled variable occurrence is available to match.</p>}             <label className="flex min-h-10 items-start gap-2 text-xs leading-5 text-[color:var(--portal-text)]"><input type="checkbox" checked={expenseForm.bill_review_confirmed} onChange={(event) => setExpenseField('bill_review_confirmed', event.target.checked)} className="mt-1 accent-[#b98a3e]" /><span>I reviewed this invoice and confirm the displayed vendor, amount, and dates.</span></label>           </div> : null}
+          {!editExpense && approvedBills.length ? <Field label="Reviewed bill (optional)"><PortalSelect value={expenseForm.source_bill_id} onChange={(value) => { const bill = data.bills.find((item) => item.id === value); setExpenseField('source_bill_id', value); setExpenseField('source_bill_occurrence_id', ''); setExpenseField('bill_review_confirmed', false); if (bill) { setExpenseField('description', bill.service); setExpenseField('vendor_name', bill.provider); setExpenseField('amount', String(bill.amount)); setExpenseField('incurred_on', bill.issue_date || bill.due_date || ''); setExpenseField('due_date', bill.due_date || ''); setExpenseField('category', bill.bill_category || '') } }} options={[{ value: '', label: 'No linked bill' }, ...approvedBills.map((bill) => ({ value: bill.id, label: `${bill.provider} · ${bill.service} · ${money(bill.amount)}` }))]} buttonClassName="min-h-11 w-full" /></Field> : null}           {expenseForm.source_bill_id ? <div className="space-y-3 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/55 p-3 sm:col-span-2">             <p className="text-xs leading-5 text-[color:var(--portal-muted)]">Review the vendor, amount, and dates above. If this bill belongs to an expected recurring period, match it to avoid creating a second expense.</p>             {occurrenceOptions.length ? <Field label="Match an expected period (optional)"><PortalSelect value={expenseForm.source_bill_occurrence_id} onChange={(value) => setExpenseField('source_bill_occurrence_id', value)} options={[{ value: '', label: 'Create a new expense record' }, ...occurrenceOptions]} buttonClassName="min-h-11 w-full" /></Field> : <p className="text-xs text-[color:var(--portal-muted)]">No unmatched period is available for this confirmed provider.</p>}             <label className="flex min-h-10 items-start gap-2 text-xs leading-5 text-[color:var(--portal-text)]"><input type="checkbox" checked={expenseForm.bill_review_confirmed} onChange={(event) => setExpenseField('bill_review_confirmed', event.target.checked)} className="mt-1 accent-[#b98a3e]" /><span>I reviewed this invoice and confirm the displayed vendor, amount, and dates.</span></label>           </div> : null}
           <Field label="Reference number (optional)"><Input value={expenseForm.reference_number} onChange={(event) => setExpenseField('reference_number', event.target.value)} maxLength={100} placeholder="Receipt, transfer, or invoice ref." /></Field>
           <Field label="Notes (optional)" className="sm:col-span-2"><textarea className={TEXTAREA_CLASS} value={expenseForm.notes} onChange={(event) => setExpenseField('notes', event.target.value)} maxLength={2000} placeholder="Additional context" /></Field>
         </fieldset>
@@ -974,9 +1045,11 @@ export default function ExpenseManagement({ view, expenseId, embedded = false }:
       </form>
     </PortalModal>
 
-    <PortalModal isOpen={templateModalOpen} onClose={() => { setTemplateModalOpen(false); setEditTemplate(null) }} title={editTemplate ? 'Edit recurring template' : 'New recurring template'} description="Changes apply to future occurrences. Previously generated expenses stay in the ledger." maxWidth="max-w-2xl" fullScreenOnMobile>
+    <PortalModal isOpen={templateModalOpen} onClose={() => { setTemplateModalOpen(false); setEditTemplate(null) }} title={pendingTemplateRequest ? 'Resolve recurring cost save' : editTemplate ? 'Edit recurring cost' : 'Add recurring cost'} description="Changes apply to future periods. Previously generated expenses stay in the ledger." maxWidth="max-w-2xl" fullScreenOnMobile>
       <form onSubmit={submitTemplate} className="space-y-4">
-        <div className="grid gap-4 sm:grid-cols-2">
+        {notice ? <p role="alert" className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-3 text-sm text-[color:var(--portal-text)]">{notice}</p> : null}
+        {pendingTemplateRequest ? <p role="status" className="rounded-xl border border-amber-500/25 bg-amber-500/5 p-3 text-xs leading-5 text-[color:var(--portal-text)]">This cost may already be saved. Retry the unchanged request to avoid creating a duplicate.</p> : null}
+        <fieldset disabled={Boolean(pendingTemplateRequest)} className="grid min-w-0 gap-4 sm:grid-cols-2">
           <Field label="Expense name"><Input required value={templateForm.name} onChange={(event) => setTemplateForm((current) => ({ ...current, name: event.target.value }))} maxLength={200} placeholder="Monthly internet" /></Field>
           <Field label="Category"><PortalSelect value={templateForm.category} onChange={(value) => setTemplateForm((current) => ({ ...current, category: value }))} options={[{ value: '', label: 'Choose category' }, ...categoryOptions]} buttonClassName="min-h-11 w-full" /></Field>
           <Field label="Expense type"><PortalSelect value={templateForm.is_variable ? 'variable' : 'fixed'} onChange={(value) => setTemplateForm((current) => ({ ...current, is_variable: value === 'variable', expected_amount: value === 'variable' ? '' : current.expected_amount }))} options={[{ value: 'fixed', label: 'Fixed recurring' }, { value: 'variable', label: 'Variable recurring' }]} buttonClassName="min-h-11 w-full" /></Field>
@@ -986,11 +1059,11 @@ export default function ExpenseManagement({ view, expenseId, embedded = false }:
           <Field label="Next billing date"><PortalDatePicker value={templateForm.first_due_date} onChange={(value) => setTemplateForm((current) => ({ ...current, first_due_date: value }))} placeholder="Select next due date" timeZone="America/Chicago" /></Field>
           <Field label="Start date"><PortalDatePicker value={templateForm.start_date} onChange={(value) => setTemplateForm((current) => ({ ...current, start_date: value }))} placeholder="Select start date" timeZone="America/Chicago" /></Field>
           <Field label="End date (optional)"><PortalDatePicker value={templateForm.end_date} onChange={(value) => setTemplateForm((current) => ({ ...current, end_date: value }))} placeholder="No end date" timeZone="America/Chicago" /></Field>
-          <Field label="Vendor (optional)"><Input value={templateForm.vendor_name} onChange={(event) => setTemplateForm((current) => ({ ...current, vendor_name: event.target.value }))} maxLength={200} placeholder="Company or merchant" /></Field>
+          {provider ? <p className="text-sm text-[color:var(--portal-muted)]">Provider: {provider.name}</p> : <Field label="Vendor (optional)"><Input value={templateForm.vendor_name} onChange={(event) => setTemplateForm((current) => ({ ...current, vendor_name: event.target.value }))} maxLength={200} placeholder="Company or merchant" /></Field>}
           <Field label="Payment method (optional)"><PortalSelect value={templateForm.payment_method} onChange={(value) => setTemplateForm((current) => ({ ...current, payment_method: value }))} options={[{ value: '', label: 'Unknown' }, ...PAYMENT_METHODS.map((value) => ({ value, label: value }))]} buttonClassName="min-h-11 w-full" /></Field>
           <Field label="Notes (optional)" className="sm:col-span-2"><textarea className={TEXTAREA_CLASS} value={templateForm.notes} onChange={(event) => setTemplateForm((current) => ({ ...current, notes: event.target.value }))} maxLength={2000} placeholder="Billing context" /></Field>
-        </div>
-        <div className="flex flex-col-reverse gap-2 border-t border-[color:var(--portal-border)] pt-4 sm:flex-row sm:justify-end"><PortalButton type="button" onClick={() => { setTemplateModalOpen(false); setEditTemplate(null) }}>Cancel</PortalButton><PortalButton type="submit" variant="primary" disabled={busy}>{busy ? 'Saving…' : 'Save template'}</PortalButton></div>
+        </fieldset>
+        <div className="flex flex-col-reverse gap-2 border-t border-[color:var(--portal-border)] pt-4 sm:flex-row sm:justify-end"><PortalButton type="button" onClick={() => { setTemplateModalOpen(false); setEditTemplate(null) }}>Close</PortalButton><PortalButton type="submit" variant="primary" disabled={busy}>{busy ? 'Saving…' : pendingTemplateRequest ? 'Retry same request' : 'Save recurring cost'}</PortalButton></div>
       </form>
     </PortalModal>
 
@@ -1051,10 +1124,10 @@ export default function ExpenseManagement({ view, expenseId, embedded = false }:
 }
 
 function DashboardView({
-  data, period, setPeriod, periodRange, customStart, setCustomStart, customEnd, setCustomEnd, trendPeriod, setTrendPeriod,
+  data, period, setPeriod, periodRange, externalRange, customStart, setCustomStart, customEnd, setCustomEnd, trendPeriod, setTrendPeriod,
   paidTotal, paidExcluded = 0, unpaidTotal, overdueTotal, upcomingTotal, monthlyFixed, variableTotal, unknownVariableCount, eventTotal, recentExpenses, bookingById,
 }: {
-  data: ExpenseManagementData; period: string; setPeriod: (value: string) => void; periodRange: { start: string; end: string }; customStart: string; setCustomStart: (value: string) => void; customEnd: string; setCustomEnd: (value: string) => void; trendPeriod: string; setTrendPeriod: (value: string) => void; paidTotal: number; paidExcluded?: number; unpaidTotal: number; overdueTotal: number; upcomingTotal: number; monthlyFixed: number; variableTotal: number; unknownVariableCount: number; eventTotal: number; recentExpenses: ExpenseRow[]; bookingById: Map<string, ExpenseBooking>;
+  data: ExpenseManagementData; period: string; setPeriod: (value: string) => void; periodRange: { start: string; end: string }; externalRange: boolean; customStart: string; setCustomStart: (value: string) => void; customEnd: string; setCustomEnd: (value: string) => void; trendPeriod: string; setTrendPeriod: (value: string) => void; paidTotal: number; paidExcluded?: number; unpaidTotal: number; overdueTotal: number; upcomingTotal: number; monthlyFixed: number; variableTotal: number; unknownVariableCount: number; eventTotal: number; recentExpenses: ExpenseRow[]; bookingById: Map<string, ExpenseBooking>;
 }) {
   const filteredExpenses = data.expenses.filter((expense) => expense.status !== 'cancelled' && hasKnownAmount(expense) && expenseDateInPeriod(expense, periodRange.start, periodRange.end))
   const categoryTotals = new Map<string, number>()
@@ -1063,7 +1136,11 @@ function DashboardView({
   const trendBuckets = buildTrendBuckets(data.expenses, trendPeriod)
   const maxTrend = Math.max(1, ...trendBuckets.map((bucket) => bucket.paid + bucket.refunds + bucket.unpaid))
   const fixedVariable = [
-    { label: 'Fixed recurring', amount: data.expenses.filter((expense) => hasKnownAmount(expense) && expense.recurring_template_id && !data.templates.find((template) => template.id === expense.recurring_template_id)?.is_variable && inRange(expense.incurred_on, periodRange.start, periodRange.end)).reduce((sum, expense) => sum + Math.max(0, Number(expense.amount) || 0), 0) },
+    { label: 'Fixed recurring', amount: data.expenses.filter((expense) => {
+      const templateId = expense.recurring_template_id || data.expenses.find((period) => period.matched_expense_id === expense.id)?.recurring_template_id
+      const template = data.templates.find((item) => item.id === templateId)
+      return expense.status !== 'cancelled' && hasKnownAmount(expense) && template && !template.is_variable && inRange(expense.incurred_on, periodRange.start, periodRange.end)
+    }).reduce((sum, expense) => sum + Math.max(0, Number(expense.amount) || 0), 0) },
     { label: 'Variable recurring', amount: variableTotal },
   ]
   const businessEvent = [
@@ -1071,20 +1148,20 @@ function DashboardView({
     { label: 'Event', amount: eventTotal },
   ]
   let cursor = 0
-  const palette = ['#b98a3e', '#667f73', '#92758a', '#c49a75', '#7887a0', '#a88a54', '#7c8b8a', '#bb755e']
-  const donutStops = categories.length ? categories.map((item, index) => {
+  const categoryColors = expenseCategoryColors(categories.map((item) => item.name))
+  const donutStops = categories.length ? categories.map((item) => {
     const start = cursor
     cursor += categories.reduce((sum, entry) => sum + entry.amount, 0) ? item.amount / categories.reduce((sum, entry) => sum + entry.amount, 0) * 100 : 0
-    return `${palette[index % palette.length]} ${start}% ${cursor}%`
+    return `${categoryColors.get(item.name)} ${start}% ${cursor}%`
   }).join(', ') : 'var(--portal-border) 0% 100%'
 
   return <div className="space-y-5">
     <section className={`${CARD_CLASS} flex flex-col gap-3 p-4 sm:flex-row sm:items-end sm:justify-between`}>
       <div><h2 className="font-sans text-base font-bold text-[color:var(--portal-text)]">Spending for the selected period</h2><p className="mt-1 text-xs text-[color:var(--portal-muted)]">Paid totals follow recorded payment dates. Expected costs do not reduce cash.</p></div>
-      <div className="grid gap-2 sm:grid-cols-[minmax(10rem,12rem)_minmax(10rem,12rem)]">
+      {!externalRange && <div className="grid gap-2 sm:grid-cols-[minmax(10rem,12rem)_minmax(10rem,12rem)]">
         <PortalSelect value={period} onChange={setPeriod} options={PERIOD_OPTIONS} buttonClassName="min-h-10 w-full" />
         {period === 'custom' ? <div className="grid grid-cols-2 gap-2 sm:col-span-2"><Field label="Start"><PortalDatePicker value={customStart} onChange={setCustomStart} placeholder="Start date" timeZone="America/Chicago" /></Field><Field label="End"><PortalDatePicker value={customEnd} onChange={setCustomEnd} placeholder="End date" timeZone="America/Chicago" /></Field></div> : null}
-      </div>
+      </div>}
     </section>
     <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
       <MetricCard label="Total expenses paid" value={money(paidTotal)} detail={paidExcluded ? `Payments less refunds dated in period. ${paidExcluded} ${paidExcluded === 1 ? 'expense is' : 'expenses are'} excluded until the amount is confirmed.` : 'Payments less refunds dated in period'} tone="gold" />
@@ -1117,7 +1194,7 @@ function DashboardView({
         <h2 className="font-sans text-base font-bold text-[color:var(--portal-text)]">Expenses by category</h2><p className="mt-1 text-xs text-[color:var(--portal-muted)]">Known recorded amounts, including unpaid items. Bills awaiting an amount are excluded.</p>
         <div className="mt-5 flex flex-col items-center gap-5 sm:flex-row sm:items-start">
           <div role="img" aria-label="Expense distribution by category" className="h-36 w-36 shrink-0 rounded-full" style={{ background: `conic-gradient(${donutStops})` }}><div className="m-[22%] grid h-[56%] place-items-center rounded-full bg-[color:var(--portal-card)] text-center"><span className="text-[10px] leading-4 text-[color:var(--portal-muted)]">Total<br /><strong className="tabular-nums text-[color:var(--portal-text)]">{money(categories.reduce((sum, row) => sum + row.amount, 0))}</strong></span></div></div>
-          <ul className="w-full min-w-0 space-y-2">{categories.slice(0, 7).map((item, index) => <li key={item.name} className="flex items-center justify-between gap-3 text-xs"><span className="flex min-w-0 items-center gap-2 text-[color:var(--portal-text)]"><i className="h-2.5 w-2.5 shrink-0 rounded-sm" style={{ backgroundColor: palette[index % palette.length] }} /><span className="truncate">{item.name}</span></span><span className="shrink-0 tabular-nums text-[color:var(--portal-muted)]">{money(item.amount)}</span></li>)}{!categories.length ? <li className="text-xs text-[color:var(--portal-muted)]">No expenses recorded in this period.</li> : null}</ul>
+          <ul className="w-full min-w-0 space-y-2">{categories.slice(0, 7).map((item) => <li key={item.name} className="flex items-center justify-between gap-3 text-xs"><span className="flex min-w-0 items-center gap-2 text-[color:var(--portal-text)]"><i className="h-2.5 w-2.5 shrink-0 rounded-sm" style={{ backgroundColor: categoryColors.get(item.name) }} /><span className="truncate">{item.name}</span></span><span className="shrink-0 tabular-nums text-[color:var(--portal-muted)]">{money(item.amount)}</span></li>)}{!categories.length ? <li className="text-xs text-[color:var(--portal-muted)]">No expenses recorded in this period.</li> : null}</ul>
         </div>
       </div>
     </section>
@@ -1177,23 +1254,23 @@ function ExpenseRows({ expenses, bookingById }: { expenses: ExpenseRow[]; bookin
   })}</div>
 }
 
-function RecurringView({ data, busy, onAdd, onEdit, onToggle, onViewExpense, onEditExpense, onSkip }: {
-  data: ExpenseManagementData; busy: boolean; onAdd: () => void; onEdit: (template: ExpenseTemplate) => void; onToggle: (template: ExpenseTemplate) => void; onViewExpense: (id: string) => void; onEditExpense: (expense: ExpenseRow) => void; onSkip: (expense: ExpenseRow) => void;
+function RecurringView({ data, busy, onAdd, onEdit, onToggle, onViewExpense, onEditExpense, onSkip, providerMode = false }: {
+  data: ExpenseManagementData; busy: boolean; onAdd: () => void; onEdit: (template: ExpenseTemplate) => void; onToggle: (template: ExpenseTemplate) => void; onViewExpense: (id: string) => void; onEditExpense: (expense: ExpenseRow) => void; onSkip: (expense: ExpenseRow) => void; providerMode?: boolean;
 }) {
   const templates = data.templates
   const fixed = templates.filter((template) => !template.is_variable)
   const variable = templates.filter((template) => template.is_variable)
   const occurrences = data.expenses.filter((expense) => expense.recurring_template_id).sort((a, b) => String(a.due_date || a.incurred_on).localeCompare(String(b.due_date || b.incurred_on)))
   return <div className="space-y-5">
-    <div className="grid gap-3 sm:grid-cols-2"><MetricCard label="Fixed templates" value={String(fixed.filter((item) => item.is_active).length)} detail="Active predictable obligations" /><MetricCard label="Variable templates" value={String(variable.filter((item) => item.is_active).length)} detail="Amounts are entered for each bill" /></div>
+    {providerMode ? <TemplateSection providerMode title="Schedules" detail="Expected charges for this provider." templates={templates} busy={busy} onEdit={onEdit} onToggle={onToggle} onAdd={onAdd} /> : <><div className="grid gap-3 sm:grid-cols-2"><MetricCard label="Fixed templates" value={String(fixed.filter((item) => item.is_active).length)} detail="Active predictable obligations" /><MetricCard label="Variable templates" value={String(variable.filter((item) => item.is_active).length)} detail="Amounts are entered for each bill" /></div>
     <TemplateSection title="Fixed recurring expenses" detail="Stable expected amounts, such as rent or internet." templates={fixed} busy={busy} onEdit={onEdit} onToggle={onToggle} onAdd={onAdd} />
-    <TemplateSection title="Variable recurring expenses" detail="Each occurrence waits for the actual bill amount." templates={variable} busy={busy} onEdit={onEdit} onToggle={onToggle} onAdd={onAdd} />
-    <section className={`${CARD_CLASS} overflow-hidden`}><div className="border-b border-[color:var(--portal-border)] px-4 py-4 sm:px-5"><h2 className="font-sans text-base font-bold text-[color:var(--portal-text)]">Generated expense occurrences</h2><p className="mt-1 text-xs text-[color:var(--portal-muted)]">Edit one occurrence or skip its billing period without changing the recurring template.</p></div>{occurrences.length ? <div className="divide-y divide-[color:var(--portal-border)]">{occurrences.map((expense) => { const isVariableAmountUnknown = !hasKnownAmount(expense); return <article key={expense.id} className="flex min-w-0 flex-col gap-3 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-5"><button type="button" onClick={() => onViewExpense(expense.id)} className="min-w-0 flex-1 text-left"><span className="block truncate text-sm font-semibold text-[color:var(--portal-text)]">{expense.description || expense.category}</span><span className="mt-1 block truncate text-xs text-[color:var(--portal-muted)]">{formatDate(expense.due_date || expense.incurred_on)} · {expense.category} · {isVariableAmountUnknown ? 'Amount awaiting bill' : money(expense.amount)}</span></button><div className="flex shrink-0 items-center gap-2"><StatusBadge status={expense.payment_status} /><PortalButton type="button" onClick={() => onEditExpense(expense)}>Edit occurrence</PortalButton>{expense.payment_status !== 'paid' && expense.payment_status !== 'cancelled' ? <PortalButton type="button" disabled={busy} onClick={() => onSkip(expense)}>Skip period</PortalButton> : null}</div></article> })}</div> : <div className="p-4"><EmptyState title="No recurring expenses generated yet" detail="When a template is active, its expected occurrences will appear here. Variable amounts stay unknown until the bill arrives." /></div>}</section>
+    <TemplateSection title="Variable recurring expenses" detail="Each occurrence waits for the actual bill amount." templates={variable} busy={busy} onEdit={onEdit} onToggle={onToggle} onAdd={onAdd} /></>}
+    {(!providerMode || templates.length > 0) && <section className={`${CARD_CLASS} overflow-hidden`}><div className="border-b border-[color:var(--portal-border)] px-4 py-4 sm:px-5"><h2 className="font-sans text-base font-bold text-[color:var(--portal-text)]">Expected periods</h2><p className="mt-1 text-xs text-[color:var(--portal-muted)]">Edit or skip one period without changing its schedule.</p></div>{occurrences.length ? <div className="divide-y divide-[color:var(--portal-border)]">{occurrences.map((expense) => { const isVariableAmountUnknown = !hasKnownAmount(expense); return <article key={expense.id} className="flex min-w-0 flex-col gap-3 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-5"><button type="button" onClick={() => onViewExpense(expense.id)} className="min-w-0 flex-1 text-left"><span className="block truncate text-sm font-semibold text-[color:var(--portal-text)]">{expense.description || expense.category}</span><span className="mt-1 block truncate text-xs text-[color:var(--portal-muted)]">{formatDate(expense.due_date || expense.incurred_on)} · {expense.category} · {isVariableAmountUnknown ? 'Amount awaiting bill' : money(expense.amount)}</span></button><div className="flex shrink-0 items-center gap-2">{expense.matched_expense_id ? <Link href={'/portal/finances/expenses/' + encodeURIComponent(expense.matched_expense_id)} className="text-xs font-semibold text-[#9a712e] dark:text-[#e6c77f]">Matched · View bill expense</Link> : <><StatusBadge status={expense.payment_status} /><PortalButton type="button" onClick={() => onEditExpense(expense)}>Edit occurrence</PortalButton>{expense.payment_status !== 'paid' && expense.payment_status !== 'cancelled' ? <PortalButton type="button" disabled={busy} onClick={() => onSkip(expense)}>Skip period</PortalButton> : null}</>}</div></article> })}</div> : <div className="p-4"><EmptyState title="No expected periods yet" detail="Active schedules create expected periods. Variable amounts stay unknown until the bill arrives." /></div>}</section>}
   </div>
 }
 
-function TemplateSection({ title, detail, templates, busy, onEdit, onToggle, onAdd }: { title: string; detail: string; templates: ExpenseTemplate[]; busy: boolean; onEdit: (template: ExpenseTemplate) => void; onToggle: (template: ExpenseTemplate) => void; onAdd: () => void }) {
-  return <section className={`${CARD_CLASS} overflow-hidden`}><div className="flex flex-wrap items-start justify-between gap-3 border-b border-[color:var(--portal-border)] px-4 py-4 sm:px-5"><div><h2 className="font-sans text-base font-bold text-[color:var(--portal-text)]">{title}</h2><p className="mt-1 text-xs text-[color:var(--portal-muted)]">{detail}</p></div><button type="button" onClick={onAdd} className="inline-flex min-h-9 items-center gap-1.5 rounded-lg px-2 text-xs font-semibold text-[#9a712e] hover:bg-[#caa24c]/10 dark:text-[#e6c77f]"><Plus size={14} /> Add template</button></div>{templates.length ? <div className="divide-y divide-[color:var(--portal-border)]">{templates.map((template) => <article key={template.id} className="flex flex-col gap-3 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-5"><div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><h3 className="truncate text-sm font-semibold text-[color:var(--portal-text)]">{template.name}</h3><span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${template.is_active ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300' : 'bg-[color:var(--portal-soft)] text-[color:var(--portal-muted)]'}`}>{template.is_active ? 'Active' : 'Inactive'}</span></div><p className="mt-1 text-xs text-[color:var(--portal-muted)]">{template.category} · {template.frequency === 'biweekly' ? 'Every two weeks' : template.frequency}{template.vendor_name ? ` · ${template.vendor_name}` : ''}</p><p className="mt-1 text-xs text-[color:var(--portal-muted)]">{template.is_variable ? 'Variable amount' : money(template.expected_amount)} · Next due {formatDate(template.first_due_date)} · Starts {formatDate(template.start_date)}</p></div><div className="flex shrink-0 flex-wrap gap-2"><PortalButton type="button" onClick={() => onEdit(template)}>Edit</PortalButton><PortalButton type="button" disabled={busy} onClick={() => onToggle(template)}>{template.is_active ? 'Deactivate' : 'Activate'}</PortalButton></div></article>)}</div> : <div className="p-4"><EmptyState title="No templates here" detail="Add a recurring template to create expected expense occurrences." /></div>}</section>
+function TemplateSection({ title, detail, templates, busy, onEdit, onToggle, onAdd, providerMode = false }: { title: string; detail: string; templates: ExpenseTemplate[]; busy: boolean; onEdit: (template: ExpenseTemplate) => void; onToggle: (template: ExpenseTemplate) => void; onAdd: () => void; providerMode?: boolean }) {
+  return <section className={`${CARD_CLASS} overflow-hidden`}><div className="flex flex-wrap items-start justify-between gap-3 border-b border-[color:var(--portal-border)] px-4 py-4 sm:px-5"><div><h2 className="font-sans text-base font-bold text-[color:var(--portal-text)]">{title}</h2><p className="mt-1 text-xs text-[color:var(--portal-muted)]">{detail}</p></div><button type="button" onClick={onAdd} className="inline-flex min-h-9 items-center gap-1.5 rounded-lg px-2 text-xs font-semibold text-[#9a712e] hover:bg-[#caa24c]/10 dark:text-[#e6c77f]"><Plus size={14} /> Add recurring cost</button></div>{templates.length ? <div className="divide-y divide-[color:var(--portal-border)]">{templates.map((template) => <article key={template.id} className="flex flex-col gap-3 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-5"><div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><h3 className="truncate text-sm font-semibold text-[color:var(--portal-text)]">{template.name}</h3><span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${template.is_active ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300' : 'bg-[color:var(--portal-soft)] text-[color:var(--portal-muted)]'}`}>{template.is_active ? 'Active' : 'Inactive'}</span></div><p className="mt-1 text-xs text-[color:var(--portal-muted)]">{template.category} · {template.frequency === 'biweekly' ? 'Every two weeks' : template.frequency}{template.vendor_name ? ` · ${template.vendor_name}` : ''}</p><p className="mt-1 text-xs text-[color:var(--portal-muted)]">{template.is_variable ? 'Variable amount' : money(template.expected_amount)} · First scheduled {formatDate(template.first_due_date)} · Starts {formatDate(template.start_date)}</p></div><div className="flex shrink-0 flex-wrap gap-2"><PortalButton type="button" onClick={() => onEdit(template)}>Edit</PortalButton><PortalButton type="button" disabled={busy} onClick={() => onToggle(template)}>{template.is_active ? 'Deactivate' : 'Activate'}</PortalButton></div></article>)}</div> : <div className="p-4"><EmptyState title={providerMode ? "No linked recurring costs yet" : "No recurring costs yet"} detail={providerMode ? "Link an existing schedule above or add a recurring cost for this provider." : "Add a recurring cost to track expected bills."} /></div>}</section>
 }
 
 function BusinessView({ data, categoryOptions, categoryFilter, setCategoryFilter, statusFilter, setStatusFilter, query, setQuery, onAdd, onImportBill, onEdit, onCancel, onOpen, onManageCategories, loading }: {
@@ -1202,7 +1279,7 @@ function BusinessView({ data, categoryOptions, categoryFilter, setCategoryFilter
   const businessExpenses = data.expenses.filter((expense) => !expense.booking_id && expense.expense_type !== 'event')
   const filtered = businessExpenses.filter((expense) => (categoryFilter === 'all' || expense.category === categoryFilter) && (statusFilter === 'all' || expense.payment_status === statusFilter) && (!query.trim() || `${expense.description} ${expense.vendor_name} ${expense.category}`.toLowerCase().includes(query.trim().toLowerCase())))
   return <div className="space-y-5">
-    {data.bills.length ? <section className={`${CARD_CLASS} border-l-2 border-l-[#b98a3e] p-4 sm:p-5`}><div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between"><div><h2 className="font-sans text-base font-bold text-[color:var(--portal-text)]">Reviewed vendor bills</h2><p className="mt-1 max-w-2xl text-xs leading-5 text-[color:var(--portal-muted)]">Bills from the invoice inbox stay in review until their facts are confirmed. Add a reviewed bill to the expense ledger once; its source file remains linked.</p></div><LinkButton href="/portal/operations?tab=bills">Open bill intake <ArrowRight size={14} /></LinkButton></div>{data.bills.some((bill) => bill.payment_ready_at && bill.extraction_status === 'ready' && bill.amount_state === 'known' && Number.isFinite(Number(bill.amount)) && Number(bill.amount) >= 0) ? <div className="mt-3 divide-y divide-[color:var(--portal-border)]">{data.bills.filter((bill) => bill.payment_ready_at && bill.extraction_status === 'ready' && bill.amount_state === 'known' && Number.isFinite(Number(bill.amount)) && Number(bill.amount) >= 0 && bill.status !== 'paid').slice(0, 3).map((bill) => <div key={bill.id} className="flex flex-col gap-2 py-3 sm:flex-row sm:items-center sm:justify-between"><div className="min-w-0"><p className="truncate text-sm font-semibold text-[color:var(--portal-text)]">{bill.provider} · {bill.service}</p><p className="mt-1 text-xs text-[color:var(--portal-muted)]">{money(bill.amount)} · Due {formatDate(bill.due_date)}{bill.source_filename ? ` · ${bill.source_filename}` : ''}</p></div>{data.expenses.some((expense) => expense.source_bill_id === bill.id) ? <span className="shrink-0 text-xs font-semibold text-emerald-700 dark:text-emerald-300">Added to expenses</span> : <PortalButton type="button" onClick={() => onImportBill(bill)}>Review &amp; log</PortalButton>}</div>)}</div> : <p className="mt-3 text-xs text-[color:var(--portal-muted)]">Bills awaiting extraction or owner review remain in Operations and won’t affect expense totals.</p>}</section> : null}
+    {data.bills.length ? <section className={`${CARD_CLASS} border-l-2 border-l-[#b98a3e] p-4 sm:p-5`}><div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between"><div><h2 className="font-sans text-base font-bold text-[color:var(--portal-text)]">Reviewed vendor bills</h2><p className="mt-1 max-w-2xl text-xs leading-5 text-[color:var(--portal-muted)]">Bills from the invoice inbox stay in review until their facts are confirmed. Add a reviewed bill to the expense ledger once; its source file remains linked.</p></div><LinkButton href="/portal/finances?view=bill-review">Open bill intake <ArrowRight size={14} /></LinkButton></div>{data.bills.some((bill) => bill.payment_ready_at && bill.extraction_status === 'ready' && bill.amount_state === 'known' && Number.isFinite(Number(bill.amount)) && Number(bill.amount) >= 0) ? <div className="mt-3 divide-y divide-[color:var(--portal-border)]">{data.bills.filter((bill) => bill.payment_ready_at && bill.extraction_status === 'ready' && bill.amount_state === 'known' && Number.isFinite(Number(bill.amount)) && Number(bill.amount) >= 0 && bill.status !== 'paid').slice(0, 3).map((bill) => <div key={bill.id} className="flex flex-col gap-2 py-3 sm:flex-row sm:items-center sm:justify-between"><div className="min-w-0"><p className="truncate text-sm font-semibold text-[color:var(--portal-text)]">{bill.provider} · {bill.service}</p><p className="mt-1 text-xs text-[color:var(--portal-muted)]">{money(bill.amount)} · Due {formatDate(bill.due_date)}{bill.source_filename ? ` · ${bill.source_filename}` : ''}</p></div>{data.expenses.some((expense) => expense.source_bill_id === bill.id) ? <span className="shrink-0 text-xs font-semibold text-emerald-700 dark:text-emerald-300">Added to expenses</span> : <PortalButton type="button" onClick={() => onImportBill(bill)}>Review &amp; log</PortalButton>}</div>)}</div> : <p className="mt-3 text-xs text-[color:var(--portal-muted)]">Bills awaiting extraction or owner review remain in Bills and won’t affect expense totals.</p>}</section> : null}
     <section className={`${CARD_CLASS} overflow-hidden`}>
       <div className="border-b border-[color:var(--portal-border)] p-4 sm:p-5"><div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between"><div><h2 className="font-sans text-base font-bold text-[color:var(--portal-text)]">Business expense ledger</h2><p className="mt-1 text-xs text-[color:var(--portal-muted)]">General operating expenses remain separate from event costs.</p></div><div className="flex flex-wrap gap-2">{data.can_manage_categories ? <PortalButton type="button" onClick={onManageCategories}>Manage categories</PortalButton> : null}<PortalButton type="button" variant="primary" onClick={onAdd}><Plus size={14} /> Log expense</PortalButton></div></div>
         <div className="mt-4 grid gap-2 sm:grid-cols-[minmax(0,1fr)_12rem_12rem]"><label className="flex min-h-10 items-center gap-2 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3"><MagnifyingGlass size={14} className="shrink-0 text-[color:var(--portal-muted)]" /><span className="sr-only">Search expenses</span><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search description or vendor" className="min-w-0 flex-1 bg-transparent text-sm text-[color:var(--portal-text)] outline-none placeholder:text-[color:var(--portal-faint)]" /></label><PortalSelect value={categoryFilter} onChange={setCategoryFilter} options={[{ value: 'all', label: 'All categories' }, ...categoryOptions]} buttonClassName="min-h-10 w-full" /><PortalSelect value={statusFilter} onChange={setStatusFilter} options={[{ value: 'all', label: 'All statuses' }, ...['expected', 'due_today', 'overdue', 'partially_paid', 'paid', 'cancelled'].map((value) => ({ value, label: expenseStatusLabel(value) }))]} buttonClassName="min-h-10 w-full" /></div>
@@ -1293,7 +1370,7 @@ function ReceiptsView({ data, categories, receiptQuery, setReceiptQuery, vendorF
     <section className={`${CARD_CLASS} overflow-hidden`}><div className="border-b border-[color:var(--portal-border)] p-4 sm:p-5"><div className="flex flex-col gap-3 xl:flex-row xl:items-end xl:justify-between"><div><h2 className="font-sans text-base font-bold text-[color:var(--portal-text)]">Receipt library</h2><p className="mt-1 text-xs text-[color:var(--portal-muted)]">Search by vendor, category, filename, or expense.</p></div><div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-5"><label className="flex min-h-10 items-center gap-2 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 sm:col-span-2 xl:col-span-1"><MagnifyingGlass size={14} className="shrink-0 text-[color:var(--portal-muted)]" /><span className="sr-only">Search receipts</span><input value={receiptQuery} onChange={(event) => setReceiptQuery(event.target.value)} placeholder="Search receipts" className="min-w-0 flex-1 bg-transparent text-sm text-[color:var(--portal-text)] outline-none placeholder:text-[color:var(--portal-faint)]" /></label><PortalSelect value={vendorFilter} onChange={setVendorFilter} options={[{ value: 'all', label: 'All vendors' }, ...vendors.map((vendor) => ({ value: vendor, label: vendor }))]} buttonClassName="min-h-10 w-full" /><PortalSelect value={categoryFilter} onChange={setCategoryFilter} options={[{ value: 'all', label: 'All categories' }, ...categories]} buttonClassName="min-h-10 w-full" /><PortalSelect value={bookingFilter} onChange={setBookingFilter} options={[{ value: 'all', label: 'All events' }, ...data.bookings.map((booking) => ({ value: booking.id, label: booking.client_name }))]} buttonClassName="min-h-10 w-full" /><div className="grid grid-cols-2 gap-2"><PortalDatePicker value={start} onChange={setStart} placeholder="From date" timeZone="America/Chicago" /><PortalDatePicker value={end} onChange={setEnd} placeholder="To date" timeZone="America/Chicago" /></div></div></div></div>
       {filtered.length ? <div className="divide-y divide-[color:var(--portal-border)]">{filtered.map((receipt) => { const vendor = String(receipt.metadata?.vendor_name || 'Vendor not set'); const category = String(receipt.metadata?.category || 'Uncategorized'); const date = String(receipt.metadata?.transaction_date || ''); const expense = data.expenses.find((row) => row.id === receipt.expense_id); return <article key={receipt.id} className="flex min-w-0 flex-col gap-3 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-5"><div className="min-w-0"><p className="truncate text-sm font-semibold text-[color:var(--portal-text)]">{vendor} · {money(Number(receipt.metadata?.total_amount) || 0)}</p><p className="mt-1 truncate text-xs text-[color:var(--portal-muted)]">{formatDate(date)} · {category} · {receipt.file_name}{expense ? ` · ${expense.description || expense.category}` : ''}</p></div><div className="flex shrink-0 gap-2"><a href={`/api/expenses/receipts/${encodeURIComponent(receipt.id)}?download=0`} target="_blank" rel="noreferrer" className="inline-flex min-h-9 items-center justify-center rounded-lg border border-[color:var(--portal-border)] px-3 text-xs font-semibold text-[color:var(--portal-text)] hover:bg-[color:var(--portal-soft)]">Preview</a><a href={`/api/expenses/receipts/${encodeURIComponent(receipt.id)}?download=1`} className="inline-flex min-h-9 items-center justify-center rounded-lg px-3 text-xs font-semibold text-[#9a712e] hover:bg-[#caa24c]/10 dark:text-[#e6c77f]">Download</a></div></article> })}</div> : <div className="p-4"><EmptyState title="No receipts match these filters" detail={all.length ? 'Try changing the vendor, event, date range, or search term.' : 'Uploaded receipts will be organized here.'} /></div>}
     </section>
-    {data.bills.length ? <p className="text-xs leading-5 text-[color:var(--portal-muted)]">Email-extracted vendor invoices remain in the existing Operations Bills intake until reviewed. Open the <Link href="/portal/operations?tab=bills" className="font-semibold text-[#9a712e] underline underline-offset-2 dark:text-[#e6c77f]">bill ledger</Link> to review their source attachments.</p> : null}
+    {data.bills.length ? <p className="text-xs leading-5 text-[color:var(--portal-muted)]">Email-extracted vendor invoices remain in the Bills workspace until reviewed. Open the <Link href="/portal/finances?view=bill-review" className="font-semibold text-[#9a712e] underline underline-offset-2 dark:text-[#e6c77f]">bill ledger</Link> to review their source attachments.</p> : null}
   </div>
 }
 
@@ -1311,7 +1388,7 @@ function ExpenseDetailView({ expense, data, booking, onBack, onEdit, onCancel, o
         ].map(([label, value]) => <div key={label} className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/55 p-3"><p className="text-[10px] text-[color:var(--portal-muted)]">{label}</p><p className="mt-1 break-words text-sm font-semibold tabular-nums text-[color:var(--portal-text)]">{value}</p></div>)}</div>
         {expense.notes ? <div className="mt-4 rounded-xl border border-[color:var(--portal-border)] p-3"><p className="text-xs font-semibold text-[color:var(--portal-text)]">Notes</p><p className="mt-1 whitespace-pre-wrap text-sm leading-6 text-[color:var(--portal-muted)]">{expense.notes}</p></div> : null}
         {booking ? <Link href={`/portal/planner/event/${encodeURIComponent(booking.id)}`} className="mt-4 flex min-h-12 items-center justify-between gap-3 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/45 px-3 hover:border-[#caa24c]/50 hover:bg-[color:var(--portal-soft)]"><span className="min-w-0"><span className="block text-xs font-semibold text-[color:var(--portal-text)]">{booking.client_name} · {booking.event_type || 'Event'}</span><span className="mt-1 block text-xs text-[color:var(--portal-muted)]">{formatDate(booking.event_date)} · Open booking</span></span><ArrowRight size={15} className="shrink-0 text-[color:var(--portal-muted)]" /></Link> : null}
-        {linkedBill ? <Link href={`/portal/operations?tab=bills&bill=${encodeURIComponent(linkedBill.id)}`} className="mt-3 block rounded-xl border border-[color:var(--portal-border)] px-3 py-3 text-xs text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-soft)]">Source bill: <strong className="text-[color:var(--portal-text)]">{linkedBill.provider} · {linkedBill.service}</strong><span className="ml-2 font-semibold text-[#9a712e] dark:text-[#e6c77f]">Open source</span></Link> : null}
+        {linkedBill ? <Link href={`/portal/finances?view=bill-review&bill=${encodeURIComponent(linkedBill.id)}`} className="mt-3 block rounded-xl border border-[color:var(--portal-border)] px-3 py-3 text-xs text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-soft)]">Source bill: <strong className="text-[color:var(--portal-text)]">{linkedBill.provider} · {linkedBill.service}</strong><span className="ml-2 font-semibold text-[#9a712e] dark:text-[#e6c77f]">Open source</span></Link> : null}
       </section>
       <section className={`${CARD_CLASS} p-4 sm:p-5`}><h2 className="font-sans text-base font-bold text-[color:var(--portal-text)]">Receipt attachments</h2>{linkedReceipts.length ? <ul className="mt-3 divide-y divide-[color:var(--portal-border)]">{linkedReceipts.map((receipt) => <li key={receipt.id} className="flex items-center justify-between gap-3 py-3"><span className="min-w-0"><span className="block truncate text-sm font-semibold text-[color:var(--portal-text)]">{receipt.file_name}</span><span className="mt-1 block text-xs text-[color:var(--portal-muted)]">{receipt.content_type}</span></span><a href={`/api/expenses/receipts/${encodeURIComponent(receipt.id)}?download=0`} target="_blank" rel="noreferrer" className="shrink-0 rounded-lg px-2 py-2 text-xs font-semibold text-[#9a712e] hover:bg-[#caa24c]/10 dark:text-[#e6c77f]">Preview</a></li>)}</ul> : <p className="mt-2 text-xs leading-5 text-[color:var(--portal-muted)]">No receipt is attached. Add one in Receipts &amp; Records.</p>}<LinkButton href="/portal/finances/expenses/receipts">Open receipt library <ArrowRight size={14} /></LinkButton></section>
     </div>

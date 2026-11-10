@@ -16,6 +16,7 @@ import { getPublicLuxorPhoneNumber } from './luxorPhoneNumbersServer'
 import { sendLuxorZohoEmail } from './zohoMailServer'
 import { luxorMailProvider } from './luxorMailConfig'
 import { breakdownCanonicalJson, breakdownPricingSignature, breakdownVenueAccessLabel, breakdownEventEndLabel, type LuxorBreakdown, type LuxorBreakdownSummary } from './luxorBreakdownTypes'
+import { readProposalBreakdownCopy } from './luxorProposalBreakdownCopyServer'
 
 type StoredBreakdown = LuxorBreakdown & { request_fingerprint: string; actor_email: string; provider: 'resend' | 'zoho' }
 const TABLE = 'luxor_proposal_breakdowns'
@@ -162,6 +163,8 @@ export async function sendLuxorBreakdown(input: {
     const guestArrivalRaw = String(context.guest_arrival_time || context.guestArrivalTime || selection.guestArrivalTime || selection.guest_arrival_time || '')
     const rentalStart = String(context.rental_start_time || context.start_time || selection.rentalStartTime || selection.rental_start_time || '')
     const rentalEnd = String(context.rental_end_time || context.end_time || selection.rentalEndTime || selection.rental_end_time || '')
+    let copyOverride: Awaited<ReturnType<typeof readProposalBreakdownCopy>> = null
+    try { copyOverride = await readProposalBreakdownCopy() } catch { /* Settings failure keeps the original wrapper copy. */ }
     const email = buildLuxorProposalBreakdownEmail({
       recipientName: inquiry.full_name,
       eventType: String(context.event_type || selection.eventType || 'Event'),
@@ -172,7 +175,7 @@ export async function sendLuxorBreakdown(input: {
       selectedPackageId: packageId, selectedPackage, packages: calculation.packages,
       packageOptions: calculation.packageOptions, addOnQuotes: calculation.addOnQuotes,
       phoneNumber: await getPublicLuxorPhoneNumber(), bookingUrl: null,
-    })
+    }, copyOverride)
     const [created] = await supabaseRestStrict<StoredBreakdown[]>(`${TABLE}?on_conflict=id&select=*`, {
       method: 'POST', headers: { Prefer: 'resolution=ignore-duplicates,return=representation' },
       body: JSON.stringify({

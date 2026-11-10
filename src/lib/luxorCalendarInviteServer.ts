@@ -12,6 +12,7 @@ import ical, {
 } from 'ical-generator'
 import nodemailer from 'nodemailer'
 import { luxorMailProvider, luxorResendConfigured, type LuxorMailProvider } from './luxorMailConfig'
+import { CALENDAR_CANCELLATION_DEFAULT, CALENDAR_UPDATE_DEFAULT, type CalendarMessageCopyMap } from './luxorCalendarMessageCopy'
 import { sendLuxorResendEmail } from './luxorResendMailServer'
 
 const LUXOR_ORGANIZER_EMAIL = 'booking@luxoratlaspalmas.com'
@@ -153,11 +154,13 @@ function zohoSmtpConfig() {
   return { host, port, user, password }
 }
 
-export function buildLuxorCalendarMessage(input: LuxorCalendarInviteInput) {
+export function buildLuxorCalendarMessage(input: LuxorCalendarInviteInput, copyMap?: CalendarMessageCopyMap | null) {
   const validated = validateInvite(input)
   const calendarContent = buildLuxorCalendarInvite(input)
   const dateLabel = invitationDateLabel(input.start, input.end)
-  const subject = input.method === 'CANCEL' ? `Cancelled: ${validated.title}` : validated.title
+  const cancelCopy = copyMap?.cancellation ?? CALENDAR_CANCELLATION_DEFAULT
+  const updateCopy = copyMap?.update ?? CALENDAR_UPDATE_DEFAULT
+  const subject = input.method === 'CANCEL' ? `${cancelCopy.subjectPrefix}${validated.title}` : validated.title
   const safeTitle = escapeHtml(subject)
   const safeDate = escapeHtml(dateLabel)
   const safeLocation = escapeHtml(validated.location)
@@ -174,7 +177,7 @@ export function buildLuxorCalendarMessage(input: LuxorCalendarInviteInput) {
       validated.location,
       validated.description,
       '',
-      `Reply to ${LUXOR_ORGANIZER_EMAIL} with any questions.`,
+      input.method === 'CANCEL' ? cancelCopy.footer : updateCopy.footer,
     ].filter(Boolean).join('\n\n'),
     html: `
       <div style="margin:0;background:#f6f2eb;padding:28px 14px;font-family:Arial,Helvetica,sans-serif;color:#2f271f;">
@@ -184,7 +187,7 @@ export function buildLuxorCalendarMessage(input: LuxorCalendarInviteInput) {
           <p style="margin:0 0 6px;font-size:15px;line-height:1.6;"><strong>${safeDate}</strong></p>
           <p style="margin:0 0 22px;font-size:14px;line-height:1.6;color:#6f624f;">${safeLocation}</p>
           ${safeDescription ? `<p style="margin:0;border-top:1px solid #eadfce;padding-top:20px;font-size:14px;line-height:1.7;color:#51463a;">${safeDescription}</p>` : ''}
-          <p style="margin:24px 0 0;font-size:12px;line-height:1.7;color:#7d7164;">${input.method === 'CANCEL' ? 'This appointment has been cancelled. Your calendar may update automatically or ask you to remove it.' : 'Use the calendar controls in this message to accept, decline, or add the appointment.'} Questions? Reply to booking@luxoratlaspalmas.com.</p>
+          <p style="margin:24px 0 0;font-size:12px;line-height:1.7;color:#7d7164;">${escapeHtml(input.method === 'CANCEL' ? cancelCopy.footer : updateCopy.footer)}</p>
         </div>
       </div>`,
     headers: {

@@ -3,6 +3,7 @@ import 'server-only'
 import { supabaseRest } from './supabaseRestServer'
 import { luxorMailAddress } from './luxorMailConfig'
 import { buildLuxorCalendarMessage } from './luxorCalendarInviteServer'
+import { readCalendarMessageCopyMap } from './luxorCalendarMessageCopyServer'
 import { sendLuxorResendEmail } from './luxorResendMailServer'
 import type { LuxorEmailJob, LuxorInquiry } from './luxorInquiryTypes'
 
@@ -73,8 +74,10 @@ export async function deliverLuxorCalendarJob(job: LuxorEmailJob) {
     ? current.sequence !== snapshot.sequence || current.status === 'cancelled'
     : current.sequence > snapshot.sequence && current.status === 'confirmed' && current.state.attendeeEmails.includes(snapshot.attendeeEmail)
   if (superseded) return { status: 'skipped' as const }
+  let copyMap: Awaited<ReturnType<typeof readCalendarMessageCopyMap>> = null
+  try { copyMap = await readCalendarMessageCopyMap() } catch { /* Settings failure keeps the original wrapper copy. */ }
   const message = buildLuxorCalendarMessage({ ...snapshot, start: new Date(snapshot.startUtc), end: new Date(snapshot.endUtc),
-    stamp: new Date(snapshot.stamp), created: new Date(snapshot.createdAt) })
+    stamp: new Date(snapshot.stamp), created: new Date(snapshot.createdAt) }, copyMap)
   const brandedRequest = snapshot.method === 'REQUEST' && job.metadata.delivery === 'branded_confirmation'
   const frozenText = typeof job.metadata.plain_text === 'string' ? job.metadata.plain_text : ''
   const sent = await sendLuxorResendEmail({

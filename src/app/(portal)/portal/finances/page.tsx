@@ -6,7 +6,6 @@ import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import {
   CreditCard,
-  Repeat,
   Briefcase,
   CalendarDots,
   Receipt,
@@ -38,7 +37,7 @@ import {
 } from '@/components/portal/PortalUI'
 import FinancialOverview from '@/components/portal/FinancialOverview'
 import ExpenseManagement from '@/components/portal/expenses/ExpenseManagement'
-import FinancialBills from '@/components/portal/FinancialBills'
+import ProvidersWorkspace from '@/components/portal/ProvidersWorkspace'
 import { OperationsPageContent } from '@/components/portal/OperationsWorkspace'
 import { chicagoCalendarDate } from '@/lib/luxorPaymentDashboardModel'
 import { PaymentHistoryDetails, ReceivablesView, RevenueCollectionsView } from '@/components/portal/RevenueCollectionsView'
@@ -95,8 +94,11 @@ export default function FinancesPage() {
   const [testClassificationVerified, setTestClassificationVerified] = useState(false)
   const refreshGeneration = useRef(0)
   const [loading, setLoading] = useState(true)
+  const [financeViewsReady, setFinanceViewsReady] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [searchTerm, setSearchTerm] = useState('')
+
+  useEffect(() => { if (!loading) setFinanceViewsReady(true) }, [loading])
 
   useEffect(() => {
     if (!isDateRangeOpen) return
@@ -397,9 +399,9 @@ type LuxorBookingExpense = {
     receivables: 'Payment Schedules',
     invoices: 'Invoices Ledger',
     payments: 'Payments Log',
-    expenses: 'Expense dashboard',
-    'bill-review': 'Bill review',
-    'bill-providers': 'Bills and providers',
+    expenses: 'Expense Dashboard',
+    'bill-review': 'Bills',
+    'bill-providers': 'Providers',
     'expense-recurring': 'Recurring expenses',
     'expense-business': 'Business expenses',
     'expense-events': 'Event expenses',
@@ -454,7 +456,7 @@ type LuxorBookingExpense = {
       <PortalPageHeader
         icon={<CurrencyDollar size={18} weight="regular" />}
         title="Finances"
-        titleAccessory={activeTab === 'dashboard' ? dateRangeButton('ml-2 hidden md:block', 'left') : undefined}
+        titleAccessory={activeTab === 'dashboard' || activeTab === 'expenses' ? dateRangeButton('ml-2 hidden md:block', 'left') : undefined}
         mobileActionsInline
         actions={
           <div className="flex flex-wrap items-center justify-end gap-2.5">
@@ -466,7 +468,7 @@ type LuxorBookingExpense = {
               aria-haspopup="dialog"
               aria-expanded={isViewPickerOpen}
               aria-label={`Browse views. Currently viewing ${FINANCE_TAB_LABELS[activeTab] || 'Overview'}`}
-              className="hidden md:inline-flex min-h-10 items-center gap-2.5 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3.5 py-1.5 text-left text-[color:var(--portal-text)] transition-colors hover:border-[#caa24c]/45 hover:bg-[color:var(--portal-soft)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45"
+              className="hidden min-h-10 items-center gap-2.5 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3.5 py-1.5 text-left text-[color:var(--portal-text)] transition-colors hover:border-[#caa24c]/45 hover:bg-[color:var(--portal-soft)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 md:inline-flex xl:hidden"
             >
               <Menu size={16} className="shrink-0 text-[#a8792f]" aria-hidden="true" />
               <span className="min-w-0 flex-1">
@@ -511,26 +513,46 @@ type LuxorBookingExpense = {
       <FinanceBrowseViews
         open={isViewPickerOpen}
         close={() => setIsViewPickerOpen(false)}
-        currentView={(activeTab === 'dashboard' ? 'overview' : activeTab) as FinanceBrowseView}
+        currentView={(
+          activeTab === 'dashboard' ? 'overview' :
+          activeTab === 'expenses' ? 'expense-dashboard' :
+          activeTab === 'expense-recurring' ? 'recurring-expenses' :
+          activeTab === 'expense-business' ? 'business-expenses' :
+          activeTab === 'expense-events' ? 'event-expenses' :
+          activeTab === 'expense-receipts' ? 'expense-receipts' :
+          activeTab === 'expense-detail' ? 'business-expenses' :
+          activeTab
+        ) as FinanceBrowseView}
         onLegacySelect={selectLegacyView}
       />
 
-      {activeTab === 'dashboard' && <div className="md:hidden">{periodControls}</div>}
-      {!isPayables && <FinanceMainTabs activeTab={activeTab as 'dashboard' | 'revenue' | 'receivables' | 'invoices' | 'payments' | 'books'} onLocalSelect={selectLegacyView} />}
-
-      {isPayables && <div className="min-w-0 shrink-0 overflow-x-auto"><PortalAnimatedTabs variant="slider" ariaLabel="Payables sections" tabs={[
-        { id: 'expenses', label: 'Expense Dashboard', icon: <TrendDown size={15} /> }, { id: 'bill-review', label: 'Bill Review', icon: <FileText size={15} /> }, { id: 'bill-providers', label: 'Bills and Providers', icon: <Buildings size={15} /> }, { id: 'expense-recurring', label: 'Recurring Expenses', icon: <Repeat size={15} /> }, { id: 'expense-business', label: 'Business Expenses', icon: <Briefcase size={15} /> }, { id: 'expense-events', label: 'Event Expenses', icon: <CalendarDots size={15} /> }, { id: 'expense-receipts', label: 'Receipts & Records', icon: <Receipt size={15} /> },
-      ]} activeTab={activeTab === 'expense-detail' ? 'expense-business' : activeTab} onTabChange={(tab) => selectLegacyView(tab)} /></div>}
-      <PortalTabTransition activeKey={activeTab} className="flex-1 min-h-0 overflow-hidden">
-      {activeTab === 'revenue' && <div className="h-full overflow-y-auto pb-6 portal-scrollbar"><RevenueCollectionsView view="revenue" actorEmail={null} embedded /></div>}
-      {activeTab === 'books' && <div className="h-full overflow-y-auto pb-6 portal-scrollbar"><BooksRecordsPage embedded /></div>}
-      {activeTab === 'expenses' && <ExpenseManagement view="dashboard" embedded />}
+      {(activeTab === 'dashboard' || activeTab === 'expenses') && <div className="md:hidden">{periodControls}</div>}
+      <div className="hidden min-w-0 shrink-0 overflow-hidden rounded-xl border border-[color:var(--portal-border)]/70 bg-[color:var(--portal-soft)] p-1 xl:grid">
+        <AnimatePresence initial={false} mode="sync">
+          <motion.div
+            key={isPayables ? 'payables' : 'receivables'}
+            className="col-start-1 row-start-1 min-w-0"
+            initial={reduceMotion ? false : { y: '100%', opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            exit={reduceMotion ? { opacity: 0 } : { y: '-100%', opacity: 0 }}
+            transition={{ duration: reduceMotion ? 0 : 0.28, ease: [0.22, 1, 0.36, 1] }}
+          >
+            {isPayables ? <div className="min-w-0 overflow-x-auto"><PortalAnimatedTabs variant="slider" ariaLabel="Payables sections" className="!rounded-none !border-0 !bg-transparent !p-0" tabs={[
+              { id: 'expenses', label: 'Expense Dashboard', icon: <TrendDown size={15} /> }, { id: 'bill-review', label: 'Bills', icon: <FileText size={15} /> }, { id: 'bill-providers', label: 'Providers', icon: <Buildings size={15} /> }, { id: 'expense-business', label: 'Business Expenses', icon: <Briefcase size={15} /> }, { id: 'expense-events', label: 'Event Expenses', icon: <CalendarDots size={15} /> }, { id: 'expense-receipts', label: 'Receipts & Records', icon: <Receipt size={15} /> },
+            ]} activeTab={activeTab === 'expense-detail' ? 'expense-business' : activeTab} onTabChange={(tab) => selectLegacyView(tab)} /></div> : <FinanceMainTabs bare activeTab={activeTab as 'dashboard' | 'revenue' | 'receivables' | 'invoices' | 'payments' | 'books'} onLocalSelect={selectLegacyView} />}
+          </motion.div>
+        </AnimatePresence>
+      </div>
+      {(financeViewsReady || activeTab === 'revenue') && <motion.div initial={false} animate={{ opacity: activeTab === 'revenue' ? 1 : 0, filter: activeTab === 'revenue' || reduceMotion ? 'blur(0px)' : 'blur(10px)' }} transition={{ duration: reduceMotion ? 0 : 0.22 }} className={`flex-1 min-h-0 overflow-y-auto pb-6 portal-scrollbar ${activeTab === 'revenue' ? '' : 'hidden'}`}><RevenueCollectionsView view="revenue" actorEmail={null} embedded active={activeTab === 'revenue'} /></motion.div>}
+      {(financeViewsReady || activeTab === 'books') && <motion.div initial={false} animate={{ opacity: activeTab === 'books' ? 1 : 0, filter: activeTab === 'books' || reduceMotion ? 'blur(0px)' : 'blur(10px)' }} transition={{ duration: reduceMotion ? 0 : 0.22 }} className={`flex-1 min-h-0 overflow-y-auto pb-6 portal-scrollbar ${activeTab === 'books' ? '' : 'hidden'}`}><BooksRecordsPage embedded active={activeTab === 'books'} /></motion.div>}
+      <PortalTabTransition activeKey={activeTab} className={`flex-1 min-h-0 overflow-hidden ${activeTab === 'revenue' || activeTab === 'books' ? 'hidden' : ''}`}>
+      {activeTab === 'expenses' && <ExpenseManagement view="dashboard" embedded selectedRange={overviewRange} />}
       {activeTab === 'expense-recurring' && <ExpenseManagement view="recurring" embedded />}
       {activeTab === 'expense-business' && <ExpenseManagement view="business" embedded />}
       {activeTab === 'expense-events' && <ExpenseManagement view="events" embedded />}
       {activeTab === 'expense-receipts' && <ExpenseManagement view="receipts" embedded />}
       {activeTab === 'expense-detail' && <ExpenseManagement view="detail" expenseId={routeSearchParams.get('expense') || undefined} embedded />}
-      {activeTab === 'bill-providers' && <div className="h-full overflow-y-auto portal-scrollbar"><FinancialBills embedded /></div>}
+      {activeTab === 'bill-providers' && <ProvidersWorkspace />}
       {activeTab === 'bill-review' && <OperationsPageContent embeddedBills />}
       {/* DASHBOARD TAB */}
       {activeTab === 'dashboard' && (loading || (!error && testClassificationVerified)) && (

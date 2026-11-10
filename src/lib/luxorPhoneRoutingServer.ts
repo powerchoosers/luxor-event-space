@@ -3,6 +3,7 @@ import 'server-only'
 import { normalizePhoneNumber } from './luxorCallsServer'
 import { getActiveLuxorPhoneNumber } from './luxorPhoneNumbersServer'
 import { supabaseRest } from './supabaseRestServer'
+import { PHONE_TEXT_DEFAULTS } from './luxorPhoneTextWorkflow'
 
 export type LuxorOutboundMode = 'browser' | 'ring_phone'
 
@@ -30,9 +31,9 @@ function defaultSettings(): LuxorPhoneRoutingSettings {
     ring_browser: true,
     ring_phone: Boolean(fallbackNumber),
     missed_call_text_enabled: false,
-    missed_call_text_body: 'Luxor Event Space: Sorry we missed your call. Reply with your name, event date, and event type, and we will get back to you. Reply STOP to opt out.',
+    missed_call_text_body: PHONE_TEXT_DEFAULTS.missed_call,
     inbound_text_reply_enabled: false,
-    inbound_text_reply_body: 'Luxor Event Space: Thanks for your message. We received it and will respond as soon as possible. Reply STOP to opt out.',
+    inbound_text_reply_body: PHONE_TEXT_DEFAULTS.inbound_acknowledgment,
     inbound_text_reply_cooldown_hours: 12,
     updated_by: null,
     updated_at: new Date(0).toISOString(),

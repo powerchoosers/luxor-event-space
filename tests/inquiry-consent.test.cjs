@@ -48,6 +48,7 @@ test('inquiry normalization records only explicitly checked independent choices'
     './luxorTourMetrics': {},
     './luxorTextAutomationsServer': {},
     './luxorTourSlotsServer': {},
+    './luxorTourSlots': {}, './luxorCalendarServer': {}, './luxorTourPlanningServer': {}, './luxorPhoneNumbersServer': {}, './luxorInquiryDuplicateMatch': {},
   })
   const base = { fullName: 'Synthetic Lead', email: 'lead@example.invalid', phone: '3125550100', source: 'homepage_brochure', flow: 'brochure_lead', eventType: 'Wedding' }
   const none = normalizeInquiry(base)
@@ -266,6 +267,7 @@ test('SMS signup marketing choice persists only server-selected disclosure evide
     },
     './luxorTextCampaignsServer': { queueInquiryTextJobs: async () => {} },
     './luxorTourSlotsServer': {},
+    './luxorTourSlots': {}, './luxorCalendarServer': {}, './luxorTourPlanningServer': {}, './luxorPhoneNumbersServer': {}, './luxorInquiryDuplicateMatch': {},
   })
 
   await createLuxorInquiry({
@@ -314,6 +316,7 @@ test('audience selection requires the exact requested SMS scope', async () => {
     './luxorInquiriesServer': {},
     './luxorTestLeadServer': {},
     './luxorCustomWorkflowFeatureGates': {},
+    './luxorTourNotificationsServer': {}, './luxorSystemMessageTemplatesServer': {}, './luxorSystemMessageTemplates': {},
   })
   assert.deepEqual((await listEligibleTextAudience({ requiredScope: 'marketing' })).map((recipient) => recipient.inquiryId), ['marketing'])
   assert.deepEqual((await listEligibleTextAudience({ requiredScope: 'customer_care' })).map((recipient) => recipient.inquiryId), ['care'])

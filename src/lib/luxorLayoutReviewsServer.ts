@@ -5,6 +5,7 @@ import { createUniqueLuxorEmailJob, updateLuxorEmailJob } from './luxorEmailJobs
 import { supabaseRest } from './supabaseRestServer'
 import { broadcastLuxorPortalNotification } from './luxorZohoWebhookServer'
 import { normalizeEmailAddress } from './zohoMailServer'
+import { renderLayoutReviewEmailCopy, type LayoutReviewEmailCopy } from './luxorLayoutReviewEmailCopy'
 import type { LuxorEmailJob } from './luxorInquiryTypes'
 import type {
   LayoutReviewEmailDelivery,
@@ -477,15 +478,17 @@ export function buildLuxorLayoutReviewEmail(input: {
   clientName: string
   review: Pick<LuxorLayoutReview, 'layout_name' | 'expires_at'>
   reviewUrl: string
+  copyOverride?: LayoutReviewEmailCopy | null
 }) {
+  const copy = input.copyOverride ? renderLayoutReviewEmailCopy(input.copyOverride, { first_name: firstName(input.clientName), layout_name: input.review.layout_name }) : null
   return {
-    subject: 'Your Luxor event layout is ready to review',
+    subject: copy?.subject || 'Your Luxor event layout is ready to review',
     body: [
-      `Hi ${firstName(input.clientName)},`,
-      `Your saved event layout, “${input.review.layout_name},” is ready to review. Open the private link below to explore the 3D setup, approve the plan, or send us any requested changes.`,
+      copy?.greeting || `Hi ${firstName(input.clientName)},`,
+      copy?.body || `Your saved event layout, “${input.review.layout_name},” is ready to review. Open the private link below to explore the 3D setup, approve the plan, or send us any requested changes.`,
       input.reviewUrl,
       `This private link expires ${formattedExpiry(input.review.expires_at)}.`,
-      'We look forward to bringing your celebration to life.',
+      copy?.closing || 'We look forward to bringing your celebration to life.',
       'Luxor Event Space',
     ].join('\n\n'),
   }
@@ -498,6 +501,7 @@ export async function queueLuxorLayoutReviewEmail(input: {
   subject: string
   body: string
   requestedBy: string
+  copySettingsUnavailable?: boolean
 }) {
   const recipientEmail = normalizeEmailAddress(input.recipientEmail)
   if (!recipientEmail) throw new Error('Add a valid client email before sending this layout review.')
@@ -528,6 +532,7 @@ export async function queueLuxorLayoutReviewEmail(input: {
         requested_by: input.requestedBy,
         sender_from: 'booking@luxoratlaspalmas.com',
         sender_name: 'Luxor Event Space',
+        copy_settings_unavailable: input.copySettingsUnavailable === true,
       },
     })
     const delivery = retried && toLayoutReviewEmailDelivery(retried)
@@ -548,6 +553,7 @@ export async function queueLuxorLayoutReviewEmail(input: {
       requested_by: input.requestedBy,
       sender_from: 'booking@luxoratlaspalmas.com',
       sender_name: 'Luxor Event Space',
+      ...(input.copySettingsUnavailable ? { copy_settings_unavailable: true } : {}),
     },
   })
   const delivery = toLayoutReviewEmailDelivery(job)

@@ -10,11 +10,17 @@ import { getLuxorBooking, listLuxorBookingsByInquiry, listLuxorPaymentsByBooking
 import { buildLuxorInvoicePdf } from '@/lib/luxorInvoicePdfServer'
 import { sendLuxorZohoEmail } from '@/lib/zohoMailServer'
 import { buildLuxorDateLockDepositEmail, buildLuxorProposalEmail, buildLuxorPaymentRequestEmail, buildLuxorProposalContractEmail } from '@/lib/luxorProposalEmailServer'
+import { readAgreementPackageCopy } from '@/lib/luxorAgreementPackageCopyServer'
 import { downloadLuxorDocument, downloadLuxorPrivatePdf, getLuxorDocumentByInvoice, saveLuxorInvoicePdf, saveLuxorProposalPdf } from '@/lib/luxorDocumentsServer'
 import { createNote, listNotesByInquiry } from '@/lib/luxorNotesServer'
 import { cancelQueuedLuxorEmailJobs, createLuxorEmailJob, createUniqueLuxorEmailJob, updateLuxorEmailJob } from '@/lib/luxorEmailJobsServer'
-import { buildAiOfferReminderEmail, buildContractReminderEmail, buildFinalPaymentReminderEmail, buildPaymentReminderEmail, lifecycleAutomationKey } from '@/lib/luxorLifecycleEmailsServer'
-import { createUniqueTextJob, queueInvoiceReminderTexts } from '@/lib/luxorTextCampaignsServer'
+import { buildAiOfferReminderEmail, buildFinalPaymentReminderEmail, buildPaymentReminderEmail, lifecycleAutomationKey } from '@/lib/luxorLifecycleEmailsServer'
+import { buildAgreementReminderPair } from '@/lib/luxorAgreementReminderQueue'
+import { readOfferReminderSetting } from '@/lib/luxorOfferReminderCopyServer'
+import { readPaymentRequestReminderSetting } from '@/lib/luxorPaymentRequestReminderCopyServer'
+import { createUniqueTextJob, queueInvoiceReminderTexts, readTextCopy } from '@/lib/luxorTextCampaignsServer'
+import { readInvoiceReminderTemplate } from '@/lib/luxorSystemMessageTemplatesServer'
+import { INVOICE_REMINDER_DEFAULTS, renderInvoiceReminder } from '@/lib/luxorSystemMessageTemplates'
 import { createLuxorSignatureRequest, getActiveLuxorSignatureRequestByBooking, getLuxorBookingContractFingerprint, recordLuxorSignatureEvent, updateLuxorSignatureRequest } from '@/lib/luxorSignaturesServer'
 import { createLuxorPostContractCheckout, expireLuxorCheckoutForRepricing, prepareLuxorDepositPaymentLink } from '@/lib/luxorStripeCheckoutServer'
 import type { LuxorSignatureRequest } from '@/lib/luxorInquiryTypes'
@@ -73,6 +79,15 @@ function offerReminderTimes(expiresAt?: string | null) {
     .filter((time, index, values) => time > now + 15 * 60_000 && time < expiry - 5 * 60_000 && values.indexOf(time) === index)
     .sort((a, b) => a - b)
     .map((time) => new Date(time).toISOString())
+}
+
+async function offerReminderCopyForQueue() {
+  try { return { copy: (await readOfferReminderSetting()).setting.copy_override, unavailable: false } }
+  catch (error) { console.error('Offer reminder settings unavailable; using the original wording:', error); return { copy: null, unavailable: true } }
+}
+async function paymentRequestReminderCopyForQueue() {
+  try { return { copy: (await readPaymentRequestReminderSetting()).setting.copy_override, unavailable: false } }
+  catch (error) { console.error('Payment reminder settings unavailable; using the original wording:', error); return { copy: null, unavailable: true } }
 }
 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -306,13 +321,16 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
       await createNote(inquiry.id, `Booking package sent to ${inquiry.email}: negotiated reservation-deposit invoice, Stripe payment link, agreement, and Guest Guide. The date remains pending until both payment and signature are complete.`, 'status_change', session.email)
       await cancelQueuedLuxorEmailJobs(inquiry.id, ['proposal_view_reminder', 'proposal_payment_reminder', 'contract_view_reminder', 'contract_signature_reminder'])
-      const viewReminder = buildContractReminderEmail({ signature, kind: 'view' })
-      const signatureReminder = buildContractReminderEmail({ signature, kind: 'sign' })
-      const paymentReminder = buildPaymentReminderEmail({ inquiry, reviewUrl: depositReviewUrl, paymentAmount: depositAmount, paymentLabel })
+      const agreementReminders = await buildAgreementReminderPair(signature)
+      const viewReminder = agreementReminders.view
+      const signatureReminder = agreementReminders.sign
+      const paymentCopy = await paymentRequestReminderCopyForQueue()
+      const paymentReminder = buildPaymentReminderEmail({ inquiry, reviewUrl: depositReviewUrl, paymentAmount: depositAmount, paymentLabel, copyOverride: paymentCopy.copy })
       const reminderBooking = booking!
       const reminderRecipient = inquiry.email!
+      const offerCopy = await offerReminderCopyForQueue()
       const offerReminderJobs = await Promise.all(offerReminderTimes(updatedDepositInvoice.offer_expires_at).map(async (scheduledFor, index) => {
-        const reminder = await buildAiOfferReminderEmail({ inquiry, invoice: updatedDepositInvoice, booking: reminderBooking, reviewUrl: depositReviewUrl, reminderNumber: index + 1, notes })
+        const reminder = await buildAiOfferReminderEmail({ inquiry, invoice: updatedDepositInvoice, booking: reminderBooking, reviewUrl: depositReviewUrl, reminderNumber: index + 1, notes, copyOverride: offerCopy.copy })
         return createUniqueLuxorEmailJob({
           inquiryId: inquiry.id,
           bookingId: reminderBooking.id,
@@ -323,13 +341,13 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
           body: reminder.body,
           scheduledFor,
           automationKey: `proposal_offer:${updatedDepositInvoice.id}:${index + 1}`,
-          metadata: { invoice_id: updatedDepositInvoice.id, offer_reminder: true, offer_expires_at: updatedDepositInvoice.offer_expires_at, ai_generated: reminder.aiGenerated },
+          metadata: { invoice_id: updatedDepositInvoice.id, offer_reminder: true, offer_expires_at: updatedDepositInvoice.offer_expires_at, ai_generated: reminder.aiGenerated, ...(offerCopy.copy ? { offer_copy_snapshot: offerCopy.copy } : {}), ...(offerCopy.unavailable ? { copy_settings_unavailable: true } : {}) },
         })
       }))
       await Promise.all([
-        createUniqueLuxorEmailJob({ inquiryId: inquiry.id, bookingId: booking.id, signatureRequestId: signature.id, jobType: 'contract_view_reminder', recipientEmail: inquiry.email, subject: viewReminder.subject, body: viewReminder.body, scheduledFor: new Date(Date.now() + 48 * 60 * 60_000).toISOString(), automationKey: lifecycleAutomationKey('contract_view_reminder', signature.id), metadata: { invoice_id: updatedDepositInvoice.id, offer_expires_at: updatedDepositInvoice.offer_expires_at } }),
-        createUniqueLuxorEmailJob({ inquiryId: inquiry.id, bookingId: booking.id, signatureRequestId: signature.id, jobType: 'contract_signature_reminder', recipientEmail: inquiry.email, subject: signatureReminder.subject, body: signatureReminder.body, scheduledFor: new Date(Date.now() + 5 * 24 * 60 * 60_000).toISOString(), automationKey: lifecycleAutomationKey('contract_signature_reminder', signature.id), metadata: { invoice_id: updatedDepositInvoice.id, offer_expires_at: updatedDepositInvoice.offer_expires_at } }),
-        createUniqueLuxorEmailJob({ inquiryId: inquiry.id, bookingId: booking.id, jobType: 'proposal_payment_reminder', recipientEmail: inquiry.email, subject: paymentReminder.subject, body: paymentReminder.body, scheduledFor: new Date(Date.now() + 72 * 60 * 60_000).toISOString(), automationKey: lifecycleAutomationKey('proposal_payment_reminder', updatedDepositInvoice.id), metadata: { invoice_id: updatedDepositInvoice.id, flow_stage: 'booking_package_deposit', offer_expires_at: updatedDepositInvoice.offer_expires_at } }),
+        createUniqueLuxorEmailJob({ inquiryId: inquiry.id, bookingId: booking.id, signatureRequestId: signature.id, jobType: 'contract_view_reminder', recipientEmail: inquiry.email, subject: viewReminder.subject, body: viewReminder.body, scheduledFor: new Date(Date.now() + 48 * 60 * 60_000).toISOString(), automationKey: lifecycleAutomationKey('contract_view_reminder', signature.id), metadata: { invoice_id: updatedDepositInvoice.id, offer_expires_at: updatedDepositInvoice.offer_expires_at, ...(agreementReminders.copySettingsUnavailable ? { copy_settings_unavailable: true } : {}) } }),
+        createUniqueLuxorEmailJob({ inquiryId: inquiry.id, bookingId: booking.id, signatureRequestId: signature.id, jobType: 'contract_signature_reminder', recipientEmail: inquiry.email, subject: signatureReminder.subject, body: signatureReminder.body, scheduledFor: new Date(Date.now() + 5 * 24 * 60 * 60_000).toISOString(), automationKey: lifecycleAutomationKey('contract_signature_reminder', signature.id), metadata: { invoice_id: updatedDepositInvoice.id, offer_expires_at: updatedDepositInvoice.offer_expires_at, ...(agreementReminders.copySettingsUnavailable ? { copy_settings_unavailable: true } : {}) } }),
+        createUniqueLuxorEmailJob({ inquiryId: inquiry.id, bookingId: booking.id, jobType: 'proposal_payment_reminder', recipientEmail: inquiry.email, subject: paymentReminder.subject, body: paymentReminder.body, scheduledFor: new Date(Date.now() + 72 * 60 * 60_000).toISOString(), automationKey: lifecycleAutomationKey('proposal_payment_reminder', updatedDepositInvoice.id), metadata: { invoice_id: updatedDepositInvoice.id, flow_stage: 'booking_package_deposit', offer_expires_at: updatedDepositInvoice.offer_expires_at, payment_request_reminder: true, ...(paymentCopy.copy ? { payment_request_copy_snapshot: paymentCopy.copy } : {}), ...(paymentCopy.unavailable ? { copy_settings_unavailable: true } : {}) } }),
         ...offerReminderJobs,
       ])
 
@@ -784,7 +802,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         downloadLuxorPrivatePdf(signature.guest_guide_path || ''),
       ])
       await saveLuxorProposalPdf({ invoice, inquiryId: invoice.inquiry_id, pdf, createdBy: session.email })
-      const email = await buildLuxorProposalContractEmail({ invoice, inquiry, booking, signingUrl, notes })
+      const email = await buildLuxorProposalContractEmail({ invoice, inquiry, booking, signingUrl, notes, copyOverride: await readAgreementPackageCopy() })
       const job = await createLuxorEmailJob({
         inquiryId: inquiry.id,
         bookingId: booking.id,
@@ -841,12 +859,14 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       }) ?? inquiry
       await createNote(inquiry.id, 'Proposal and agreement sent together. Payment will be requested automatically after signature.', 'status_change', session.email)
       await cancelQueuedLuxorEmailJobs(inquiry.id, ['proposal_view_reminder', 'proposal_payment_reminder', 'contract_view_reminder', 'contract_signature_reminder'])
-      const viewReminder = buildContractReminderEmail({ signature, kind: 'view' })
-      const signatureReminder = buildContractReminderEmail({ signature, kind: 'sign' })
+      const agreementReminders = await buildAgreementReminderPair(signature)
+      const viewReminder = agreementReminders.view
+      const signatureReminder = agreementReminders.sign
       const reminderBooking = booking!
       const reminderRecipient = inquiry.email!
+      const offerCopy = await offerReminderCopyForQueue()
       const offerReminderJobs = await Promise.all(offerReminderTimes(invoice.offer_expires_at).map(async (scheduledFor, index) => {
-        const reminder = await buildAiOfferReminderEmail({ inquiry, invoice, booking: reminderBooking, reviewUrl: `${origin}/proposal/${publicToken}`, reminderNumber: index + 1, notes })
+        const reminder = await buildAiOfferReminderEmail({ inquiry, invoice, booking: reminderBooking, reviewUrl: `${origin}/proposal/${publicToken}`, reminderNumber: index + 1, notes, copyOverride: offerCopy.copy })
         return createUniqueLuxorEmailJob({
           inquiryId: inquiry.id,
           bookingId: reminderBooking.id,
@@ -857,12 +877,12 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
           body: reminder.body,
           scheduledFor,
           automationKey: `proposal_offer:${invoice.id}:${index + 1}`,
-          metadata: { invoice_id: invoice.id, offer_reminder: true, offer_expires_at: invoice.offer_expires_at, ai_generated: reminder.aiGenerated },
+          metadata: { invoice_id: invoice.id, offer_reminder: true, offer_expires_at: invoice.offer_expires_at, ai_generated: reminder.aiGenerated, ...(offerCopy.copy ? { offer_copy_snapshot: offerCopy.copy } : {}), ...(offerCopy.unavailable ? { copy_settings_unavailable: true } : {}) },
         })
       }))
       await Promise.all([
-        createUniqueLuxorEmailJob({ inquiryId: inquiry.id, bookingId: booking.id, signatureRequestId: signature.id, jobType: 'contract_view_reminder', recipientEmail: inquiry.email, subject: viewReminder.subject, body: viewReminder.body, scheduledFor: new Date(Date.now() + 48 * 60 * 60_000).toISOString(), automationKey: lifecycleAutomationKey('contract_view_reminder', signature.id), metadata: { invoice_id: invoice.id, offer_expires_at: invoice.offer_expires_at } }),
-        createUniqueLuxorEmailJob({ inquiryId: inquiry.id, bookingId: booking.id, signatureRequestId: signature.id, jobType: 'contract_signature_reminder', recipientEmail: inquiry.email, subject: signatureReminder.subject, body: signatureReminder.body, scheduledFor: new Date(Date.now() + 5 * 24 * 60 * 60_000).toISOString(), automationKey: lifecycleAutomationKey('contract_signature_reminder', signature.id), metadata: { invoice_id: invoice.id, offer_expires_at: invoice.offer_expires_at } }),
+        createUniqueLuxorEmailJob({ inquiryId: inquiry.id, bookingId: booking.id, signatureRequestId: signature.id, jobType: 'contract_view_reminder', recipientEmail: inquiry.email, subject: viewReminder.subject, body: viewReminder.body, scheduledFor: new Date(Date.now() + 48 * 60 * 60_000).toISOString(), automationKey: lifecycleAutomationKey('contract_view_reminder', signature.id), metadata: { invoice_id: invoice.id, offer_expires_at: invoice.offer_expires_at, ...(agreementReminders.copySettingsUnavailable ? { copy_settings_unavailable: true } : {}) } }),
+        createUniqueLuxorEmailJob({ inquiryId: inquiry.id, bookingId: booking.id, signatureRequestId: signature.id, jobType: 'contract_signature_reminder', recipientEmail: inquiry.email, subject: signatureReminder.subject, body: signatureReminder.body, scheduledFor: new Date(Date.now() + 5 * 24 * 60 * 60_000).toISOString(), automationKey: lifecycleAutomationKey('contract_signature_reminder', signature.id), metadata: { invoice_id: invoice.id, offer_expires_at: invoice.offer_expires_at, ...(agreementReminders.copySettingsUnavailable ? { copy_settings_unavailable: true } : {}) } }),
         ...offerReminderJobs,
       ])
       return NextResponse.json({ invoice: updated, inquiry: updatedInquiry, signature, signingUrl, mode: 'proposal_contract' })
@@ -1149,7 +1169,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
           metadata: { invoice_id: invoice.id, ...(checkout.checkoutId ? { checkout_session_id: checkout.checkoutId } : {}), reminder_sequence: 1 },
         })
       } else {
-        const paymentReminder = buildPaymentReminderEmail({ inquiry, reviewUrl: paymentUrl, paymentAmount, paymentLabel })
+        const paymentCopy = await paymentRequestReminderCopyForQueue()
+        const paymentReminder = buildPaymentReminderEmail({ inquiry, reviewUrl: paymentUrl, paymentAmount, paymentLabel, copyOverride: paymentCopy.copy })
         await createUniqueLuxorEmailJob({
           inquiryId: inquiry.id,
           bookingId: booking.id,
@@ -1159,7 +1180,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
           body: paymentReminder.body,
           scheduledFor: new Date(Date.now() + 72 * 60 * 60_000).toISOString(),
           automationKey: lifecycleAutomationKey('proposal_payment_reminder', paymentRequestKey),
-          metadata: { invoice_id: invoice.id, ...(checkout.checkoutId ? { checkout_session_id: checkout.checkoutId } : {}), reminder_sequence: 1, flow_stage: 'post_signature_payment' },
+          metadata: { invoice_id: invoice.id, ...(checkout.checkoutId ? { checkout_session_id: checkout.checkoutId } : {}), reminder_sequence: 1, flow_stage: 'post_signature_payment', payment_request_reminder: true, ...(paymentCopy.copy ? { payment_request_copy_snapshot: paymentCopy.copy } : {}), ...(paymentCopy.unavailable ? { copy_settings_unavailable: true } : {}) },
         })
       }
     } catch (automationError) {
@@ -1170,6 +1191,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         await queueInvoiceReminderTexts(updated, { phone: inquiry.phone, name: inquiry.full_name }, {
           final_payment_due_date: booking?.final_payment_due_date,
         })
+        const paymentTextTemplate = await readTextCopy(() => readInvoiceReminderTemplate('invoice_payment_request'), INVOICE_REMINDER_DEFAULTS.invoice_payment_request)
         await createUniqueTextJob({
           jobType: 'invoice_due_reminder',
           phone: inquiry.phone,
@@ -1179,9 +1201,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
           invoiceId: invoice.id,
           scheduledFor: new Date(Date.now() + 72 * 60 * 60_000).toISOString(),
           automationKey: `invoice_payment_request:${invoice.id}:${paymentRequestKey}`,
-          body: `Luxor Event Space: Hi ${inquiry.full_name.split(/\s+/)[0] || 'there'}, this is a reminder that your ${paymentAmount.toLocaleString('en-US', { style: 'currency', currency: 'USD' })} payment request is still open. Pay securely here: ${paymentUrl} Reply STOP to opt out.`,
+          body: renderInvoiceReminder(paymentTextTemplate.body, { name: inquiry.full_name, amount: paymentAmount.toLocaleString('en-US', { style: 'currency', currency: 'USD' }), paymentUrl }, 'invoice_payment_request'),
           requiredScope: 'invoice',
-          metadata: { ...(checkout.checkoutId ? { checkout_session_id: checkout.checkoutId } : {}), due_date: invoice.due_date },
+          metadata: { ...(checkout.checkoutId ? { checkout_session_id: checkout.checkoutId } : {}), due_date: invoice.due_date, ...(paymentTextTemplate.unavailable ? { copy_settings_unavailable: true } : {}) },
         })
       } catch (automationError) {
         console.error('[invoice-payment-request] text reminder queue failed after the proposal was delivered', automationError)

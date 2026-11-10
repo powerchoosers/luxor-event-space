@@ -1,6 +1,7 @@
 'use client'
 import { LUXOR_MAX_GUESTS } from '@/lib/luxorInquiryTypes'
 import { formatLuxorDate } from '@/lib/luxorDateFormatting'
+import { isSafeWorkflowLink } from '@/lib/luxorWorkflowLink'
 
 import React, { useState, useEffect, useLayoutEffect, useRef, useId } from 'react'
 import { 
@@ -90,6 +91,7 @@ type Message = {
   newContactCard?: NewContactCardPayload
   tourInviteCard?: TourInviteCardPayload
   workflowDraft?: ElenaWorkflowDraftPayload
+  workflowLinks?: Array<{ name: string; href: string | null; note: string }>
   textCampaignDraft?: { name: string; bodyTemplate: string; campaignType: string }
   voiceTranscript?: Array<{ role: 'user' | 'assistant'; text: string }>
 }
@@ -109,6 +111,7 @@ type ElenaChatResponse = {
   newContactCard?: NewContactCardPayload
   tourInviteCard?: TourInviteCardPayload
   workflowDraft?: ElenaWorkflowDraftPayload
+  workflowLinks?: Array<{ name: string; href: string | null; note: string }>
   navigation?: { href: string }
 }
 
@@ -130,6 +133,7 @@ function hasVoiceActionOutput(message: Message) {
     || message.newContactCard
     || message.tourInviteCard
     || message.workflowDraft
+    || message.workflowLinks?.length
     || message.textCampaignDraft
     || message.toolActivityFailed
   )
@@ -961,6 +965,7 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
           newContactCard: data.newContactCard,
           tourInviteCard: data.tourInviteCard,
           workflowDraft: data.workflowDraft,
+          workflowLinks: data.workflowLinks,
           textCampaignDraft: data.textCampaignDraft,
         }
       ])
@@ -1511,6 +1516,8 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
                             onSaved={(workflow) => handleWorkflowDraftSaved(index, workflow)}
                           />
                         )}
+
+                        {msg.workflowLinks?.filter((item) => isSafeWorkflowLink(item.href)).map((item) => <Link key={item.href} href={item.href!} onClick={() => { stopVoice(); onClose() }} className="mt-2 inline-flex min-h-11 w-[96%] items-center justify-between gap-3 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-4 py-3 text-left text-xs font-semibold text-[color:var(--portal-text)] transition hover:border-[#caa24c]/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45"><span><span className="block">{item.name}</span><span className="mt-1 block font-normal text-[color:var(--portal-muted)]">{item.note}</span></span><ExternalLink size={15} aria-hidden="true" /></Link>)}
 
                         {msg.textCampaignDraft && (
                           <section className="mt-2 w-[96%] rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-4 shadow-sm">

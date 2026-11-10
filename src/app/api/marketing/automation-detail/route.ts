@@ -4,11 +4,18 @@ import { buildBrochureDeliveryEmailHtml, buildLuxorFollowUpEmailHtml } from '@/l
 import { customerFacingFollowUpTitle } from '@/lib/luxorFollowUpEmailContent'
 import { getLuxorFollowUpSetup, isLuxorBrochureFollowUpSendingEnabled, updateLuxorFollowUpTemplate, type LuxorFollowUpTemplate } from '@/lib/luxorFollowUpsServer'
 import { validateFollowUpContentUpdates, type FollowUpEmailContent } from '@/lib/luxorAutomationDetail'
+import { BROCHURE_EMAIL_DEFAULTS } from '@/lib/luxorBrochureStepDefaults'
+import { renderBrochureDeliveryCopy } from '@/lib/luxorBrochureDeliveryCopy'
+import { readBrochureDeliverySetting } from '@/lib/luxorBrochureDeliveryCopyServer'
 import { getLuxorTourEmailTemplatePreviews } from '@/lib/luxorTourEmailServer'
 import { getLuxorTourSmsTemplatePreviews } from '@/lib/luxorTextCampaignsServer'
+import { readTourTextTemplate } from '@/lib/luxorSystemMessageTemplatesServer'
+import { readTourEmailCopySettings } from '@/lib/luxorTourEmailCopyServer'
 import type { LuxorInquiry } from '@/lib/luxorInquiryTypes'
 import { classifyAutomationStatus } from '@/lib/luxorAutomationsLibrary'
 import { supabaseRest, supabaseRestCount } from '@/lib/supabaseRestServer'
+import { canControlLiveLuxorAutomations } from '@/lib/luxorAutomationEnvironment'
+import { CustomWorkflowServiceError, requireCustomWorkflowOperator } from '@/lib/luxorCustomWorkflowsServer'
 
 const NO_STORE_HEADERS = { 'Cache-Control': 'no-store' }
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -79,10 +86,13 @@ async function getBrochureDetail() {
     sendsConfigured = null
   }
   const status = classifyAutomationStatus(automation, templates, sendsConfigured)
-  const [activeEnrollments, sentEmails] = await Promise.all([
+  const [activeEnrollments, sentEmails, deliverySetting] = await Promise.all([
     safeCount('luxor_follow_up_enrollments?select=id,luxor_inquiries!inner(is_test)&automation_key=eq.brochure_lead&status=eq.active&luxor_inquiries.is_test=eq.false'),
     safeCount('luxor_email_jobs?select=id,luxor_inquiries!inner(is_test)&job_type=eq.marketing_campaign&automation_enrollment_id=not.is.null&metadata->>automation_key=eq.brochure_lead&status=eq.sent&test_run_id=is.null&luxor_inquiries.is_test=eq.false'),
+    readBrochureDeliverySetting(),
   ])
+  const deliveryCopy = deliverySetting.setting.copy_override
+  const previewCopy = deliveryCopy ? renderBrochureDeliveryCopy(deliveryCopy, { first_name: 'Sample', event_type: 'Sample event', guest_count: '80' }) : null
 
   return {
     kind: 'saved' as const,
@@ -95,10 +105,10 @@ async function getBrochureDetail() {
     templates,
     activity: { activeEnrollments, sentEmails },
     brochureDelivery: {
-      subject: 'Your Luxor at Las Palmas Venue Brochure',
-      previewText: 'Your free Luxor at Las Palmas venue brochure is ready.',
-      bodyHtml: buildBrochureDeliveryEmailHtml(syntheticInquiry()),
-      note: 'This first email step reuses the existing brochure delivery. Its content is rendered by the application and the saved step copy is not used.',
+      subject: previewCopy?.subject || 'Your Luxor at Las Palmas Venue Brochure',
+      previewText: previewCopy?.preview || 'Your free Luxor at Las Palmas venue brochure is ready.',
+      bodyHtml: buildBrochureDeliveryEmailHtml(syntheticInquiry(), deliveryCopy),
+      note: 'This first step uses the brochure delivery email. The sample guest and fixed download link are for preview.',
     },
     enrollmentRules: [
       'At enrollment, the request must have an email address and marketing opt-in. Requests already booked, tour-confirmed, closed-lost, or carrying any follow-up disposition are skipped.',
@@ -114,9 +124,12 @@ async function getBrochureDetail() {
 }
 
 async function getTourDetail() {
-  const [sentEmails, sentTexts] = await Promise.all([
+  const [sentEmails, sentTexts, confirmationText, reminderText, emailSettings] = await Promise.all([
     safeCount('luxor_email_jobs?select=id,luxor_inquiries!inner(is_test)&job_type=in.(tour_confirmation,tour_reminder)&tour_revision_id=not.is.null&status=eq.sent&test_run_id=is.null&luxor_inquiries.is_test=eq.false'),
     safeCount('luxor_text_jobs?select=id,luxor_inquiries!inner(is_test)&job_type=in.(tour_confirmation,tour_reminder)&status=in.(sent,delivered)&luxor_inquiries.is_test=eq.false'),
+    readTourTextTemplate('tour_confirmation'),
+    readTourTextTemplate('tour_reminder'),
+    readTourEmailCopySettings(),
   ])
   return {
     kind: 'system' as const,
@@ -125,8 +138,8 @@ async function getTourDetail() {
     trigger: 'A tour is scheduled or rescheduled in the calendar system.',
     updatedAt: null,
     activity: { sentEmails, sentTexts },
-    emails: getLuxorTourEmailTemplatePreviews(),
-    texts: getLuxorTourSmsTemplatePreviews(),
+    emails: getLuxorTourEmailTemplatePreviews(Object.fromEntries(emailSettings.settings.map((setting) => [setting.notice_key, setting.copy_override]))),
+    texts: getLuxorTourSmsTemplatePreviews({ confirmation: confirmationText.template.body_template, reminder: reminderText.template.body_template }),
     emailSteps: [
       { key: 'confirmation', name: 'Tour confirmation and calendar invitation', channel: 'Email + calendar', timing: 'When a confirmed tour schedule is saved.' },
       { key: 'reminder_24', name: '24-hour reminder', channel: 'Email', timing: '24 hours before the tour, when that time is still in the future.' },
@@ -140,7 +153,7 @@ async function getTourDetail() {
       'The confirmation email is rendered for the scheduled tour revision and saved with that revision. It uses the code fallback, or may use AI-tailored copy when the server provider is configured.',
       'Email reminders use the saved tour details and are queued only when their scheduled time is in the future. Delivery checks that the job still belongs to the current tour revision.',
       'Rescheduling replaces the current revision and cancels untouched queued email and text jobs for the prior schedule. Cancellation also prevents remaining eligible reminders.',
-      'Text delivery continues through the existing consent and STOP checks. No global workflow activation, timing, or editing controls are available here.',
+      'Text delivery continues through the existing consent and STOP checks. Text copy can be reviewed in the workflow builder; calendar delivery and timing continue to use the existing tour controls.',
     ],
   }
 }
@@ -201,7 +214,11 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  if (!await getLuxorPortalSession()) return NextResponse.json({ error: 'Zoho portal login required.' }, { status: 401, headers: NO_STORE_HEADERS })
+  const session = await getLuxorPortalSession()
+  if (!session) return NextResponse.json({ error: 'Portal login required.' }, { status: 401, headers: NO_STORE_HEADERS })
+  try { await requireCustomWorkflowOperator(session.email) } catch (error) {
+    return NextResponse.json({ error: error instanceof CustomWorkflowServiceError ? error.message : 'Marketing access is required.' }, { status: error instanceof CustomWorkflowServiceError ? error.status : 403, headers: NO_STORE_HEADERS })
+  }
 
   let payload: { action?: unknown; templateId?: unknown; updates?: unknown }
   try {
@@ -257,12 +274,18 @@ export async function POST(request: NextRequest) {
 }
 
 export async function PATCH(request: NextRequest) {
-  if (!await getLuxorPortalSession()) return NextResponse.json({ error: 'Zoho portal login required.' }, { status: 401, headers: NO_STORE_HEADERS })
+  const session = await getLuxorPortalSession()
+  if (!session) return NextResponse.json({ error: 'Portal login required.' }, { status: 401, headers: NO_STORE_HEADERS })
+  try { await requireCustomWorkflowOperator(session.email) } catch (error) {
+    return NextResponse.json({ error: error instanceof CustomWorkflowServiceError ? error.message : 'Marketing access is required.' }, { status: error instanceof CustomWorkflowServiceError ? error.status : 403, headers: NO_STORE_HEADERS })
+  }
+  if (!canControlLiveLuxorAutomations()) return NextResponse.json({ error: 'Live automation editing is unavailable in this preview.' }, { status: 409, headers: NO_STORE_HEADERS })
 
   let payload: {
     templateId?: unknown
     expectedUpdatedAt?: unknown
     updates?: unknown
+    restoreDefault?: unknown
     applyToQueued?: unknown
     queuedPreview?: { templateUpdatedAt?: unknown; eligibleCount?: unknown; limitExceeded?: unknown; candidates?: unknown }
   }
@@ -274,6 +297,8 @@ export async function PATCH(request: NextRequest) {
   if (payload.applyToQueued !== undefined && typeof payload.applyToQueued !== 'boolean') {
     return NextResponse.json({ error: 'The queued-copy option must be a boolean.' }, { status: 400, headers: NO_STORE_HEADERS })
   }
+  if (payload.restoreDefault !== undefined && typeof payload.restoreDefault !== 'boolean') return NextResponse.json({ error: 'Invalid restore selection.' }, { status: 400, headers: NO_STORE_HEADERS })
+  if (payload.restoreDefault === true && payload.applyToQueued === true) return NextResponse.json({ error: 'Restore the template separately from queued-email updates.' }, { status: 400, headers: NO_STORE_HEADERS })
   if (typeof payload.templateId !== 'string' || !UUID_PATTERN.test(payload.templateId)
     || typeof payload.expectedUpdatedAt !== 'string' || !Number.isFinite(Date.parse(payload.expectedUpdatedAt))) {
     return NextResponse.json({ error: 'Reload this email step before saving.' }, { status: 400, headers: NO_STORE_HEADERS })
@@ -288,7 +313,13 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: 'This step does not have an editable saved email template.' }, { status: 400, headers: NO_STORE_HEADERS })
     }
     templateForQueuedUpdate = template
-    validatedUpdates = validateFollowUpContentUpdates(contentOf(template), payload.updates)
+    if (payload.restoreDefault === true) {
+      const original = template.automation_key === 'brochure_lead' ? BROCHURE_EMAIL_DEFAULTS[template.step_key] : undefined
+      if (!original) return NextResponse.json({ error: 'No original email is available for this step.' }, { status: 400, headers: NO_STORE_HEADERS })
+      validatedUpdates = validateFollowUpContentUpdates(original, original)
+    } else {
+      validatedUpdates = validateFollowUpContentUpdates(contentOf(template), payload.updates)
+    }
     if (payload.applyToQueued === true && (template.automation_key !== 'brochure_lead' || template.step_key === 'email_1')) {
       return NextResponse.json({ error: 'Queued-copy updates are available only for saved brochure follow-up emails.' }, { status: 400, headers: NO_STORE_HEADERS })
     }

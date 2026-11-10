@@ -159,6 +159,8 @@ export function OperationsPageContent({ embeddedBills = false }: { embeddedBills
   // Database states
   const [bills, setBills] = useState<LuxorBill[]>([])
   const [billIntakes, setBillIntakes] = useState<LuxorBillIntake[]>([])
+  const [invoiceAnalysisConfigured, setInvoiceAnalysisConfigured] = useState<boolean | null>(null)
+  const [resendReceivingConfigured, setResendReceivingConfigured] = useState<boolean | null>(null)
   const [inventory, setInventory] = useState<LuxorInventoryItem[]>([])
   const [vendors, setVendors] = useState<LuxorVendor[]>([])
   const [utilities, setUtilities] = useState<LuxorUtilityReading[]>([])
@@ -266,6 +268,8 @@ export function OperationsPageContent({ embeddedBills = false }: { embeddedBills
       const payload = await res.json()
       setBills(payload.bills || [])
       setBillIntakes(payload.billIntakes || [])
+      setInvoiceAnalysisConfigured(typeof payload.invoiceAnalysisConfigured === 'boolean' ? payload.invoiceAnalysisConfigured : null)
+      setResendReceivingConfigured(typeof payload.resendReceivingConfigured === 'boolean' ? payload.resendReceivingConfigured : null)
       setInventory(payload.inventory || [])
       setVendors(payload.vendors || [])
       setUtilities(payload.utilities || [])
@@ -349,7 +353,7 @@ export function OperationsPageContent({ embeddedBills = false }: { embeddedBills
     if (bulkType === 'vendor') setVendors((current) => current.map((record) => updatedIds.includes(record.id) ? { ...record, ...updates } as LuxorVendor : record))
     bulkSelection.clear()
     setBulkBusy(null)
-    if (updatedIds.length !== ids.length) alert(`${updatedIds.length} of ${ids.length} records were updated. Reload the page before retrying the others.`)
+    if (updatedIds.length !== ids.length) notify({ title: 'Some records were not updated', description: `${updatedIds.length} of ${ids.length} records were updated. Reload the page before retrying the others.`, variant: 'warning', durationMs: 0 })
   }
 
   const deleteSelectedOperationsRecords = async () => {
@@ -369,7 +373,7 @@ export function OperationsPageContent({ embeddedBills = false }: { embeddedBills
     bulkSelection.clear()
     setConfirmBulkDelete(false)
     setBulkBusy(null)
-    if (deletedIds.length !== ids.length) alert(`${deletedIds.length} of ${ids.length} records were deleted. Reload the page before retrying the others.`)
+    if (deletedIds.length !== ids.length) notify({ title: 'Some records were not deleted', description: `${deletedIds.length} of ${ids.length} records were deleted. Reload the page before retrying the others.`, variant: 'warning', durationMs: 0 })
   }
 
   const handleToggleReadinessTask = (id: string) => {
@@ -436,7 +440,7 @@ export function OperationsPageContent({ embeddedBills = false }: { embeddedBills
       sessionStorage.removeItem(storageKey)
       setBills((prev) => prev.some((bill) => bill.id === body.id) ? prev : [body as LuxorBill, ...prev])
       setIsBillModalOpen(false)
-      if (body.recurring_obligation) alert(`Saved. “${body.recurring_obligation}” is already a recurring expense for this vendor and category, so another recurring expense was not created.`)
+      if (body.recurring_obligation) notify({ title: 'Bill saved', description: `“${body.recurring_obligation}” is already a recurring expense for this vendor and category, so another recurring expense was not created.`, variant: 'info', durationMs: 0 })
       setBillService('')
       setBillProvider('')
       setBillAmount('')
@@ -448,7 +452,7 @@ export function OperationsPageContent({ embeddedBills = false }: { embeddedBills
       setBillInvoiceNumber('')
       setBillIssueDate('')
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Failed to save bill. Save again with the same details to avoid a duplicate.')
+      notify({ title: 'Bill could not be saved', description: err instanceof Error ? err.message : 'Save again with the same details to avoid a duplicate.', variant: 'error', durationMs: 0 })
     } finally {
       setBillSaveBusy(false)
     }
@@ -530,7 +534,7 @@ export function OperationsPageContent({ embeddedBills = false }: { embeddedBills
       setTaskDescription('')
       setTaskDueDate('')
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Failed to save ticket.')
+      notify({ title: 'Ticket could not be saved', description: err instanceof Error ? err.message : 'Please try again.', variant: 'error', durationMs: 0 })
     }
   }
 
@@ -557,7 +561,7 @@ export function OperationsPageContent({ embeddedBills = false }: { embeddedBills
       setInvName('')
       setInvCount('')
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Failed to save inventory count.')
+      notify({ title: 'Inventory count could not be saved', description: err instanceof Error ? err.message : 'Please try again.', variant: 'error', durationMs: 0 })
     }
   }
 
@@ -588,7 +592,7 @@ export function OperationsPageContent({ embeddedBills = false }: { embeddedBills
       setVendorRating('')
       setVendorCoi('false')
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Failed to save vendor profile.')
+      notify({ title: 'Provider could not be saved', description: err instanceof Error ? err.message : 'Please try again.', variant: 'error', durationMs: 0 })
     }
   }
 
@@ -596,7 +600,7 @@ export function OperationsPageContent({ embeddedBills = false }: { embeddedBills
     e.preventDefault()
     if (!editingItem || !editFormData) return
     if (editingItem.type === 'bill' && editFormData.amount_state === 'known' && (editFormData.amount === '' || editFormData.amount == null || !Number.isFinite(Number(editFormData.amount)) || Number(editFormData.amount) < 0)) {
-      alert('Enter a valid amount, or choose unknown or variable.')
+      notify({ title: 'Check the amount', description: 'Enter a valid amount, or choose unknown or variable.', variant: 'warning', durationMs: 0 })
       return
     }
     setSubmittingEdit(true)
@@ -632,7 +636,7 @@ export function OperationsPageContent({ embeddedBills = false }: { embeddedBills
       
       setEditingItem(null)
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Failed to update entry.')
+      notify({ title: 'Entry could not be updated', description: err instanceof Error ? err.message : 'Please try again.', variant: 'error', durationMs: 0 })
     } finally {
       setSubmittingEdit(false)
     }
@@ -661,7 +665,7 @@ export function OperationsPageContent({ embeddedBills = false }: { embeddedBills
       setDeletingItem(null)
       setEditingItem(null)
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Failed to delete entry.')
+      notify({ title: 'Entry could not be deleted', description: err instanceof Error ? err.message : 'Please try again.', variant: 'error', durationMs: 0 })
     } finally {
       setSubmittingDelete(false)
     }
@@ -834,6 +838,8 @@ export function OperationsPageContent({ embeddedBills = false }: { embeddedBills
         <BillsPayableLedger
           bills={bills}
           intakes={billIntakes}
+          invoiceAnalysisConfigured={invoiceAnalysisConfigured}
+          resendReceivingConfigured={resendReceivingConfigured}
           vendors={vendors}
           onVendorChanged={(vendor) => setVendors((current) => current.some((item) => item.id === vendor.id) ? current.map((item) => item.id === vendor.id ? vendor : item) : [...current, vendor])}
           onAddBill={() => setIsBillModalOpen(true)}
@@ -904,7 +910,7 @@ export function OperationsPageContent({ embeddedBills = false }: { embeddedBills
                                   .then((updated) => {
                                     setMaintenanceTasks((prev) => prev.map((t) => (t.id === task.id ? updated : t)))
                                   })
-                                  .catch(() => alert('Failed to update status.'))
+                                  .catch(() => notify({ title: 'Status could not be updated', description: 'Please try again.', variant: 'error', durationMs: 0 }))
                               }}
                               className={`text-[9px] font-black uppercase tracking-wider border rounded-md px-2.5 py-1 transition-all cursor-pointer ${
                                 task.status === 'completed'

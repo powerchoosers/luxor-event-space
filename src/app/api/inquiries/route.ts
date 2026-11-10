@@ -200,21 +200,9 @@ export async function POST(request: NextRequest) {
     if (inquiry) {
       if (inquiry.email && (inquiry.flow === 'brochure_lead' || inquiry.source === 'homepage_brochure')) {
         try {
-          const { buildBrochureDeliveryEmailHtml, createLuxorEmailJob, processLuxorEmailJobs } = await import('@/lib/luxorEmailJobsServer')
-          const bodyHtml = buildBrochureDeliveryEmailHtml(inquiry)
-          const job = await createLuxorEmailJob({
-            inquiryId: inquiry.id,
-            jobType: 'booking_package',
-            recipientEmail: inquiry.email,
-            subject: 'Your Luxor at Las Palmas Venue Brochure',
-            body: bodyHtml,
-            scheduledFor: new Date().toISOString(),
-            metadata: {
-              automated: true,
-              flow_stage: 'brochure_delivery',
-              lead_source: inquiry.source,
-            },
-          })
+          const { processLuxorEmailJobs } = await import('@/lib/luxorEmailJobsServer')
+          const { queueBrochureDelivery } = await import('@/lib/luxorBrochureDeliveryQueue')
+          const job = await queueBrochureDelivery(inquiry)
           if (job) {
             after(async () => {
               await processLuxorEmailJobs([job]).catch((err) => {

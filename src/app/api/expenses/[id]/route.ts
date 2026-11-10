@@ -45,6 +45,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
       && current.status !== 'paid'
     const body = objectBody(await request.json())
     if (!body) throw new LuxorExpenseRequestError('Invalid expense update.')
+    if (body.expected_updated_at !== undefined && body.expected_updated_at !== current.updated_at) throw new LuxorExpenseRequestError('This expense changed. Refresh and review the period before matching.', 409)
 
     const patch: Record<string, unknown> = {}
     const editable = ['description', 'amount', 'incurred_on', 'due_date', 'category', 'vendor_name', 'payment_method', 'reference_number', 'notes', 'status', 'booking_id', 'source_bill_id']
@@ -121,6 +122,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
           const sourceBillId = body.source_bill_id === null || body.source_bill_id === '' ? null : body.source_bill_id
           if (sourceBillId === current.source_bill_id) break
           if (current.source_bill_id) throw new LuxorExpenseRequestError('An expense cannot be reassigned to a different source bill.', 409)
+          if (current.recurring_template_id && (current.status === 'cancelled' || current.status === 'paid' || current.payments.length > 0 || (current.paid_amount === null && !freshVariableOccurrence) || (current.paid_amount !== null && current.paid_amount !== 0))) throw new LuxorExpenseRequestError('This recurring period has payment history or needs review. It cannot be matched here.', 409)
           if (sourceBillId === null || !isExpenseUuid(sourceBillId)) throw new LuxorExpenseRequestError('Choose a valid source bill.')
           if (body.confirm_source_bill !== true) throw new LuxorExpenseRequestError('Review and confirm the extracted bill facts before linking it.')
           const bill = await validateExpenseBill(sourceBillId)

@@ -4,8 +4,8 @@ import { getLuxorPortalSession } from '@/lib/luxorPortalAuth'
 import { getLuxorInquiry, updateLuxorInquiry } from '@/lib/luxorInquiriesServer'
 import { createNote } from '@/lib/luxorNotesServer'
 import { getInvoice } from '@/lib/luxorInvoicesServer'
-import { cancelQueuedLuxorEmailJobs, createUniqueLuxorEmailJob } from '@/lib/luxorEmailJobsServer'
-import { buildEventEmail, lifecycleAutomationKey } from '@/lib/luxorLifecycleEmailsServer'
+import { cancelQueuedLuxorEmailJobs } from '@/lib/luxorEmailJobsServer'
+import { syncBookingEmailAutomations } from '@/lib/luxorBookingEmailAutomationsServer'
 import { queueBookingTextJobs } from '@/lib/luxorTextCampaignsServer'
 import { LUXOR_DEFAULT_SECURITY_DEPOSIT, parseLuxorCurrency } from '@/lib/luxorBookingMoney'
 import { luxorCollectionAmounts } from '@/lib/luxorPaymentOwnership'
@@ -430,56 +430,3 @@ function eventPipelineStageForBooking(booking: NonNullable<Awaited<ReturnType<ty
   return (stage === 'complete' ? 'closing' : stage) as LuxorPipelineStage
 }
 
-async function syncBookingEmailAutomations(input: {
-  inquiry: NonNullable<Awaited<ReturnType<typeof getLuxorInquiry>>>
-  booking: NonNullable<Awaited<ReturnType<typeof getLuxorBooking>>>
-  previous: NonNullable<Awaited<ReturnType<typeof getLuxorBooking>>>
-}) {
-  if (!input.inquiry.email) return
-  const metadata = input.booking.metadata || {}
-  const previousMetadata = input.previous.metadata || {}
-
-  if ((metadata.final_payment_recorded_manually_at || metadata.final_payment_paid_at) &&
-      !(previousMetadata.final_payment_recorded_manually_at || previousMetadata.final_payment_paid_at)) {
-    await cancelQueuedLuxorEmailJobs(input.inquiry.id, ['final_payment_reminder'])
-  }
-
-  if (metadata.planning_completed_at && !previousMetadata.planning_completed_at && input.booking.event_date) {
-    const details = buildEventEmail({ inquiry: input.inquiry, booking: input.booking, kind: 'details' })
-    const day = buildEventEmail({ inquiry: input.inquiry, booking: input.booking, kind: 'day' })
-    const eventTime = new Date(`${input.booking.event_date}T12:00:00-05:00`).getTime()
-    const reminders = [
-      { kind: 'event_details_reminder' as const, offset: 14, email: details },
-      { kind: 'event_day_reminder' as const, offset: 2, email: day },
-    ]
-    for (const reminder of reminders) {
-      const scheduledFor = new Date(eventTime - reminder.offset * 24 * 60 * 60_000)
-      if (scheduledFor.getTime() <= Date.now()) continue
-      await createUniqueLuxorEmailJob({
-        inquiryId: input.inquiry.id,
-        bookingId: input.booking.id,
-        jobType: reminder.kind,
-        recipientEmail: input.inquiry.email,
-        subject: reminder.email.subject,
-        body: reminder.email.body,
-        scheduledFor: scheduledFor.toISOString(),
-        automationKey: lifecycleAutomationKey(reminder.kind, input.booking.id),
-        metadata: { event_date: input.booking.event_date },
-      })
-    }
-  }
-
-  if (metadata.event_completed_at && !previousMetadata.event_completed_at) {
-    const thanks = buildEventEmail({ inquiry: input.inquiry, booking: input.booking, kind: 'thanks' })
-    await createUniqueLuxorEmailJob({
-      inquiryId: input.inquiry.id,
-      bookingId: input.booking.id,
-      jobType: 'post_event_follow_up',
-      recipientEmail: input.inquiry.email,
-      subject: thanks.subject,
-      body: thanks.body,
-      scheduledFor: new Date(Date.now() + 24 * 60 * 60_000).toISOString(),
-      automationKey: lifecycleAutomationKey('post_event_follow_up', input.booking.id),
-    })
-  }
-}

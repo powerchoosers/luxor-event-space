@@ -10,6 +10,11 @@ import { buildExecutedLuxorContract, buildLuxorContractPdf, buildLuxorGuestGuide
 import { getLuxorContractSignaturePlacement, LUXOR_CONTRACT_SIGNATURE_PLACEMENT } from './luxorSignaturePlacement'
 import { downloadLuxorPrivatePdf, saveLuxorPrivatePdf } from './luxorDocumentsServer'
 import { queueLuxorTransactionalNotice } from './luxorTransactionalNoticeServer'
+import { readAgreementClientCopySetting } from './luxorAgreementClientCopyServer'
+import { renderAgreementClientCopy } from './luxorAgreementClientCopy'
+import { readAgreementOwnerCopySetting } from './luxorAgreementOwnerCopyServer'
+import { buildAgreementOwnerNotice } from './luxorAgreementOwnerCopy'
+import type { PaidInvoiceEmailCopy } from './luxorPaidInvoiceEmailCopy'
 import crypto from 'crypto'
 import { getLuxorInquiry, updateLuxorInquiry } from './luxorInquiriesServer'
 import { ensureLuxorDepositInvoice, ensureLuxorFinalBalanceInvoice, ensureLuxorSecurityDepositInvoice, getInvoice, getInvoiceByBookingAndKind, listPaidPaymentsByInvoice, luxorFinalPaymentDueDate } from './luxorInvoicesServer'
@@ -1088,29 +1093,49 @@ export async function signLuxorSignatureRequest(input: {
   }
 
   const paymentBreakdown = paymentInvoice ? getInitialPaymentBreakdown(paymentInvoice) : null
+  let completionCopy: PaidInvoiceEmailCopy | null = null
+  try {
+    const { setting } = await readAgreementClientCopySetting()
+    completionCopy = setting.copy_override
+  } catch (error) {
+    // A settings outage must not interrupt finalizing an already signed agreement.
+    console.error('Agreement completion copy unavailable; using original wording:', error)
+  }
   const paymentSection = checkoutUrl && paymentBreakdown ? `<div style="margin:28px 0;padding:22px;border:1px solid #d9bd84;background:#fffaf2"><p style="margin:0 0 8px;color:#9b6d24;font-size:11px;font-weight:700;letter-spacing:.18em;text-transform:uppercase">Next step: complete your booking payment</p><p style="margin:0 0 12px">Your secure initial booking payment due now is <strong>${formatMoney(paymentBreakdown.initialBookingPayment)}</strong>. The refundable security deposit is separate and is not included in this payment.</p><p style="margin:0 0 18px">The separate refundable security deposit is held throughout the event period and returned following the post-event inspection, subject to the Event Agreement.</p><a href="${checkoutUrl}" style="display:inline-block;background:#caa24c;color:#17120c;text-decoration:none;padding:14px 22px;font-size:11px;font-weight:800;letter-spacing:.14em;text-transform:uppercase">Complete secure payment</a></div>` : '<p style="color:#756755">Luxor will follow up separately with secure payment instructions.</p>'
   const completionHtml = `<div style="font-family:Arial,sans-serif;width:100%;box-sizing:border-box;overflow-wrap:anywhere;max-width:620px;margin:auto;background:#f8f3e9;color:#221d18;padding:36px;border-top:4px solid #b98a3d"><p style="letter-spacing:.28em;text-transform:uppercase;color:#9b6d24;font-size:12px;font-weight:700">Luxor Event Space</p><h1 style="font-family:Georgia,serif;font-size:34px">Your agreement is complete</h1><p>Hi ${escapeNoticeHtml(input.signedName.split(' ')[0] || input.signedName)},</p><p>Your Event Space Agreement has been signed by you and countersigned by ${escapeNoticeHtml(ownerName)}. Your fully executed copy is attached for your records.</p>${paymentSection}<p style="color:#756755;font-size:13px">Document ID: ${signature.id}<br/>Completed: ${new Date(ownerSignedAt).toLocaleString('en-US')}</p></div>`
+  let renderedCompletion = { html: completionHtml, subject: null as string | null }
+  try { renderedCompletion = renderAgreementClientCopy(completionHtml, paymentSection, input.signedName.split(' ')[0] || input.signedName, completionCopy) }
+  catch (error) { console.error('Agreement completion copy could not be rendered; using original wording:', error) }
   const latestInquiry = signature.inquiry_id ? await getLuxorInquiry(signature.inquiry_id) : null
   if (latestInquiry?.status !== 'closed_lost') {
     await queueLuxorTransactionalNotice({
       kind: 'agreement_client', sourceId: signature.id,
       inquiryId: signature.inquiry_id, bookingId: signature.booking_id, signatureRequestId: signature.id,
       recipient: signature.client_email,
-      subject: checkoutUrl ? 'Agreement complete — complete your secure booking payment' : 'Your Luxor Event Space agreement is complete',
-      html: completionHtml, scheduledFor: ownerSignedAt,
+      subject: renderedCompletion.subject || (checkoutUrl ? 'Agreement complete — complete your secure booking payment' : 'Your Luxor Event Space agreement is complete'),
+      html: renderedCompletion.html, scheduledFor: ownerSignedAt,
       pdf: executedCustomerPdf, filename: 'Luxor-Event-Agreement-Executed.pdf',
     })
   }
   const ownerNoticeAlreadySent = Boolean(signature.metadata?.ownerExecutionNoticeSentAt)
   if (!ownerNoticeAlreadySent && (executionCreatedThisAttempt || signature.metadata?.transactionalNoticesVersion === 1)) {
+    let ownerCopy = null
+    try {
+      const { setting } = await readAgreementOwnerCopySetting()
+      ownerCopy = setting.copy_override
+    } catch (error) {
+      console.error('Agreement owner copy unavailable; using original wording:', error)
+    }
+    const clientDisplayName = executionSignature.signed_name || input.signedName
+    const renderedOwner = buildAgreementOwnerNotice(clientDisplayName, ownerCopy)
     // The queue row is the delivery receipt. Do not mark this notice sent at enqueue.
     // Owner copies are not customer follow-ups and remain independent of lead closure.
     await queueLuxorTransactionalNotice({
       kind: 'agreement_owner', sourceId: signature.id,
       bookingId: signature.booking_id, signatureRequestId: signature.id,
       recipient: ownerEmail,
-      subject: `Executed Luxor agreement - ${executionSignature.signed_name || input.signedName}`.replace(/[\r\n]+/g, ' '),
-      html: `<div style="font-family:Arial,sans-serif;overflow-wrap:anywhere"><h2>Executed agreement archived</h2><p>${escapeNoticeHtml(executionSignature.signed_name || input.signedName)} completed the agreement. The internal copy with the full audit timeline is attached.</p></div>`,
+      subject: renderedOwner.subject,
+      html: renderedOwner.html,
       scheduledFor: ownerSignedAt, pdf: executedAuditPdf, filename: 'Luxor-Event-Agreement-Audit.pdf',
     })
   }

@@ -1,8 +1,9 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { PortalButton, PortalModal, PortalSelect } from '@/components/portal/PortalUI'
 import type { LuxorVendor } from '@/lib/luxorInquiryTypes'
+import { lookupProviderWebsite, type WebsiteSuggestion } from '@/lib/luxorProviderWebsiteLookupClient'
 
 export type VendorDetails = LuxorVendor & { archived_at?: string | null; contact_person?: string | null; business_website?: string | null; mailing_address?: string | null; vendor_category?: string | null; internal_notes?: string | null }
 const CATEGORIES = ['Venue Maintenance', 'Utilities', 'Insurance', 'Marketing', 'Event Rentals', 'Decor', 'Entertainment', 'Catering', 'Cleaning', 'Security', 'Technology', 'Professional Services', 'Other', 'DJs & Music', 'Fine Caterers', 'Security Crew', 'Florist Services', 'Rentals & Decor', 'Valet Service', 'Bartenders', 'Photographers', 'Makeup Artist']
@@ -38,19 +39,44 @@ function profileFieldsStored(vendor: VendorDetails) {
     || vendor.internal_notes !== undefined
 }
 
-export default function VendorBusinessDetails({ vendor, onSaved }: { vendor: VendorDetails; onSaved: (vendor: VendorDetails) => void }) {
+export default function VendorBusinessDetails({ vendor, onSaved, onWebsiteSuggested }: { vendor: VendorDetails; onSaved: (vendor: VendorDetails) => void; onWebsiteSuggested?: (vendorId: string, suggestion: WebsiteSuggestion | null) => void }) {
   const [open, setOpen] = useState(false)
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState('')
+  const [lookupBusy, setLookupBusy] = useState(false)
+  const [suggestion, setSuggestion] = useState<WebsiteSuggestion | null>(null)
+  const [lookupMessage, setLookupMessage] = useState('')
   const [editVersion, setEditVersion] = useState(vendor.updated_at)
   const [values, setValues] = useState<FormValues>(() => formState(vendor))
   const profileReady = profileFieldsStored(vendor)
   const options = CATEGORIES.includes(values.vendor_type) ? CATEGORIES : [values.vendor_type, ...CATEGORIES]
+  useEffect(() => {
+    if (!profileReady || vendor.archived_at || vendor.business_website) return
+    let live = true
+    setSuggestion(null)
+    setLookupBusy(true)
+    void lookupProviderWebsite(vendor).then((result) => {
+      if (!live) return
+      setSuggestion(result)
+      if (result) onWebsiteSuggested?.(vendor.id, result)
+    }).catch(() => { /* Manual retry remains available. */ }).finally(() => { if (live) setLookupBusy(false) })
+    return () => { live = false }
+  }, [vendor.id, vendor.name, vendor.vendor_type, vendor.business_website, vendor.archived_at, profileReady, onWebsiteSuggested])
   function begin() {
     setValues(formState(vendor))
     setEditVersion(vendor.updated_at)
     setMessage('')
+    setLookupMessage('')
     setOpen(true)
+  }
+  async function findWebsite() {
+    setLookupBusy(true); setLookupMessage(''); setSuggestion(null)
+    try {
+      const result = await lookupProviderWebsite(vendor, true)
+      if (!result) setLookupMessage('No grounded match found. Enter the website if you know it.')
+      else { setSuggestion(result); onWebsiteSuggested?.(vendor.id, result) }
+    } catch (error) { setLookupMessage(error instanceof Error ? error.message : 'Website lookup failed.') }
+    finally { setLookupBusy(false) }
   }
   async function save(event: React.FormEvent) {
     event.preventDefault()
@@ -96,7 +122,7 @@ export default function VendorBusinessDetails({ vendor, onSaved }: { vendor: Ven
   }
   const inputClass = 'mt-1 min-h-11 w-full rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 text-sm text-[color:var(--portal-text)]'
   return <>
-    <PortalButton size="sm" onClick={begin} disabled={Boolean(vendor.archived_at)}>Edit company details</PortalButton>
+    <div className="space-y-2"><PortalButton size="sm" onClick={begin} disabled={Boolean(vendor.archived_at)}>Edit company details</PortalButton>{suggestion && !vendor.business_website ? <p className="text-xs text-[color:var(--portal-muted)]">Possible website found. <button type="button" onClick={begin} className="font-semibold text-[#9a712e] underline dark:text-[#e6c77f]">Review website</button></p> : null}</div>
     <PortalModal isOpen={open} onClose={() => { if (!busy) setOpen(false) }} title="Edit company details" description={profileReady ? 'Business details save on the vendor record. Do not enter tax or government identification numbers.' : 'Name, email, phone, and category save on the existing vendor record.'} maxWidth="max-w-lg">
       <form onSubmit={save} className="space-y-4">
         <label className="block text-sm text-[color:var(--portal-text)]">Business name<input className={inputClass} required maxLength={200} value={values.name} onChange={(event) => setValues({ ...values, name: event.target.value })} /></label>
@@ -106,6 +132,7 @@ export default function VendorBusinessDetails({ vendor, onSaved }: { vendor: Ven
         {profileReady ? <div className="space-y-4 border-t border-[color:var(--portal-border)] pt-4">
           <label className="block text-sm text-[color:var(--portal-text)]">Primary contact<input className={inputClass} maxLength={200} value={values.contact_person} onChange={(event) => setValues({ ...values, contact_person: event.target.value })} /></label>
           <label className="block text-sm text-[color:var(--portal-text)]">Website<input className={inputClass} maxLength={500} value={values.business_website} onChange={(event) => setValues({ ...values, business_website: event.target.value })} placeholder="https://…" /></label>
+          <div className="space-y-2"><PortalButton type="button" size="sm" disabled={lookupBusy} onClick={() => void findWebsite()}>{lookupBusy ? 'Looking up website…' : 'Find website'}</PortalButton>{lookupMessage ? <p role="status" className="text-xs text-[color:var(--portal-muted)]">{lookupMessage}</p> : null}{suggestion ? <div className="space-y-2 text-xs text-[color:var(--portal-muted)]"><p>Possible website: <a href={suggestion.source} target="_blank" rel="noreferrer" className="font-semibold text-[#9a712e] underline dark:text-[#e6c77f]">{suggestion.website}</a>. Check that it is the right business.</p><PortalButton type="button" size="sm" onClick={() => { setValues((current) => ({ ...current, business_website: suggestion.website })) }}>Use this website</PortalButton></div> : null}</div>
           <label className="block text-sm text-[color:var(--portal-text)]">Mailing address<textarea className={`${inputClass} min-h-24 py-2`} maxLength={1000} value={values.mailing_address} onChange={(event) => setValues({ ...values, mailing_address: event.target.value })} /></label>
           <label className="block text-sm text-[color:var(--portal-text)]">Finance category<input className={inputClass} maxLength={100} value={values.vendor_category} onChange={(event) => setValues({ ...values, vendor_category: event.target.value })} /></label>
           <label className="block text-sm text-[color:var(--portal-text)]">Internal notes<textarea className={`${inputClass} min-h-24 py-2`} maxLength={2000} value={values.internal_notes} onChange={(event) => setValues({ ...values, internal_notes: event.target.value })} /></label>

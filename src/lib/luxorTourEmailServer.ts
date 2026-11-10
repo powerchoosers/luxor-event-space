@@ -5,6 +5,7 @@ import { renderLuxorSystemEmail } from './luxorEmailDesignSystem'
 import { formatPhoneDisplay } from './luxorPhoneClient'
 import { getLuxorAiVenueContext } from './luxorAiContextServer'
 import { LUXOR_UNSLOP_COPY_RULES } from './luxorUnslop'
+import { renderTourEmailCopy, type TourEmailCopy } from './luxorTourEmailCopy'
 
 type TourCopy = {
   subject: string
@@ -38,13 +39,17 @@ function cancelResponseUrl(responseUrl?: string | null) {
 
 const FALLBACK_LOCATION = 'Luxor at Las Palmas Events, 803 Castroville Rd #402, San Antonio, TX 78237'
 
-export async function buildAiTourConfirmationEmail(context: TourEmailContext, options: { skipAi?: boolean } = {}) {
-  const copy = options.skipAi ? fallbackCopy(context) : await generateTourCopy(context)
+function resolveOverride(context: TourEmailContext, copy: TourEmailCopy) {
+  return renderTourEmailCopy(copy, { first_name: firstNameOf(context.inquiry.full_name), event_type: context.inquiry.event_type || 'event', guest_count: context.inquiry.guest_count ? String(context.inquiry.guest_count) : '', tour_date: context.tourDateLabel, tour_time: context.tourTimeLabel, meeting_type: context.meetingType, client_notes: context.clientFacingNotes || '' })
+}
+
+export async function buildAiTourConfirmationEmail(context: TourEmailContext, options: { skipAi?: boolean; copyOverride?: TourEmailCopy | null } = {}) {
+  const copy = options.copyOverride ? resolveOverride(context, options.copyOverride) : options.skipAi ? fallbackCopy(context) : await generateTourCopy(context)
   return {
     subject: copy.subject,
     body: renderTourEmailHtml(context, copy),
     text: renderTourEmailText(context, copy),
-    aiGenerated: Boolean(process.env.OPEN_ROUTER_API_KEY),
+    aiGenerated: !options.copyOverride && Boolean(process.env.OPEN_ROUTER_API_KEY),
     heroImage: eventImagePath(context.inquiry.event_type),
   }
 }
@@ -52,8 +57,9 @@ export async function buildAiTourConfirmationEmail(context: TourEmailContext, op
 export function buildTourReminderEmail(
   context: TourEmailContext,
   reminderLabel: 'tomorrow' | 'soon',
+  copyOverride?: TourEmailCopy | null,
 ) {
-  const copy = tourReminderCopy(context, reminderLabel)
+  const copy = copyOverride ? resolveOverride(context, copyOverride) : tourReminderCopy(context, reminderLabel)
   return {
     subject: copy.subject,
     body: renderTourEmailHtml(context, copy),
@@ -78,7 +84,7 @@ function tourReminderCopy(context: TourEmailContext, reminderLabel: 'tomorrow' |
  * Render inspectable, code-backed examples for the read-only automation detail
  * page. These examples use synthetic values and never call the AI provider.
  */
-export function getLuxorTourEmailTemplatePreviews() {
+export function getLuxorTourEmailTemplatePreviews(overrides: Partial<Record<'confirmation' | 'reminder_24' | 'reminder_2', TourEmailCopy | null>> = {}) {
   const context: TourEmailContext = {
     inquiry: {
       id: '00000000-0000-4000-8000-000000000001',
@@ -96,22 +102,22 @@ export function getLuxorTourEmailTemplatePreviews() {
     responseUrl: null,
     contactPhone: null,
   }
-  const confirmationCopy = fallbackCopy(context)
+  const confirmationCopy = overrides.confirmation ? resolveOverride(context, overrides.confirmation) : fallbackCopy(context)
   const confirmation = {
     subject: confirmationCopy.subject,
     body: renderTourEmailHtml(context, confirmationCopy),
     text: renderTourEmailText(context, confirmationCopy),
   }
-  const reminder24Copy = tourReminderCopy(context, 'tomorrow')
-  const reminder2Copy = tourReminderCopy(context, 'soon')
+  const reminder24Copy = overrides.reminder_24 ? resolveOverride(context, overrides.reminder_24) : tourReminderCopy(context, 'tomorrow')
+  const reminder2Copy = overrides.reminder_2 ? resolveOverride(context, overrides.reminder_2) : tourReminderCopy(context, 'soon')
   const reminder24 = { subject: reminder24Copy.subject, body: renderTourEmailHtml(context, reminder24Copy), text: renderTourEmailText(context, reminder24Copy) }
   const reminder2 = { subject: reminder2Copy.subject, body: renderTourEmailHtml(context, reminder2Copy), text: renderTourEmailText(context, reminder2Copy) }
 
   return {
     sampleNotice: 'Sample guest, event, date, and time values are used for inspection only. A real confirmation includes a tour-specific signed reschedule link and is saved with its tour revision.',
-    confirmation: { ...confirmation, source: 'Code fallback. The scheduled confirmation may be AI-tailored when the server AI provider is configured.' },
-    reminder_24: { ...reminder24, source: 'Code-rendered reminder copy with saved tour values inserted.' },
-    reminder_2: { ...reminder2, source: 'Code-rendered reminder copy with saved tour values inserted.' },
+    confirmation: { ...confirmation, source: overrides.confirmation ? 'Saved confirmation copy with sample tour values inserted.' : 'Code fallback. The scheduled confirmation may be AI-tailored when the server AI provider is configured.' },
+    reminder_24: { ...reminder24, source: overrides.reminder_24 ? 'Saved reminder copy with sample tour values inserted.' : 'Code-rendered reminder copy with saved tour values inserted.' },
+    reminder_2: { ...reminder2, source: overrides.reminder_2 ? 'Saved reminder copy with sample tour values inserted.' : 'Code-rendered reminder copy with saved tour values inserted.' },
   }
 }
 

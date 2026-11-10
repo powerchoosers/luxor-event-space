@@ -13,6 +13,7 @@ const servicePath = path.join(repo, 'src/lib/luxorCustomWorkflowsServer.ts')
 const approved = new Set(['owner@example.invalid', 'marketing@example.invalid'])
 const members = new Map()
 let lookupCount = 0
+let tourCapability = false
 
 function loadServiceWithSyntheticAuth() {
   const source = fs.readFileSync(servicePath, 'utf8')
@@ -27,8 +28,10 @@ function loadServiceWithSyntheticAuth() {
 
   const mocks = {
     'server-only': {},
+    './luxorWorkflowEmailServer': {},
+    './luxorMailConfig': {},
     './luxorEmailDesignSystem': { renderLuxorSystemEmail: () => '' },
-    './supabaseRestServer': { supabaseRest: async () => [] },
+    './supabaseRestServer': { supabaseRest: async (query) => query === 'rpc/luxor_custom_workflow_attended_tour_capability' ? tourCapability : [] },
     './luxorPortalAuth': {
       getAllowedZohoPortalEmails: () => [...approved],
       isAuthorizedLuxorPortalEmail: (email) => approved.has(String(email).trim().toLowerCase()),
@@ -41,6 +44,7 @@ function loadServiceWithSyntheticAuth() {
       memberCan: (member, permission) => member.role === 'owner' || member.permissions.includes(permission),
     },
     './luxorCustomWorkflowDefinition': {
+      CUSTOM_WORKFLOW_RUNTIME_TRIGGERS: ['contact_form_inquiry_created', 'manual'],
       cloneCustomWorkflowDefinition: (value) => value,
       createNewContactFollowUpDefinition: () => ({ steps: [] }),
       validateCustomWorkflowDefinition: () => ({ valid: true, issues: [] }),
@@ -62,6 +66,12 @@ function loadServiceWithSyntheticAuth() {
 }
 
 const service = loadServiceWithSyntheticAuth()
+
+test('completed-tour trigger is offered only when the database capability is installed', async () => {
+  tourCapability = false; assert.deepEqual(await service.getConnectedCustomWorkflowTriggers(), ['contact_form_inquiry_created', 'manual'])
+  tourCapability = true; assert.deepEqual(await service.getConnectedCustomWorkflowTriggers(), ['contact_form_inquiry_created', 'manual', 'tour_attended'])
+  tourCapability = false
+})
 
 function member(role, permissions, status = 'active') {
   return { role, permissions, status }

@@ -9,6 +9,7 @@ import { processPendingLuxorBillIntakes } from '@/lib/luxorBillIntakeServer'
 import { processPendingManualBillAnalyses } from '@/lib/luxorManualBillAnalysisServer'
 import { supabaseRestStrict } from '@/lib/supabaseRestServer'
 import { generateLuxorExpenseOccurrences } from '@/lib/luxorExpensesServer'
+import { reconcileEventEmailReminders } from '@/lib/luxorBookingEmailAutomationsServer'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 120
@@ -66,6 +67,11 @@ export async function POST(request: NextRequest) {
   }
 
   const now = new Date()
+  try {
+    await reconcileEventEmailReminders(10)
+  } catch (error) {
+    console.warn('Event reminder reconciliation is unavailable; pending work will retry:', error instanceof Error ? error.message : error)
+  }
   let expenseGeneration: { status: 'outside_window' | 'processed' | 'failed'; inserted?: number } = { status: 'outside_window' }
   if (isDailyExpenseGenerationWindow(now)) {
     try {

@@ -4,6 +4,8 @@ import crypto from 'node:crypto'
 import { renderLuxorSystemEmail } from '@/lib/luxorEmailDesignSystem'
 import { normalizePlannerEventLayout } from '@/lib/luxorPlannerLayout'
 import { supabaseRestStrict } from '@/lib/supabaseRestServer'
+import { renderPlannerInvitationCopy, type PlannerInvitationCopy } from '@/lib/luxorPlannerInvitationCopy'
+import { PLANNER_VERIFICATION_DEFAULT, renderPlannerVerificationCopy, type PlannerVerificationCopy } from '@/lib/luxorPlannerVerificationCopy'
 
 export type PlannerPresentation = Record<string, unknown> & {
   id: string
@@ -141,15 +143,16 @@ export function verifyPresentationSession(value: string | undefined, presentatio
   } catch { return false }
 }
 
-export function buildPlannerPresentationInvitation(input: { name: string; url: string; expiresAt: string }) {
+export function buildPlannerPresentationInvitation(input: { name: string; url: string; expiresAt: string; copyOverride?: PlannerInvitationCopy | null }) {
+  const copy = input.copyOverride ? renderPlannerInvitationCopy(input.copyOverride, input.name.split(/\s+/)[0] || 'there') : null
   return {
-    subject: 'Your Luxor event design is ready to review',
+    subject: copy?.subject ?? 'Your Luxor event design is ready to review',
     body: renderLuxorSystemEmail({
       previewText: 'A private event design is ready for your review.',
       eyebrow: 'Your event design',
       title: 'A design to review',
-      greeting: `Hello ${escapeHtml(input.name.split(/\s+/)[0] || 'there')},`,
-      bodyHtml: '<p style="margin:0">Luxor has prepared an event design for you. Open the private presentation to view the selected concept and images, then verify the email address this invitation was sent to with a one-time code.</p>',
+      greeting: copy ? escapeHtml(copy.greeting) : `Hello ${escapeHtml(input.name.split(/\s+/)[0] || 'there')},`,
+      bodyHtml: copy ? `<p style="margin:0">${escapeHtml(copy.body).replace(/\n/g, '<br />')}</p><p>Verify the email address this invitation was sent to with a one-time code.</p>` : '<p style="margin:0">Luxor has prepared an event design for you. Open the private presentation to view the selected concept and images, then verify the email address this invitation was sent to with a one-time code.</p>',
       actions: [{ label: 'Review your event design', url: input.url }],
       note: `This private link expires ${escapeHtml(new Date(input.expiresAt).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric', timeZone: 'America/Chicago' }))}. The verification code is sent separately when you request access.`,
       theme: 'light',
@@ -157,16 +160,19 @@ export function buildPlannerPresentationInvitation(input: { name: string; url: s
   }
 }
 
-export function buildPlannerPresentationCodeEmail(code: string) {
+export function buildPlannerPresentationCodeEmail(code: string, copyOverride?: PlannerVerificationCopy | null) {
+  const copy = copyOverride ? renderPlannerVerificationCopy(copyOverride) : null
+  const safeCode = /^\d{6}$/.test(code) ? code : '123456'
+  const codeHtml = escapeHtml(safeCode)
   return {
-    subject: 'Your Luxor design verification code',
+    subject: copy?.subject ?? PLANNER_VERIFICATION_DEFAULT.subject,
     body: renderLuxorSystemEmail({
       previewText: 'Use this one-time code to open your Luxor event design.',
       eyebrow: 'Private design access',
-      title: 'Verify your email',
-      greeting: 'Hello,',
-      bodyHtml: `<p style="margin:0">Enter this six-digit code in the Luxor presentation page:</p><p style="margin:22px 0;text-align:center;font-size:30px;font-weight:700;letter-spacing:8px;color:#9a712e">${code}</p><p style="margin:0">This code expires in 10 minutes and works once. If you did not request it, you can ignore this email.</p>`,
-      note: 'For your privacy, Luxor will never ask you to share this code by phone or text.',
+      title: copy?.title ?? PLANNER_VERIFICATION_DEFAULT.title,
+      greeting: escapeHtml(copy?.greeting ?? PLANNER_VERIFICATION_DEFAULT.greeting),
+      bodyHtml: `<p style="margin:0">${escapeHtml(copy?.intro ?? PLANNER_VERIFICATION_DEFAULT.intro).replace(/\n/g, '<br />')}</p><p style="margin:22px 0;text-align:center;font-size:30px;font-weight:700;letter-spacing:8px;color:#9a712e">${codeHtml}</p><p style="margin:0">${escapeHtml(copy?.closing ?? PLANNER_VERIFICATION_DEFAULT.closing).replace(/\n/g, '<br />')}</p>`,
+      note: escapeHtml(copy?.note ?? PLANNER_VERIFICATION_DEFAULT.note).replace(/\n/g, '<br />'),
       theme: 'light',
     }),
   }

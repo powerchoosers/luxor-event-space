@@ -31,10 +31,20 @@ import {
 import { getLuxorInquiry } from './luxorInquiriesServer'
 import { recordLuxorTestSmsSimulation } from './luxorTestLeadServer'
 import { CUSTOM_WORKFLOW_EXECUTION_ENABLED, isCustomWorkflowJobBlockedFromLegacyDispatch } from './luxorCustomWorkflowFeatureGates'
+import { readEventReminderTemplate, readInquiryConfirmationTemplate, readInvoiceReminderTemplate, readPaymentConfirmationTemplate, readTourTextTemplate } from './luxorSystemMessageTemplatesServer'
+import { renderEventReminder, renderInquiryConfirmation, renderInvoiceReminder, renderPaymentConfirmation, renderTourText, EVENT_REMINDER_DEFAULT, INQUIRY_CONFIRMATION_DEFAULT, INVOICE_REMINDER_DEFAULTS, PAYMENT_CONFIRMATION_DEFAULT, TOUR_TEXT_DEFAULTS } from './luxorSystemMessageTemplates'
 
 const MAX_CAMPAIGN_RECIPIENTS = 1000
 
 class TourBookingEligibilityError extends Error {}
+
+export async function readTextCopy(read: () => Promise<{ template: { body_template: string } }>, fallback: string) {
+  try { return { body: (await read()).template.body_template, unavailable: false } }
+  catch (error) {
+    console.error('System text settings unavailable; using the original message:', error)
+    return { body: fallback, unavailable: true }
+  }
+}
 
 async function hasSignedBookingForTourText(job: LuxorTextJob) {
   if (!['tour_confirmation', 'tour_reminder'].includes(job.job_type)) return false
@@ -353,20 +363,22 @@ export async function queueInquiryTextJobs(inquiry: LuxorInquiry) {
   if (!inquiry.phone) return []
   const jobs: Array<LuxorTextJob | null> = []
   if (inquiry.preferred_tour_date) {
+    const confirmation = await readTextCopy(() => readTourTextTemplate('tour_confirmation'), TOUR_TEXT_DEFAULTS.tour_confirmation)
     jobs.push(await createUniqueTextJob({
       jobType: 'tour_confirmation',
       phone: inquiry.phone,
       name: inquiry.full_name,
       inquiryId: inquiry.id,
       automationKey: `tour_confirmation:${inquiry.id}:${inquiry.preferred_tour_date}:${inquiry.preferred_tour_time || ''}`,
-      body: buildLuxorTourConfirmationText(inquiry),
+      body: renderTourText(confirmation.body, 'tour_confirmation', { name: inquiry.full_name, date: formatDate(inquiry.preferred_tour_date), time: inquiry.preferred_tour_time }),
       requiredScope: 'tour',
-      metadata: { tour_date: inquiry.preferred_tour_date },
+      metadata: { tour_date: inquiry.preferred_tour_date, ...(confirmation.unavailable ? { copy_settings_unavailable: true } : {}) },
     }))
 
     const reminderDate = new Date(`${inquiry.preferred_tour_date}T15:00:00Z`)
     reminderDate.setUTCDate(reminderDate.getUTCDate() - 1)
     if (reminderDate.getTime() > Date.now()) {
+      const reminder = await readTextCopy(() => readTourTextTemplate('tour_reminder'), TOUR_TEXT_DEFAULTS.tour_reminder)
       jobs.push(await createUniqueTextJob({
         jobType: 'tour_reminder',
         phone: inquiry.phone,
@@ -374,19 +386,21 @@ export async function queueInquiryTextJobs(inquiry: LuxorInquiry) {
         inquiryId: inquiry.id,
         scheduledFor: reminderDate.toISOString(),
         automationKey: `tour_reminder:${inquiry.id}:${inquiry.preferred_tour_date}:${inquiry.preferred_tour_time || ''}`,
-        body: buildLuxorTourReminderText(inquiry),
+        body: renderTourText(reminder.body, 'tour_reminder', { name: inquiry.full_name, date: formatDate(inquiry.preferred_tour_date), time: inquiry.preferred_tour_time }),
         requiredScope: 'tour',
-        metadata: { tour_date: inquiry.preferred_tour_date },
+        metadata: { tour_date: inquiry.preferred_tour_date, ...(reminder.unavailable ? { copy_settings_unavailable: true } : {}) },
       }))
     }
   } else {
+    const template = await readTextCopy(readInquiryConfirmationTemplate, INQUIRY_CONFIRMATION_DEFAULT)
     jobs.push(await createUniqueTextJob({
       jobType: 'inquiry_confirmation',
       phone: inquiry.phone,
       name: inquiry.full_name,
       inquiryId: inquiry.id,
       automationKey: `inquiry_confirmation:${inquiry.id}`,
-      body: `Luxor Event Space: Hi ${firstName(inquiry.full_name)}, we received your ${inquiry.event_type || 'event'} inquiry and will follow up with availability and next steps. Reply STOP to opt out.`,
+      body: renderInquiryConfirmation(template.body, { fullName: inquiry.full_name, eventType: inquiry.event_type }),
+      metadata: template.unavailable ? { copy_settings_unavailable: true } : undefined,
     }))
   }
   return jobs.filter((job): job is LuxorTextJob => Boolean(job))
@@ -395,14 +409,14 @@ export async function queueInquiryTextJobs(inquiry: LuxorInquiry) {
 type LuxorTourTextContext = Pick<LuxorInquiry, 'full_name' | 'preferred_tour_date' | 'preferred_tour_time'>
 
 export function buildLuxorTourConfirmationText(inquiry: LuxorTourTextContext) {
-  return `Luxor Event Space: Hi ${firstName(inquiry.full_name)}, your private venue tour is confirmed for ${formatDate(inquiry.preferred_tour_date)}${inquiry.preferred_tour_time ? ` at ${inquiry.preferred_tour_time}` : ''}. Reply with any questions. Reply STOP to opt out.`
+  return renderTourText(TOUR_TEXT_DEFAULTS.tour_confirmation, 'tour_confirmation', { name: inquiry.full_name, date: formatDate(inquiry.preferred_tour_date), time: inquiry.preferred_tour_time })
 }
 
 export function buildLuxorTourReminderText(inquiry: LuxorTourTextContext) {
-  return `Luxor Event Space: Reminder for your private venue tour tomorrow${inquiry.preferred_tour_time ? ` at ${inquiry.preferred_tour_time}` : ''}. We look forward to meeting you. Reply STOP to opt out.`
+  return renderTourText(TOUR_TEXT_DEFAULTS.tour_reminder, 'tour_reminder', { name: inquiry.full_name, date: formatDate(inquiry.preferred_tour_date), time: inquiry.preferred_tour_time })
 }
 
-export function getLuxorTourSmsTemplatePreviews() {
+export function getLuxorTourSmsTemplatePreviews(templates: { confirmation: string; reminder: string } = { confirmation: TOUR_TEXT_DEFAULTS.tour_confirmation, reminder: TOUR_TEXT_DEFAULTS.tour_reminder }) {
   const sampleDate = new Date()
   sampleDate.setDate(sampleDate.getDate() + 7)
   const sample: LuxorTourTextContext = {
@@ -413,11 +427,11 @@ export function getLuxorTourSmsTemplatePreviews() {
   return {
     sampleNotice: 'Sample values are for inspection only; texts are queued only when the inquiry has a phone number and automated SMS authorization allows delivery.',
     confirmation: {
-      body: buildLuxorTourConfirmationText(sample),
+      body: renderTourText(templates.confirmation, 'tour_confirmation', { name: sample.full_name, date: formatDate(sample.preferred_tour_date), time: sample.preferred_tour_time }),
       timing: 'When the tour is scheduled.',
     },
     reminder: {
-      body: buildLuxorTourReminderText(sample),
+      body: renderTourText(templates.reminder, 'tour_reminder', { name: sample.full_name, date: formatDate(sample.preferred_tour_date), time: sample.preferred_tour_time }),
       timing: '15:00 UTC on the calendar day before the tour, only if that time is still in the future.',
     },
     consent: 'Automated SMS authorization is checked before queueing. Existing STOP consent and send controls remain in force.',
@@ -473,7 +487,9 @@ export async function queueBookingTextJobs(booking: LuxorBooking) {
     { key: '1d', date: oneDayBefore, label: 'tomorrow' },
   ].filter((entry) => entry.date.getTime() > Date.now())
 
-  const jobs = []
+  if (!schedules.length) return []
+  const jobs: Array<LuxorTextJob | null> = []
+  const template = await readTextCopy(readEventReminderTemplate, EVENT_REMINDER_DEFAULT)
   for (const schedule of schedules) {
     jobs.push(await createUniqueTextJob({
       jobType: 'event_reminder',
@@ -483,9 +499,9 @@ export async function queueBookingTextJobs(booking: LuxorBooking) {
       bookingId: booking.id,
       scheduledFor: schedule.date.toISOString(),
       automationKey: `event_reminder:${booking.id}:${schedule.key}:${booking.event_date}`,
-      body: `Luxor Event Space: Hi ${firstName(booking.client_name)}, your ${booking.event_type || 'event'} is ${schedule.label} away on ${formatDate(booking.event_date)}. Reply with any final questions or updates. Reply STOP to opt out.`,
+      body: renderEventReminder(template.body, { name: booking.client_name, eventType: booking.event_type, timeUntil: schedule.label, eventDate: formatDate(booking.event_date) }),
       requiredScope: 'event',
-      metadata: { event_date: booking.event_date },
+      metadata: { event_date: booking.event_date, ...(template.unavailable ? { copy_settings_unavailable: true } : {}) },
     }))
   }
   return jobs.filter((job): job is LuxorTextJob => Boolean(job))
@@ -497,6 +513,7 @@ export async function queuePaymentConfirmationText(
 ) {
   if (!contact.phone || payment.status !== 'paid') return null
   const amount = Number(payment.amount || 0).toLocaleString('en-US', { style: 'currency', currency: 'USD' })
+  const template = await readTextCopy(readPaymentConfirmationTemplate, PAYMENT_CONFIRMATION_DEFAULT)
   return createUniqueTextJob({
     jobType: 'payment_confirmation',
     phone: contact.phone,
@@ -505,8 +522,9 @@ export async function queuePaymentConfirmationText(
     bookingId: payment.booking_id,
     invoiceId: payment.invoice_id,
     automationKey: `payment_confirmation:${payment.id}`,
-    body: `Luxor Event Space: Hi ${firstName(contact.name)}, we received your payment of ${amount}. Thank you. Reply with any questions. Reply STOP to opt out.`,
+    body: renderPaymentConfirmation(template.body, { name: contact.name, amount }),
     requiredScope: 'payment',
+    metadata: template.unavailable ? { copy_settings_unavailable: true } : undefined,
   })
 }
 
@@ -527,8 +545,13 @@ export async function queueInvoiceReminderTexts(
   overdue.setUTCDate(overdue.getUTCDate() + 1)
   const amount = Number(invoice.total || 0).toLocaleString('en-US', { style: 'currency', currency: 'USD' })
   const jobs = []
+  const queueBeforeDue = beforeDue.getTime() > Date.now()
+  const [dueTemplate, overdueTemplate] = await Promise.all([
+    queueBeforeDue ? readTextCopy(() => readInvoiceReminderTemplate('invoice_due_reminder'), INVOICE_REMINDER_DEFAULTS.invoice_due_reminder) : Promise.resolve(null),
+    readTextCopy(() => readInvoiceReminderTemplate('invoice_overdue_reminder'), INVOICE_REMINDER_DEFAULTS.invoice_overdue_reminder),
+  ])
 
-  if (beforeDue.getTime() > Date.now()) {
+  if (queueBeforeDue && dueTemplate) {
     jobs.push(await createUniqueTextJob({
       jobType: 'invoice_due_reminder',
       phone: contact.phone,
@@ -537,9 +560,9 @@ export async function queueInvoiceReminderTexts(
       invoiceId: invoice.id,
       scheduledFor: beforeDue.toISOString(),
       automationKey: `invoice_due:${invoice.id}:${invoiceDueDate}`,
-      body: `Luxor Event Space: Hi ${firstName(contact.name)}, a friendly reminder that your ${amount} invoice is due ${formatDate(invoiceDueDate)}. Please use your secure invoice link or contact us with questions. Reply STOP to opt out.`,
+      body: renderInvoiceReminder(dueTemplate.body, { name: contact.name, amount, dueDate: formatDate(invoiceDueDate) }),
       requiredScope: 'invoice',
-      metadata: { due_date: invoiceDueDate },
+      metadata: { due_date: invoiceDueDate, ...(dueTemplate.unavailable ? { copy_settings_unavailable: true } : {}) },
     }))
   }
   jobs.push(await createUniqueTextJob({
@@ -550,9 +573,9 @@ export async function queueInvoiceReminderTexts(
     invoiceId: invoice.id,
     scheduledFor: overdue.toISOString(),
     automationKey: `invoice_overdue:${invoice.id}:${invoiceDueDate}`,
-    body: `Luxor Event Space: Hi ${firstName(contact.name)}, our records show your ${amount} invoice due ${formatDate(invoiceDueDate)} is still unpaid. Please use your secure invoice link or contact us for help. Reply STOP to opt out.`,
+    body: renderInvoiceReminder(overdueTemplate.body, { name: contact.name, amount, dueDate: formatDate(invoiceDueDate) }),
     requiredScope: 'invoice',
-    metadata: { due_date: invoiceDueDate },
+    metadata: { due_date: invoiceDueDate, ...(overdueTemplate.unavailable ? { copy_settings_unavailable: true } : {}) },
   }))
   return jobs.filter((job): job is LuxorTextJob => Boolean(job))
 }
