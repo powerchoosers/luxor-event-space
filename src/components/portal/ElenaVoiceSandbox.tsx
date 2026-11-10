@@ -41,6 +41,7 @@ export function ElenaVoiceSandbox() {
   const [phoneVoiceError, setPhoneVoiceError] = useState('')
   const [phoneVoiceSaved, setPhoneVoiceSaved] = useState('')
   const client = useRef<ElenaVoiceSandboxClient | null>(null)
+  const voiceChoiceMade = useRef(false)
   const meter = useRef<HTMLDivElement>(null)
   const transcript = useRef<HTMLDivElement>(null)
   const mounted = useRef(true)
@@ -57,7 +58,9 @@ export function ElenaVoiceSandbox() {
       if (!Array.isArray(result.voices) || !result.phoneTest || !result.context) throw new Error('Voice settings are incomplete. Please retry.')
       if (!mounted.current) return
       setConfiguration(result)
-      setVoice((previous) => result.voices.includes(previous) ? previous : result.defaultVoice)
+      setVoice((previous) => voiceChoiceMade.current && result.voices.includes(previous)
+        ? previous
+        : result.voices.includes(result.phoneTest.voice) ? result.phoneTest.voice : result.defaultVoice)
     } catch (error) {
       if (mounted.current) setLoadError(error instanceof Error ? error.message : 'Voice settings could not load.')
     } finally { if (mounted.current) setLoading(false) }
@@ -108,15 +111,15 @@ export function ElenaVoiceSandbox() {
   }
 
   const toggleMute = () => { client.current?.mute(!muted); setMuted(!muted) }
-  const savePhoneVoice = async () => {
-    if (!configuration?.phoneTest.voice || savingPhoneVoice || voice === configuration.phoneTest.voice) return
+  const savePhoneVoice = async (selectedVoice: string) => {
+    if (!configuration?.phoneTest.voice || savingPhoneVoice || selectedVoice === configuration.phoneTest.voice) return
     setSavingPhoneVoice(true)
     setPhoneVoiceError('')
     setPhoneVoiceSaved('')
     try {
       const response = await fetch('/api/portal/elena-voice', {
         method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ voice }), cache: 'no-store', signal: AbortSignal.timeout(20_000),
+        body: JSON.stringify({ voice: selectedVoice }), cache: 'no-store', signal: AbortSignal.timeout(20_000),
       })
       const result = await response.json() as { voice?: string; appliesTo?: string; error?: string }
       if (!response.ok || typeof result.voice !== 'string' || result.appliesTo !== 'next_phone_call') {
@@ -129,6 +132,13 @@ export function ElenaVoiceSandbox() {
     } catch (error) {
       if (mounted.current) setPhoneVoiceError(error instanceof Error ? error.message : 'The phone voice could not be saved.')
     } finally { if (mounted.current) setSavingPhoneVoice(false) }
+  }
+  const chooseVoice = (nextVoice: string) => {
+    voiceChoiceMade.current = true
+    setVoice(nextVoice)
+    setPhoneVoiceSaved('')
+    setPhoneVoiceError('')
+    if (nextVoice !== configuration?.phoneTest.voice) void savePhoneVoice(nextVoice)
   }
   const minutes = String(Math.floor(elapsed / 60)).padStart(2, '0')
   const seconds = String(elapsed % 60).padStart(2, '0')
@@ -150,8 +160,8 @@ export function ElenaVoiceSandbox() {
           <p className="mt-2 text-sm leading-6 text-[color:var(--portal-muted)]">Talk to Elena as an incoming caller. Tour bookings and transfers are rehearsed; this practice does not reserve a time or call Arianna.</p>
           <div className="mt-5 max-w-sm">
             <p className="mb-2 text-xs font-semibold text-[color:var(--portal-text)]">Elena’s voice</p>
-            <PortalSelect aria-label="Elena’s voice" value={voice} onChange={(nextVoice) => { setVoice(nextVoice); setPhoneVoiceSaved(''); setPhoneVoiceError('') }} disabled={loading || !configuration || isActive || savingPhoneVoice} options={(configuration?.voices || ['marin']).map((name) => ({ value: name, label: `${titleCase(name)}${name === configuration?.defaultVoice ? ' · default' : ''}` }))} buttonClassName="!min-h-11" />
-            <p className="mt-2 text-xs leading-5 text-[color:var(--portal-muted)]">{isActive ? 'End this test to choose another voice.' : 'Each test starts a fresh conversation in the selected voice.'}</p>
+            <PortalSelect aria-label="Elena’s voice" value={voice} onChange={chooseVoice} disabled={loading || !configuration || isActive || savingPhoneVoice} options={(configuration?.voices || ['marin']).map((name) => ({ value: name, label: `${titleCase(name)}${name === configuration?.defaultVoice ? ' · default' : ''}` }))} buttonClassName="!min-h-11" />
+            <p className="mt-2 text-xs leading-5 text-[color:var(--portal-muted)]">{isActive ? 'End this test to choose another voice.' : savingPhoneVoice ? 'Saving for your next phone call…' : 'Each test starts a fresh conversation; your choice is saved for the next phone call.'}</p>
           </div>
           <div className="mt-6 flex flex-wrap items-center gap-2.5">
             {isActive ? <>
@@ -185,9 +195,8 @@ export function ElenaVoiceSandbox() {
           </>}
           {configuration?.publicNumber ? <p className="mt-3 text-xs leading-5 text-[color:var(--portal-muted)]">Public Luxor line: <span className="whitespace-nowrap tabular-nums">{formatPhoneDisplay(configuration.publicNumber)}</span></p> : null}
           {!loading && configuration ? <div className="mt-5 space-y-2.5">
-            <p className="text-sm text-[color:var(--portal-text)]">Phone voice: <span className="font-semibold">{configuration.phoneTest.voice ? titleCase(configuration.phoneTest.voice) : 'Unavailable'}</span></p>
-            <PortalButton className="min-h-11 w-full !whitespace-normal text-left" disabled={!configuration.phoneTest.voice || savingPhoneVoice || voice === configuration.phoneTest.voice} onClick={() => void savePhoneVoice()}>{savingPhoneVoice ? <Loader2 size={14} className="shrink-0 animate-spin motion-reduce:animate-none" /> : <Volume2 size={14} className="shrink-0" />}{savingPhoneVoice ? 'Saving phone voice…' : `Use ${titleCase(voice)} for next phone call`}</PortalButton>
-            <p className="text-xs leading-5 text-[color:var(--portal-muted)]">Choose a voice in Browser practice, then apply it here. A saved change starts with the next phone call; calls already in progress keep their voice.</p>
+            <p className="text-sm text-[color:var(--portal-text)]">Next phone call: <span className="font-semibold">{configuration.phoneTest.voice ? titleCase(configuration.phoneTest.voice) : 'Unavailable'}</span></p>
+            <p className="text-xs leading-5 text-[color:var(--portal-muted)]">Voice changes apply to the next call. An active call keeps its original voice.</p>
             {phoneVoiceSaved ? <p role="status" className="text-xs leading-5 text-[color:var(--portal-text)]">{phoneVoiceSaved}</p> : null}
             {phoneVoiceError ? <p role="alert" className="text-xs leading-5 text-red-700 dark:text-red-300">{phoneVoiceError}</p> : null}
           </div> : null}

@@ -26,7 +26,7 @@ export async function POST(request: Request) {
   } catch (error) {
     // Provider errors can contain caller metadata; record only a fixed event and safe error class.
     if (error instanceof ElenaPhoneTestDiagnosticError) {
-      console.warn('[Elena Phone Test] Incoming call could not be accepted', { kind: error.diagnostic, ...(error.providerStatus ? { providerStatus: error.providerStatus } : {}) })
+      console.warn('[Elena Phone Test] Incoming call could not be accepted', { kind: error.diagnostic, ...(error.providerStatus ? { providerStatus: error.providerStatus } : {}), ...(error.providerCode ? { providerCode: error.providerCode } : {}) })
     } else {
       console.warn('[Elena Phone Test] Incoming call could not be accepted', { kind: error instanceof SyntaxError ? 'invalid_json' : 'acceptance_failed' })
     }
