@@ -20,7 +20,36 @@ export function suggestsRecurringBill(bill: LuxorBill): boolean {
   const category = bill.bill_category || bill.extracted_fields?.category_suggestion
   if (typeof category === 'string' && /^(rent|utilities)$/i.test(category.trim())) return true
   if (isRecurringFrequency(bill.frequency)) return true
-  return /\b(water|electric(?:ity)?|natural gas|internet|broadband|telecom(?:munications)?|phone|telephone|tv|television|cable|rent|lease|subscription)\b/i.test(`${bill.service || ''} ${bill.provider || ''}`)
+  return /\b(water|wastewater|sewer(?:age)?|electric(?:ity)?|natural gas|propane|gas utility|internet|broadband|fiber|isp|telecom(?:munications)?|phone|telephone|cellular|wireless|mobile plan|tv|television|cable|satellite|dish|streaming|trash|waste|recycl(?:ing)?|rent|lease|subscription)\b/i.test(`${bill.service || ''} ${bill.provider || ''}`)
+}
+
+const RECURRING_FREQUENCY_MAP: Record<string, 'weekly' | 'biweekly' | 'monthly' | 'quarterly' | 'annually'> = {
+  weekly: 'weekly',
+  biweekly: 'biweekly',
+  'bi weekly': 'biweekly',
+  monthly: 'monthly',
+  bimonthly: 'monthly',
+  'bi monthly': 'monthly',
+  quarterly: 'quarterly',
+  semiannual: 'quarterly',
+  'semi annual': 'quarterly',
+  semiannually: 'quarterly',
+  'semi annually': 'quarterly',
+  annual: 'annually',
+  annually: 'annually',
+  yearly: 'annually',
+}
+
+/** Maps extracted bill cadence to a recurring template frequency; utilities default to monthly. */
+export function utilityRecurringFrequency(bill: LuxorBill): 'weekly' | 'biweekly' | 'monthly' | 'quarterly' | 'annually' {
+  const normalized = (bill.frequency || '').trim().toLowerCase().replace(/[\s-]+/g, ' ')
+  if (RECURRING_FREQUENCY_MAP[normalized]) return RECURRING_FREQUENCY_MAP[normalized]
+  if (/\b(?:every|each|per) week\b|\bweekly\b/.test(normalized)) return 'weekly'
+  if (/\b(?:every|each|per) (?:two|2) weeks\b|\bbi[- ]?weekly\b/.test(normalized)) return 'biweekly'
+  if (/\b(?:every|each|per) month\b|\bmonthly\b/.test(normalized)) return 'monthly'
+  if (/\b(?:every|each|per) quarter\b|\bquarterly\b/.test(normalized)) return 'quarterly'
+  if (/\b(?:every|each|per) year\b|\bannual(?:ly)?\b|\byearly\b/.test(normalized)) return 'annually'
+  return 'monthly'
 }
 
 /** Group display candidates by their recorded name, without linking records. */

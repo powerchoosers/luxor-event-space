@@ -3,6 +3,7 @@ import { getOperationsSession } from '@/lib/luxorOperationsAccess'
 import { supabaseRest, supabaseRestStrict } from '@/lib/supabaseRestServer'
 import type { LuxorBill } from '@/lib/luxorInquiryTypes'
 import { luxorTimestampIsKnown, luxorTimestampMs } from '@/lib/luxorTimestamp'
+import { ensureUtilityRecurringScheduleFromBill, linkApprovedUtilityBillToSchedule } from '@/lib/luxorUtilityRecurringAutoServer'
 
 const ALLOWED_FIELDS = new Set(['service', 'frequency', 'provider', 'amount', 'due_date', 'invoice_number', 'review_notes'])
 
@@ -92,6 +93,10 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
       await supabaseRest(`luxor_bill_intakes?attachment_id=eq.${bill.source_attachment_id}&status=in.(needs_review,ready)`, { method: 'PATCH', body: JSON.stringify({
         status: body.action === 'flag' || body.action === 'confirm_distinct' ? 'needs_review' : 'ready', reviewed_at: now, reviewed_by: session.email, updated_at: now,
       }) })
+    }
+    if (body.action === 'approve') {
+      await ensureUtilityRecurringScheduleFromBill(bill).catch(() => undefined)
+      await linkApprovedUtilityBillToSchedule(bill, session.email).catch(() => undefined)
     }
     return NextResponse.json(bill)
   } catch (error) {

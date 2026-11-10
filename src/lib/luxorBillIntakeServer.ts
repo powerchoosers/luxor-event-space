@@ -7,6 +7,7 @@ import { supabaseRest, supabaseRestStrict } from '@/lib/supabaseRestServer'
 import { matchConfirmedBillCompany } from '@/lib/luxorBillCompanyMatch'
 import { isLuxorBillCategory, type LuxorBillCategory } from '@/lib/luxorBillCategories'
 import { broadcastLuxorPortalNotification } from '@/lib/luxorZohoWebhookServer'
+import { ensureUtilityRecurringScheduleFromBill } from '@/lib/luxorUtilityRecurringAutoServer'
 import type { LuxorBill, LuxorBillArithmeticStatus, LuxorBillEvidence, LuxorBillIntake, LuxorBillLineItem } from '@/lib/luxorInquiryTypes'
 
 const MAX_INVOICE_BYTES = 20 * 1024 * 1024
@@ -370,6 +371,7 @@ async function processIntake(intake: LuxorBillIntake) {
     arithmetic_status: arithmetic, lease_until: null, updated_at: new Date().toISOString(), last_error_code: null, last_error_message: null,
   }) })
   await broadcastLuxorPortalNotification('bill-intake-updated', { intakeId: intake.id, status }).catch((error) => console.warn('Bill intake realtime notice failed:', error))
+  await ensureUtilityRecurringScheduleFromBill(bill).catch((error) => console.warn('Utility recurring schedule automation failed:', error))
 }
 
 export async function processPendingLuxorBillIntakes(limit = 1, intakeId?: string) {

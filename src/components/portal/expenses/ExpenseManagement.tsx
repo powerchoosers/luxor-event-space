@@ -5,7 +5,6 @@ import type React from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import {
-  ArrowClockwise,
   ArrowLeft,
   ArrowRight,
   Briefcase,
@@ -48,6 +47,7 @@ import { recurringCostEvidence, type RecurringCostEvidence } from '@/lib/luxorRe
 import { getLuxorExpenseCashActivityInPeriod } from '@/lib/luxorFinanceReporting'
 import { expenseCategoryColors } from '@/lib/luxorExpenseChartColors'
 import { getLuxorExpensePaymentPostFailureDisposition, reconcileLuxorExpensePaymentRetry } from '@/lib/luxorExpenseTypes'
+import { getPortalSupabaseClient } from '@/lib/supabaseClient'
 import type { LuxorBill, LuxorBooking, LuxorInvoice, LuxorPayment, LuxorPaymentInstallment, LuxorPaymentRefundView } from '@/lib/luxorInquiryTypes'
 
 type ExpenseManagementView = 'dashboard' | 'recurring' | 'business' | 'events' | 'receipts' | 'detail'
@@ -323,7 +323,6 @@ export default function ExpenseManagement({ view, expenseId, embedded = false, s
   const recurringSuggestions = useMemo(() => view === 'recurring' && !provider ? recurringCostEvidence(data.bills, data.expenses, data.templates) : [], [view, provider, data.bills, data.expenses, data.templates])
   const [ledger, setLedger] = useState<FinanceLedgerData>({ payments: [], invoices: [], bookings: [], installments: [], refunds: [], eventPaymentsReceivedByBooking: null, eventPaymentsVerified: false })
   const [loading, setLoading] = useState(true)
-  const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [browseOpen, setBrowseOpen] = useState(false)
   const [notice, setNotice] = useState<string | null>(null)
@@ -378,8 +377,7 @@ export default function ExpenseManagement({ view, expenseId, embedded = false, s
   const [categoryEdit, setCategoryEdit] = useState<{ id: string; name: string } | null>(null)
 
   const loadData = useCallback(async (quiet = false) => {
-    if (quiet) setRefreshing(true)
-    else setLoading(true)
+    if (!quiet) setLoading(true)
     setError(null)
     try {
       const responses = await Promise.all([
@@ -420,12 +418,74 @@ export default function ExpenseManagement({ view, expenseId, embedded = false, s
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Expense records could not be loaded.')
     } finally {
-      setLoading(false)
-      setRefreshing(false)
+      if (!quiet) setLoading(false)
     }
   }, [view])
 
   useEffect(() => { void loadData() }, [loadData])
+
+  useEffect(() => {
+    const supabase = getPortalSupabaseClient()
+    if (!supabase) return
+
+    let active = true
+    let refreshTimer: number | null = null
+    const scheduleRefresh = () => {
+      if (!active || document.visibilityState !== 'visible') return
+      if (refreshTimer !== null) return
+      refreshTimer = window.setTimeout(() => {
+        refreshTimer = null
+        void loadData(true)
+      }, 250)
+    }
+
+    const expenseTables = [
+      'luxor_bills',
+      'luxor_booking_expenses',
+      'luxor_expense_templates',
+      'luxor_expense_payments',
+      'luxor_recurring_cost_bill_links',
+    ] as const
+
+    let broadcastChannel: ReturnType<typeof supabase.channel> | null = null
+    const postgresChannel = supabase.channel('luxor-expense-management-refresh')
+    for (const table of expenseTables) {
+      postgresChannel.on('postgres_changes', { event: '*', schema: 'public', table }, scheduleRefresh)
+    }
+    void postgresChannel.subscribe((status) => {
+      if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') console.warn(`Expense management realtime channel entered ${status}.`)
+    })
+
+    void fetch('/api/portal/realtime-config', { headers: { Accept: 'application/json' }, cache: 'no-store' })
+      .then((response) => (response.ok ? response.json() : null))
+      .then((data) => {
+        if (!active || typeof data?.realtimeChannel !== 'string') return
+        broadcastChannel = supabase
+          .channel(data.realtimeChannel)
+          .on('broadcast', { event: 'email-arrived' }, scheduleRefresh)
+          .on('broadcast', { event: 'email-status' }, scheduleRefresh)
+          .on('broadcast', { event: 'bill-intake-updated' }, scheduleRefresh)
+          .subscribe((status) => {
+            if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') console.warn(`Expense management broadcast channel entered ${status}.`)
+          })
+      })
+      .catch((error) => console.warn('Failed to connect expense management realtime updates:', error))
+
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === 'visible') scheduleRefresh()
+    }
+    window.addEventListener('focus', refreshWhenVisible)
+    document.addEventListener('visibilitychange', refreshWhenVisible)
+
+    return () => {
+      active = false
+      if (refreshTimer !== null) window.clearTimeout(refreshTimer)
+      window.removeEventListener('focus', refreshWhenVisible)
+      document.removeEventListener('visibilitychange', refreshWhenVisible)
+      void supabase.removeChannel(postgresChannel)
+      if (broadcastChannel) void supabase.removeChannel(broadcastChannel)
+    }
+  }, [loadData])
 
   useEffect(() => {
     if (view !== 'recurring') return
@@ -1026,9 +1086,8 @@ export default function ExpenseManagement({ view, expenseId, embedded = false, s
       <span className="min-w-0"><span className="block text-[8px] font-black uppercase tracking-[0.14em] text-[color:var(--portal-faint)]">Browse views</span><span className="mt-0.5 block max-w-[170px] truncate text-xs font-bold leading-tight">{page.title}</span></span>
       <span aria-hidden="true" className="text-[color:var(--portal-muted)]">⌄</span>
     </button>
-    <PortalButton type="button" onClick={refresh} disabled={refreshing} aria-label="Refresh expense records"><ArrowClockwise size={15} className={refreshing ? 'animate-spin' : ''} /> Refresh</PortalButton>
     {view === 'recurring' && onBrowseCompanies ? <PortalButton type="button" onClick={onBrowseCompanies}>Company details</PortalButton> : null}
-    {view === 'recurring' ? <PortalButton type="button" variant="primary" onClick={() => openNewTemplate()}><Plus size={15} /> Add recurring cost</PortalButton> : null}
+    {view === 'recurring' ? <PortalButton type="button" variant="primary" onClick={() => openNewTemplate()} className="!hidden md:!inline-flex"><Plus size={15} /> Add recurring cost</PortalButton> : null}
     {view === 'business' || view === 'dashboard' ? <PortalButton type="button" variant="primary" onClick={() => openNewExpense('business')}><Plus size={15} /> Log expense</PortalButton> : null}
     {view === 'events' ? <PortalButton type="button" variant="primary" onClick={() => openNewExpense('event')}><Plus size={15} /> Add event expense</PortalButton> : null}
     {view === 'receipts' ? <PortalButton type="button" variant="primary" onClick={() => document.getElementById('expense-receipt-file')?.click()}><UploadSimple size={15} /> Upload receipt</PortalButton> : null}
@@ -1047,7 +1106,7 @@ export default function ExpenseManagement({ view, expenseId, embedded = false, s
       </button>
     </div>}
     <FinanceBrowseViews open={browseOpen} close={() => setBrowseOpen(false)} currentView={page.browse} />
-    {embedded && !provider && view !== 'detail' && <div className="flex flex-wrap items-center justify-between gap-3">{view === 'recurring' || view === 'business' ? <div><h2 className="text-lg font-bold text-[color:var(--portal-text)]">{view === 'recurring' ? 'Recurring costs' : 'Business expenses'}</h2><p className="mt-1 text-sm text-[color:var(--portal-muted)]">{view === 'recurring' ? 'Rent, utilities, and subscriptions. Manage schedules and expected charges.' : 'Recorded operating costs, one-off purchases, and payment history.'}</p></div> : null}{headerActions}</div>}
+    {embedded && !provider && view !== 'detail' ? <div className="flex flex-wrap items-center justify-end gap-3">{headerActions}</div> : null}
     {!embedded && <nav aria-label="Expense management views" className="hidden xl:block">
       <PortalAnimatedTabs tabs={EXPENSE_TABS} activeTab={activeView as Exclude<ExpenseManagementView, 'detail'>} onTabChange={navigateTab} ariaLabel="Expense management views" className="flex min-w-max items-center gap-1 overflow-x-auto portal-scrollbar" />
     </nav>}
@@ -1491,7 +1550,7 @@ function RecurringView({ data, busy, onAdd, onEdit, onToggle, onViewExpense, onE
   function openTemplate(id: string) { setSupplierWebsite(null); setLogoFailed(false); setProfileBills([]); setProfileBillsError(''); setProfileBillsMore(false); setProfileBillsLoading(false); setSelectedId(id); setScheduleOpen(true); setPeriodPage(1); setPeriodView('upcoming') }
   return <>
     {!panelOnly && <section className="overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)]">
-      <div className="border-b border-[color:var(--portal-border)] px-4 py-3 sm:px-6"><PortalFilterBar searchValue={search} onSearchChange={(value) => { setSearch(value); setPage(1) }} searchPlaceholder="Search recurring costs" resultLabel={`${filtered.length} ${filtered.length === 1 ? 'cost' : 'costs'}`} activeFilters={[...(status !== 'all' ? [{ id: 'status', label: status === 'active' ? 'Active' : 'Paused', onRemove: () => { setStatus('all'); setPage(1) } }] : []), ...(amountType !== 'all' ? [{ id: 'amount', label: amountType === 'variable' ? 'Amount varies' : 'Fixed amount', onRemove: () => { setAmountType('all'); setPage(1) } }] : [])]} onClearFilters={() => { setStatus('all'); setAmountType('all'); setPage(1) }}><div className="grid gap-3 sm:grid-cols-2"><PortalSelect value={status} onChange={value => { setStatus(value); setPage(1) }} aria-label="Schedule status" options={[{ value: 'all', label: 'All statuses' }, { value: 'active', label: 'Active' }, { value: 'paused', label: 'Paused' }]} buttonClassName="min-h-11 w-full" /><PortalSelect value={amountType} onChange={value => { setAmountType(value); setPage(1) }} aria-label="Amount type" options={[{ value: 'all', label: 'All amounts' }, { value: 'fixed', label: 'Fixed amount' }, { value: 'variable', label: 'Amount varies' }]} buttonClassName="min-h-11 w-full" /></div></PortalFilterBar></div>
+      <div className="border-b border-[color:var(--portal-border)] px-4 py-3 sm:px-6"><PortalFilterBar searchValue={search} onSearchChange={(value) => { setSearch(value); setPage(1) }} searchPlaceholder="Search recurring costs" resultLabel={`${filtered.length} ${filtered.length === 1 ? 'cost' : 'costs'}`} activeFilters={[...(status !== 'all' ? [{ id: 'status', label: status === 'active' ? 'Active' : 'Paused', onRemove: () => { setStatus('all'); setPage(1) } }] : []), ...(amountType !== 'all' ? [{ id: 'amount', label: amountType === 'variable' ? 'Amount varies' : 'Fixed amount', onRemove: () => { setAmountType('all'); setPage(1) } }] : [])]} onClearFilters={() => { setStatus('all'); setAmountType('all'); setPage(1) }} actions={<PortalButton type="button" variant="primary" onClick={onAdd} aria-label="Add recurring cost" title="Add recurring cost" className="md:hidden aspect-square shrink-0 !size-9.5 !min-h-9.5 !max-h-9.5 !min-w-9.5 !max-w-9.5 !p-0 !gap-0"><Plus size={15} aria-hidden="true" /></PortalButton>}><div className="grid gap-3 sm:grid-cols-2"><PortalSelect value={status} onChange={value => { setStatus(value); setPage(1) }} aria-label="Schedule status" options={[{ value: 'all', label: 'All statuses' }, { value: 'active', label: 'Active' }, { value: 'paused', label: 'Paused' }]} buttonClassName="min-h-11 w-full" /><PortalSelect value={amountType} onChange={value => { setAmountType(value); setPage(1) }} aria-label="Amount type" options={[{ value: 'all', label: 'All amounts' }, { value: 'fixed', label: 'Fixed amount' }, { value: 'variable', label: 'Amount varies' }]} buttonClassName="min-h-11 w-full" /></div></PortalFilterBar></div>
       <div className="hidden grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)_6rem_1rem] gap-4 border-b border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/45 px-6 py-3 text-xs font-semibold text-[color:var(--portal-muted)] md:grid"><span>Cost / company</span><span>Repeats</span><span className="text-right">Expected amount</span><span>Status</span><span /></div>
       <div className="divide-y divide-[color:var(--portal-border)]">{filtered.slice((currentPage-1)*15,currentPage*15).map(template => <button type="button" key={template.id} onClick={() => openTemplate(template.id)} className="grid w-full grid-cols-[minmax(0,1fr)_auto_1rem] items-center gap-3 px-4 py-4 text-left transition-colors hover:bg-[color:var(--portal-soft)]/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#caa24c]/50 md:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)_6rem_1rem] md:gap-4 md:px-6"><span className="min-w-0"><span className="block truncate text-sm font-semibold text-[color:var(--portal-text)]">{template.name}</span><span className="mt-1 block truncate text-xs text-[color:var(--portal-muted)]">{template.vendor_name || template.category}<span className="md:hidden"> · {recurringFrequency(template)}{!template.is_active ? ' · Paused' : ''}</span></span></span><span className="hidden text-sm text-[color:var(--portal-muted)] md:block">{recurringFrequency(template)}</span><span className="text-right text-sm font-semibold tabular-nums text-[color:var(--portal-text)]">{template.is_variable ? 'Varies' : money(template.expected_amount)}</span><span className={`hidden text-xs md:block ${template.is_active ? 'text-emerald-700 dark:text-emerald-300' : 'text-[color:var(--portal-muted)]'}`}>{template.is_active ? 'Active' : 'Paused'}</span><CaretRight size={15} className="text-[color:var(--portal-muted)]" /></button>)}</div>
       {!filtered.length ? <div className="px-5 py-12 text-center"><p className="text-sm font-semibold text-[color:var(--portal-text)]">{data.templates.length ? 'No matching recurring costs' : 'No recurring costs yet'}</p><p className="mt-2 text-sm text-[color:var(--portal-muted)]">{data.templates.length ? 'Try another search or clear the filters.' : 'Add rent, utilities, or subscriptions to track expected bills.'}</p>{!data.templates.length ? <PortalButton className="mt-4" onClick={onAdd}>Add recurring cost</PortalButton> : null}</div> : null}

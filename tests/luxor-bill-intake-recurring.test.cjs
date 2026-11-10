@@ -26,6 +26,7 @@ test('intake produces a reviewable recurring bill without creating a provider or
     '@/lib/luxorBillCompanyMatch': { matchConfirmedBillCompany: () => null },
     '@/lib/luxorBillCategories': { isLuxorBillCategory: (value) => ['Rent', 'Maintenance', 'Utilities', 'Supplies', 'Marketing'].includes(value) },
     '@/lib/luxorZohoWebhookServer': { broadcastLuxorPortalNotification: async (...args) => notices.push(args) },
+    '@/lib/luxorUtilityRecurringAutoServer': { ensureUtilityRecurringScheduleFromBill: async (bill) => (suggestsRecurringBill({ ...bill, id: 'bill' }) ? (writes.push({ url: 'luxor_expense_templates', bill }), { created: true, templateId: 'template-auto' }) : { created: false, templateId: null }) },
     '@/lib/supabaseRestServer': {
       supabaseRestStrict: async () => [],
       supabaseRest: async (url, options) => {
@@ -55,7 +56,8 @@ test('intake produces a reviewable recurring bill without creating a provider or
     assert.equal(created.source_filename, intake.filename)
     assert.equal(created.source_content_type, intake.content_type)
     assert.equal(suggestsRecurringBill({ ...created, id: 'bill' }), true)
-    assert.ok(writes.every((item) => !/expense_templates|booking_expenses|expense_payments|luxor_vendors/.test(item.url)))
+    assert.ok(writes.some((item) => item.url === 'luxor_expense_templates'))
+    assert.ok(writes.every((item) => !/booking_expenses|expense_payments|luxor_vendors/.test(item.url)))
     assert.equal(notices.length, 1)
     global.fetch = async () => new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify({ classification: 'vendor_bill', vendor_name: 'CPS Energy', service: 'Electricity', category_suggestion: 'Utilities', due_date: '2021-11-05', currency: 'USD', total_amount: 59.16, confidence: 0.95, line_items: [{ description: 'Current charges', amount: 58.35 }], evidence: [{ field: 'total_amount', quote: 'After Nov 05, 2021 Pay $59.16', page_number: 1 }] }) } }] }), { status: 200 })
     await processPendingLuxorBillIntakes()
@@ -65,7 +67,8 @@ test('intake produces a reviewable recurring bill without creating a provider or
     assert.equal(mismatch.amount_state, 'unknown')
     assert.equal(mismatch.extracted_fields.total_amount, 59.16)
     assert.equal(mismatch.payment_ready_at, null)
-    assert.ok(writes.every((item) => !/expense_templates|booking_expenses|expense_payments|luxor_vendors/.test(item.url)))
+    assert.ok(writes.some((item) => item.url === 'luxor_expense_templates'))
+    assert.ok(writes.every((item) => !/booking_expenses|expense_payments|luxor_vendors/.test(item.url)))
     global.fetch = async () => new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify({ classification: 'vendor_bill', vendor_name: 'CPS Energy', service: 'Electricity', category_suggestion: 'Utilities', due_date: '2021-11-05', currency: 'USD', total_amount: 59.16, confidence: 0.95, line_items: [], evidence: [{ field: 'total_amount', quote: 'After Nov 05, 2021 Pay $59.16', page_number: 1 }] }) } }] }), { status: 200 })
     await processPendingLuxorBillIntakes()
     const lateAlternative = writes.filter((item) => item.url === 'rpc/luxor_insert_intake_bill').at(-1).data.p_bill
@@ -85,6 +88,7 @@ test('queues supported invoice attachments when the invoices mailbox is copied',
     '@/lib/luxorBillCompanyMatch': {},
     '@/lib/luxorBillCategories': {},
     '@/lib/luxorZohoWebhookServer': { broadcastLuxorPortalNotification: async () => {} },
+    '@/lib/luxorUtilityRecurringAutoServer': { ensureUtilityRecurringScheduleFromBill: async () => ({ created: false, templateId: null }) },
     '@/lib/supabaseRestServer': { supabaseRest: async (url, options) => writes.push({ url, body: JSON.parse(options.body) }) },
   }
   const { enqueueLuxorInvoiceAttachments } = load('src/lib/luxorBillIntakeServer.ts', stubs)
