@@ -1,5 +1,5 @@
 import { after } from 'next/server'
-import { acceptElenaPhoneTestEvent, elenaPhoneTestReady, verifyOpenAiVoiceSignature, greetElenaPhoneTest } from '@/lib/luxorElenaPhoneTestServer'
+import { acceptElenaPhoneTestEvent, elenaPhoneTestReady, verifyOpenAiVoiceSignature, greetElenaPhoneTest, ElenaPhoneTestDiagnosticError } from '@/lib/luxorElenaPhoneTestServer'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -25,7 +25,11 @@ export async function POST(request: Request) {
     return Response.json({ accepted: result.accepted === true, duplicate: result.duplicate === true, ignored: result.ignored === true }, { headers: { 'Cache-Control': 'no-store' } })
   } catch (error) {
     // Provider errors can contain caller metadata; record only a fixed event and safe error class.
-    console.warn('[Elena Phone Test] Incoming call could not be accepted', { kind: error instanceof SyntaxError ? 'invalid_json' : 'acceptance_failed' })
+    if (error instanceof ElenaPhoneTestDiagnosticError) {
+      console.warn('[Elena Phone Test] Incoming call could not be accepted', { kind: error.diagnostic, ...(error.providerStatus ? { providerStatus: error.providerStatus } : {}) })
+    } else {
+      console.warn('[Elena Phone Test] Incoming call could not be accepted', { kind: error instanceof SyntaxError ? 'invalid_json' : 'acceptance_failed' })
+    }
     return Response.json({ error: 'The phone test could not accept this call.' }, { status: error instanceof SyntaxError ? 400 : 503 })
   }
 }

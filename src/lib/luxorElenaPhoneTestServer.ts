@@ -29,6 +29,11 @@ type PhoneToken = {
 type PhoneCall = { id: string; twilio_call_sid: string; metadata: Record<string, unknown>; updated_at: string }
 type IncomingVoiceEvent = { id: string; type: string; created_at: number; data: { type: string; session_id: string; sip_headers: Array<{ name: string; value: string }> } }
 class PhoneActionError extends Error {}
+export class ElenaPhoneTestDiagnosticError extends Error {
+  constructor(readonly diagnostic: 'invalid_incoming_event' | 'twilio_number_lookup_failed' | 'test_number_not_bound' | 'public_number_guard' | 'twilio_call_sid_missing' | 'twilio_call_lookup_failed' | 'twilio_call_mismatch' | 'openai_acceptance_rejected', readonly providerStatus?: number) {
+    super(diagnostic)
+  }
+}
 
 /** Standard Webhooks signatures cover the raw bytes, delivery ID and a five-minute timestamp. */
 export function verifyOpenAiVoiceSignature(payload: string, headers: Headers, secret: string, now = Date.now()) {
@@ -117,10 +122,10 @@ function carrier() {
 async function ownedTestNumber() {
   const { config, client } = carrier()
   const number = await client.incomingPhoneNumbers(ELENA_PHONE_TEST_NUMBER_SID).fetch()
-  if (number.phoneNumber !== ELENA_PHONE_TEST_NUMBER || number.trunkSid !== config.trunkSid || number.accountSid !== config.accountSid) throw new Error('The approved number is not attached to the test trunk.')
+  if (number.phoneNumber !== ELENA_PHONE_TEST_NUMBER || number.trunkSid !== config.trunkSid || number.accountSid !== config.accountSid) throw new ElenaPhoneTestDiagnosticError('test_number_not_bound')
   const selected = await supabaseRestStrict<Array<{ phone_number: string; is_public: boolean }>>('luxor_phone_numbers?select=phone_number,is_public&or=(is_active.eq.true,is_public.eq.true)')
   // A CRM-active number may be deliberately repurposed, but a public number never may.
-  if (selected.some((row) => row.is_public && row.phone_number === ELENA_PHONE_TEST_NUMBER)) throw new Error('A public number cannot be used for the Elena test.')
+  if (selected.some((row) => row.is_public && row.phone_number === ELENA_PHONE_TEST_NUMBER)) throw new ElenaPhoneTestDiagnosticError('public_number_guard')
   return { config, client }
 }
 
@@ -146,13 +151,21 @@ async function patchCall(row: PhoneCall, patch: Record<string, unknown>, conditi
 
 /** Carrier API checks, rather than caller-supplied SIP headers, bind this session to our test trunk. */
 async function verifyIncomingCarrierCall(event: IncomingVoiceEvent) {
-  const { config, client } = await ownedTestNumber()
+  let owned: Awaited<ReturnType<typeof ownedTestNumber>>
+  try { owned = await ownedTestNumber() } catch (error) {
+    if (error instanceof ElenaPhoneTestDiagnosticError) throw error
+    throw new ElenaPhoneTestDiagnosticError('twilio_number_lookup_failed')
+  }
+  const { config, client } = owned
   const sidHeaders = event.data.sip_headers.filter((header) => header.name.toLowerCase() === 'x-twilio-callsid')
   const callSid = sidHeaders.length === 1 ? sidHeaders[0].value.trim() : ''
-  if (!/^CA[0-9a-f]{32}$/i.test(callSid)) throw new Error('A verifiable carrier call is required.')
-  const call = await client.calls(callSid).fetch()
+  if (!/^CA[0-9a-f]{32}$/i.test(callSid)) throw new ElenaPhoneTestDiagnosticError('twilio_call_sid_missing')
+  let call: Awaited<ReturnType<ReturnType<typeof client.calls>['fetch']>>
+  try { call = await client.calls(callSid).fetch() } catch {
+    throw new ElenaPhoneTestDiagnosticError('twilio_call_lookup_failed')
+  }
   const fresh = Math.abs(Date.now() - call.dateCreated.getTime()) < 180_000
-  if (call.accountSid !== config.accountSid || call.to !== ELENA_PHONE_TEST_NUMBER || call.trunkSid !== config.trunkSid || call.direction !== 'inbound' || !['queued', 'ringing', 'in-progress'].includes(call.status) || !fresh) throw new Error('This call is outside the authorized phone test.')
+  if (call.accountSid !== config.accountSid || call.to !== ELENA_PHONE_TEST_NUMBER || call.trunkSid !== config.trunkSid || call.direction !== 'inbound' || !['queued', 'ringing', 'in-progress'].includes(call.status) || !fresh) throw new ElenaPhoneTestDiagnosticError('twilio_call_mismatch')
   return call
 }
 
@@ -162,7 +175,7 @@ export async function acceptElenaPhoneTestEvent(raw: unknown) {
   const config = phoneConfig()
   const event = raw as IncomingVoiceEvent
   if (event?.type !== 'live.transport.incoming') return { ignored: true }
-  if (!event.id || event.data?.type !== 'sip' || !SESSION_ID.test(event.data.session_id) || !Array.isArray(event.data.sip_headers) || event.data.sip_headers.length > 100 || event.data.sip_headers.some((header) => typeof header?.name !== 'string' || typeof header?.value !== 'string') || !Number.isSafeInteger(event.created_at)) throw new Error('Invalid incoming phone event.')
+  if (!event.id || event.data?.type !== 'sip' || !SESSION_ID.test(event.data.session_id) || !Array.isArray(event.data.sip_headers) || event.data.sip_headers.length > 100 || event.data.sip_headers.some((header) => typeof header?.name !== 'string' || typeof header?.value !== 'string') || !Number.isSafeInteger(event.created_at)) throw new ElenaPhoneTestDiagnosticError('invalid_incoming_event')
   const sessionId = event.data.session_id
   const existing = event.data.sip_headers.find((header) => header.name.toLowerCase() === 'x-twilio-callsid')?.value.trim()
   if (existing && /^CA[0-9a-f]{32}$/i.test(existing)) {
@@ -188,7 +201,7 @@ export async function acceptElenaPhoneTestEvent(raw: unknown) {
     // An earlier decision may have won after a timeout or concurrent delivery. Do not issue another greeting or assume acceptance.
     const payload = await response.json().catch(() => ({})) as { error?: { code?: string } }
     if (payload.error?.code === 'decision_already_made') return { duplicate: true, acceptanceUnverified: row.metadata.accepted !== true }
-    throw new Error(`OpenAI phone acceptance failed (${response.status}).`)
+    throw new ElenaPhoneTestDiagnosticError('openai_acceptance_rejected', response.status)
   }
   const [accepted] = await patchCall(row, { accepted: true })
   if (!accepted) return { acceptanceUnverified: true }
