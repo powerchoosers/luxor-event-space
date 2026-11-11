@@ -15,8 +15,24 @@ import { sendLuxorWebPush } from '@/lib/luxorWebPushServer'
 export const runtime = 'nodejs'
 
 export async function POST(request: Request) {
+  const elenaEnabled = process.env.LUXOR_ELENA_LIVE_INBOUND_ENABLED === 'true'
+  const liveRequest = elenaEnabled ? request.clone() : null
   const params = await readTwilioForm(request)
   if (!validateTwilioWebhook(request, params)) return forbiddenTwimlResponse()
+
+  if (elenaEnabled) {
+    const configuredNumber = normalizePhoneNumber(process.env.LUXOR_ELENA_LIVE_NUMBER)
+    if (!configuredNumber) {
+      const unavailable = createTwilioVoiceResponse()
+      unavailable.say('The Luxor phone system is temporarily unavailable. Please try again shortly.')
+      unavailable.hangup()
+      return twimlResponse(unavailable)
+    }
+    if (normalizePhoneNumber(params.To) === configuredNumber && liveRequest) {
+      const { handleElenaLiveIncoming } = await import('@/lib/luxorElenaInboundServer')
+      return handleElenaLiveIncoming(liveRequest)
+    }
+  }
 
   const response = createTwilioVoiceResponse()
 

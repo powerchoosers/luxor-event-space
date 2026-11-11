@@ -1,6 +1,6 @@
 # Elena voice test
 
-The approved phone test number is **+1 817 663 0380** (`PN3339992846524f8140edc3dca201fbfe`). The public number **+1 956 365 2037** is protected. These changes do not choose a new public or CRM-active number in Supabase.
+The approved phone test number is **+1 817 663 0380** (`PN3339992846524f8140edc3dca201fbfe`). This test setup does not change the selected public or CRM-active number. The public line has a separate, explicitly authorized Elena-first configuration described in [Elena inbound calls](elena-live-inbound.md).
 
 The current phone path uses Twilio Programmable Voice with a secure SIP connection to GPT-Live. A dedicated Elastic SIP trunk was prepared during the initial implementation; the migration script removes only the approved number's association with that trunk. It retains the owned number and trunk and preserves the public line and SMS configuration. Checked-in code and preparation records are not proof of current deployment or live routing.
 

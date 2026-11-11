@@ -4,7 +4,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useRouter } from 'next/navigation'
 import { AnimatePresence, motion, useMotionValue, useReducedMotion, useTransform } from 'framer-motion'
-import { AlertCircle, Bell, CalendarCheck2, Check, CheckCircle2, ClipboardList, Eye, FileSignature, Mail, MessageSquare, PhoneMissed, Receipt, RotateCw, Search, X } from '@/lib/icons/phosphor-compat'
+import { AlertCircle, Bell, CalendarCheck2, Check, CheckCircle2, ClipboardList, Eye, FileSignature, Mail, MessageSquare, Phone, PhoneMissed, Receipt, RotateCw, Search, X } from '@/lib/icons/phosphor-compat'
 import {
   PortalCloseButton,
   PortalGhostIconButton,
@@ -40,12 +40,12 @@ function notificationCategory(type: NotificationType): CategoryType {
   return 'leads'
 }
 
-function notificationIcon(type: NotificationType) {
+function notificationIcon(type: NotificationType, elenaAnswered = false) {
   switch (type) {
     case 'email': return <Mail size={16} className="text-blue-500 dark:text-blue-400" />
     case 'email_open':
     case 'proposal_opened': return <Eye size={16} className="text-blue-500 dark:text-blue-400" />
-    case 'call': return <PhoneMissed size={16} className="text-rose-500 dark:text-rose-400" />
+    case 'call': return elenaAnswered ? <Phone size={16} className="text-emerald-500 dark:text-emerald-400" /> : <PhoneMissed size={16} className="text-rose-500 dark:text-rose-400" />
     case 'sms':
     case 'layout_feedback': return <MessageSquare size={16} className="text-emerald-500 dark:text-emerald-400" />
     case 'form': return <ClipboardList size={16} className="text-[#b78b2f] dark:text-[#d8b45e]" />
@@ -133,7 +133,7 @@ function SwipeableNotificationItem({
       >
         <button type="button" onClick={onOpen} className="flex w-full items-start gap-3 px-4 py-3.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#caa24c]/45">
         <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[color:var(--portal-soft)]">
-          {notificationIcon(item.type)}
+          {notificationIcon(item.type, item.metadata?.elenaAnswered === true)}
         </div>
         <div className="min-w-0 flex-1">
           <div className="flex items-start justify-between gap-3">

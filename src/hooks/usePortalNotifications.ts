@@ -5,6 +5,7 @@ import { decodeHtmlEntities } from '@/lib/luxorTextUtils'
 import { getPortalSupabaseClient } from '@/lib/supabaseClient'
 import { isLuxorBounceForCurrentAddress, luxorBounceNotificationId } from '@/lib/luxorEmailBounce'
 import { getLuxorOutstandingPaymentRequestAmount } from '@/lib/luxorInvoiceNotificationEligibility'
+import { ELENA_ANSWERED_NOTIFICATION_BODY, ELENA_ANSWERED_NOTIFICATION_TITLE, isElenaLiveAnsweredCall } from '@/lib/luxorElenaInboundNotification'
 
 export type NotificationType = 'email' | 'call' | 'sms' | 'form' | 'booking' | 'calendar_response' | 'proposal_opened' | 'checkout_opened' | 'invoice_paid' | 'bill_due' | 'contract' | 'email_open' | 'layout_feedback' | 'email_delivery_issue'
 
@@ -438,31 +439,33 @@ export function usePortalNotifications() {
         }
       }
 
-      // 4. Missed Calls
+      // 4. Calls that need the owner's attention.
       if (callsRes.status === 'fulfilled' && callsRes.value.ok) {
         const data = await callsRes.value.json()
         if (Array.isArray(data)) {
-          const missedCalls = data.filter((c: RawRecord) =>
+          const attentionCalls = data.filter((c: RawRecord) => isElenaLiveAnsweredCall(c) || (
             c.direction === 'inbound' &&
-            (c.status === 'no-answer' || c.status === 'canceled' || c.status === 'busy' || c.status === 'failed' || c.outcome === 'missed')
+            (c.status === 'no-answer' || c.status === 'canceled' || c.status === 'busy' || c.status === 'failed' || c.outcome === 'missed'))
           )
-          missedCalls.forEach((call: RawRecord) => {
+          attentionCalls.forEach((call: RawRecord) => {
             const callId = `call_${String(call.id)}`
+            const elenaAnswered = isElenaLiveAnsweredCall(call)
+            const callMetadata = call.metadata as Record<string, unknown> | undefined
             const caller = String(call.contact_name || call.from_number || 'Caller')
             const fromNumber = call.from_number ? String(call.from_number) : null
-            const timestamp = String(call.created_at || new Date().toISOString())
+            const timestamp = String((elenaAnswered && callMetadata?.elena_answered_at) || call.created_at || new Date().toISOString())
 
             const isRead = currentReadIds.has(callId) || Boolean(call.is_read)
             const inquiryId = String(call.inquiry_id || '')
             aggregated.push({
               id: callId,
               type: 'call',
-              title: `Missed call from ${caller}`,
-              subtitle: fromNumber ? `Phone: ${fromNumber}` : 'Inbound call unattended',
+              title: elenaAnswered ? ELENA_ANSWERED_NOTIFICATION_TITLE : `Missed call from ${caller}`,
+              subtitle: elenaAnswered ? ELENA_ANSWERED_NOTIFICATION_BODY : fromNumber ? `Phone: ${fromNumber}` : 'Inbound call unattended',
               timestamp,
               isRead,
               targetUrl: inquiryId ? leadUrl(inquiryId, 'activity') : '/portal/calls',
-              metadata: { fromNumber: call.from_number, inquiryId },
+              metadata: { fromNumber: call.from_number, inquiryId, elenaAnswered },
             })
           })
         }

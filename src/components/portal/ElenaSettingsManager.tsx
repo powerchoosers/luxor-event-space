@@ -39,6 +39,7 @@ import {
   PortalTabTransition,
 } from '@/components/portal/PortalUI'
 import { useToast } from '@/components/portal/ToastProvider'
+import { ElenaInboundSettings } from '@/components/portal/ElenaInboundSettings'
 
 type ElenaTab = 'overview' | 'knowledge' | 'flows' | 'instructions' | 'integrations' | 'settings'
 type SourceType = 'manual' | 'import' | 'website' | 'connected'
@@ -793,6 +794,8 @@ export function ElenaSettingsManager() {
 
       <PortalTabTransition activeKey={activeTab}>
         {activeTab === 'overview' ? (
+          <div className="space-y-5">
+          <ElenaInboundSettings />
           <div className="grid gap-5 xl:grid-cols-[minmax(0,1.08fr)_minmax(18.5rem,0.92fr)]">
             <div className="order-2 space-y-5 xl:order-1">
               <Panel>
@@ -997,6 +1000,7 @@ export function ElenaSettingsManager() {
                 </PortalSkeletonTransition>
               </Panel>
             </div>
+          </div>
           </div>
         ) : null}
 
