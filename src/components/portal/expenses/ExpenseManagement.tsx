@@ -43,6 +43,7 @@ import {
   PortalTabTransition,
   type PortalStatusTone,
 } from '@/components/portal/PortalUI'
+import { ExpenseMobileActionBar } from '@/components/portal/expenses/ExpenseMobileActionBar'
 import BillDetailsPanel from '@/components/portal/BillDetailsPanel'
 import BillDocumentPreview from '@/components/portal/BillDocumentPreview'
 import { lookupScheduleProviderWebsite } from '@/lib/luxorProviderWebsiteLookupClient'
@@ -1098,7 +1099,7 @@ export default function ExpenseManagement({ view, expenseId, embedded = false, s
     </button>
     {view === 'recurring' && onBrowseCompanies ? <PortalButton type="button" onClick={onBrowseCompanies}>Company details</PortalButton> : null}
     {view === 'recurring' ? <PortalButton type="button" variant="primary" onClick={() => openNewTemplate()} className="!hidden"><Plus size={15} /> Add recurring cost</PortalButton> : null}
-    {view === 'business' || view === 'dashboard' ? <PortalButton type="button" variant="primary" onClick={() => openNewExpense('business')}><Plus size={15} /> Log expense</PortalButton> : null}
+    {view === 'business' || view === 'dashboard' ? <PortalButton type="button" variant="primary" onClick={() => openNewExpense('business')} className={view === 'dashboard' ? '!hidden sm:!inline-flex' : undefined}><Plus size={15} /> Log expense</PortalButton> : null}
     {view === 'events' ? <PortalButton type="button" variant="primary" onClick={() => openNewExpense('event')}><Plus size={15} /> Add event expense</PortalButton> : null}
     {view === 'receipts' ? <PortalButton type="button" variant="primary" onClick={() => document.getElementById('expense-receipt-file')?.click()}><UploadSimple size={15} /> Upload receipt</PortalButton> : null}
   </div>
@@ -1116,11 +1117,11 @@ export default function ExpenseManagement({ view, expenseId, embedded = false, s
       </button>
     </div>}
     {!embedded && <FinanceBrowseViews open={browseOpen} close={() => setBrowseOpen(false)} currentView={page.browse} />}
-    {embedded && !provider && view !== 'detail' ? <div className="flex flex-wrap items-center justify-end gap-2.5 pb-1">{headerActions}</div> : null}
+    {embedded && !provider && view !== 'detail' ? <div className={`flex-wrap items-center justify-end gap-2.5 pb-1 ${view === 'dashboard' ? 'hidden sm:flex' : 'flex'}`}>{headerActions}</div> : null}
     {!embedded && <nav aria-label="Expense management views" className="hidden xl:block">
       <PortalAnimatedTabs tabs={EXPENSE_TABS} activeTab={activeView as Exclude<ExpenseManagementView, 'detail'>} onTabChange={navigateTab} ariaLabel="Expense management views" className="flex min-w-max items-center gap-1 overflow-x-auto portal-scrollbar" />
     </nav>}
-    <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden pb-6 portal-scrollbar">
+    <div className={`min-h-0 flex-1 overflow-y-auto overflow-x-hidden portal-scrollbar ${view === 'dashboard' ? 'pb-24 sm:pb-6' : 'pb-6'}`}>
       {notice ? <div role="status" className="mb-4 flex items-start justify-between gap-3 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-4 py-3 text-sm text-[color:var(--portal-text)]"><span>{notice}</span><button type="button" aria-label="Dismiss message" onClick={() => setNotice(null)} className="rounded p-1 text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-card)]"><X size={14} /></button></div> : null}
       {error ? <div role="alert" className="mb-4 rounded-xl border border-rose-500/20 bg-rose-500/5 p-4 text-sm text-rose-700 dark:text-rose-300"><p className="font-semibold">Expense records are unavailable</p><p className="mt-1">{error}</p><button type="button" onClick={refresh} className="mt-3 font-semibold underline underline-offset-2">Try again</button></div> : null}
       {loading && !data.expenses.length ? <div className="space-y-4"><div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">{Array.from({ length: 4 }, (_, i) => <div key={i} className={`${CARD_CLASS} p-5`}><PortalSkeleton className="h-3 w-28 rounded" /><PortalSkeleton className="mt-4 h-7 w-32 rounded" /><PortalSkeleton className="mt-3 h-3 w-40 rounded" /></div>)}</div><div className={`${CARD_CLASS} p-5`}><PortalSkeleton className="h-5 w-48 rounded" /><PortalSkeleton className="mt-5 h-52 w-full rounded-xl" /></div></div> : null}
@@ -1135,6 +1136,12 @@ export default function ExpenseManagement({ view, expenseId, embedded = false, s
       </PortalTabTransition> : null}
     </div>
 
+    {view === 'dashboard' && !panelOnly ? (
+      <ExpenseMobileActionBar
+        onLogExpense={() => openNewExpense('business')}
+        onAddRecurring={() => openNewTemplate()}
+      />
+    ) : null}
     </>}
 
     {panelOnly && view === 'recurring' ? <RecurringView message={notice} key={initialTemplateId || 'recurring-panel'} initialTemplateId={initialTemplateId} panelOnly onClose={finishPanelOnly} loading={loading} error={error || undefined} onRetry={refresh} data={data} busy={busy} onAdd={() => openNewTemplate()} onEdit={openNewTemplate} onToggle={toggleTemplate} onViewExpense={setPanelExpenseId} onEditExpense={openEditExpense} onSkip={skipOccurrence} onOpenBill={openBill} /> : null}
@@ -1274,6 +1281,17 @@ function DashboardView({
   const categories = [...categoryTotals.entries()].map(([name, amount]) => ({ name, amount })).sort((a, b) => b.amount - a.amount)
   const trendBuckets = buildTrendBuckets(data.expenses, trendPeriod)
   const maxTrend = Math.max(1, ...trendBuckets.map((bucket) => bucket.paid + bucket.refunds + bucket.unpaid))
+  const trendScrollRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    const scrollEl = trendScrollRef.current
+    if (!scrollEl) return
+    const alignToLatest = () => {
+      scrollEl.scrollLeft = Math.max(0, scrollEl.scrollWidth - scrollEl.clientWidth)
+    }
+    alignToLatest()
+    const frame = window.requestAnimationFrame(alignToLatest)
+    return () => window.cancelAnimationFrame(frame)
+  }, [trendPeriod, trendBuckets.length])
   const fixedVariable = [
     { label: 'Fixed recurring', amount: data.expenses.filter((expense) => {
       const templateId = expense.recurring_template_id || data.expenses.find((period) => period.matched_expense_id === expense.id)?.recurring_template_id
@@ -1312,20 +1330,26 @@ function DashboardView({
     <section className="grid gap-4 xl:grid-cols-[minmax(0,1.5fr)_minmax(20rem,1fr)]">
       <div className={`${CARD_CLASS} p-4 sm:p-5`}>
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between"><div><h2 className="font-sans text-base font-bold text-[color:var(--portal-text)]">Expense trends</h2><p className="mt-1 text-xs text-[color:var(--portal-muted)]">Paid outflows and unpaid balances are shown separately.</p></div><PortalSelect value={trendPeriod} onChange={setTrendPeriod} options={[{ value: 'monthly', label: 'Monthly' }, { value: 'quarterly', label: 'Quarterly' }, { value: 'annual', label: 'Annual' }]} buttonClassName="min-h-9 w-full sm:w-36" /></div>
-        <div className="mt-5 flex gap-2"><div className="relative h-[calc(13rem-1.75rem)] w-12 shrink-0 text-right text-[10px] text-[color:var(--portal-muted)]">{[maxTrend, maxTrend / 2, 0].map((value, index) => <span key={index} className="absolute right-0 -translate-y-1/2 whitespace-nowrap" style={{ top: `${index * 50}%` }}>{new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', notation: 'compact', maximumFractionDigits: 1 }).format(value)}</span>)}</div><div role="img" aria-label={`${trendPeriod} expenses with paid, refunded, and unpaid amounts`} className="relative grid h-52 min-w-0 flex-1 grid-flow-col auto-cols-fr items-end gap-2 pb-2 sm:gap-4"><div aria-hidden="true" className="pointer-events-none absolute inset-x-0 bottom-7 top-0 flex flex-col justify-between">{[0, 1, 2].map((line) => <div key={line} className="border-t border-[color:var(--portal-border)]" />)}</div>
-          {trendBuckets.map((bucket) => {
-            const paidHeight = bucket.paid / maxTrend * 100
-            const refundHeight = bucket.refunds / maxTrend * 100
-            const unpaidHeight = bucket.unpaid / maxTrend * 100
-            return <div key={bucket.label} className="flex h-full min-w-0 flex-col items-center justify-end gap-1">
-              <div className="flex h-[calc(100%-1.25rem)] w-full items-end justify-center gap-1" aria-label={`${bucket.label}: ${money(bucket.paid)} paid, ${money(bucket.refunds)} refunded, ${money(bucket.unpaid)} unpaid${bucket.unknown ? `, ${bucket.unknown} awaiting an amount` : ''}`}>
-                <div className="w-[42%] max-w-7 rounded-t bg-[#b98a3e] transition-[height]" style={{ height: `${Math.max(bucket.paid > 0 ? 3 : 0, paidHeight)}%` }} title={`Paid ${money(bucket.paid)}`} />
-                <div className="w-[32%] max-w-6 rounded-t bg-emerald-700/60 transition-[height] dark:bg-emerald-300/60" style={{ height: `${Math.max(bucket.refunds > 0 ? 3 : 0, refundHeight)}%` }} title={`Refunded ${money(bucket.refunds)}`} />
-                <div className="w-[42%] max-w-7 rounded-t bg-[#b98a3e]/30 dark:bg-[#e6c77f]/30 transition-[height]" style={{ height: `${Math.max(bucket.unpaid > 0 ? 3 : 0, unpaidHeight)}%` }} title={`Unpaid ${money(bucket.unpaid)}`} />
-              </div><span className="max-w-full truncate text-[10px] text-[color:var(--portal-muted)]">{bucket.label}</span>
+        <div className="mt-5 flex gap-2">
+          <div className="relative h-[calc(13rem-1.75rem)] w-12 shrink-0 text-right text-[10px] tabular-nums text-[color:var(--portal-muted)]">{[maxTrend, maxTrend / 2, 0].map((value, index) => <span key={index} className="absolute right-0 -translate-y-1/2 whitespace-nowrap" style={{ top: `${index * 50}%` }}>{new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', notation: 'compact', maximumFractionDigits: 1 }).format(value)}</span>)}</div>
+          <div ref={trendScrollRef} className="min-w-0 flex-1 snap-x snap-proximity overflow-x-auto overscroll-x-contain portal-scrollbar [-webkit-overflow-scrolling:touch] sm:overflow-visible sm:snap-none">
+            <div role="img" aria-label={`${trendPeriod} expenses with paid, refunded, and unpaid amounts`} className="relative grid h-52 w-max min-w-full auto-cols-[3.25rem] grid-flow-col items-end gap-1.5 pb-2 sm:w-full sm:min-w-0 sm:auto-cols-fr sm:gap-4">
+              <div aria-hidden="true" className="pointer-events-none absolute inset-x-0 bottom-7 top-0 flex flex-col justify-between">{[0, 1, 2].map((line) => <div key={line} className="border-t border-[color:var(--portal-border)]" />)}</div>
+              {trendBuckets.map((bucket) => {
+                const paidHeight = bucket.paid / maxTrend * 100
+                const refundHeight = bucket.refunds / maxTrend * 100
+                const unpaidHeight = bucket.unpaid / maxTrend * 100
+                return <div key={bucket.key} className="flex h-full snap-center flex-col items-center justify-end gap-1">
+                  <div className="flex h-[calc(100%-1.25rem)] w-full min-w-[2.5rem] items-end justify-center gap-0.5 sm:gap-1" aria-label={`${bucket.label}: ${money(bucket.paid)} paid, ${money(bucket.refunds)} refunded, ${money(bucket.unpaid)} unpaid${bucket.unknown ? `, ${bucket.unknown} awaiting an amount` : ''}`}>
+                    <div className="w-[42%] max-w-7 rounded-t bg-[#b98a3e] transition-[height]" style={{ height: `${Math.max(bucket.paid > 0 ? 3 : 0, paidHeight)}%` }} title={`Paid ${money(bucket.paid)}`} />
+                    <div className="w-[32%] max-w-6 rounded-t bg-emerald-700/60 transition-[height] dark:bg-emerald-300/60" style={{ height: `${Math.max(bucket.refunds > 0 ? 3 : 0, refundHeight)}%` }} title={`Refunded ${money(bucket.refunds)}`} />
+                    <div className="w-[42%] max-w-7 rounded-t bg-[#b98a3e]/30 dark:bg-[#e6c77f]/30 transition-[height]" style={{ height: `${Math.max(bucket.unpaid > 0 ? 3 : 0, unpaidHeight)}%` }} title={`Unpaid ${money(bucket.unpaid)}`} />
+                  </div>
+                  <span className="w-full whitespace-nowrap text-center text-[10px] leading-tight text-[color:var(--portal-muted)] sm:truncate">{bucket.label}</span>
+                </div>
+              })}
             </div>
-          })}
-        </div>
+          </div>
         </div>
         <div className="mt-3 flex flex-wrap gap-4 text-xs text-[color:var(--portal-muted)]"><span className="inline-flex items-center gap-1.5"><i className="h-2.5 w-2.5 rounded-sm bg-[#b98a3e]" /> Paid</span><span className="inline-flex items-center gap-1.5"><i className="h-2.5 w-2.5 rounded-sm bg-emerald-700/60 dark:bg-emerald-300/60" /> Refunded</span><span className="inline-flex items-center gap-1.5"><i className="h-2.5 w-2.5 rounded-sm bg-[#b98a3e]/30 dark:bg-[#e6c77f]/30" /> Unpaid</span></div>
       </div>
