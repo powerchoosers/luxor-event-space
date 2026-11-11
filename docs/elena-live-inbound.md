@@ -9,7 +9,7 @@ changes carrier routing or enables the live flow by itself.
 
 ## Live behavior
 
-Elena identifies herself as Luxor's AI concierge. Her voice and Arianna's
+Elena introduces herself by name and answers honestly if asked whether she is AI. Her voice and Arianna's
 availability come from the owner settings. Availability is checked when a
 transfer is prepared and again when the caller confirms it.
 
