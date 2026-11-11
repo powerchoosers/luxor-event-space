@@ -230,7 +230,7 @@ export function LuxorContactForm({
                 <button
                   type="submit"
                   disabled={submitting}
-                  className="inline-flex min-h-12 w-full items-center justify-center gap-2.5 rounded-xl bg-[#b98a3d] px-6 text-sm font-bold uppercase tracking-[0.14em] !text-white shadow-sm transition hover:bg-[#9d722e] disabled:cursor-not-allowed disabled:opacity-60"
+                  className="luxor-gold-raised inline-flex min-h-12 w-full items-center justify-center gap-2.5 rounded-xl px-6 text-sm uppercase tracking-[0.14em] disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   {submitting ? (
                     <>

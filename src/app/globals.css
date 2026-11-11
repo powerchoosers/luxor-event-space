@@ -685,7 +685,8 @@ body[data-portal-theme] :is(.luxor-gold-raised, .portal-gold-btn) svg[fill="none
 }
 
 body[data-portal-theme] .luxor-gold-raised:hover:not(:disabled),
-body[data-portal-theme] .portal-gold-btn:hover:not(:disabled) {
+body[data-portal-theme] .portal-gold-btn:hover:not(:disabled),
+:is(a, button, [role="button"]).luxor-gold-raised:hover:not(:disabled) {
   border-color: #c49b42 !important;
   background: linear-gradient(180deg, #e0be67 0%, #caa043 100%) !important;
   color: #ffffff !important;
@@ -696,15 +697,30 @@ body[data-portal-theme] .portal-gold-btn:hover:not(:disabled) {
 }
 
 body[data-portal-theme] .luxor-gold-raised:active:not(:disabled),
-body[data-portal-theme] .portal-gold-btn:active:not(:disabled) {
+body[data-portal-theme] .portal-gold-btn:active:not(:disabled),
+:is(a, button, [role="button"]).luxor-gold-raised:active:not(:disabled) {
   box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.28) !important;
   transform: translateY(1px) !important;
 }
 
 body[data-portal-theme] .luxor-gold-raised:focus-visible,
-body[data-portal-theme] .portal-gold-btn:focus-visible {
+body[data-portal-theme] .portal-gold-btn:focus-visible,
+:is(a, button, [role="button"]).luxor-gold-raised:focus-visible {
   outline: 2px solid #e5c36f !important;
   outline-offset: 2px !important;
+}
+
+:is(a, button, [role="button"]).luxor-gold-raised svg:not([fill="none"]) {
+  fill: #ffffff !important;
+}
+
+:is(a, button, [role="button"]).luxor-gold-raised svg[fill="none"] {
+  color: #ffffff !important;
+  stroke: #ffffff !important;
+}
+
+:is(a, button, [role="button"]).luxor-gold-raised svg[fill="none"] :is(path, line, polyline) {
+  stroke: #ffffff !important;
 }
 
 /* Portal Desktop Scrollbars: subtle, refined gold floating scrollbar across all containers (tables, cards, modals, lists).
@@ -1527,7 +1543,7 @@ body:not([data-portal-theme]) :where(a, button, input, textarea, summary, [tabin
 .venue-film-caption { font-size: 12px; letter-spacing: .06em; }
 .venue-film-caption span { color: #c4b7a5; }
 .venue-film-buttons { display: flex; gap: 4px; }
-.venue-film-buttons button { display: inline-flex; min-width: 44px; min-height: 44px; align-items: center; justify-content: center; gap: 9px; border-radius: 4px; padding: 0 10px; font-size: 12px; color: #f7efe3; }
+body[data-luxor-site] .venue-film-buttons button { display: inline-flex; min-width: 44px; min-height: 44px; align-items: center; justify-content: center; gap: 9px; border-radius: 1rem; padding: 0 10px; font-size: 12px; color: #f7efe3; }
 .venue-film-buttons button:hover { background: #302a23; }
 .venue-film-error { padding: 12px 18px; font-size: 14px; }
 .venue-film-error a { text-decoration: underline; }
@@ -1677,23 +1693,34 @@ body[data-luxor-site] #hero .venue-film {
   border-radius: 0;
 }
 
+/* Give public action controls the softer, more consistent radius used across the portal. */
+body[data-luxor-site] :is(a, button, [role="button"]):is(
+  [class~="rounded"],
+  [class*="rounded-sm"],
+  [class*="rounded-md"],
+  [class*="rounded-lg"],
+  [class*="rounded-xl"]
+):not([class*="rounded-full"]):not([class*="rounded-none"]):not([data-conversion="gallery_open"]) {
+  border-radius: 1rem !important;
+}
+
+/* Keep the hero brochure action translucent so the venue video remains visible. */
 body[data-luxor-site] #hero .hero-brochure-cta {
-  border-color: rgba(255, 255, 255, 0.42) !important;
-  background: rgba(5, 5, 5, 0.62) !important;
+  border: 1px solid rgba(255, 255, 255, 0.58) !important;
+  background: rgba(5, 5, 5, 0.56) !important;
   color: #fffaf3 !important;
   box-shadow: 0 12px 30px -18px rgba(0, 0, 0, 0.86);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
 }
 
 body[data-luxor-site] #hero .hero-brochure-cta:hover {
-  border-color: rgba(241, 210, 122, 0.84) !important;
-  background: rgba(5, 5, 5, 0.76) !important;
+  border-color: rgba(241, 210, 122, 0.9) !important;
+  background: rgba(5, 5, 5, 0.66) !important;
   color: #fffaf3 !important;
 }
 
 body[data-luxor-site] #hero .hero-brochure-cta svg {
   color: #caa24c !important;
+  stroke: #caa24c !important;
 }
 
 /* Photo titles sit over darkened imagery and must remain readable on the public light theme. */

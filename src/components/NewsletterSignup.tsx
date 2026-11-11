@@ -131,7 +131,7 @@ export function NewsletterSignup({ spanish = false }: { spanish?: boolean }) {
         <button
           type="submit"
           disabled={status === 'submitting'}
-          className="ml-3 inline-flex min-h-11 items-center gap-2 px-1 text-[10px] font-bold uppercase tracking-[0.16em] !text-[#805b1f] transition hover:!text-[#241d17] disabled:cursor-wait disabled:opacity-60"
+          className="luxor-gold-raised ml-3 inline-flex min-h-11 items-center gap-2 rounded-md px-4 text-[10px] uppercase tracking-[0.16em] disabled:cursor-wait disabled:opacity-60"
         >
           {status === 'submitting' ? (spanish ? 'Uniendo…' : 'Joining…') : spanish ? 'Únete' : 'Join'}
           <ArrowRight className="h-4 w-4" aria-hidden="true" />

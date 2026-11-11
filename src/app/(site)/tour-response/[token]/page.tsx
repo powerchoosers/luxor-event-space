@@ -106,13 +106,13 @@ export default function TourResponsePage() {
         </h1>
         <p className="mt-4 text-sm leading-6 text-zinc-300">{message}</p>
         {status === 'ready' && action === 'cancel' && expectedSequence !== null ? (
-          <button type="button" onClick={() => void submitChange('cancel')} className="mt-8 inline-flex rounded-lg bg-[#caa24c] px-5 py-3 text-xs font-black uppercase tracking-[0.18em] text-[#050505] hover:bg-[#dfba65]">
+          <button type="button" onClick={() => void submitChange('cancel')} className="luxor-gold-raised mt-8 inline-flex rounded-lg px-5 py-3 text-xs uppercase tracking-[0.18em]">
             Confirm cancellation
           </button>
         ) : null}
         {status === 'ready' && action === 'reschedule' ? (
           <div className="mt-8 flex flex-wrap justify-center gap-3">
-            <button type="button" onClick={() => void submitChange('reschedule')} className="rounded-lg bg-[#caa24c] px-5 py-3 text-xs font-black uppercase tracking-[0.18em] text-[#050505] hover:bg-[#dfba65]">Request reschedule</button>
+            <button type="button" onClick={() => void submitChange('reschedule')} className="luxor-gold-raised rounded-lg px-5 py-3 text-xs uppercase tracking-[0.18em]">Request reschedule</button>
             <a href="?action=cancel" className="rounded-lg border border-[#caa24c]/30 px-5 py-3 text-xs font-black uppercase tracking-[0.18em] text-[#f1d27a] hover:bg-[#caa24c]/10">Cancel tour</a>
           </div>
         ) : null}

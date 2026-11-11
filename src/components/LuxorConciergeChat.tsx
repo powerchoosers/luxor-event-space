@@ -586,7 +586,7 @@ export function LuxorConciergeChat() {
           type="button"
           onClick={submitTourRequest}
           disabled={!bookingReady || submitted || submittingInquiry}
-          className="mt-3 flex w-full items-center justify-center gap-2 rounded-md border border-[#f1d27a]/45 bg-[#caa24c] px-4 py-3 text-xs font-bold uppercase tracking-[0.14em] text-white hover:text-white focus-visible:text-white transition hover:bg-[#f1d27a] disabled:cursor-not-allowed disabled:opacity-45"
+          className="luxor-gold-raised mt-3 flex w-full items-center justify-center gap-2 rounded-md px-4 py-3 text-xs uppercase tracking-[0.14em] disabled:cursor-not-allowed disabled:opacity-45"
         >
           {submitted ? (tourSelection ? 'Tour confirmed' : 'Tour request sent') : submittingInquiry ? (tourSelection ? 'Booking tour' : 'Sending request') : bookingReady ? (tourSelection ? 'Confirm tour' : 'Send tour request') : hasTourTime ? tourSelection && !bookingEmailComplete ? 'Add email to confirm' : 'Add name + phone' : 'Pick a time'}
           <Check className="h-4 w-4" />
@@ -712,7 +712,7 @@ export function LuxorConciergeChat() {
                       setStartChoicesVisible(false)
                       showBookingCard()
                     }}
-                    className="mt-2 w-full rounded-md border border-[#f1d27a]/45 bg-[#caa24c] px-3 py-3 text-center text-[10px] font-bold uppercase tracking-[0.1em] text-white hover:text-white focus-visible:text-white transition hover:bg-[#f1d27a]"
+                    className="luxor-gold-raised mt-2 w-full rounded-md px-3 py-3 text-center text-[10px] uppercase tracking-[0.1em]"
                   >
                     Schedule a visit
                   </button>
@@ -815,7 +815,7 @@ export function LuxorConciergeChat() {
                   <button
                     type="submit"
                     disabled={pending || !input.trim()}
-                    className="flex h-11 w-11 shrink-0 items-center justify-center rounded-md border border-[#f1d27a]/45 bg-[#caa24c] text-white hover:text-white focus-visible:text-white transition hover:bg-[#f1d27a] disabled:cursor-not-allowed disabled:opacity-45"
+                    className="luxor-gold-raised flex h-11 w-11 shrink-0 items-center justify-center rounded-md disabled:cursor-not-allowed disabled:opacity-45"
                     aria-label="Send message"
                   >
                     <Send className="h-4 w-4" />

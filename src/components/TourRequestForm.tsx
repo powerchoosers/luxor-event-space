@@ -725,7 +725,7 @@ export function TourRequestForm({ locale = 'en' }: { locale?: Locale }) {
               type="button"
               onClick={handleNextFromStep1}
               disabled={!customMode && !slotId}
-              className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#b98a3d] px-5 text-sm font-bold uppercase tracking-[0.12em] !text-white transition hover:bg-[#9d722e] disabled:cursor-not-allowed disabled:opacity-50"
+              className="luxor-gold-raised inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl px-5 text-sm uppercase tracking-[0.12em] disabled:cursor-not-allowed disabled:opacity-50"
             >
               {!customMode && !slotId ? (spanish ? 'Selecciona un horario' : 'Select a time') : (spanish ? 'Continuar →' : 'Continue →')}
             </button>
@@ -816,7 +816,7 @@ export function TourRequestForm({ locale = 'en' }: { locale?: Locale }) {
             <button
               type="button"
               onClick={handleNextFromStep2}
-              className="inline-flex min-h-12 flex-1 items-center justify-center gap-2 rounded-xl bg-[#b98a3d] px-5 text-sm font-bold uppercase tracking-[0.12em] !text-white transition hover:bg-[#9d722e]"
+              className="luxor-gold-raised inline-flex min-h-12 flex-1 items-center justify-center gap-2 rounded-xl px-5 text-sm uppercase tracking-[0.12em]"
             >
               {spanish ? 'Continuar →' : 'Continue →'}
             </button>
@@ -943,7 +943,7 @@ export function TourRequestForm({ locale = 'en' }: { locale?: Locale }) {
               type="button"
               onClick={() => handleFinalSubmit()}
               disabled={submitting}
-              className="inline-flex min-h-12 flex-1 items-center justify-center gap-2 rounded-xl bg-[#b98a3d] px-5 text-sm font-bold uppercase tracking-[0.12em] !text-white transition hover:bg-[#9d722e] disabled:cursor-not-allowed disabled:opacity-60"
+              className="luxor-gold-raised inline-flex min-h-12 flex-1 items-center justify-center gap-2 rounded-xl px-5 text-sm uppercase tracking-[0.12em] disabled:cursor-not-allowed disabled:opacity-60"
             >
               {submitting ? <Loader2 size={16} className="animate-spin" /> : null}
               {submitting
@@ -1071,7 +1071,7 @@ export function TourRequestForm({ locale = 'en' }: { locale?: Locale }) {
           <div className="mt-6">
             <Link
               href={spanish ? '/es' : '/'}
-              className="inline-flex min-h-12 w-full items-center justify-center rounded-xl bg-[#b98a3d] px-5 text-sm font-bold uppercase tracking-[0.12em] !text-white transition hover:bg-[#9d722e]"
+              className="luxor-gold-raised inline-flex min-h-12 w-full items-center justify-center rounded-xl px-5 text-sm uppercase tracking-[0.12em]"
             >
               {spanish ? 'Volver al Inicio' : 'Back to Home'}
             </Link>

@@ -579,7 +579,7 @@ export function LuxorDatePicker({
                 </div>
                 <div className="mt-3 flex items-center justify-between gap-3">
                   <button type="button" onClick={resetCalendarView} className={`min-h-10 rounded-xl border px-4 text-sm font-medium text-[#6f4d1f] hover:bg-[#f7efe3] ${isPortal ? 'border-[color:var(--portal-border,rgba(202,162,76,0.24))] text-[color:var(--portal-muted,#d7c29a)] hover:bg-[color:var(--portal-soft,rgba(255,255,255,0.06))]' : 'border-[#d8c4a4]'}`}>Reset</button>
-                  <button type="button" disabled={!hasSelectableDateInMonth(new Date(draftYear, draftMonth, 1), today)} onClick={applyDraftMonthYear} className="min-h-10 rounded-xl bg-[#caa24c] px-5 text-sm font-semibold text-white hover:bg-[#b98a3d] disabled:cursor-not-allowed disabled:opacity-50">Done</button>
+                  <button type="button" disabled={!hasSelectableDateInMonth(new Date(draftYear, draftMonth, 1), today)} onClick={applyDraftMonthYear} className={`min-h-10 rounded-xl px-5 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-50 ${isPortal ? 'bg-[#caa24c] text-white hover:bg-[#b98a3d]' : 'luxor-gold-raised'}`}>Done</button>
                 </div>
               </section>
             </div>

@@ -321,7 +321,7 @@ export default function GalleryPage() {
             <p className="font-mono text-xs font-bold uppercase tracking-[0.28em] text-[#f1d27a]">Inside Luxor</p>
             <h1 className="mt-5 font-serif text-5xl leading-[0.9] sm:text-6xl lg:text-7xl">See the room before you visit.</h1>
             <p className="mt-7 max-w-xl text-base leading-7 text-[#d7c29a]/78 sm:text-lg">Watch our venue film, captured inside Luxor. Then explore the collection and visit to picture your celebration here.</p>
-            <Link href="/visit#visit-booking" data-conversion="visit_cta_click" data-conversion-label="Gallery hero" className="mt-8 inline-flex min-h-12 items-center justify-center gap-2 rounded-md bg-[#caa24c] px-6 py-3 text-sm font-bold uppercase tracking-[.14em] text-white hover:text-white focus-visible:text-white">Schedule a Visit <ArrowRight className="h-4 w-4" /></Link>
+            <Link href="/visit#visit-booking" data-conversion="visit_cta_click" data-conversion-label="Gallery hero" className="luxor-gold-raised mt-8 inline-flex min-h-12 items-center justify-center gap-2 rounded-md px-6 py-3 text-sm uppercase tracking-[.14em]">Schedule a Visit <ArrowRight className="h-4 w-4" /></Link>
           </div>
           <VenueFilm autoPlay />
         </div>
@@ -471,7 +471,7 @@ export default function GalleryPage() {
               <p className="max-w-xl text-sm leading-6 text-[#d7c29a]/70 sm:text-base">
                 The next step is seeing how your guest count, tables, photos, and dance floor would fit inside the room.
               </p>
-              <Link href="/visit#visit-booking" data-conversion="visit_cta_click" data-conversion-label="Gallery collection" className="inline-flex items-center justify-center gap-2 rounded-md border border-[#f1d27a]/45 bg-[#caa24c] px-5 py-3 text-sm font-bold uppercase tracking-[0.14em] text-white hover:text-white focus-visible:text-white">
+              <Link href="/visit#visit-booking" data-conversion="visit_cta_click" data-conversion-label="Gallery collection" className="luxor-gold-raised inline-flex items-center justify-center gap-2 rounded-md px-5 py-3 text-sm uppercase tracking-[0.14em]">
                 Schedule a Visit <ArrowRight className="h-4 w-4" />
               </Link>
             </div>

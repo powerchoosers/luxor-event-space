@@ -179,7 +179,7 @@ export function LuxorTimePicker({ value, onChange, placeholder = 'Select a time'
           <div role="group" aria-label="AM or PM" className="mt-2 grid grid-cols-2 gap-2">
             {(['AM', 'PM'] as const).map((option, index) => <button key={option} ref={(node) => { periodButtons.current[index] = node }} type="button" aria-pressed={period === option} onClick={() => setPeriod(option)} className={'min-h-9 rounded-xl border px-3 text-sm font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c] ' + (period === option ? 'border-[#caa24c] bg-[#f0e7d9] text-[#33291f]' : 'border-[#eadfce] text-[#6f5f4f] hover:bg-[#f7efe3]')}>{option}</button>)}
           </div>
-          <div className="mt-3 flex justify-end gap-2 border-t border-[#eadfce] pt-3"><button type="button" onClick={close} className="min-h-10 rounded-xl border border-[#d8c4a4] px-4 text-sm font-medium text-[#6f4d1f] hover:bg-[#f7efe3]">Cancel</button><button type="button" onClick={apply} className={`min-h-10 rounded-xl px-5 text-sm font-semibold ${renderTrigger ? 'luxor-gold-raised !text-white' : 'bg-[#caa24c] text-white hover:bg-[#b98a3d]'}`}>Done</button></div>
+          <div className="mt-3 flex justify-end gap-2 border-t border-[#eadfce] pt-3"><button type="button" onClick={close} className="min-h-10 rounded-xl border border-[#d8c4a4] px-4 text-sm font-medium text-[#6f4d1f] hover:bg-[#f7efe3]">Cancel</button><button type="button" onClick={apply} className={`min-h-10 rounded-xl px-5 text-sm font-semibold ${renderTrigger ? 'luxor-gold-raised !text-white' : 'luxor-gold-raised'}`}>Done</button></div>
         </motion.div>
       </> : null}
     </AnimatePresence>, document.body) : null}

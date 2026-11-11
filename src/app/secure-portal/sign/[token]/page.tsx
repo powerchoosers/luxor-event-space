@@ -763,7 +763,7 @@ export default function SignaturePage() {
                 <button
                   type="submit"
                   disabled={submitting || signature.payment_blocked || !accepted || !signedName.trim() || !signatureDataUrl}
-                  className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#2d251e] px-4 text-sm font-semibold text-white transition hover:bg-[#45392f] disabled:cursor-not-allowed disabled:opacity-40"
+                  className="luxor-gold-raised flex h-12 w-full items-center justify-center gap-2 rounded-xl px-4 text-sm disabled:cursor-not-allowed disabled:opacity-40"
                 >
                   {submitting ? <><LoaderCircle className="animate-spin" size={16} /> Finalizing agreement…</> : <><PenLine size={16} /> Sign & complete agreement</>}
                 </button>

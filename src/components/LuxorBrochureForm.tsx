@@ -188,7 +188,7 @@ export function LuxorBrochureForm({ className = '' }: { className?: string }) {
                 download="Luxor-at-Las-Palmas-Venue-Brochure.pdf"
                 onClick={handleDownloadClick}
                 data-conversion="brochure_download_click"
-                className="inline-flex min-h-14 w-full sm:w-auto items-center justify-center gap-3 rounded-xl border border-[#f1d27a]/50 bg-[#caa24c] px-8 py-4 text-sm font-bold uppercase tracking-[0.16em] text-white hover:text-white focus-visible:text-white shadow-[0_18px_40px_-18px_rgba(202,162,76,0.8)] transition hover:bg-[#dfbd68] hover:shadow-[0_22px_50px_-18px_rgba(202,162,76,1)]"
+                className="luxor-gold-raised inline-flex min-h-14 w-full items-center justify-center gap-3 rounded-xl px-8 py-4 text-sm uppercase tracking-[0.16em] sm:w-auto"
               >
                 <Download className="h-4 w-4 text-white" />
                 <span>Download Your Free Brochure</span>
@@ -398,7 +398,7 @@ export function LuxorBrochureForm({ className = '' }: { className?: string }) {
                 <button
                   type="submit"
                   disabled={submitting}
-                  className="inline-flex min-h-14 w-full items-center justify-center gap-3 rounded-xl border border-[#f1d27a]/50 bg-[#caa24c] px-8 py-4 font-serif text-sm font-bold uppercase tracking-[0.18em] text-white hover:text-white focus-visible:text-white shadow-[0_18px_40px_-18px_rgba(202,162,76,0.8)] transition hover:bg-[#dfbd68] disabled:cursor-not-allowed disabled:opacity-60"
+                  className="luxor-gold-raised inline-flex min-h-14 w-full items-center justify-center gap-3 rounded-xl px-8 py-4 font-serif text-sm uppercase tracking-[0.18em] disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   {submitting ? (
                     <>

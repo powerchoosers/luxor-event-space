@@ -7,7 +7,7 @@ export default function PaymentCancelledPage() {
         <p className="text-xs font-bold uppercase tracking-[0.28em] text-[#caa24c]">Payment not completed</p>
         <h1 className="mt-4 text-3xl font-semibold text-white">Your proposal is still available.</h1>
         <p className="mt-4 text-sm leading-6 text-zinc-400">No payment was recorded. You can use the secure link in your email again or contact Luxor if you need the proposal adjusted.</p>
-        <Link href="/visit" className="mt-8 inline-flex rounded-full bg-[#b98a3e] px-6 py-3 text-xs font-black uppercase tracking-widest text-white">Contact Luxor</Link>
+        <Link href="/visit" className="luxor-gold-raised mt-8 inline-flex rounded-full px-6 py-3 text-xs uppercase tracking-widest">Contact Luxor</Link>
       </div>
     </main>
   )

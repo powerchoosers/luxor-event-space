@@ -43,9 +43,7 @@ export default function Home() {
             <motion.a
               href="#brochure-form"
               data-conversion="brochure_hero_click"
-              whileHover={{ scale: 1.04 }}
-              whileTap={{ scale: 0.97 }}
-              className="hero-brochure-cta pointer-events-auto group relative inline-flex w-48 items-center justify-center gap-2 rounded-md border px-4 py-3 text-center font-serif text-[11px] font-semibold uppercase leading-snug tracking-[0.16em] transition-all duration-300 sm:w-auto sm:gap-3 sm:rounded-full sm:px-10 sm:py-5 sm:text-base sm:tracking-[0.2em]"
+              className="hero-brochure-cta pointer-events-auto group relative inline-flex w-48 items-center justify-center gap-2 rounded-2xl px-4 py-3 text-center font-serif text-[11px] uppercase leading-snug tracking-[0.16em] sm:w-auto sm:gap-3 sm:rounded-full sm:px-10 sm:py-5 sm:text-base sm:tracking-[0.2em]"
             >
               <span className="relative z-10">
                 Get your free <span className="block sm:inline">venue brochure.</span>
