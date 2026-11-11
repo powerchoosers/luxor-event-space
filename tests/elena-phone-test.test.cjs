@@ -16,6 +16,20 @@ const secret = `whsec_${Buffer.alloc(32, 7).toString('base64')}`
 const testNumber = '+18176630380', publicNumber = '+19563652037', transferTarget = '+15550009999'
 let state
 
+function matches(row, query) {
+  if (!row) return false
+  const params = new URLSearchParams(query.split('?')[1])
+  for (const [key, condition] of params) {
+    if (['select', 'limit', 'order', 'on_conflict'].includes(key)) continue
+    const value = key.startsWith('metadata->>') ? row.metadata[key.slice('metadata->>'.length)] : row[key]
+    if (condition === 'is.null' && value !== null && value !== undefined) return false
+    if (condition.startsWith('eq.') && String(value) !== condition.slice(3)) return false
+    if (condition.startsWith('in.(') && !condition.slice(4, -1).split(',').includes(String(value))) return false
+    if (condition.startsWith('not.in.(') && condition.slice(8, -1).split(',').includes(String(value))) return false
+  }
+  return true
+}
+
 function compile(relative, stubs) {
   const filename = path.join(root, relative)
   const source = ts.transpileModule(fs.readFileSync(filename, 'utf8'), {
@@ -32,26 +46,24 @@ function compile(relative, stubs) {
 
 const incomingPhoneNumbers = () => ({ fetch: async () => ({ ...state.number }) })
 incomingPhoneNumbers.list = async ({ phoneNumber }) => state.ownedTargets.includes(phoneNumber) ? [{ phoneNumber }] : []
-const client = { incomingPhoneNumbers, calls: () => ({ fetch: async () => ({ ...state.carrierCall }) }) }
+const client = { incomingPhoneNumbers, calls: (sid) => ({
+  fetch: async () => { state.carrierFetches.push(sid); return { ...state.carrierCall } },
+  update: async (input) => { state.carrierUpdates.push({ sid, input }); return { sid, ...input } },
+}) }
+const syntheticTwilio = () => client
+syntheticTwilio.twiml = require('twilio').twiml
+const ingressProof = compile('src/lib/luxorElenaPhoneIngressProof.ts', {})
 const service = compile('src/lib/luxorElenaPhoneTestServer.ts', {
-  'server-only': {}, twilio: () => client,
+  'server-only': {}, twilio: syntheticTwilio,
   ws: class SyntheticSocket { constructor() { throw new Error('Unexpected socket: stale updates must not connect') } },
   './supabaseRestServer': { supabaseRestStrict: async (query, init = {}) => {
     state.database.push({ query, init })
     if (query.startsWith('luxor_phone_numbers?')) return state.selected
     if (!query.startsWith('luxor_calls?')) throw new Error('Unexpected database operation')
-    const requestedSid = new URLSearchParams(query.split('?')[1]).get('twilio_call_sid')?.replace(/^eq\./, '')
-    if (!init.method) return requestedSid === state.row?.twilio_call_sid ? [structuredClone(state.row)] : []
+    if (!init.method) return matches(state.row, query) ? [structuredClone(state.row)] : []
     if (init.method === 'PATCH') {
       if (state.beforeNextPatch) { const callback = state.beforeNextPatch; state.beforeNextPatch = null; callback() }
-      if (requestedSid !== state.row?.twilio_call_sid) return []
-      const params = new URLSearchParams(query.split('?')[1])
-      const expected = params.get('metadata->>transfer_state')?.replace(/^eq\./, '')
-      if (expected && expected !== state.row.metadata.transfer_state) return []
-      const expectedUpdated = params.get('updated_at')?.replace(/^eq\./, '')
-      if (expectedUpdated && expectedUpdated !== state.row.updated_at) return []
-      const expectedMetadata = params.get('metadata')?.replace(/^eq\./, '')
-      if (expectedMetadata && JSON.stringify(JSON.parse(expectedMetadata)) !== JSON.stringify(state.row.metadata)) return []
+      if (!matches(state.row, query)) return []
       state.row = { ...state.row, ...JSON.parse(init.body) }
       return [structuredClone(state.row)]
     }
@@ -65,14 +77,16 @@ const service = compile('src/lib/luxorElenaPhoneTestServer.ts', {
   './luxorTourSlotsServer': { listAvailableLuxorTourSlots: async () => [{ id: 'synthetic-slot', date: '2099-11-11', label: '5:00 PM' }] },
   './luxorElenaVoiceSandboxServer': { buildElenaVoiceInstructions: async () => 'Synthetic venue instructions.' },
   './luxorElenaVoiceTestSettingsServer': { getElenaPhoneTestVoice: async () => 'marin' },
+  './luxorElenaPhoneIngressProof': ingressProof,
+  './luxorTwilioServer': { createTwilioVoiceResponse: () => new syntheticTwilio.twiml.VoiceResponse() },
 })
 
 function reset() {
   state = {
-    row: { id: 'synthetic-call', twilio_call_sid: callSid, updated_at: new Date().toISOString(), metadata: { scope: 'elena_phone_test', openai_session_id: 'live_synthetic', accepted: true, transfer_state: 'none', rehearsal_only: true } },
-    number: { phoneNumber: testNumber, accountSid, trunkSid },
+    row: { id: 'synthetic-call', twilio_call_sid: callSid, status: 'in-progress', to_number: testNumber, from_number: '+15550001111', updated_at: new Date().toISOString(), metadata: { scope: 'elena_phone_test', ingress_mode: 'programmable_sip', openai_session_id: 'live_synthetic', accepted: true, transfer_state: 'none', rehearsal_only: true } },
+    number: { phoneNumber: testNumber, accountSid, trunkSid: null, voiceApplicationSid: null, voiceUrl: 'https://www.luxoratlaspalmas.com/api/elena-phone-test/incoming', voiceMethod: 'POST', voiceFallbackUrl: 'https://www.luxoratlaspalmas.com/api/elena-phone-test/fallback' },
     carrierCall: { sid: callSid, accountSid, to: testNumber, from: '+15550001111', trunkSid, direction: 'inbound', status: 'in-progress', dateCreated: new Date() },
-    selected: [{ phone_number: publicNumber, is_public: true }], target: transferTarget, ownedTargets: [], database: [], fetches: [],
+    selected: [{ phone_number: publicNumber, is_public: true }], target: transferTarget, ownedTargets: [], database: [], fetches: [], carrierUpdates: [], carrierFetches: [],
   }
 }
 
@@ -149,21 +163,73 @@ test('phone test fails closed unless enabled and bound to the approved test numb
   })
 })
 
-test('carrier verification rejects calls to the public line before OpenAI acceptance', async () => {
-  reset(); state.row = null; state.carrierCall.to = publicNumber
+function incomingEvent(token, sessionId = 'live_synthetic', extraHeaders = []) {
+  return { id: 'evt_synthetic', type: 'live.transport.incoming', created_at: Math.floor(Date.now() / 1000), data: { type: 'sip', session_id: sessionId, sip_headers: [...(token ? [{ name: 'X-Luxor-Ingress', value: token }] : []), ...extraHeaders] } }
+}
+
+function unboundIngress() {
+  reset()
+  const token = ingressProof.deriveElenaIngressToken(callSid, secret)
+  Object.assign(state.row.metadata, { openai_session_id: null, accepted: false, ingress_token_hash: ingressProof.hashElenaIngressToken(token, secret), ingress_expires_at: new Date(Date.now() + 120_000).toISOString() })
+  return token
+}
+
+test('missing, forged, duplicated and expired ingress tickets fail before any OpenAI acceptance', async () => {
+  const token = unboundIngress()
   await withConfiguration(async () => {
-    await assert.rejects(service.acceptElenaPhoneTestEvent({ id: 'evt_synthetic', type: 'live.transport.incoming', created_at: Math.floor(Date.now() / 1000), data: { type: 'sip', session_id: 'live_synthetic', sip_headers: [{ name: 'X-Twilio-CallSid', value: callSid }] } }), /outside the authorized phone test/)
+    for (const event of [incomingEvent(null), incomingEvent('x'.repeat(43)), incomingEvent(token, 'live_synthetic', [{ name: 'x-luxor-ingress', value: token }])]) {
+      await assert.rejects(service.acceptElenaPhoneTestEvent(event), (error) => error.diagnostic === 'twilio_call_mismatch')
+    }
+    state.row.metadata.ingress_expires_at = new Date(Date.now() - 1).toISOString()
+    await assert.rejects(service.acceptElenaPhoneTestEvent(incomingEvent(token)), (error) => error.diagnostic === 'twilio_call_mismatch')
     assert.equal(state.fetches.length, 0)
     assert.equal(state.database.filter(({ init }) => init.method).length, 0)
+    assert.equal(state.carrierFetches.length, 0)
   })
 })
 
-test('phone tools reject a token for another session or inactive carrier call', async () => {
+test('a signed-ingress ticket binds one OpenAI session without depending on a live SIP Call resource', async () => {
+  const token = unboundIngress()
+  await withConfiguration(async () => {
+    const accepted = await service.acceptElenaPhoneTestEvent(incomingEvent(token))
+    assert.equal(accepted.accepted, true)
+    assert.equal(accepted.callSid, callSid)
+    assert.equal(state.row.metadata.openai_session_id, 'live_synthetic')
+    assert.equal(state.row.metadata.accepted, true)
+    assert.equal(state.fetches.length, 1)
+    assert.match(state.fetches[0].url, /\/live\/sessions\/live_synthetic\/accept$/)
+    assert.equal(state.carrierFetches.length, 0)
+    assert.equal((await service.acceptElenaPhoneTestEvent(incomingEvent(token))).duplicate, true)
+    await assert.rejects(service.acceptElenaPhoneTestEvent(incomingEvent(token, 'live_attacker')), (error) => error.diagnostic === 'twilio_call_mismatch')
+    assert.equal(state.fetches.length, 1)
+    state.row.status = 'completed'
+    await assert.rejects(service.acceptElenaPhoneTestEvent(incomingEvent(token)), (error) => error.diagnostic === 'twilio_call_mismatch')
+    assert.equal(state.fetches.length, 1)
+  })
+})
+
+test('concurrent ticket claiming cannot move authorization to another OpenAI session', async () => {
+  const token = unboundIngress()
+  await withConfiguration(async () => {
+    state.beforeNextPatch = () => {
+      state.row.metadata.openai_session_id = 'live_other_session'
+      state.row.updated_at = new Date(Date.parse(state.row.updated_at) + 1).toISOString()
+    }
+    await assert.rejects(service.acceptElenaPhoneTestEvent(incomingEvent(token)), (error) => error.diagnostic === 'twilio_call_mismatch')
+    assert.equal(state.row.metadata.openai_session_id, 'live_other_session')
+    assert.equal(state.fetches.length, 0)
+  })
+})
+
+test('phone tools reject another session and a parent completed by signed status', async () => {
   reset()
   await withConfiguration(async () => {
     let outcome = await tool('available_tour_times', {}, { sessionId: 'live_other' })
     assert.equal(outcome.result.isError, true)
-    state.carrierCall.status = 'completed'
+    outcome = await tool('available_tour_times')
+    assert.equal(outcome.result.isError, undefined)
+    assert.equal(state.carrierFetches.length, 0)
+    state.row.status = 'completed'
     outcome = await tool('available_tour_times')
     assert.equal(outcome.result.isError, true)
     assert.equal(state.fetches.length, 0)
@@ -217,11 +283,31 @@ test('real transfer requires current approval and is attempted at most once', as
     const outcome = await tool('confirm_transfer', { token: prepared.output.token, spoken_confirmation: 'Yes, please.' })
     assert.equal(outcome.output.requested, true)
     assert.equal(outcome.output.answered, false)
-    assert.equal(state.fetches.length, 1)
-    assert.deepEqual(JSON.parse(state.fetches[0].init.body), { target_uri: `tel:${transferTarget}` })
+    assert.equal(state.fetches.length, 0)
+    assert.equal(state.carrierUpdates.length, 1)
+    assert.equal(state.carrierUpdates[0].sid, callSid)
+    assert.match(state.carrierUpdates[0].input.twiml, new RegExp(`<Number[^>]*>\\${transferTarget}</Number>`))
+    assert.match(state.carrierUpdates[0].input.twiml, /record="do-not-record"/)
+    assert.doesNotMatch(state.carrierUpdates[0].input.twiml, /5558888888/)
     assert.equal((await tool('confirm_transfer', { token: prepared.output.token, spoken_confirmation: 'yes' })).result.isError, true)
-    assert.equal(state.fetches.length, 1)
+    assert.equal(state.carrierUpdates.length, 1)
     assert.ok(state.database.filter(({ init }) => init.method).every(({ query }) => query.startsWith('luxor_calls?')))
+  })
+})
+
+test('transfer verifies the live PSTN parent rather than redirecting a wrong or completed leg', async () => {
+  reset()
+  await withConfiguration(async () => {
+    const prepared = await tool('prepare_transfer')
+    const original = { ...state.carrierCall }
+    for (const invalid of [{ accountSid: `AC${'8'.repeat(32)}` }, { to: publicNumber }, { direction: 'outbound-dial' }, { status: 'completed' }]) {
+      state.carrierCall = { ...original, ...invalid }
+      const outcome = await tool('confirm_transfer', { token: prepared.output.token, spoken_confirmation: 'yes' })
+      assert.equal(outcome.result.isError, true)
+      assert.equal(state.row.metadata.transfer_state, 'prepared')
+      assert.equal(state.carrierUpdates.length, 0)
+    }
+    assert.equal(state.fetches.length, 0)
   })
 })
 
@@ -260,15 +346,16 @@ test('completion callback verifies carrier and test destination and never starts
   })
   await withConfiguration(async () => {
     const form = { CallSid: callSid, AccountSid: accountSid, To: testNumber, CallStatus: 'completed', CallDuration: '37' }
+    const callback = (value) => ({ form: value, url: 'https://synthetic.invalid/api/elena-phone-test/status' })
     validSignature = false
-    assert.equal((await statusRoute.POST({ form })).status, 403)
+    assert.equal((await statusRoute.POST(callback(form))).status, 403)
     validSignature = true
-    assert.equal((await statusRoute.POST({ form: { ...form, To: publicNumber } })).status, 403)
-    assert.equal((await statusRoute.POST({ form: { ...form, AccountSid: 'unrelated-account' } })).status, 403)
+    assert.equal((await statusRoute.POST(callback({ ...form, To: publicNumber }))).status, 403)
+    assert.equal((await statusRoute.POST(callback({ ...form, AccountSid: 'unrelated-account' }))).status, 403)
     assert.equal(writes.length, 0)
-    assert.equal((await (await statusRoute.POST({ form: { ...form, CallStatus: 'in-progress' } })).json()).ignored, true)
+    assert.equal((await (await statusRoute.POST(callback({ ...form, CallStatus: 'in-progress' }))).json()).ignored, true)
     assert.equal(writes.length, 0)
-    assert.equal((await statusRoute.POST({ form })).status, 200)
+    assert.equal((await statusRoute.POST(callback(form))).status, 200)
     assert.equal(writes.length, 2)
     assert.ok(writes.every(({ query }) => query.includes('metadata->>scope=eq.elena_phone_test')))
     const patch = JSON.parse(writes[1].init.body)
@@ -278,5 +365,47 @@ test('completion callback verifies carrier and test destination and never starts
     assert.equal(patch.recording_consent_status, undefined)
     assert.equal(patch.transcription_status, undefined)
     assert.equal(state.fetches.length, 0)
+  })
+})
+
+test('transfer callbacks require an authorized parent and preserve answer evidence across late events', async () => {
+  reset()
+  const writes = []
+  const statusRoute = compile('src/app/api/elena-phone-test/status/route.ts', {
+    '@/lib/luxorElenaPhoneTestServer': { ELENA_PHONE_TEST_NUMBER: testNumber },
+    '@/lib/luxorTwilioServer': {
+      readTwilioForm: async (request) => request.form,
+      validateTwilioWebhook: () => true,
+      normalizeTwilioCallStatus: (value) => value === 'answered' ? 'in-progress' : value,
+      parseTwilioInteger: (value) => Number(value),
+    },
+    '@/lib/supabaseRestServer': { supabaseRestStrict: async (query, init = {}) => {
+      writes.push({ query, init })
+      if (!matches(state.row, query)) return []
+      if (init.method === 'PATCH') state.row = { ...state.row, ...JSON.parse(init.body) }
+      return [structuredClone(state.row)]
+    } },
+  })
+  await withConfiguration(async () => {
+    const base = { CallSid: otherCallSid, ParentCallSid: callSid, AccountSid: accountSid, To: transferTarget, CallStatus: 'ringing', SequenceNumber: '1' }
+    const callback = (overrides = {}, parent = callSid) => ({ form: { ...base, ...overrides }, url: `https://synthetic.invalid/api/elena-phone-test/status?leg=transfer&parentCallSid=${parent}` })
+    assert.equal((await statusRoute.POST(callback({ ParentCallSid: otherCallSid }))).status, 403)
+    assert.equal((await statusRoute.POST(callback({ CallSid: callSid }))).status, 403)
+    assert.equal((await statusRoute.POST(callback())).status, 403)
+    assert.equal(writes.filter(({ init }) => init.method).length, 0)
+    state.row.metadata.transfer_state = 'attempted'
+    assert.equal((await statusRoute.POST(callback())).status, 200)
+    assert.equal(state.row.metadata.transfer_answered, false)
+    assert.equal((await statusRoute.POST(callback({ CallStatus: 'answered', SequenceNumber: '2' }))).status, 200)
+    assert.equal(state.row.metadata.transfer_answered, true)
+    assert.equal(state.row.metadata.transfer_status, 'in-progress')
+    assert.equal((await statusRoute.POST(callback({ CallStatus: 'completed', SequenceNumber: '3' }))).status, 200)
+    assert.equal((await statusRoute.POST(callback({ CallStatus: 'ringing', SequenceNumber: '1' }))).status, 200)
+    assert.equal(state.row.metadata.transfer_status, 'completed')
+    assert.equal(state.row.metadata.transfer_answered, true)
+    assert.equal(state.row.metadata.transfer_last_sequence, 3)
+    assert.equal(state.row.status, 'in-progress')
+    assert.equal(state.row.metadata.openai_session_id, 'live_synthetic')
+    assert.ok(writes.filter(({ init }) => init.method).every(({ init }) => JSON.parse(init.body).status === undefined))
   })
 })
