@@ -834,10 +834,10 @@ export function LuxorConciergeChat() {
             transition={{ duration: 0.22, ease: [0.23, 1, 0.32, 1] }}
             type="button"
             onClick={() => setOpen(true)}
-            className="luxor-concierge-launcher absolute bottom-0 right-0 group flex h-16 w-16 items-center justify-center rounded-full border border-[#f1d27a]/45 bg-[#0d0908] p-1 text-left shadow-[0_20px_70px_-30px_rgba(0,0,0,1)] transition hover:border-[#f1d27a]/70 hover:bg-[#120d0c] sm:h-auto sm:w-auto sm:justify-start sm:gap-3 sm:py-2 sm:pl-2 sm:pr-4 sm:whitespace-nowrap"
+            className="luxor-concierge-launcher absolute bottom-0 right-0 group flex h-14 w-14 items-center justify-center rounded-full border border-[#caa24c]/55 bg-[#fffdf9] p-0 text-left shadow-[0_8px_24px_-10px_rgba(61,43,23,0.38)] transition hover:border-[#caa24c]/80 sm:h-auto sm:w-auto sm:justify-start sm:gap-3 sm:rounded-full sm:border-[#f1d27a]/45 sm:bg-[#0d0908] sm:p-1 sm:py-2 sm:pl-2 sm:pr-4 sm:whitespace-nowrap sm:shadow-[0_20px_70px_-30px_rgba(0,0,0,1)]"
             aria-label={spanish ? 'Abrir el chat de la concierge de Luxor' : 'Open Luxor concierge chat'}
           >
-            <span className="relative flex h-14 w-14 shrink-0 overflow-hidden rounded-full border border-[#caa24c]/55 bg-[#120d0c]">
+            <span className="relative flex h-12 w-12 shrink-0 overflow-hidden rounded-full border border-[#caa24c]/45 bg-[#f1e9df] sm:h-14 sm:w-14 sm:border-[#caa24c]/55 sm:bg-[#120d0c]">
               <Image src="/luxor-concierge.png" alt="" fill sizes="56px" className="object-cover" />
             </span>
             <span className="hidden sm:block">
