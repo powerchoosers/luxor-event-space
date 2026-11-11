@@ -8,6 +8,7 @@ const path = require('node:path')
 const Module = require('node:module')
 const ts = require('typescript')
 const { createHmac } = require('node:crypto')
+const { EventEmitter } = require('node:events')
 
 const root = path.resolve(__dirname, '..')
 const callSid = `CA${'1'.repeat(32)}`, otherCallSid = `CA${'2'.repeat(32)}`
@@ -53,9 +54,55 @@ const client = { incomingPhoneNumbers, calls: (sid) => ({
 const syntheticTwilio = () => client
 syntheticTwilio.twiml = require('twilio').twiml
 const ingressProof = compile('src/lib/luxorElenaPhoneIngressProof.ts', {})
+class SyntheticSocket extends EventEmitter {
+  static CONNECTING = 0
+  static OPEN = 1
+  static CLOSED = 3
+  constructor() {
+    super()
+    if (!state.socketScenario) throw new Error('Unexpected socket: stale updates must not connect')
+    this.readyState = SyntheticSocket.CONNECTING
+    state.sockets.push(this)
+    queueMicrotask(() => {
+      if (state.socketScenario === 'handshake_error') {
+        const error = new Error('SHOULD_NOT_BE_LOGGED_PRIVATE_ERROR_DETAIL')
+        error.code = 'ECONNRESET'
+        this.emit('error', error)
+        return
+      }
+      if (state.socketScenario === 'handshake_rejected') {
+        this.emit('unexpected-response', {}, { statusCode: 401, resume: () => { state.handshakeBodyResumed = true } })
+        return
+      }
+      this.readyState = SyntheticSocket.OPEN
+      this.emit('open')
+      state.socketSendsAtOpen = state.socketSends.length
+      this.emit('message', Buffer.from(JSON.stringify({ type: 'session.started', session: { id: 'live_synthetic' } })))
+    })
+  }
+  send(raw) {
+    const event = JSON.parse(raw)
+    state.socketSends.push(event)
+    queueMicrotask(() => {
+      if (state.socketScenario === 'command_error') {
+        this.emit('message', Buffer.from(JSON.stringify({ type: 'error', error: { type: 'invalid_request_error', code: 'invalid_value', param: 'content', client_event_id: event.event_id, message: 'SHOULD_NOT_BE_LOGGED_PRIVATE_COMMAND_DETAIL' } })))
+      } else {
+        this.emit('message', Buffer.from(JSON.stringify({ type: 'session.commentary.appended', client_event_id: event.event_id, start_ms: 1, end_ms: 2 })))
+        this.emit('message', Buffer.from(JSON.stringify({ type: 'session.input_audio.append', audio: 'SYNTHETIC_CALLER_AUDIO_DO_NOT_STORE' })))
+        if (state.socketScenario !== 'no_output') {
+          this.emit('message', Buffer.from(JSON.stringify({ type: 'session.output_transcript.delta', delta: 'SHOULD_NOT_BE_LOGGED_PRIVATE_TRANSCRIPT' })))
+          this.emit('message', Buffer.from(JSON.stringify({ type: 'session.output_audio.delta', delta: 'SYNTHETIC_AUDIO_DO_NOT_STORE' })))
+        }
+      }
+      this.emit('close', 1000, Buffer.alloc(0))
+    })
+  }
+  close() { this.readyState = SyntheticSocket.CLOSED }
+  terminate() { this.readyState = SyntheticSocket.CLOSED }
+}
 const service = compile('src/lib/luxorElenaPhoneTestServer.ts', {
   'server-only': {}, twilio: syntheticTwilio,
-  ws: class SyntheticSocket { constructor() { throw new Error('Unexpected socket: stale updates must not connect') } },
+  ws: SyntheticSocket,
   './supabaseRestServer': { supabaseRestStrict: async (query, init = {}) => {
     state.database.push({ query, init })
     if (query.startsWith('luxor_phone_numbers?')) return state.selected
@@ -75,7 +122,7 @@ const service = compile('src/lib/luxorElenaPhoneTestServer.ts', {
   } },
   './luxorPhoneRoutingServer': { getLuxorPhoneRoutingSettings: async () => ({ ring_to_number: state.target }) },
   './luxorTourSlotsServer': { listAvailableLuxorTourSlots: async () => [{ id: 'synthetic-slot', date: '2099-11-11', label: '5:00 PM' }] },
-  './luxorElenaVoiceSandboxServer': { buildElenaVoiceInstructions: async () => 'Synthetic venue instructions.' },
+  './luxorElenaVoiceSandboxServer': { buildElenaVoiceInstructions: async () => state.instructions || 'Synthetic venue instructions.' },
   './luxorElenaVoiceTestSettingsServer': { getElenaPhoneTestVoice: async () => 'marin' },
   './luxorElenaPhoneIngressProof': ingressProof,
   './luxorTwilioServer': { createTwilioVoiceResponse: () => new syntheticTwilio.twiml.VoiceResponse() },
@@ -86,7 +133,7 @@ function reset() {
     row: { id: 'synthetic-call', twilio_call_sid: callSid, status: 'in-progress', to_number: testNumber, from_number: '+15550001111', updated_at: new Date().toISOString(), metadata: { scope: 'elena_phone_test', ingress_mode: 'programmable_sip', openai_session_id: 'live_synthetic', accepted: true, transfer_state: 'none', rehearsal_only: true } },
     number: { phoneNumber: testNumber, accountSid, trunkSid: null, voiceApplicationSid: null, voiceUrl: 'https://www.luxoratlaspalmas.com/api/elena-phone-test/incoming', voiceMethod: 'POST', voiceFallbackUrl: 'https://www.luxoratlaspalmas.com/api/elena-phone-test/fallback' },
     carrierCall: { sid: callSid, accountSid, to: testNumber, from: '+15550001111', trunkSid, direction: 'inbound', status: 'in-progress', dateCreated: new Date() },
-    selected: [{ phone_number: publicNumber, is_public: true }], target: transferTarget, ownedTargets: [], database: [], fetches: [], carrierUpdates: [], carrierFetches: [],
+    selected: [{ phone_number: publicNumber, is_public: true }], target: transferTarget, ownedTargets: [], database: [], fetches: [], carrierUpdates: [], carrierFetches: [], sockets: [], socketSends: [],
   }
 }
 
@@ -190,6 +237,7 @@ test('missing, forged, duplicated and expired ingress tickets fail before any Op
 
 test('a signed-ingress ticket binds one OpenAI session without depending on a live SIP Call resource', async () => {
   const token = unboundIngress()
+  state.instructions = 'Synthetic verified venue context. ' + 'Long startup context. '.repeat(1000)
   await withConfiguration(async () => {
     const accepted = await service.acceptElenaPhoneTestEvent(incomingEvent(token))
     assert.equal(accepted.accepted, true)
@@ -198,6 +246,10 @@ test('a signed-ingress ticket binds one OpenAI session without depending on a li
     assert.equal(state.row.metadata.accepted, true)
     assert.equal(state.fetches.length, 1)
     assert.match(state.fetches[0].url, /\/live\/sessions\/live_synthetic\/accept$/)
+    const startup = JSON.parse(state.fetches[0].init.body).session
+    assert.equal(startup.instructions, state.instructions)
+    assert.doesNotMatch(startup.instructions, /remain silent|being verified|verification hold/i)
+    assert.ok(startup.input.some((item) => item.role === 'developer' && item.content.some((part) => part.type === 'input_text' && /greeting.*Elena/i.test(part.text))))
     assert.equal(state.carrierFetches.length, 0)
     assert.equal((await service.acceptElenaPhoneTestEvent(incomingEvent(token))).duplicate, true)
     await assert.rejects(service.acceptElenaPhoneTestEvent(incomingEvent(token, 'live_attacker')), (error) => error.diagnostic === 'twilio_call_mismatch')
@@ -325,6 +377,78 @@ test('a stale greeting update cannot undo a concurrent transfer attempt', async 
     assert.equal(state.row.metadata.greeting_requested, undefined)
     assert.equal(state.fetches.length, 0)
   })
+})
+
+async function captureWarnings(fn) {
+  const warnings = [], original = console.warn
+  console.warn = (...values) => warnings.push(values)
+  try { await fn(warnings) } finally { console.warn = original }
+}
+
+test('phone greeting sends one short commentary on attach and observes ack, transcript and audio separately', async () => {
+  reset(); state.socketScenario = 'success'; state.instructions = 'Long startup context. '.repeat(1000)
+  await withConfiguration(async () => {
+    await captureWarnings(async (warnings) => {
+      await service.greetElenaPhoneTest('live_synthetic', callSid)
+      assert.equal(state.socketSendsAtOpen, 1, 'Sideband must not wait for replay of session.started')
+      assert.equal(state.socketSends.length, 1)
+      const greeting = state.socketSends[0]
+      assert.equal(greeting.type, 'session.commentary.append')
+      assert.equal(greeting.delegation_id, null)
+      assert.ok(greeting.content.length < 500, 'Only the short greeting belongs in an append; full context belongs at startup')
+      assert.equal(state.row.metadata.greeting_sideband_connected, true)
+      assert.equal(state.row.metadata.greeting_command_acknowledged, true)
+      assert.equal(state.row.metadata.greeting_input_audio_observed, true)
+      assert.equal(state.row.metadata.greeting_transcript_observed, true)
+      assert.equal(state.row.metadata.greeting_audio_observed, true)
+      assert.equal(state.row.metadata.greeting_playback_verified, false)
+      assert.equal(state.row.metadata.greeting_control_failure, null)
+      assert.equal(warnings.length, 0)
+      assert.doesNotMatch(JSON.stringify(state.row.metadata), /SHOULD_NOT_BE_LOGGED|DO_NOT_STORE/)
+    })
+  })
+})
+
+test('a rejected greeting command records a safe failure instead of hiding the rejection', async () => {
+  reset(); state.socketScenario = 'command_error'
+  await withConfiguration(async () => captureWarnings(async (warnings) => {
+    await service.greetElenaPhoneTest('live_synthetic', callSid)
+    assert.equal(state.row.metadata.greeting_sideband_connected, true)
+    assert.equal(state.row.metadata.greeting_control_failure, 'command_rejected')
+    assert.equal(state.row.metadata.greeting_command_acknowledged, false)
+    assert.equal(state.row.metadata.greeting_transcript_observed, false)
+    assert.equal(state.row.metadata.greeting_audio_observed, false)
+    assert.equal(warnings[0][1].kind, 'command_rejected')
+    assert.doesNotMatch(JSON.stringify({ metadata: state.row.metadata, warnings }), /SHOULD_NOT_BE_LOGGED|DO_NOT_STORE/)
+  }))
+})
+
+test('greeting transport and rejected handshakes have independent safe diagnostics', async () => {
+  for (const scenario of ['handshake_error', 'handshake_rejected']) {
+    reset(); state.socketScenario = scenario
+    await withConfiguration(async () => captureWarnings(async (warnings) => {
+      await service.greetElenaPhoneTest('live_synthetic', callSid)
+      assert.equal(state.socketSends.length, 0)
+      assert.equal(state.row.metadata.greeting_sideband_connected, false)
+      assert.equal(state.row.metadata.greeting_control_failure, scenario === 'handshake_error' ? 'socket_error' : 'handshake_rejected')
+      assert.equal(state.row.metadata.greeting_provider_status, scenario === 'handshake_rejected' ? 401 : null)
+      if (scenario === 'handshake_rejected') assert.equal(state.handshakeBodyResumed, true)
+      assert.equal(warnings.length, 1)
+      assert.doesNotMatch(JSON.stringify({ metadata: state.row.metadata, warnings }), /SHOULD_NOT_BE_LOGGED|DO_NOT_STORE/)
+    }))
+  }
+})
+
+test('a greeting acknowledgement alone does not count as observed speech or playback', async () => {
+  reset(); state.socketScenario = 'no_output'
+  await withConfiguration(async () => captureWarnings(async (warnings) => {
+    await service.greetElenaPhoneTest('live_synthetic', callSid)
+    assert.equal(state.row.metadata.greeting_command_acknowledged, true)
+    assert.equal(state.row.metadata.greeting_audio_observed, false)
+    assert.equal(state.row.metadata.greeting_transcript_observed, false)
+    assert.equal(state.row.metadata.greeting_playback_verified, false)
+    assert.equal(warnings[0][1].kind, 'no_output_observed')
+  }))
 })
 
 test('completion callback verifies carrier and test destination and never starts recording or messaging', async () => {

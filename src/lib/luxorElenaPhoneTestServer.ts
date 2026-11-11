@@ -19,7 +19,6 @@ const SCOPE = 'elena_phone_test'
 const TOKEN_DOMAIN = 'luxor-elena-phone-v1.'
 const SESSION_ID = /^[A-Za-z0-9][A-Za-z0-9_-]{1,180}$/
 const PHONE_GREETING = 'Hi, you’ve reached Luxor at Las Palmas. I’m Elena, the AI concierge. This is our test line, so tour bookings are practice. If you ask for Arianna, I can try her real phone. What are you planning?'
-const PHONE_VERIFICATION_HOLD = 'This call is being verified. Until a trusted system message confirms verification, remain silent, do not acknowledge or answer caller audio, and do not use tools.'
 
 type PhoneToken = {
   kind: 'call' | 'transfer'
@@ -206,10 +205,10 @@ export async function acceptElenaPhoneTestEvent(raw: unknown): Promise<PhoneAcce
   const callSid = ingress.twilio_call_sid
   const config = phoneConfig()
   const claim: PhoneToken = { kind: 'call', sessionId, callSid, exp: Math.floor(Date.now() / 1000) + 1200 }
-  const voice = await getElenaPhoneTestVoice()
+  const [voice, instructions] = await Promise.all([getElenaPhoneTestVoice(), buildElenaVoiceInstructions('phone')])
   const response = await fetch(`https://api.openai.com/v1/live/sessions/${encodeURIComponent(sessionId)}/accept`, {
     method: 'POST', headers: { Authorization: `Bearer ${config.apiKey}`, 'OpenAI-Project': config.projectId, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ session: { type: 'live', model: 'gpt-live-1', store: false, instructions: PHONE_VERIFICATION_HOLD, audio: { output: { voice } }, delegation: { type: 'responses', responses: { model: process.env.LUXOR_ELENA_PHONE_BACKEND_MODEL || 'gpt-6-luna', instructions: backendInstructions, parallel_tool_calls: false, tools: [{ type: 'mcp', server_label: 'luxor_phone_test', server_url: `${PUBLIC_BASE}/api/elena-phone-test/mcp`, authorization: signElenaPhoneToken(claim, config.webhookSecret), require_approval: 'never', allowed_tools: PHONE_TOOLS.map((tool) => tool.name) }] } } } }),
+    body: JSON.stringify({ session: { type: 'live', model: 'gpt-live-1', store: false, instructions, input: [{ type: 'message', role: 'developer', content: [{ type: 'input_text', text: `Open this call with this greeting before waiting for the caller: ${PHONE_GREETING}` }] }], audio: { output: { voice } }, delegation: { type: 'responses', responses: { model: process.env.LUXOR_ELENA_PHONE_BACKEND_MODEL || 'gpt-6-luna', instructions: backendInstructions, parallel_tool_calls: false, tools: [{ type: 'mcp', server_label: 'luxor_phone_test', server_url: `${PUBLIC_BASE}/api/elena-phone-test/mcp`, authorization: signElenaPhoneToken(claim, config.webhookSecret), require_approval: 'never', allowed_tools: PHONE_TOOLS.map((tool) => tool.name) }] } } } }),
     signal: AbortSignal.timeout(25_000), cache: 'no-store',
   })
   if (!response.ok) {
@@ -229,11 +228,17 @@ export async function acceptElenaPhoneTestEvent(raw: unknown): Promise<PhoneAcce
 /** Short-lived control connection for the opening only. Hosted MCP owns ongoing tool execution. */
 export async function greetElenaPhoneTest(sessionId: string, callSid: string) {
   const config = phoneConfig()
-  const instructions = await buildElenaVoiceInstructions('phone')
   const row = await verifiedSession({ kind: 'call', sessionId, callSid, exp: 0 })
   const [claimed] = await patchCall(row, { greeting_requested: true }, '&metadata->>greeting_requested=is.null')
   if (!claimed) return
-  let observed = ''
+  const greetingEventId = randomUUID()
+  let transcriptObserved = false
+  let audioObserved = false
+  let inputAudioObserved = false
+  let connected = false
+  let acknowledged = false
+  let providerStatus: number | null = null
+  let failure: 'socket_error' | 'handshake_rejected' | 'command_rejected' | null = null
   await new Promise<void>((resolve) => {
     const socket = new WebSocket(`wss://api.openai.com/v1/live/sessions/${encodeURIComponent(sessionId)}/attach`, { headers: { Authorization: `Bearer ${config.apiKey}`, 'OpenAI-Project': config.projectId }, handshakeTimeout: 5000 })
     let done = false
@@ -249,20 +254,31 @@ export async function greetElenaPhoneTest(sessionId: string, callSid: string) {
     }
     const timer = setTimeout(finish, 10_000)
     socket.on('open', () => {
-      socket.send(JSON.stringify({ type: 'session.instructions.append', event_id: randomUUID(), delegation_id: null, content: `Trusted verification is complete for this call. You may now speak and use the approved Luxor phone-test tools. Start with the next system greeting.\n\n${instructions}` }))
-      socket.send(JSON.stringify({ type: 'session.commentary.append', event_id: randomUUID(), delegation_id: null, content: PHONE_GREETING }))
+      connected = true
+      socket.send(JSON.stringify({ type: 'session.commentary.append', event_id: greetingEventId, delegation_id: null, content: PHONE_GREETING }))
     })
     socket.on('message', (bytes) => {
       try {
-        const event = JSON.parse(bytes.toString()) as { type?: string; delta?: string }
-        if (event.type === 'session.output_transcript.delta' && typeof event.delta === 'string') observed = (observed + event.delta).slice(0, 1500)
+        const event = JSON.parse(bytes.toString()) as { type?: string; delta?: string; audio?: string; client_event_id?: string; error?: { client_event_id?: string } }
+        if (event.type === 'session.output_transcript.delta' && typeof event.delta === 'string' && event.delta.length > 0) transcriptObserved = true
+        if (event.type === 'session.output_audio.delta' && typeof event.delta === 'string' && event.delta.length > 0) audioObserved = true
+        if (event.type === 'session.input_audio.append' && typeof event.audio === 'string' && event.audio.length > 0) inputAudioObserved = true
+        if (event.type === 'session.commentary.appended' && event.client_event_id === greetingEventId) acknowledged = true
+        if (event.type === 'error') failure = 'command_rejected'
       } catch { /* An unexpected event cannot authorize an action. */ }
     })
-    socket.on('error', finish)
+    socket.on('unexpected-response', (_request, response) => {
+      providerStatus = response.statusCode || null
+      failure = 'handshake_rejected'
+      response.resume()
+      finish()
+    })
+    socket.on('error', () => { failure = 'socket_error'; finish() })
     socket.on('close', finish)
   })
   const current = await readCall(callSid)
-  if (current?.metadata.openai_session_id === sessionId) await patchCall(current, { greeting_transcript_observed: observed.length > 0, greeting_playback_verified: false })
+  if (current?.metadata.openai_session_id === sessionId) await patchCall(current, { greeting_sideband_connected: connected, greeting_command_acknowledged: acknowledged, greeting_input_audio_observed: inputAudioObserved, greeting_audio_observed: audioObserved, greeting_transcript_observed: transcriptObserved, greeting_control_failure: failure, greeting_provider_status: providerStatus, greeting_playback_verified: false })
+  if (failure || (!audioObserved && !transcriptObserved)) console.warn('[Elena Phone Test] Opening greeting was not observed', { kind: failure || 'no_output_observed', sidebandConnected: connected, commandAcknowledged: acknowledged, inputAudioObserved, ...(providerStatus ? { providerStatus } : {}) })
 }
 
 const emptySchema = { type: 'object', properties: {}, additionalProperties: false }
