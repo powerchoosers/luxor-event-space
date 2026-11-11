@@ -12,7 +12,7 @@ import {
   Users,
   X,
 } from '@/lib/icons/phosphor-compat'
-import { PortalButton, PortalDatePicker, PortalSelect, PortalStatusBadge } from '@/components/portal/PortalUI'
+import { PortalButton, PortalCloseButton, PortalDatePicker, PortalSelect, PortalStatusBadge } from '@/components/portal/PortalUI'
 import { useToast } from '@/components/portal/ToastProvider'
 import {
   PortalBulkActionDeck,
@@ -534,7 +534,7 @@ export function TextCampaignsTab() {
                 <h3 className="text-lg font-bold text-[color:var(--portal-text)]">Review before queueing</h3>
                 <p className="mt-1 text-xs text-[color:var(--portal-muted)]">This creates real delivery jobs. It does not bypass consent or daily limits.</p>
               </div>
-              <button onClick={() => setReviewing(false)} aria-label="Close review" className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-xl text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45"><X size={15} /></button>
+              <PortalCloseButton onClick={() => setReviewing(false)} aria-label="Close review" />
             </div>
             <div className="mt-5 space-y-4">
               <div className="grid grid-cols-3 gap-3">

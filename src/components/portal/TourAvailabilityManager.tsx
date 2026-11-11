@@ -1,9 +1,9 @@
 'use client'
 
 import React, { useEffect, useMemo, useState } from 'react'
-import { createPortal } from 'react-dom'
-import { AnimatePresence, motion } from 'framer-motion'
 import {
+  Bell,
+  Calendar,
   CalendarDays,
   Check,
   ChevronLeft,
@@ -12,13 +12,21 @@ import {
   Eye,
   Loader2,
   Plus,
+  Sparkles,
   Trash2,
   X,
-  Bell,
-  Sparkles,
-  Calendar,
 } from '@/lib/icons/phosphor-compat'
-import { PortalButton, PortalDatePicker, PortalSelect } from '@/components/portal/PortalUI'
+import {
+  PortalButton,
+  PortalCheckbox,
+  PortalDatePicker,
+  PortalGhostIconButton,
+  PortalModal,
+  PortalSelect,
+  PortalSkeleton,
+  PortalSkeletonTransition,
+  PortalStatusBadge,
+} from '@/components/portal/PortalUI'
 import { useToast } from '@/components/portal/ToastProvider'
 import {
   DEFAULT_TOUR_SCHEDULE_SETTINGS,
@@ -75,7 +83,7 @@ function isoDate(date: Date) {
 
 export function TourAvailabilityManager({
   title = 'Tour availability',
-  description = 'Choose when clients can book a private venue tour.',
+  description = 'Choose when guests can book a private venue tour.',
   onUpdated,
   hideHeader = false,
 }: {
@@ -91,30 +99,17 @@ export function TourAvailabilityManager({
   const [saving, setSaving] = useState<'weekly' | 'flexible' | 'settings' | null>(null)
   const [previewOpen, setPreviewOpen] = useState(false)
 
-  useEffect(() => {
-    if (!previewOpen) return
-    const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setPreviewOpen(false)
-    }
-    window.addEventListener('keydown', closeOnEscape)
-    return () => window.removeEventListener('keydown', closeOnEscape)
-  }, [previewOpen])
-
-  // Core Data State
   const [slots, setSlots] = useState<LuxorTourSlot[]>([])
   const [schedule, setSchedule] = useState<LuxorTourAvailability[]>(FALLBACK_SCHEDULE)
   const [settings, setSettings] = useState<LuxorTourScheduleSettings>(DEFAULT_TOUR_SCHEDULE_SETTINGS)
 
-  // Flexible Schedule State
   const [flexibleDates, setFlexibleDates] = useState<Array<{ date: string; times: string[] }>>([])
   const [newFlexibleDate, setNewFlexibleDate] = useState('')
   const [selectedGridTimes, setSelectedGridTimes] = useState<string[]>([])
   const [month, setMonth] = useState(() => new Date(new Date().getFullYear(), new Date().getMonth(), 1))
 
-  // Temporary selected time pickers
   const [weeklyTimeSelect, setWeeklyTimeSelect] = useState<Record<number, string>>({})
 
-  // Preview form state
   const [previewSelectedDate, setPreviewSelectedDate] = useState('')
   const [previewSelectedTime, setPreviewSelectedTime] = useState('')
 
@@ -132,11 +127,12 @@ export function TourAvailabilityManager({
         setSchedule(
           payload.availability.map((day: LuxorTourAvailability) => ({
             ...day,
-            times: Array.isArray(day.times) && day.times.length > 0
-              ? day.times
-              : day.is_open
-                ? tourTimesForAvailability(day).map((t) => t.startTime)
-                : [],
+            times:
+              Array.isArray(day.times) && day.times.length > 0
+                ? day.times
+                : day.is_open
+                  ? tourTimesForAvailability(day).map((t) => t.startTime)
+                  : [],
           })),
         )
       }
@@ -148,7 +144,6 @@ export function TourAvailabilityManager({
         })
       }
 
-      // Group future slots into flexible dates
       const dateMap = new Map<string, string[]>()
       const today = isoDate(new Date())
       for (const slot of loadedSlots) {
@@ -167,7 +162,10 @@ export function TourAvailabilityManager({
 
       setFlexibleDates(loadedFlexible)
     } catch (error) {
-      notify({ title: error instanceof Error ? error.message : 'Could not load tour availability.', variant: 'error' })
+      notify({
+        title: error instanceof Error ? error.message : 'Could not load tour availability.',
+        variant: 'error',
+      })
     } finally {
       setLoading(false)
     }
@@ -177,14 +175,12 @@ export function TourAvailabilityManager({
     void loadData()
   }, [])
 
-  // Active mode switcher
   const mode = settings.mode
 
   function handleModeChange(newMode: LuxorTourScheduleMode) {
     setSettings((current) => ({ ...current, mode: newMode }))
   }
 
-  // Weeks Ahead calculation & preview stats
   const weeksAhead = settings.weeks_ahead
   const cutoffDate = useMemo(() => getWeeksAheadCutoffDate(weeksAhead), [weeksAhead])
   const todayStr = useMemo(() => isoDate(new Date()), [])
@@ -201,6 +197,11 @@ export function TourAvailabilityManager({
     })
   }, [slots, todayStr, cutoffDate])
 
+  const upcomingSlotsInWindow = useMemo(
+    () => slots.filter((slot) => slot.slot_date >= todayStr && slot.slot_date <= cutoffDate),
+    [slots, todayStr, cutoffDate],
+  )
+
   const previewDateRange = useMemo(() => {
     const tomorrow = new Date()
     tomorrow.setDate(tomorrow.getDate() + 1)
@@ -210,7 +211,6 @@ export function TourAvailabilityManager({
     return `${startDate} – ${endDate}`
   }, [cutoffDate])
 
-  // Weekly Schedule Helpers
   function toggleWeeklyDay(weekday: number) {
     setSchedule((current) =>
       current.map((day) => {
@@ -256,7 +256,6 @@ export function TourAvailabilityManager({
     )
   }
 
-  // Flexible Schedule Helpers
   function handleSelectFlexibleDate(dateStr: string) {
     setNewFlexibleDate(dateStr)
     const existing = flexibleDates.find((d) => d.date === dateStr)
@@ -333,17 +332,18 @@ export function TourAvailabilityManager({
 
   function removeTimeFromFlexibleDate(dateStr: string, timeStr: string) {
     setFlexibleDates((current) =>
-      current.map((item) => {
-        if (item.date !== dateStr) return item
-        return { ...item, times: item.times.filter((t) => t !== timeStr) }
-      }),
+      current
+        .map((item) => {
+          if (item.date !== dateStr) return item
+          return { ...item, times: item.times.filter((t) => t !== timeStr) }
+        })
+        .filter((item) => item.times.length > 0),
     )
     if (newFlexibleDate === dateStr) {
       setSelectedGridTimes((current) => current.filter((t) => t !== timeStr))
     }
   }
 
-  // Calendar mini grid for flexible view
   const calendarDays = useMemo(() => {
     const first = new Date(month.getFullYear(), month.getMonth(), 1)
     const total = new Date(month.getFullYear(), month.getMonth() + 1, 0).getDate()
@@ -364,7 +364,6 @@ export function TourAvailabilityManager({
     return map
   }, [slots])
 
-  // Save Operations
   async function saveWeeklySchedule() {
     try {
       setSaving('weekly')
@@ -420,7 +419,6 @@ export function TourAvailabilityManager({
     }
   }
 
-  // Preview Form Data
   const previewAvailableDates = useMemo(() => {
     const dates = new Set(availableSlotsInWindow.map((s) => s.slot_date))
     return Array.from(dates).sort()
@@ -431,47 +429,12 @@ export function TourAvailabilityManager({
     return availableSlotsInWindow.filter((s) => s.slot_date === previewSelectedDate)
   }, [availableSlotsInWindow, previewSelectedDate])
 
-  if (loading) {
-    return (
-      <div className="min-h-[70vh] sm:min-h-[75vh] space-y-6">
-        {/* Top status card skeleton */}
-        <div className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-4 sm:p-5 space-y-3">
-          <div className="flex items-center justify-between">
-            <div className="h-4 w-32 rounded luxor-skeleton" />
-            <div className="h-6 w-44 rounded-full luxor-skeleton" />
-          </div>
-          <div className="h-4 w-72 rounded luxor-skeleton" />
-        </div>
-        {/* Method selector skeleton */}
-        <div className="space-y-2">
-          <div className="h-3 w-28 rounded luxor-skeleton" />
-          <div className="grid grid-cols-2 gap-2 sm:max-w-md">
-            <div className="h-10 rounded-lg luxor-skeleton" />
-            <div className="h-10 rounded-lg luxor-skeleton" />
-          </div>
-        </div>
-        {/* Days skeleton */}
-        <div className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 space-y-4">
-          <div className="h-4 w-52 rounded luxor-skeleton" />
-          <div className="h-3 w-80 rounded luxor-skeleton" />
-          <div className="space-y-3 pt-2">
-            {[1, 2, 3, 4, 5].map((i) => (
-              <div key={i} className="h-16 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-3 luxor-skeleton" />
-            ))}
-          </div>
-        </div>
-      </div>
-    )
-  }
-
   return (
-    <motion.div initial={{ opacity: 0, filter: 'blur(10px)', y: 8 }} animate={{ opacity: 1, filter: 'blur(0px)', y: 0 }} transition={{ duration: 0.32, ease: [0.22, 1, 0.36, 1] }} className="space-y-6 min-h-[70vh] sm:min-h-[75vh]">
-      {/* SECTION HEADER & PUBLIC STATUS BANNER */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+    <div className="space-y-5">
+      {/* Header */}
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className={hideHeader ? 'hidden' : undefined}>
-          <span className="text-xs font-black uppercase tracking-[0.2em] text-[color:var(--portal-text)]">
-            {title}
-          </span>
+          <h3 className="text-base font-bold text-[color:var(--portal-text)]">{title}</h3>
           <p className="mt-1 text-xs text-[color:var(--portal-muted)]">{description}</p>
         </div>
 
@@ -479,105 +442,150 @@ export function TourAvailabilityManager({
           type="button"
           variant="secondary"
           size="sm"
+          disabled={loading}
           onClick={() => {
             setPreviewSelectedDate(previewAvailableDates[0] || '')
+            setPreviewSelectedTime('')
             setPreviewOpen(true)
           }}
-          className="flex items-center gap-2 self-start font-semibold text-[#caa24c]"
+          className="self-start"
         >
-          <Eye size={14} /> Preview Guest Booking Form
+          <Eye size={14} aria-hidden="true" />
+          Preview guest booking form
         </PortalButton>
       </div>
 
-      {/* TOP STATUS CARD (Prompt Req 7) */}
-      <section className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-4 sm:p-5">
+      {/* Public Status Summary */}
+      <section className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/55 p-4 sm:p-5">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="space-y-1">
-            <div className="flex items-center gap-2">
-              <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-[color:var(--portal-faint)]">
-                Public Schedule
-              </span>
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/10 px-2.5 py-0.5 text-[11px] font-bold text-emerald-500">
-                <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-                {availableSlotsInWindow.length > 0 ? 'Tours are currently accepting bookings' : 'No upcoming open slots'}
-              </span>
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-xs font-semibold text-[color:var(--portal-muted)]">Public schedule</span>
+              <PortalSkeletonTransition
+                loading={loading}
+                overlap
+                className="inline-flex items-center"
+                skeleton={<PortalSkeleton className="h-5 w-32 rounded-md" />}
+              >
+                <PortalStatusBadge
+                  borderless
+                  tone={availableSlotsInWindow.length > 0 ? 'green' : 'neutral'}
+                  status={availableSlotsInWindow.length > 0 ? 'Accepting bookings' : 'No upcoming open slots'}
+                />
+              </PortalSkeletonTransition>
             </div>
-            <p className="text-xs font-medium text-[color:var(--portal-text)]">
-              {mode === 'weekly' ? 'Weekly Schedule' : 'Flexible Schedule'} · {weeksAhead} week{weeksAhead === 1 ? '' : 's'} ahead · <strong className="text-[#caa24c]">{availableSlotsInWindow.length}</strong> available tour times
-            </p>
+            <PortalSkeletonTransition
+              loading={loading}
+              overlap
+              skeleton={<PortalSkeleton className="h-4 w-56 rounded" />}
+            >
+              <p className="text-xs font-medium tabular-nums text-[color:var(--portal-text)]">
+                {mode === 'weekly' ? 'Weekly schedule' : 'Flexible schedule'} · {weeksAhead} week{weeksAhead === 1 ? '' : 's'} ahead ·{' '}
+                <strong className="text-[#a8792f] dark:text-[#caa24c]">{availableSlotsInWindow.length}</strong> available times
+              </p>
+            </PortalSkeletonTransition>
           </div>
 
-          <div className="flex items-center gap-2 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 py-2 text-right">
-            <CalendarDays size={16} className="text-[#caa24c]" />
-            <div className="text-left">
-              <p className="text-[9px] font-bold uppercase tracking-wider text-[color:var(--portal-faint)]">Window</p>
-              <p className="text-xs font-semibold text-[color:var(--portal-text)]">{previewDateRange}</p>
+          <div className="flex items-center gap-2.5 self-start rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3.5 py-2 sm:self-auto">
+            <CalendarDays size={16} className="shrink-0 text-[#a8792f] dark:text-[#caa24c]" aria-hidden="true" />
+            <div>
+              <p className="text-[11px] font-medium text-[color:var(--portal-muted)]">Booking window</p>
+              <PortalSkeletonTransition
+                loading={loading}
+                overlap
+                skeleton={<PortalSkeleton className="mt-0.5 h-4 w-24 rounded" />}
+              >
+                <p className="text-xs font-semibold tabular-nums text-[color:var(--portal-text)]">{previewDateRange}</p>
+              </PortalSkeletonTransition>
             </div>
           </div>
         </div>
       </section>
 
       <details className="border-y border-[color:var(--portal-border)] py-3">
-        <summary className="cursor-pointer text-sm font-semibold text-[color:var(--portal-text)]">Upcoming tour capacity</summary>
-        <p className="mt-2 text-xs text-[color:var(--portal-muted)]">Confirmed bookings per time. A full time is unavailable to guests.</p>
-        {slots.filter((slot) => slot.slot_date >= todayStr && slot.slot_date <= cutoffDate).length ? (
-          <div className="mt-3 max-h-80 overflow-y-auto">
-            <ul className="divide-y divide-[color:var(--portal-border)]">
-              {slots.filter((slot) => slot.slot_date >= todayStr && slot.slot_date <= cutoffDate).map((slot) => (
-                <li key={slot.id} className="flex items-center justify-between gap-4 py-2 text-sm text-[color:var(--portal-text)]">
-                  <span>{formatTourSlotDate(slot.slot_date)} · {formatTourSlotTime(slot.start_time)}</span>
-                  <span className="shrink-0 text-xs text-[color:var(--portal-muted)]">
-                    {slot.booked_count}/{slot.capacity} booked · {slot.status === 'booked' || slot.booked_count >= slot.capacity ? 'Full' : slot.status === 'available' ? 'Open' : 'Unavailable'}
+        <summary className="cursor-pointer text-sm font-semibold text-[color:var(--portal-text)]">
+          Upcoming tour capacity{loading ? '' : ` (${upcomingSlotsInWindow.length})`}
+        </summary>
+        <p className="mt-1.5 text-xs text-[color:var(--portal-muted)]">
+          Confirmed bookings per time. Full slots automatically close for guests.
+        </p>
+        <PortalSkeletonTransition
+          loading={loading}
+          skeleton={
+            <div className="mt-3 space-y-2">
+              <PortalSkeleton className="h-5 w-full rounded" />
+              <PortalSkeleton className="h-5 w-5/6 rounded" />
+            </div>
+          }
+        >
+          {upcomingSlotsInWindow.length ? (
+            <ul className="mt-3 divide-y divide-[color:var(--portal-border)]">
+              {upcomingSlotsInWindow.map((slot) => (
+                <li
+                  key={slot.id}
+                  className="flex flex-wrap items-center justify-between gap-2 py-2.5 text-xs text-[color:var(--portal-text)]"
+                >
+                  <span className="font-medium tabular-nums">
+                    {formatTourSlotDate(slot.slot_date)} · {formatTourSlotTime(slot.start_time)}
+                  </span>
+                  <span className="shrink-0 tabular-nums text-[color:var(--portal-muted)]">
+                    {slot.booked_count}/{slot.capacity} booked ·{' '}
+                    {slot.status === 'booked' || slot.booked_count >= slot.capacity
+                      ? 'Full'
+                      : slot.status === 'available'
+                        ? 'Open'
+                        : 'Unavailable'}
                   </span>
                 </li>
               ))}
             </ul>
-          </div>
-        ) : <p className="mt-3 text-xs text-[color:var(--portal-muted)]">No upcoming tour times.</p>}
+          ) : (
+            <p className="mt-3 text-xs text-[color:var(--portal-muted)]">No upcoming tour times in this window.</p>
+          )}
+        </PortalSkeletonTransition>
       </details>
 
-      {/* SCHEDULING METHOD SELECTOR (Prompt Req 6) */}
+      {/* Scheduling Method */}
       <div className="space-y-2">
-        <label className="text-[10px] font-bold uppercase tracking-wider text-[color:var(--portal-faint)]">
-          Scheduling method
-        </label>
+        <span className="block text-xs font-medium text-[color:var(--portal-muted)]">Scheduling method</span>
         <div className="grid grid-cols-2 gap-2 sm:max-w-md">
           <button
             type="button"
+            disabled={loading}
             onClick={() => handleModeChange('weekly')}
-            className={`flex items-center justify-center gap-2 rounded-lg border px-4 py-2.5 text-xs font-bold transition-all ${
+            className={`flex min-h-10 items-center justify-center rounded-xl border px-4 py-2 text-xs font-semibold transition-colors ${
               mode === 'weekly'
-                ? 'border-[#caa24c] bg-[#caa24c]/15 text-[#f1d27a] shadow-sm'
+                ? 'border-[#caa24c]/60 bg-[#caa24c]/15 text-[#9a6d26] dark:text-[#f1d27a]'
                 : 'border-[color:var(--portal-border)] bg-[color:var(--portal-card)] text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]'
             }`}
           >
-            Weekly Schedule
+            Weekly schedule
           </button>
           <button
             type="button"
+            disabled={loading}
             onClick={() => handleModeChange('flexible')}
-            className={`flex items-center justify-center gap-2 rounded-lg border px-4 py-2.5 text-xs font-bold transition-all ${
+            className={`flex min-h-10 items-center justify-center rounded-xl border px-4 py-2 text-xs font-semibold transition-colors ${
               mode === 'flexible'
-                ? 'border-[#caa24c] bg-[#caa24c]/15 text-[#f1d27a] shadow-sm'
+                ? 'border-[#caa24c]/60 bg-[#caa24c]/15 text-[#9a6d26] dark:text-[#f1d27a]'
                 : 'border-[color:var(--portal-border)] bg-[color:var(--portal-card)] text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]'
             }`}
           >
-            Flexible Schedule
+            Flexible schedule
           </button>
         </div>
       </div>
 
-      {/* 1. WEEKLY RECURRING SCHEDULE (Prompt Req 1 & 6) */}
+      {/* 1. Weekly Recurring Schedule */}
       {mode === 'weekly' && (
-        <div className="space-y-6 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5">
+        <div className="space-y-5 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-4 sm:p-5">
           <div className="border-b border-[color:var(--portal-border)] pb-3">
-            <h3 className="text-sm font-bold text-[color:var(--portal-text)]">Weekly recurring availability</h3>
-            <p className="mt-1 text-xs text-[color:var(--portal-muted)]">
-              Tours will automatically repeat on these selected days and times for every upcoming week.
+            <h4 className="text-sm font-bold text-[color:var(--portal-text)]">Weekly recurring availability</h4>
+            <p className="mt-0.5 text-xs text-[color:var(--portal-muted)]">
+              Repeat these days and times automatically each week.
             </p>
           </div>
 
-          {/* Days of Week List */}
           <div className="space-y-3">
             {schedule.map((day) => {
               const dayTimes = day.times || []
@@ -588,202 +596,206 @@ export function TourAvailabilityManager({
               return (
                 <div
                   key={day.weekday}
-                  className={`rounded-xl border p-4 transition-all ${
-                    day.is_open
+                  className={`rounded-xl border p-4 transition-colors ${
+                    !loading && day.is_open
                       ? 'border-[#caa24c]/35 bg-[#caa24c]/[0.04]'
-                      : 'border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] opacity-70'
+                      : 'border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/50'
                   }`}
                 >
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                    <button
-                      type="button"
-                      onClick={() => toggleWeeklyDay(day.weekday)}
-                      className="flex items-center gap-3 text-left"
-                    >
-                      <span
-                        className={`flex h-5 w-5 items-center justify-center rounded border transition-colors ${
-                          day.is_open
-                            ? 'border-[#caa24c] bg-[#caa24c] text-white'
-                            : 'border-[color:var(--portal-faint)]'
-                        }`}
-                      >
-                        {day.is_open ? <Check size={13} /> : null}
-                      </span>
-                      <div>
-                        <span className="block text-sm font-semibold text-[color:var(--portal-text)]">
+                    {loading ? (
+                      <div className="flex items-center gap-2.5">
+                        <PortalSkeleton className="h-4 w-4 rounded" />
+                        <span className="text-xs font-semibold text-[color:var(--portal-text)]">
                           {LUXOR_WEEKDAY_LABELS[day.weekday]}
                         </span>
-                        <span className="block text-[10px] text-[color:var(--portal-muted)]">
-                          {day.is_open ? `${dayTimes.length} tour time${dayTimes.length === 1 ? '' : 's'} offered` : 'No tours offered'}
-                        </span>
                       </div>
-                    </button>
-
-                    {day.is_open && (
-                      <div className="flex flex-wrap items-center gap-2">
-                        {/* Time Chips */}
-                        {dayTimes.map((timeStr) => (
-                          <span
-                            key={timeStr}
-                            className="inline-flex items-center gap-1.5 rounded-lg border border-[#caa24c]/40 bg-[#caa24c]/15 px-2.5 py-1 text-xs font-semibold text-[color:var(--portal-text)]"
-                          >
-                            <Clock3 size={12} className="text-[#caa24c]" />
-                            {formatTourSlotTime(timeStr)}
-                            <button
-                              type="button"
-                              onClick={() => removeTimeFromDay(day.weekday, timeStr)}
-                              aria-label={`Remove ${formatTourSlotTime(timeStr)} from ${LUXOR_WEEKDAY_LABELS[day.weekday]}`}
-                              className="ml-0.5 rounded p-0.5 text-[color:var(--portal-muted)] hover:bg-[#caa24c]/30 hover:text-[color:var(--portal-text)]"
-                            >
-                              <X size={12} />
-                            </button>
-                          </span>
-                        ))}
-
-                        {/* Inline Add Time Dropdown */}
-                        <div className="w-32">
-                          <PortalSelect
-                            value={weeklyTimeSelect[day.weekday] || ''}
-                            onChange={(val) => addTimeToDay(day.weekday, val)}
-                            options={availableTimeOptions}
-                            placeholder="+ Add time"
-                            className="w-full"
-                            buttonClassName="!min-h-8 !py-1 text-xs !bg-[color:var(--portal-card)]"
-                          />
-                        </div>
-                      </div>
+                    ) : (
+                      <PortalCheckbox
+                        checked={day.is_open}
+                        onChange={() => toggleWeeklyDay(day.weekday)}
+                        label={LUXOR_WEEKDAY_LABELS[day.weekday]}
+                        sublabel={
+                          day.is_open
+                            ? `${dayTimes.length} tour time${dayTimes.length === 1 ? '' : 's'} offered`
+                            : 'Closed'
+                        }
+                      />
                     )}
+
+                    <PortalSkeletonTransition
+                      loading={loading}
+                      overlap
+                      skeleton={<PortalSkeleton className="h-8 w-44 rounded-lg" />}
+                    >
+                      {day.is_open ? (
+                        <div className="flex flex-wrap items-center gap-2">
+                          {dayTimes.map((timeStr) => (
+                            <span
+                              key={timeStr}
+                              className="inline-flex items-center gap-1.5 rounded-lg border border-[#caa24c]/35 bg-[#caa24c]/12 px-2.5 py-1 text-xs font-semibold tabular-nums text-[color:var(--portal-text)]"
+                            >
+                              <Clock3 size={12} className="text-[#a8792f] dark:text-[#caa24c]" aria-hidden="true" />
+                              {formatTourSlotTime(timeStr)}
+                              <button
+                                type="button"
+                                onClick={() => removeTimeFromDay(day.weekday, timeStr)}
+                                aria-label={`Remove ${formatTourSlotTime(timeStr)} from ${LUXOR_WEEKDAY_LABELS[day.weekday]}`}
+                                className="ml-0.5 rounded p-0.5 text-[color:var(--portal-muted)] hover:bg-[#caa24c]/25 hover:text-[color:var(--portal-text)]"
+                              >
+                                <X size={12} />
+                              </button>
+                            </span>
+                          ))}
+
+                          <div className="w-36">
+                            <PortalSelect
+                              value={weeklyTimeSelect[day.weekday] || ''}
+                              onChange={(val) => addTimeToDay(day.weekday, val)}
+                              options={availableTimeOptions}
+                              placeholder="+ Add time"
+                              className="w-full"
+                              buttonClassName="!min-h-8.5 !py-1 text-xs !bg-[color:var(--portal-card)]"
+                            />
+                          </div>
+                        </div>
+                      ) : null}
+                    </PortalSkeletonTransition>
                   </div>
                 </div>
               )
             })}
           </div>
 
-          {/* Weeks Ahead Horizon Setting (Prompt Req 3) */}
-          <div className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-4 sm:p-5">
+          <div className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/50 p-4">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
-                <label className="text-xs font-bold text-[color:var(--portal-text)]">
-                  How far ahead should guests be able to book?
-                </label>
-                <p className="mt-1 text-[11px] text-[color:var(--portal-muted)]">
-                  Controls how many weeks into the future dates are generated and displayed on the guest booking form.
-                </p>
-              </div>
-              <div className="w-48 shrink-0">
-                <PortalSelect
-                  value={String(settings.weeks_ahead)}
-                  onChange={(val) => setSettings((current) => ({ ...current, weeks_ahead: Number(val) }))}
-                  options={WEEKS_AHEAD_SELECT_OPTIONS}
-                  className="w-full"
-                />
-              </div>
-            </div>
-          </div>
-
-          {/* Public Availability Preview (Prompt Req 6) */}
-          <div className="rounded-xl border border-[#caa24c]/30 bg-[#caa24c]/[0.05] p-4 sm:p-5">
-            <div className="flex items-center justify-between">
-              <div>
-                <span className="text-[10px] font-bold uppercase tracking-wider text-[#caa24c]">
-                  Public availability preview
-                </span>
-                <p className="mt-1 text-sm font-bold text-[color:var(--portal-text)]">
-                  {previewDateRange}
-                </p>
+                <p className="text-xs font-bold text-[color:var(--portal-text)]">How far ahead can guests book?</p>
                 <p className="mt-0.5 text-xs text-[color:var(--portal-muted)]">
-                  {availableSlotsInWindow.length} tour times will be open and bookable for guests.
+                  Controls how many future weeks appear on the public booking form.
                 </p>
               </div>
-              <Sparkles size={24} className="text-[#caa24c]/60" />
+              <div className="w-full shrink-0 sm:w-48">
+                <PortalSkeletonTransition
+                  loading={loading}
+                  overlap
+                  skeleton={<PortalSkeleton className="h-10 w-full rounded-xl" />}
+                >
+                  <PortalSelect
+                    value={String(settings.weeks_ahead)}
+                    onChange={(val) => setSettings((current) => ({ ...current, weeks_ahead: Number(val) }))}
+                    options={WEEKS_AHEAD_SELECT_OPTIONS}
+                    className="w-full"
+                    buttonClassName="min-h-10"
+                  />
+                </PortalSkeletonTransition>
+              </div>
             </div>
           </div>
 
-          {/* Save Action */}
+          <div className="rounded-xl border border-[#caa24c]/25 bg-[#caa24c]/[0.05] p-4">
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <p className="text-xs font-semibold text-[#a8792f] dark:text-[#caa24c]">Public availability preview</p>
+                <PortalSkeletonTransition
+                  loading={loading}
+                  overlap
+                  skeleton={
+                    <div className="mt-1 space-y-1">
+                      <PortalSkeleton className="h-4 w-28 rounded" />
+                      <PortalSkeleton className="h-3.5 w-44 rounded" />
+                    </div>
+                  }
+                >
+                  <div>
+                    <p className="mt-0.5 text-sm font-bold tabular-nums text-[color:var(--portal-text)]">{previewDateRange}</p>
+                    <p className="mt-0.5 text-xs tabular-nums text-[color:var(--portal-muted)]">
+                      {availableSlotsInWindow.length} tour times open for guests.
+                    </p>
+                  </div>
+                </PortalSkeletonTransition>
+              </div>
+              <Sparkles size={22} className="shrink-0 text-[#a8792f]/70 dark:text-[#caa24c]/70" aria-hidden="true" />
+            </div>
+          </div>
+
           <div className="flex flex-col gap-3 border-t border-[color:var(--portal-border)] pt-4 sm:flex-row sm:items-center sm:justify-between">
-            <p className="text-[11px] text-[color:var(--portal-muted)]">
-              Saving automatically generates all tour dates for the next {settings.weeks_ahead} weeks. Booked tours are always preserved.
+            <p className="text-xs text-[color:var(--portal-muted)]">
+              Generates dates for the next {settings.weeks_ahead} weeks while keeping existing bookings intact.
             </p>
             <PortalButton
               type="button"
               variant="primary"
               onClick={() => void saveWeeklySchedule()}
-              disabled={Boolean(saving)}
-              className="font-bold"
+              disabled={Boolean(saving) || loading}
+              className="w-full shrink-0 sm:w-auto"
             >
-              {saving === 'weekly' ? <Loader2 size={14} className="animate-spin" /> : null} Save weekly schedule
+              {saving === 'weekly' ? <Loader2 size={14} className="animate-spin" aria-hidden="true" /> : null}
+              Save weekly schedule
             </PortalButton>
           </div>
         </div>
       )}
 
-      {/* 2. FLEXIBLE SCHEDULE (Prompt Req 2, 4 & 6) */}
+      {/* 2. Flexible Schedule */}
       {mode === 'flexible' && (
-        <div className="space-y-6 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5">
+        <div className="space-y-5 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-4 sm:p-5">
           <div className="border-b border-[color:var(--portal-border)] pb-3">
-            <h3 className="text-sm font-bold text-[color:var(--portal-text)]">Flexible availability</h3>
-            <p className="mt-1 text-xs text-[color:var(--portal-muted)]">
-              Manually choose exactly which dates and times tours are available. Recurring availability will not be automatically generated.
+            <h4 className="text-sm font-bold text-[color:var(--portal-text)]">Flexible availability</h4>
+            <p className="mt-0.5 text-xs text-[color:var(--portal-muted)]">
+              Pick exact dates and tour times instead of a repeating weekly schedule.
             </p>
           </div>
 
-          {/* Date & Multi-Time Selection Section */}
-          <div className="space-y-4 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-4 sm:p-5">
+          <div className="space-y-4 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/50 p-4">
             <div>
-              <label className="text-[10px] font-bold uppercase tracking-wider text-[color:var(--portal-faint)]">
-                1. Choose Date
-              </label>
+              <span className="block text-xs font-medium text-[color:var(--portal-muted)]">1. Choose date</span>
               <div className="mt-1.5 flex flex-wrap items-center gap-3">
                 <div className="w-full sm:w-72">
                   <PortalDatePicker
                     value={newFlexibleDate}
                     onChange={handleSelectFlexibleDate}
                     minDate={todayStr}
-                    placeholder="Choose date..."
+                    placeholder="Choose date…"
                     className="w-full"
+                    triggerClassName="min-h-10"
                   />
                 </div>
-                {newFlexibleDate && (
-                  <span className="inline-flex items-center gap-1.5 rounded-lg border border-[#caa24c]/40 bg-[#caa24c]/15 px-3 py-1.5 text-xs font-bold text-[color:var(--portal-text)]">
-                    <CalendarDays size={13} className="text-[#caa24c]" />
+                {newFlexibleDate ? (
+                  <span className="inline-flex items-center gap-1.5 rounded-xl border border-[#caa24c]/35 bg-[#caa24c]/12 px-3 py-1.5 text-xs font-semibold tabular-nums text-[color:var(--portal-text)]">
+                    <CalendarDays size={13} className="text-[#a8792f] dark:text-[#caa24c]" aria-hidden="true" />
                     {formatTourSlotDate(newFlexibleDate)}
                   </span>
-                )}
+                ) : null}
               </div>
             </div>
 
-            {/* Time Grid (Prompt Req 1, 2, 3 & 4) */}
-            <div className="space-y-3 pt-2">
-              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between border-t border-[color:var(--portal-border)] pt-4">
+            <div className="space-y-3 border-t border-[color:var(--portal-border)] pt-4">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                 <div>
-                  <h4 className="text-xs font-bold uppercase tracking-wider text-[color:var(--portal-text)]">
-                    2. Select Tour Times {newFlexibleDate ? `for ${formatTourSlotDate(newFlexibleDate)}` : ''}
-                  </h4>
-                  <p className="mt-0.5 text-[11px] text-[color:var(--portal-muted)]">
-                    8:00 AM – 7:30 PM (30-minute intervals). Click times to toggle them.
+                  <h5 className="text-xs font-bold text-[color:var(--portal-text)]">
+                    2. Select tour times {newFlexibleDate ? `for ${formatTourSlotDate(newFlexibleDate)}` : ''}
+                  </h5>
+                  <p className="mt-0.5 text-xs text-[color:var(--portal-muted)]">
+                    8:00 AM – 7:30 PM in 30-minute intervals.
                   </p>
                 </div>
 
                 <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={selectAllGridTimes}
-                    className="rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 py-1.5 text-xs font-semibold text-[color:var(--portal-text)] hover:border-[#caa24c]/40 hover:text-[#caa24c] transition-colors"
-                  >
-                    Select All
-                  </button>
-                  <button
-                    type="button"
+                  <PortalButton size="sm" variant="secondary" onClick={selectAllGridTimes}>
+                    Select all
+                  </PortalButton>
+                  <PortalButton
+                    size="sm"
+                    variant="ghost"
                     onClick={clearAllGridTimes}
                     disabled={selectedGridTimes.length === 0}
-                    className="rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 py-1.5 text-xs font-semibold text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)] disabled:opacity-40 transition-colors"
                   >
-                    Clear All
-                  </button>
+                    Clear all
+                  </PortalButton>
                 </div>
               </div>
 
-              {/* 24-Slot Multi-Select Grid (8:00 AM to 7:30 PM) */}
               <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
                 {LUXOR_TOUR_TIME_OPTIONS.map((opt) => {
                   const normalized = normalizeTourTime(opt.value)
@@ -794,17 +806,17 @@ export function TourAvailabilityManager({
                       key={opt.value}
                       type="button"
                       onClick={() => toggleGridTime(normalized)}
-                      className={`flex items-center justify-between rounded-lg border px-3 py-2.5 text-xs font-semibold transition-all ${
+                      className={`flex min-h-10 items-center justify-between rounded-xl border px-3 py-2 text-xs font-semibold tabular-nums transition-colors ${
                         isSelected
-                          ? 'border-[#caa24c] bg-[#caa24c]/20 text-[#f1d27a] shadow-sm ring-1 ring-[#caa24c]/50 font-bold'
-                          : 'border-[color:var(--portal-border)] bg-[color:var(--portal-card)] text-[color:var(--portal-text)] hover:border-[#caa24c]/40 hover:bg-[color:var(--portal-card)]'
+                          ? 'border-[#caa24c] bg-[#caa24c]/18 text-[#9a6d26] dark:text-[#f1d27a]'
+                          : 'border-[color:var(--portal-border)] bg-[color:var(--portal-card)] text-[color:var(--portal-text)] hover:border-[#caa24c]/40'
                       }`}
                     >
                       <span className="flex items-center gap-1.5">
                         {isSelected ? (
-                          <Check size={13} className="text-[#caa24c]" />
+                          <Check size={13} className="text-[#a8792f] dark:text-[#caa24c]" aria-hidden="true" />
                         ) : (
-                          <Clock3 size={13} className="text-[color:var(--portal-muted)]" />
+                          <Clock3 size={13} className="text-[color:var(--portal-muted)]" aria-hidden="true" />
                         )}
                         {opt.label}
                       </span>
@@ -813,10 +825,10 @@ export function TourAvailabilityManager({
                 })}
               </div>
 
-              {/* Add Selected Times Action Bar (Prompt Req 3) */}
-              <div className="flex flex-col gap-3 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-3 sm:flex-row sm:items-center sm:justify-between">
-                <span className="text-xs text-[color:var(--portal-muted)]">
-                  <strong className="text-[color:var(--portal-text)]">{selectedGridTimes.length}</strong> of {LUXOR_TOUR_TIME_OPTIONS.length} times selected
+              <div className="flex flex-col gap-3 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-3 sm:flex-row sm:items-center sm:justify-between">
+                <span className="text-xs tabular-nums text-[color:var(--portal-muted)]">
+                  <strong className="text-[color:var(--portal-text)]">{selectedGridTimes.length}</strong> of{' '}
+                  {LUXOR_TOUR_TIME_OPTIONS.length} times selected
                 </span>
 
                 <PortalButton
@@ -825,136 +837,137 @@ export function TourAvailabilityManager({
                   size="sm"
                   disabled={!newFlexibleDate || selectedGridTimes.length === 0}
                   onClick={addSelectedTimesToDate}
-                  className="font-bold flex items-center justify-center gap-1.5"
                 >
-                  <Plus size={14} /> Add Selected Times {selectedGridTimes.length > 0 ? `(${selectedGridTimes.length})` : ''}
+                  <Plus size={14} aria-hidden="true" />
+                  Apply times{selectedGridTimes.length > 0 ? ` (${selectedGridTimes.length})` : ''}
                 </PortalButton>
               </div>
             </div>
           </div>
 
-          {/* Configured Flexible Dates List (Prompt Req 5) */}
+          {/* Configured Dates */}
           <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <h4 className="text-xs font-bold uppercase tracking-wider text-[color:var(--portal-faint)]">
-                Configured Tour Dates ({flexibleDates.length})
-              </h4>
-            </div>
+            <h5 className="text-xs font-semibold tabular-nums text-[color:var(--portal-muted)]">
+              Configured tour dates ({flexibleDates.length})
+            </h5>
 
-            {flexibleDates.length === 0 ? (
-              <div className="rounded-xl border border-dashed border-[color:var(--portal-border)] p-8 text-center">
-                <Calendar size={28} className="mx-auto text-[color:var(--portal-muted)] opacity-50" />
-                <p className="mt-2 text-xs font-semibold text-[color:var(--portal-text)]">No flexible dates configured yet</p>
-                <p className="mt-1 text-[11px] text-[color:var(--portal-muted)]">
-                  Choose a date and select your desired tour times above, then click &ldquo;Add Selected Times&rdquo;.
-                </p>
-              </div>
-            ) : (
-              flexibleDates.map((item) => {
-                const isActiveInEditor = newFlexibleDate === item.date
+            <PortalSkeletonTransition
+              loading={loading}
+              skeleton={
+                <div className="space-y-2.5">
+                  {[0, 1].map((idx) => (
+                    <div key={idx} className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/50 p-4">
+                      <PortalSkeleton className="h-4 w-40 rounded" />
+                      <PortalSkeleton className="mt-2 h-6 w-56 rounded" />
+                    </div>
+                  ))}
+                </div>
+              }
+            >
+              {flexibleDates.length === 0 ? (
+                <div className="rounded-xl border border-dashed border-[color:var(--portal-border)] p-8 text-center">
+                  <Calendar size={26} className="mx-auto text-[color:var(--portal-muted)] opacity-50" aria-hidden="true" />
+                  <p className="mt-2 text-xs font-semibold text-[color:var(--portal-text)]">No flexible dates configured yet</p>
+                  <p className="mt-1 text-xs text-[color:var(--portal-muted)]">
+                    Pick a date and time slots above to add them here.
+                  </p>
+                </div>
+              ) : (
+                flexibleDates.map((item) => {
+                  const isActiveInEditor = newFlexibleDate === item.date
 
-                return (
-                  <div
-                    key={item.date}
-                    className={`rounded-xl border p-4 transition-all ${
-                      isActiveInEditor
-                        ? 'border-[#caa24c]/60 bg-[#caa24c]/[0.06] ring-1 ring-[#caa24c]/30'
-                        : 'border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]'
-                    }`}
-                  >
-                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <span className="block text-sm font-bold text-[color:var(--portal-text)]">
-                            {formatTourSlotDate(item.date)}
-                          </span>
-                          {isActiveInEditor && (
-                            <span className="rounded bg-[#caa24c]/20 px-1.5 py-0.5 text-[10px] font-bold text-[#f1d27a]">
-                              Editing in grid
+                  return (
+                    <div
+                      key={item.date}
+                      className={`rounded-xl border p-4 transition-colors ${
+                        isActiveInEditor
+                          ? 'border-[#caa24c]/55 bg-[#caa24c]/[0.06]'
+                          : 'border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/50'
+                      }`}
+                    >
+                      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                        <div>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="text-sm font-bold tabular-nums text-[color:var(--portal-text)]">
+                              {formatTourSlotDate(item.date)}
                             </span>
-                          )}
-                        </div>
-                        <span className="block text-[10px] text-[color:var(--portal-muted)]">
-                          {item.times.length} tour time{item.times.length === 1 ? '' : 's'} configured
-                        </span>
-                      </div>
-
-                      <div className="flex flex-wrap items-center gap-2">
-                        {/* Time Chips */}
-                        {item.times.map((timeStr) => (
-                          <span
-                            key={timeStr}
-                            className="inline-flex items-center gap-1.5 rounded-lg border border-[#caa24c]/40 bg-[#caa24c]/15 px-2.5 py-1 text-xs font-semibold text-[color:var(--portal-text)]"
-                          >
-                            <Clock3 size={12} className="text-[#caa24c]" />
-                            {formatTourSlotTime(timeStr)}
-                            <button
-                              type="button"
-                              onClick={() => removeTimeFromFlexibleDate(item.date, timeStr)}
-                              aria-label={`Remove ${formatTourSlotTime(timeStr)} on ${formatTourSlotDate(item.date)}`}
-                              className="ml-0.5 rounded p-0.5 text-[color:var(--portal-muted)] hover:bg-[#caa24c]/30 hover:text-[color:var(--portal-text)]"
-                            >
-                              <X size={12} />
-                            </button>
+                            {isActiveInEditor ? (
+                              <PortalStatusBadge borderless tone="gold" status="Editing" />
+                            ) : null}
+                          </div>
+                          <span className="block text-xs tabular-nums text-[color:var(--portal-muted)]">
+                            {item.times.length} tour time{item.times.length === 1 ? '' : 's'}
                           </span>
-                        ))}
+                        </div>
 
-                        {/* Edit Times Button */}
-                        <button
-                          type="button"
-                          onClick={() => editFlexibleDate(item.date)}
-                          className="rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-2.5 py-1 text-xs font-semibold text-[color:var(--portal-text)] hover:border-[#caa24c]/40 hover:text-[#caa24c] transition-colors"
-                        >
-                          Edit times
-                        </button>
+                        <div className="flex flex-wrap items-center gap-2">
+                          {item.times.map((timeStr) => (
+                            <span
+                              key={timeStr}
+                              className="inline-flex items-center gap-1.5 rounded-lg border border-[#caa24c]/35 bg-[#caa24c]/12 px-2.5 py-1 text-xs font-semibold tabular-nums text-[color:var(--portal-text)]"
+                            >
+                              <Clock3 size={12} className="text-[#a8792f] dark:text-[#caa24c]" aria-hidden="true" />
+                              {formatTourSlotTime(timeStr)}
+                              <button
+                                type="button"
+                                onClick={() => removeTimeFromFlexibleDate(item.date, timeStr)}
+                                aria-label={`Remove ${formatTourSlotTime(timeStr)} on ${formatTourSlotDate(item.date)}`}
+                                className="ml-0.5 rounded p-0.5 text-[color:var(--portal-muted)] hover:bg-[#caa24c]/25 hover:text-[color:var(--portal-text)]"
+                              >
+                                <X size={12} />
+                              </button>
+                            </span>
+                          ))}
 
-                        {/* Remove Date Button */}
-                        <button
-                          type="button"
-                          onClick={() => removeFlexibleDate(item.date)}
-                          aria-label={`Remove date ${formatTourSlotDate(item.date)}`}
-                          className="rounded-lg p-1.5 text-red-400 hover:bg-red-500/10 hover:text-red-300"
-                        >
-                          <Trash2 size={14} />
-                        </button>
+                          <PortalButton size="sm" variant="secondary" onClick={() => editFlexibleDate(item.date)}>
+                            Edit times
+                          </PortalButton>
+
+                          <PortalGhostIconButton
+                            size="sm"
+                            onClick={() => removeFlexibleDate(item.date)}
+                            aria-label={`Remove date ${formatTourSlotDate(item.date)}`}
+                            className="hover:!bg-red-500/10 hover:!text-red-500"
+                          >
+                            <Trash2 size={14} />
+                          </PortalGhostIconButton>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                )
-              })
-            )}
+                  )
+                })
+              )}
+            </PortalSkeletonTransition>
           </div>
 
-          {/* Calendar Mini-Grid (Prompt Req 2) */}
-          <div className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-4">
+          {/* Calendar Overview */}
+          <div className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/50 p-4">
             <div className="mb-3 flex items-center justify-between">
-              <span className="text-xs font-bold text-[color:var(--portal-text)]">Calendar Overview</span>
+              <span className="text-xs font-bold text-[color:var(--portal-text)]">Calendar overview</span>
               <div className="flex items-center gap-1">
-                <button
-                  type="button"
+                <PortalGhostIconButton
+                  size="sm"
                   aria-label="Previous month"
                   onClick={() => setMonth(new Date(month.getFullYear(), month.getMonth() - 1, 1))}
-                  className="rounded-lg p-1.5 text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-card)]"
                 >
                   <ChevronLeft size={15} />
-                </button>
-                <span className="text-xs font-semibold text-[color:var(--portal-text)]">
+                </PortalGhostIconButton>
+                <span className="px-1 text-xs font-semibold tabular-nums text-[color:var(--portal-text)]">
                   {month.toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}
                 </span>
-                <button
-                  type="button"
+                <PortalGhostIconButton
+                  size="sm"
                   aria-label="Next month"
                   onClick={() => setMonth(new Date(month.getFullYear(), month.getMonth() + 1, 1))}
-                  className="rounded-lg p-1.5 text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-card)]"
                 >
                   <ChevronRight size={15} />
-                </button>
+                </PortalGhostIconButton>
               </div>
             </div>
 
             <div className="grid grid-cols-7 gap-1 text-center">
               {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((d) => (
-                <span key={d} className="pb-1 text-[9px] font-bold uppercase tracking-wider text-[color:var(--portal-faint)]">
+                <span key={d} className="pb-1 text-[11px] font-semibold text-[color:var(--portal-muted)]">
                   {d}
                 </span>
               ))}
@@ -970,11 +983,11 @@ export function TourAvailabilityManager({
                     key={val}
                     type="button"
                     onClick={() => handleSelectFlexibleDate(val)}
-                    className={`relative flex min-h-10 flex-col items-center justify-center rounded-lg border text-xs transition-all ${
+                    className={`relative flex min-h-10 flex-col items-center justify-center rounded-lg border text-xs tabular-nums transition-colors ${
                       isSelectedInEditor
-                        ? 'border-[#caa24c] bg-[#caa24c]/25 font-bold text-[color:var(--portal-text)] ring-2 ring-[#caa24c]'
+                        ? 'border-[#caa24c] bg-[#caa24c]/25 font-bold text-[color:var(--portal-text)] ring-2 ring-[#caa24c]/40'
                         : isFlexibleConfigured
-                          ? 'border-[#caa24c] bg-[#caa24c]/15 font-bold text-[color:var(--portal-text)] hover:bg-[#caa24c]/20'
+                          ? 'border-[#caa24c]/60 bg-[#caa24c]/12 font-bold text-[color:var(--portal-text)] hover:bg-[#caa24c]/20'
                           : 'border-[color:var(--portal-border)] bg-[color:var(--portal-card)] text-[color:var(--portal-muted)] hover:border-[#caa24c]/40 hover:text-[color:var(--portal-text)]'
                     }`}
                   >
@@ -990,240 +1003,166 @@ export function TourAvailabilityManager({
             </div>
           </div>
 
-          {/* Weeks Ahead Horizon Setting (Prompt Req 3) */}
-          <div className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-4 sm:p-5">
+          <div className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/50 p-4">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
-                <label className="text-xs font-bold text-[color:var(--portal-text)]">
-                  How far ahead should guests be able to book?
-                </label>
-                <p className="mt-1 text-[11px] text-[color:var(--portal-muted)]">
-                  Controls how far into the future flexible tour dates are displayed on the public booking form.
+                <p className="text-xs font-bold text-[color:var(--portal-text)]">How far ahead can guests book?</p>
+                <p className="mt-0.5 text-xs text-[color:var(--portal-muted)]">
+                  Controls how far ahead flexible dates appear on the booking form.
                 </p>
               </div>
-              <div className="w-48 shrink-0">
+              <div className="w-full shrink-0 sm:w-48">
                 <PortalSelect
                   value={String(settings.weeks_ahead)}
                   onChange={(val) => setSettings((current) => ({ ...current, weeks_ahead: Number(val) }))}
                   options={WEEKS_AHEAD_SELECT_OPTIONS}
                   className="w-full"
+                  buttonClassName="min-h-10"
                 />
               </div>
             </div>
           </div>
 
-          {/* 4. FLEXIBLE SCHEDULE REMINDER (Prompt Req 4) */}
-          <div className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-4 sm:p-5">
-            <div className="space-y-4">
-              <div className="flex items-start gap-3">
-                <button
-                  type="button"
-                  onClick={() =>
-                    setSettings((current) => ({ ...current, reminder_enabled: !current.reminder_enabled }))
-                  }
-                  className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded border border-[#caa24c] bg-[#caa24c]/15 text-[#f1d27a]"
-                >
-                  {settings.reminder_enabled ? <Check size={13} /> : null}
-                </button>
-                <div>
-                  <span className="flex items-center gap-1.5 text-xs font-bold text-[color:var(--portal-text)]">
-                    <Bell size={14} className="text-[#caa24c]" /> Remind me to update my tour schedule
-                  </span>
-                  <p className="mt-1 text-[11px] text-[color:var(--portal-muted)]">
-                    Your tour schedule needs updating · Add your upcoming tour availability so guests can continue booking tours.
-                  </p>
-                </div>
-              </div>
+          <div className="space-y-4 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/50 p-4">
+            <PortalCheckbox
+              checked={settings.reminder_enabled}
+              onChange={(checked) => setSettings((current) => ({ ...current, reminder_enabled: checked }))}
+              label={
+                <span className="inline-flex items-center gap-1.5">
+                  <Bell size={13} className="text-[#a8792f] dark:text-[#caa24c]" aria-hidden="true" />
+                  Remind me to update my flexible tour schedule
+                </span>
+              }
+              sublabel="Active only while Flexible schedule is enabled."
+            />
 
-              {settings.reminder_enabled && (
-                <div className="grid gap-3 pt-2 sm:grid-cols-2">
-                  <div>
-                    <label className="text-[10px] font-bold uppercase tracking-wider text-[color:var(--portal-faint)]">
-                      Every
-                    </label>
-                    <PortalSelect
-                      value={String(settings.reminder_day)}
-                      onChange={(val) => setSettings((current) => ({ ...current, reminder_day: Number(val) }))}
-                      options={REMINDER_DAY_OPTIONS}
-                      className="mt-1 w-full"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-[10px] font-bold uppercase tracking-wider text-[color:var(--portal-faint)]">
-                      Time
-                    </label>
-                    <PortalSelect
-                      value={settings.reminder_time.slice(0, 5)}
-                      onChange={(val) => setSettings((current) => ({ ...current, reminder_time: val }))}
-                      options={REMINDER_TIME_OPTIONS}
-                      className="mt-1 w-full"
-                    />
-                  </div>
-                </div>
-              )}
-              <p className="text-[10px] text-[color:var(--portal-faint)]">
-                Note: This reminder is active only while Flexible Schedule is enabled.
-              </p>
-            </div>
+            {settings.reminder_enabled ? (
+              <div className="grid gap-3 sm:grid-cols-2">
+                <label className="block space-y-1">
+                  <span className="text-xs font-medium text-[color:var(--portal-muted)]">Day</span>
+                  <PortalSelect
+                    value={String(settings.reminder_day)}
+                    onChange={(val) => setSettings((current) => ({ ...current, reminder_day: Number(val) }))}
+                    options={REMINDER_DAY_OPTIONS}
+                    className="w-full"
+                    buttonClassName="min-h-10"
+                  />
+                </label>
+                <label className="block space-y-1">
+                  <span className="text-xs font-medium text-[color:var(--portal-muted)]">Time</span>
+                  <PortalSelect
+                    value={settings.reminder_time.slice(0, 5)}
+                    onChange={(val) => setSettings((current) => ({ ...current, reminder_time: val }))}
+                    options={REMINDER_TIME_OPTIONS}
+                    className="w-full"
+                    buttonClassName="min-h-10"
+                  />
+                </label>
+              </div>
+            ) : null}
           </div>
 
-          {/* Save Action */}
           <div className="flex flex-col gap-3 border-t border-[color:var(--portal-border)] pt-4 sm:flex-row sm:items-center sm:justify-between">
-            <p className="text-[11px] text-[color:var(--portal-muted)]">
-              Saves your custom dates and times. Existing client bookings remain completely reserved.
+            <p className="text-xs text-[color:var(--portal-muted)]">
+              Saves your custom dates and times while keeping existing bookings reserved.
             </p>
             <PortalButton
               type="button"
               variant="primary"
               onClick={() => void saveFlexibleSchedule()}
-              disabled={Boolean(saving)}
-              className="font-bold"
+              disabled={Boolean(saving) || loading}
+              className="w-full shrink-0 sm:w-auto"
             >
-              {saving === 'flexible' ? <Loader2 size={14} className="animate-spin" /> : null} Save flexible schedule
+              {saving === 'flexible' ? <Loader2 size={14} className="animate-spin" aria-hidden="true" /> : null}
+              Save flexible schedule
             </PortalButton>
           </div>
         </div>
       )}
 
-      {/* GUEST BOOKING FORM PREVIEW MODAL (Prompt Req 7) */}
-      {typeof document !== 'undefined' ? createPortal((
-        <AnimatePresence>
-          {previewOpen && (
-            <motion.div
-              role="dialog"
-              aria-modal="true"
-              aria-label="Guest booking form preview"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.22, ease: [0.23, 1, 0.32, 1] }}
-              className="fixed inset-0 z-[80] flex items-end justify-center bg-black/80 px-0 pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] backdrop-blur-sm sm:items-center sm:p-4"
-              onClick={() => setPreviewOpen(false)}
-            >
-              <motion.div
-                initial={{ opacity: 0, scale: 0.95, y: 12, filter: 'blur(8px)' }}
-                animate={{ opacity: 1, scale: 1, y: 0, filter: 'blur(0px)' }}
-                exit={{ opacity: 0, scale: 0.95, y: 12, filter: 'blur(8px)' }}
-                transition={{ duration: 0.22, ease: [0.23, 1, 0.32, 1] }}
-                className="relative flex max-h-[calc(100dvh-env(safe-area-inset-top)-env(safe-area-inset-bottom))] w-full flex-col overflow-hidden rounded-t-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] shadow-2xl sm:max-h-[90vh] sm:max-w-2xl sm:rounded-2xl"
-                onClick={(event) => event.stopPropagation()}
-              >
-            <div className="flex shrink-0 items-center justify-between gap-3 border-b border-[color:var(--portal-border)] px-4 py-3 sm:p-6 sm:pb-4">
-              <div>
-                <div className="flex items-center gap-2">
-                  <Eye size={18} className="text-[#caa24c]" />
-                  <h3 className="text-base font-bold text-[color:var(--portal-text)]">
-                    Guest Booking Form Preview
-                  </h3>
-                </div>
-                <p className="mt-1 text-xs text-[color:var(--portal-muted)]">
-                  Live preview of what prospective clients see on the public tour booking page.
-                </p>
+      {/* Guest Booking Form Preview Modal */}
+      <PortalModal
+        isOpen={previewOpen}
+        onClose={() => setPreviewOpen(false)}
+        title="Guest booking form preview"
+        description="Live view of tour times shown on the public booking page."
+        headerIcon={<Eye size={18} className="shrink-0 text-[#a8792f] dark:text-[#caa24c]" aria-hidden="true" />}
+        maxWidth="max-w-2xl"
+        footer={
+          <div className="flex justify-end">
+            <PortalButton type="button" onClick={() => setPreviewOpen(false)}>
+              Close preview
+            </PortalButton>
+          </div>
+        }
+      >
+        <div className="space-y-5">
+          <div>
+            <p className="text-xs font-semibold tabular-nums text-[color:var(--portal-muted)]">
+              1. Available tour dates ({previewAvailableDates.length})
+            </p>
+            {previewAvailableDates.length === 0 ? (
+              <p className="mt-2 rounded-xl border border-dashed border-[color:var(--portal-border)] p-4 text-xs text-[color:var(--portal-muted)]">
+                No tour slots currently available within the {weeksAhead}-week window.
+              </p>
+            ) : (
+              <div className="mt-2.5 flex flex-wrap gap-2">
+                {previewAvailableDates.map((dateStr) => {
+                  const isSelected = previewSelectedDate === dateStr
+                  return (
+                    <PortalButton
+                      key={dateStr}
+                      size="sm"
+                      variant={isSelected ? 'primary' : 'secondary'}
+                      onClick={() => {
+                        setPreviewSelectedDate(dateStr)
+                        setPreviewSelectedTime('')
+                      }}
+                      className="tabular-nums"
+                    >
+                      {formatTourSlotDate(dateStr)}
+                    </PortalButton>
+                  )
+                })}
               </div>
-              <button
-                type="button"
-                onClick={() => setPreviewOpen(false)}
-                aria-label="Close preview"
-                className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-xl text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45"
-              >
-                <X size={15} />
-              </button>
-            </div>
+            )}
+          </div>
 
-            <div className="min-h-0 flex-1 space-y-6 overflow-y-auto overscroll-contain px-4 py-4 sm:p-6 sm:pt-2">
-              {/* Date Selector */}
-              <div>
-                <label className="text-xs font-bold uppercase tracking-wider text-[color:var(--portal-faint)]">
-                  1. Select an Available Tour Date ({previewAvailableDates.length} dates available)
-                </label>
-                {previewAvailableDates.length === 0 ? (
-                  <p className="mt-2 rounded-lg border border-dashed border-[color:var(--portal-border)] p-4 text-xs text-[color:var(--portal-muted)]">
-                    No tour slots currently available within the {weeksAhead}-week window.
-                  </p>
-                ) : (
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    {previewAvailableDates.map((dateStr) => {
-                      const isSelected = previewSelectedDate === dateStr
-                      return (
-                        <button
-                          key={dateStr}
-                          type="button"
-                          onClick={() => {
-                            setPreviewSelectedDate(dateStr)
-                            setPreviewSelectedTime('')
-                          }}
-                          className={`rounded-lg border px-3 py-2 text-xs font-semibold transition-all ${
-                            isSelected
-                              ? 'border-[#caa24c] bg-[#caa24c] text-white shadow'
-                              : 'border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] text-[color:var(--portal-text)] hover:border-[#caa24c]/40'
-                          }`}
-                        >
-                          {formatTourSlotDate(dateStr)}
-                        </button>
-                      )
-                    })}
-                  </div>
-                )}
-              </div>
-
-              {/* Time Selector for Selected Date */}
-              {previewSelectedDate && (
-                <div>
-                  <label className="text-xs font-bold uppercase tracking-wider text-[color:var(--portal-faint)]">
-                    2. Select a Tour Time for {formatTourSlotDate(previewSelectedDate)}
-                  </label>
-                  {previewSlotsForSelectedDate.length === 0 ? (
-                    <p className="mt-2 text-xs text-[color:var(--portal-muted)]">
-                      No available times for this date.
-                    </p>
-                  ) : (
-                    <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
-                      {previewSlotsForSelectedDate.map((slot) => {
-                        const isSelected = previewSelectedTime === slot.id
-                        return (
-                          <button
-                            key={slot.id}
-                            type="button"
-                            onClick={() => setPreviewSelectedTime(slot.id)}
-                            className={`flex items-center justify-center gap-2 rounded-lg border px-4 py-2.5 text-xs font-bold transition-all ${
-                              isSelected
-                                ? 'border-[#caa24c] bg-[#caa24c] text-white shadow'
-                                : 'border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] text-[color:var(--portal-text)] hover:border-[#caa24c]/40'
-                            }`}
-                          >
-                            <Clock3 size={14} />
-                            {formatTourSlotTime(slot.start_time)}
-                          </button>
-                        )
-                      })}
-                    </div>
-                  )}
+          {previewSelectedDate ? (
+            <div>
+              <p className="text-xs font-semibold text-[color:var(--portal-muted)]">
+                2. Tour times for {formatTourSlotDate(previewSelectedDate)}
+              </p>
+              {previewSlotsForSelectedDate.length === 0 ? (
+                <p className="mt-2 text-xs text-[color:var(--portal-muted)]">No available times for this date.</p>
+              ) : (
+                <div className="mt-2.5 grid grid-cols-2 gap-2 sm:grid-cols-3">
+                  {previewSlotsForSelectedDate.map((slot) => {
+                    const isSelected = previewSelectedTime === slot.id
+                    return (
+                      <PortalButton
+                        key={slot.id}
+                        size="sm"
+                        variant={isSelected ? 'primary' : 'secondary'}
+                        onClick={() => setPreviewSelectedTime(slot.id)}
+                        className="tabular-nums"
+                      >
+                        <Clock3 size={14} aria-hidden="true" />
+                        {formatTourSlotTime(slot.start_time)}
+                      </PortalButton>
+                    )
+                  })}
                 </div>
               )}
-
-              {/* Safeguard & Synchronized Notice */}
-              <div className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-4 text-[11px] text-[color:var(--portal-muted)]">
-                <p>
-                  ✓ <strong>Direct Connection:</strong> Each time can hold two separate tours. It remains available after the first booking and closes when both places are booked.
-                </p>
-                <p className="mt-1">
-                  ✓ <strong>Notice Rule:</strong> Tour times less than 24 hours away are automatically hidden to ensure adequate preparation time.
-                </p>
-              </div>
             </div>
+          ) : null}
 
-            <div className="flex shrink-0 justify-end border-t border-[color:var(--portal-border)] p-4 sm:px-6">
-              <PortalButton type="button" onClick={() => setPreviewOpen(false)}>
-                Close Preview
-              </PortalButton>
-            </div>
-              </motion.div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-      ), document.body) : null}
-    </motion.div>
+          <div className="space-y-1 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-4 text-xs text-[color:var(--portal-muted)]">
+            <p>Each slot holds up to two separate tours before closing automatically.</p>
+            <p>Times less than 24 hours away are hidden to allow preparation time.</p>
+          </div>
+        </div>
+      </PortalModal>
+    </div>
   )
 }
-
-

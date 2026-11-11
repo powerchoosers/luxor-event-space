@@ -69,7 +69,33 @@ body[data-portal-theme='dark'] .portal-elevated-surface {
   --portal-soft: rgba(30, 27, 24, 0.70);
 }
 
-.portal-close-button::before {
+/* Canonical portal modal and sheet backdrops across light and dark themes */
+.portal-modal-backdrop {
+  background-color: rgba(12, 10, 8, 0.56);
+}
+
+body[data-portal-theme='dark'] .portal-modal-backdrop {
+  background-color: rgba(4, 3, 2, 0.72);
+}
+
+.portal-modal-backdrop--sheet {
+  background-color: rgba(12, 10, 8, 0.34);
+}
+
+body[data-portal-theme='dark'] .portal-modal-backdrop--sheet {
+  background-color: rgba(4, 3, 2, 0.48);
+}
+
+.portal-modal-backdrop--compact {
+  background-color: rgba(12, 10, 8, 0.34);
+}
+
+body[data-portal-theme='dark'] .portal-modal-backdrop--compact {
+  background-color: rgba(4, 3, 2, 0.46);
+}
+
+.portal-close-button::before,
+.portal-ghost-icon-button::before {
   content: '';
   position: absolute;
   inset: -4px;
@@ -277,7 +303,7 @@ body[data-portal-theme] .portal-checkbox[aria-checked='false'] svg {
   }
 }
 
-body[data-portal-theme='light'] aside,
+body[data-portal-theme='light'].portal-shell > aside:not(.portal-elena-chat-panel):not(.portal-bulk-action-deck),
 body[data-portal-theme='light'] header,
 body[data-portal-theme='light'] .nodal-void-card,
 body[data-portal-theme='light'] .luxor-glass-card,
@@ -294,9 +320,7 @@ body[data-portal-theme='light'] .portal-surface {
     border-bottom-width: 0 !important;
   }
 
-  body.portal-shell aside,
-  body[data-portal-theme='light'] aside,
-  body[data-portal-theme='dark'] aside {
+  body.portal-shell > aside:not(.portal-elena-chat-panel):not(.portal-bulk-action-deck) {
     border: none !important;
     border-right: none !important;
     box-shadow: none !important;
@@ -329,15 +353,15 @@ body[data-portal-theme='light'] .bg-\[\#0c0c0c\],
 body[data-portal-theme='light'] .bg-\[\#120d0c\]\/72,
 body[data-portal-theme='light'] .bg-\[\#120d0c\]\/70,
 body[data-portal-theme='light'] .bg-\[\#15100d\],
-body[data-portal-theme='light'] .bg-black\/40,
-body[data-portal-theme='light'] .bg-black\/60,
-body[data-portal-theme='light'] .bg-black\/30 {
+body[data-portal-theme='light'] .bg-black\/40:not(.portal-modal-backdrop):not([data-portal-backdrop='true']),
+body[data-portal-theme='light'] .bg-black\/60:not(.portal-modal-backdrop):not([data-portal-backdrop='true']),
+body[data-portal-theme='light'] .bg-black\/30:not(.portal-modal-backdrop):not([data-portal-backdrop='true']) {
   background-color: var(--portal-card) !important;
 }
 
-body[data-portal-theme='light'] .bg-black\/40,
-body[data-portal-theme='light'] .bg-black\/60,
-body[data-portal-theme='light'] .bg-black\/30,
+body[data-portal-theme='light'] .bg-black\/40:not(.portal-modal-backdrop):not([data-portal-backdrop='true']),
+body[data-portal-theme='light'] .bg-black\/60:not(.portal-modal-backdrop):not([data-portal-backdrop='true']),
+body[data-portal-theme='light'] .bg-black\/30:not(.portal-modal-backdrop):not([data-portal-backdrop='true']),
 body[data-portal-theme='light'] .bg-zinc-950,
 body[data-portal-theme='light'] .bg-zinc-950\/60,
 body[data-portal-theme='light'] .bg-zinc-950\/50,
@@ -683,24 +707,22 @@ body[data-portal-theme] .portal-gold-btn:focus-visible {
   outline-offset: 2px !important;
 }
 
-/* Desktop Portal Scrollbars: matching Loadline's tactile gold 3D raised texture (desktop mouse only) */
+/* Portal Desktop Scrollbars: subtle, refined gold floating scrollbar across all containers (tables, cards, modals, lists).
+   Invisible when idle (0 visual distraction), fades in smoothly on scroll/hover without clunky gray tracks. */
 @media (min-width: 1024px) and (hover: hover) and (pointer: fine) {
-  @supports selector(::-webkit-scrollbar) {
-    body[data-portal-theme] * {
-      scrollbar-color: auto !important;
-      scrollbar-width: auto !important;
-    }
-  }
-
   body[data-portal-theme] * {
     scrollbar-width: thin;
-    scrollbar-color: #caa24c transparent;
+    scrollbar-color: transparent transparent;
+  }
+
+  body[data-portal-theme] *:hover {
+    scrollbar-color: rgba(212, 175, 84, 0.5) transparent;
   }
 
   body[data-portal-theme] *::-webkit-scrollbar,
   body[data-portal-theme] .portal-scrollbar::-webkit-scrollbar {
-    width: 8px;
-    height: 8px;
+    width: 6px;
+    height: 6px;
   }
 
   body[data-portal-theme] *::-webkit-scrollbar-track,
@@ -710,26 +732,30 @@ body[data-portal-theme] .portal-gold-btn:focus-visible {
     border: 0 !important;
   }
 
+  /* Thumb disappears when idle */
   body[data-portal-theme] *::-webkit-scrollbar-thumb,
   body[data-portal-theme] .portal-scrollbar::-webkit-scrollbar-thumb {
-    min-height: 36px;
-    border: 1px solid #9e7525 !important;
+    min-height: 28px;
+    min-width: 28px;
     border-radius: 999px !important;
-    background: linear-gradient(180deg, #d4af54 0%, #ba8e35 100%) !important;
-    box-shadow:
-      inset 0 1px 1px rgba(255, 255, 255, 0.8),
-      inset 0 -1px 1px rgba(0, 0, 0, 0.3),
-      0 1px 2px rgba(0, 0, 0, 0.16) !important;
+    border: 1px solid transparent !important;
+    background: transparent !important;
+    transition: background 0.2s ease, border-color 0.2s ease;
   }
 
+  /* When moving or hovering in any container or table, the gold pill glides in 1:1 */
+  body[data-portal-theme] *:hover::-webkit-scrollbar-thumb,
+  body[data-portal-theme] .portal-scrollbar:hover::-webkit-scrollbar-thumb {
+    border: 1px solid rgba(184, 141, 55, 0.45) !important;
+    background: linear-gradient(180deg, rgba(212, 175, 84, 0.6) 0%, rgba(186, 142, 53, 0.6) 100%) !important;
+  }
+
+  /* When hovering directly on the scrollbar */
   body[data-portal-theme] *::-webkit-scrollbar-thumb:hover,
   body[data-portal-theme] .portal-scrollbar::-webkit-scrollbar-thumb:hover {
-    border-color: #aa812f !important;
-    background: linear-gradient(180deg, #e0be67 0%, #caa043 100%) !important;
-    box-shadow:
-      inset 0 1px 1px #ffffff,
-      inset 0 -1px 1px rgba(0, 0, 0, 0.35),
-      0 2px 4px rgba(0, 0, 0, 0.2) !important;
+    border: 1px solid #b88d37 !important;
+    background: linear-gradient(180deg, #d4af54 0%, #ba8e35 100%) !important;
+    box-shadow: 0 1px 3px rgba(36, 24, 6, 0.3) !important;
   }
 
   body[data-portal-theme] *::-webkit-scrollbar-button {
@@ -737,7 +763,7 @@ body[data-portal-theme] .portal-gold-btn:focus-visible {
   }
 }
 
-/* Tablet & Mobile Portal Scrollbars: native disappearing lightweight scrollbar without any persistent strip or track */
+/* Tablet & Mobile: native gesture-driven overlay scrollbar without persistent tracks */
 @media (max-width: 1023px), (hover: none), (pointer: coarse) {
   body[data-portal-theme] * {
     scrollbar-width: none !important;
@@ -1243,72 +1269,6 @@ body[data-luxor-site]::-webkit-scrollbar-thumb:hover {
     -webkit-overflow-scrolling: touch;
     overscroll-behavior-x: contain;
     overscroll-behavior-y: auto;
-  }
-
-  @media (min-width: 1024px) and (hover: hover) and (pointer: fine) {
-    .portal-scrollbar {
-      scrollbar-color: #caa24c transparent;
-      scrollbar-width: thin;
-    }
-
-    .portal-scrollbar::-webkit-scrollbar {
-      width: 8px;
-      height: 8px;
-    }
-
-    .portal-scrollbar::-webkit-scrollbar-track {
-      background: transparent;
-      border: 0;
-    }
-
-    .portal-scrollbar::-webkit-scrollbar-thumb {
-      min-height: 36px;
-      border: 1px solid #9e7525 !important;
-      border-radius: 999px !important;
-      background: linear-gradient(180deg, #d4af54 0%, #ba8e35 100%) !important;
-      box-shadow:
-        inset 0 1px 1px rgba(255, 255, 255, 0.8),
-        inset 0 -1px 1px rgba(0, 0, 0, 0.3),
-        0 1px 2px rgba(0, 0, 0, 0.16) !important;
-    }
-
-    .portal-scrollbar::-webkit-scrollbar-thumb:hover {
-      border-color: #aa812f !important;
-      background: linear-gradient(180deg, #e0be67 0%, #caa043 100%) !important;
-      box-shadow:
-        inset 0 1px 1px #ffffff,
-        inset 0 -1px 1px rgba(0, 0, 0, 0.35),
-        0 2px 4px rgba(0, 0, 0, 0.2) !important;
-    }
-
-    .portal-scrollbar-light {
-      scrollbar-color: #caa24c transparent;
-    }
-
-    .portal-scrollbar-light::-webkit-scrollbar-track {
-      background: transparent;
-      border: 0;
-    }
-
-    .portal-scrollbar-light::-webkit-scrollbar-thumb {
-      min-height: 36px;
-      border: 1px solid #9e7525 !important;
-      border-radius: 999px !important;
-      background: linear-gradient(180deg, #d4af54 0%, #ba8e35 100%) !important;
-      box-shadow:
-        inset 0 1px 1px rgba(255, 255, 255, 0.8),
-        inset 0 -1px 1px rgba(0, 0, 0, 0.3),
-        0 1px 2px rgba(0, 0, 0, 0.16) !important;
-    }
-
-    .portal-scrollbar-light::-webkit-scrollbar-thumb:hover {
-      border-color: #aa812f !important;
-      background: linear-gradient(180deg, #e0be67 0%, #caa043 100%) !important;
-      box-shadow:
-        inset 0 1px 1px #ffffff,
-        inset 0 -1px 1px rgba(0, 0, 0, 0.35),
-        0 2px 4px rgba(0, 0, 0, 0.2) !important;
-    }
   }
 
   .portal-render-surface {
@@ -2506,15 +2466,16 @@ body[data-luxor-site] main.pricing-page > .pricing-section {
 }
 
 @media (hover: none) and (pointer: coarse) {
-  body[data-portal-theme] button[aria-label]:not(.portal-header-action):not(.portal-inline-action):not([role="checkbox"]):not(.portal-checkbox),
-  body[data-portal-theme] button[title]:not(.portal-header-action):not(.portal-inline-action):not([role="checkbox"]):not(.portal-checkbox),
-  body[data-portal-theme] button:has(svg):not(:has(span)):not(.portal-header-action):not(.portal-inline-action):not([role="checkbox"]):not(.portal-checkbox) {
+  body[data-portal-theme] button[aria-label]:not(.portal-header-action):not(.portal-inline-action):not(.portal-ghost-icon-button):not([role="checkbox"]):not(.portal-checkbox),
+  body[data-portal-theme] button[title]:not(.portal-header-action):not(.portal-inline-action):not(.portal-ghost-icon-button):not([role="checkbox"]):not(.portal-checkbox),
+  body[data-portal-theme] button:has(svg):not(:has(span)):not(.portal-header-action):not(.portal-inline-action):not(.portal-ghost-icon-button):not([role="checkbox"]):not(.portal-checkbox) {
     min-width: 44px;
     min-height: 44px;
   }
 
   body[data-portal-theme] .portal-header-action,
   body[data-portal-theme] .portal-inline-action,
+  body[data-portal-theme] .portal-ghost-icon-button,
   body[data-portal-theme] [role="checkbox"],
   body[data-portal-theme] .portal-checkbox {
     min-width: 0 !important;

@@ -939,14 +939,10 @@ export default function LeadsPage() {
                     <h2 id="leads-view-menu-title" className="text-base font-bold text-[color:var(--portal-text)]">Browse views</h2>
                     <p className="mt-0.5 text-xs text-[color:var(--portal-muted)]">Choose a workspace view.</p>
                   </div>
-                  <button
-                    type="button"
+                  <PortalCloseButton
                     onClick={() => setIsTabMenuOpen(false)}
                     aria-label="Close views menu"
-                    className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-xl text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45"
-                  >
-                    <X size={15} />
-                  </button>
+                  />
                 </div>
                 <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4 pb-6 portal-scrollbar">
                   <nav aria-label="Leads and client views" className="space-y-4">

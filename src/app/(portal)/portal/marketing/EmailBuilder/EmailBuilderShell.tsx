@@ -655,9 +655,7 @@ export function EmailBuilderShell({ initialTemplate = null, onClose }: { initial
         <button type="button" onClick={() => { setPreviewInitialTab('send'); setShowPreview(true) }} disabled={!blocks.length} className="flex items-center gap-1.5 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 py-2 text-[9px] font-bold text-[color:var(--portal-text)] hover:bg-[color:var(--portal-soft)] disabled:opacity-40"><Send size={13} /> Send test</button>
         <button type="button" onClick={() => { setPreviewInitialTab('send'); setShowPreview(true) }} disabled={!blocks.length} title="Review the email, audience, and delivery details before sending" aria-label="Review email before sending" className="flex items-center gap-1.5 rounded-lg bg-[#b88732] px-4 py-2 text-[9px] font-black uppercase tracking-[0.12em] text-white transition hover:bg-[#a8792f] disabled:opacity-40"><BadgeCheck size={13} /> Review &amp; prepare</button>
         {onClose ? (
-          <button type="button" onClick={onClose} aria-label="Close builder" title="Close builder" className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-xl text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45">
-            <X size={15} />
-          </button>
+          <PortalCloseButton onClick={onClose} aria-label="Close builder" title="Close builder" />
         ) : null}
       </div>
 

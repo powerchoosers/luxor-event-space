@@ -16,6 +16,7 @@ import { useRouter } from 'next/navigation'
 import { useEffect, useId, useRef, useState, useSyncExternalStore } from 'react'
 import { createPortal } from 'react-dom'
 import { NewLeadDrawer } from '@/components/portal/NewLeadDrawer'
+import { PortalCloseButton } from '@/components/portal/PortalUI'
 
 const ACTION_BAR_SPRING = { stiffness: 460, damping: 43, mass: 1 }
 const subscribeToHydration = () => () => {}
@@ -215,7 +216,7 @@ function DesktopQuickActions() {
     </motion.div>
     <AnimatePresence onExitComplete={() => { setTabHidden(false); if (keyboardInteraction.current) requestAnimationFrame(() => toggle.current?.focus()) }}>
       {open ? <motion.div id={panelId} role="region" aria-label="Quick actions" initial={reduceMotion ? { opacity: 0 } : { x: 40, opacity: 0, scale: 0.95 }} animate={{ x: 0, opacity: 1, scale: 1 }} exit={reduceMotion ? { opacity: 0 } : { x: 40, opacity: 0, scale: 0.95 }} transition={{ duration: reduceMotion ? 0 : 0.24, ease: [0.23, 1, 0.32, 1] }} style={{ top: `clamp(8px, calc(${position ? `${position.y}px` : '75vh'} - 110px), calc(100dvh - 270px))`, transformOrigin: 'right center' }} className="fixed right-0 w-60 rounded-l-2xl border border-r-0 border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-3 shadow-xl">
-        <div className="mb-2 flex items-center justify-between px-3"><h2 className="text-sm font-semibold text-[color:var(--portal-text)]">Quick actions</h2><button ref={drawerClose} type="button" onClick={close} aria-label="Close quick actions" className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-xl text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45"><X size={16} /></button></div>
+        <div className="mb-2 flex items-center justify-between px-3"><h2 className="text-sm font-semibold text-[color:var(--portal-text)]">Quick actions</h2><PortalCloseButton ref={drawerClose} onClick={close} aria-label="Close quick actions" /></div>
         <button type="button" className={action} onClick={() => { setOpen(false); setInquiryOpen(true) }}><Plus size={17} className="text-[#a8792f]" /> New inquiry</button>
         <Link className={action} href="/portal/leads?view=followups"><Phone size={17} className="text-[#a8792f]" /> Follow Ups</Link>
         <Link className={action} href="/portal/marketing?tab=automations"><Workflow size={17} className="text-[#a8792f]" /> Flow</Link>

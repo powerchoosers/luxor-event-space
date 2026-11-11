@@ -1578,23 +1578,22 @@ export function OperationsPageContent({ embeddedBills = false }: { embeddedBills
       </PortalModal>
 
       {/* 5. Edit Modals */}
-      {editingItem && editFormData && (
-        <PortalModal
-          isOpen={!!editingItem}
-          onClose={() => setEditingItem(null)}
-          sidePanel={editingItem.type === 'bill'}
-          headerBack={editingItem.type === 'bill'}
-          animateClose
-          title={`Edit ${
-            editingItem.type === 'bill'
-              ? 'bill details'
-              : editingItem.type === 'task'
-              ? 'Maintenance Ticket'
-              : editingItem.type === 'inventory'
-              ? 'Inventory Item'
-              : 'Preferred Vendor'
-          }`}
-        >
+      <PortalModal
+        isOpen={Boolean(editingItem && editFormData)}
+        onClose={() => setEditingItem(null)}
+        sidePanel={editingItem?.type === 'bill'}
+        headerBack={editingItem?.type === 'bill'}
+        title={editingItem ? `Edit ${
+          editingItem.type === 'bill'
+            ? 'bill details'
+            : editingItem.type === 'task'
+            ? 'Maintenance Ticket'
+            : editingItem.type === 'inventory'
+            ? 'Inventory Item'
+            : 'Preferred Vendor'
+        }` : undefined}
+      >
+        {editingItem && editFormData ? (
           <form onSubmit={handleEditSubmit} className="space-y-4">
             {editingItem.type === 'bill' && (
               <>
@@ -1912,16 +1911,16 @@ export function OperationsPageContent({ embeddedBills = false }: { embeddedBills
               </div>
             </div>
           </form>
-        </PortalModal>
-      )}
+        ) : null}
+      </PortalModal>
 
       {/* 6. Delete Confirmation Modal */}
-      {deletingItem && (
-        <PortalModal
-          isOpen={!!deletingItem}
-          onClose={() => setDeletingItem(null)}
-          title="Confirm Deletion"
-        >
+      <PortalModal
+        isOpen={Boolean(deletingItem)}
+        onClose={() => setDeletingItem(null)}
+        title="Confirm Deletion"
+      >
+        {deletingItem ? (
           <div className="space-y-4">
             <p className="text-xs text-zinc-300 leading-relaxed">
               Are you sure you want to delete <span className="font-bold text-white">&ldquo;{deletingItem.name}&rdquo;</span>? 
@@ -1945,8 +1944,8 @@ export function OperationsPageContent({ embeddedBills = false }: { embeddedBills
               </button>
             </div>
           </div>
-        </PortalModal>
-      )}
+        ) : null}
+      </PortalModal>
       </PortalTabTransition>
     </PortalPageFrame>
   )

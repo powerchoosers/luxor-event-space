@@ -5,9 +5,9 @@ import Link from 'next/link'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import {
   AlertCircle, ArrowUpRight, Check, CheckCircle2, ChevronDown, ChevronRight,
-  Building2, Clock3, FileCheck2, FileText, Inbox, Mail, Plus, ShieldCheck, X,
+  Building2, Clock3, CreditCard, FileCheck2, FilePenLine, FileText, Inbox, Mail, Plus, ShieldCheck, X,
 } from '@/lib/icons/phosphor-compat'
-import { PortalAnimatedTabs, PortalButton, PortalFilterBar, PortalModal, PortalSelect } from '@/components/portal/PortalUI'
+import { PortalAnimatedTabs, PortalButton, PortalCloseButton, PortalFilterBar, PortalGhostIconButton, PortalModal, PortalSelect } from '@/components/portal/PortalUI'
 import { formatLuxorDate } from '@/lib/luxorDateFormatting'
 import ManualBillAnalysis from '@/components/portal/ManualBillAnalysis'
 import BillPlanning from '@/components/portal/BillPlanning'
@@ -87,14 +87,14 @@ function ledgerStatus(bill: LuxorBill): LedgerTab {
 }
 
 function statusLabel(bill: LuxorBill) {
-  if (bill.archived_at) return { label: 'Archived', color: 'text-[color:var(--portal-muted)] bg-[color:var(--portal-soft)] border-[color:var(--portal-border)]' }
+  if (bill.archived_at) return { label: 'Archived', color: 'text-[color:var(--portal-muted)] bg-[color:var(--portal-soft)]' }
   const status = ledgerStatus(bill)
-  if (status === 'review') return { label: 'Needs review', color: 'text-amber-700 dark:text-amber-300 bg-amber-500/10 border-amber-500/20' }
-  if (status === 'paid') return { label: 'Paid', color: 'text-emerald-700 dark:text-emerald-300 bg-emerald-500/10 border-emerald-500/20' }
-  if (status === 'hold') return { label: 'On hold', color: 'text-rose-700 dark:text-rose-300 bg-rose-500/10 border-rose-500/20' }
-  if (status === 'due') return { label: relativeDue(bill.due_date), color: 'text-rose-700 dark:text-rose-300 bg-rose-500/10 border-rose-500/20' }
-  if (status === 'ready') return { label: 'Ready to pay', color: 'text-blue-700 dark:text-blue-300 bg-blue-500/10 border-blue-500/20' }
-  return { label: 'Open', color: 'text-[color:var(--portal-muted)] bg-[color:var(--portal-soft)] border-[color:var(--portal-border)]' }
+  if (status === 'review') return { label: 'Needs review', color: 'text-amber-700 dark:text-amber-300 bg-amber-500/10' }
+  if (status === 'paid') return { label: 'Paid', color: 'text-emerald-700 dark:text-emerald-300 bg-emerald-500/10' }
+  if (status === 'hold') return { label: 'On hold', color: 'text-rose-700 dark:text-rose-300 bg-rose-500/10' }
+  if (status === 'due') return { label: relativeDue(bill.due_date), color: 'text-rose-700 dark:text-rose-300 bg-rose-500/10' }
+  if (status === 'ready') return { label: 'Ready to pay', color: 'text-blue-700 dark:text-blue-300 bg-blue-500/10' }
+  return { label: 'Open', color: 'text-[color:var(--portal-muted)] bg-[color:var(--portal-soft)]' }
 }
 
 
@@ -337,7 +337,43 @@ export function BillsPayableLedger({
         </div>)}
       </div>
     </section>
-    <PortalModal isOpen={Boolean(selected)} onClose={() => { if (!busy) selectBill(null) }} title="Bill details" description={displayedBill?.service} sidePanel maxWidth="max-w-[600px]" animateClose>
+    <PortalModal
+      isOpen={Boolean(selected)}
+      onClose={() => { if (!busy) selectBill(null) }}
+      title="Bill details"
+      description={displayedBill?.service}
+      sidePanel
+      maxWidth="max-w-[600px]"
+      animateClose
+      headerAction={displayedBill ? (
+        <div className="flex items-center gap-1">
+          {!displayedBill.archived_at && displayedBill.status !== 'paid' ? (
+            <PortalGhostIconButton
+              size="sm"
+              onClick={() => review('mark_paid')}
+              disabled={Boolean(busy)}
+              aria-label="Mark bill paid"
+              title="Mark bill paid"
+              className="!h-8 !w-8 text-emerald-600 hover:bg-emerald-500/10 hover:text-emerald-700 dark:text-emerald-400 dark:hover:text-emerald-300"
+            >
+              <Check size={16} />
+            </PortalGhostIconButton>
+          ) : null}
+          {!displayedBill.archived_at && displayedBill.status !== 'paid' ? (
+            <PortalGhostIconButton
+              size="sm"
+              onClick={() => { if (selected) onEditBill(selected) }}
+              disabled={Boolean(busy)}
+              aria-label="Edit bill details"
+              title="Edit bill details"
+              className="!h-8 !w-8"
+            >
+              <FilePenLine size={16} />
+            </PortalGhostIconButton>
+          ) : null}
+        </div>
+      ) : null}
+    >
       {displayedBill ? <BillReview key={displayedBill.id} bill={displayedBill} balance={getBillBalance(displayedBill, expenses)} busy={busy} message={message} onClose={() => selectBill(null)} onReview={review} onBillChanged={onBillChanged} onEdit={() => { if (selected) onEditBill(selected) }} vendors={vendors} companyChoice={companyChoice} setCompanyChoice={setCompanyChoice} companyName={companyName} setCompanyName={setCompanyName} onLinkCompany={linkCompany} onOpenBill={(id) => void openRelatedBill(id)} onOpenExpense={onOpenExpense} onCreateExpense={onCreateExpense} onVendorChanged={onVendorChanged} onFilterCompany={(id) => { setVendor(id); setSelectedId(null); const params = new URLSearchParams(searchParams.toString()); params.set('company', id); params.delete('bill'); router.replace(`${pathname}?${params.toString()}`, { scroll: false }) }} /> : null}
     </PortalModal>
   </>
@@ -350,12 +386,112 @@ export function BillReview({ bill, balance, busy, message, onClose, onReview, on
   const [companyOverride, setCompanyOverride] = useState<LuxorVendor | null>(null)
   const company = companyOverride?.id === bill.vendor_id ? companyOverride : vendors.find((item) => item.id === bill.vendor_id)
   return <div className="space-y-5">
-    {!bill.archived_at && bill.status !== 'paid' ? <PortalButton type="button" disabled={Boolean(busy)} onClick={onEdit} className="w-full">Edit bill details</PortalButton> : null}
-    <div className="flex items-start justify-between gap-3"><div className="min-w-0"><span className={`inline-flex rounded-md border px-2 py-1 text-[11px] font-bold ${badge.color}`}>{badge.label}</span><div className="mt-3 flex min-w-0 items-center gap-3"><VendorMark bill={bill} /><div className="min-w-0"><h3 id="bill-review-title" className="truncate text-base font-semibold text-[color:var(--portal-text)]">{bill.provider}</h3><p className="mt-1 truncate text-xs text-[color:var(--portal-muted)]">{bill.source_filename || bill.service}</p></div></div></div>{showClose ? <button type="button" onClick={onClose} aria-label="Close bill detail" className="-mr-1 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-xl text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45"><X size={15} /></button> : null}</div>
+    <div className="flex items-center justify-between gap-3">
+      <div className="flex min-w-0 items-center gap-3">
+        <VendorMark bill={bill} />
+        <div className="min-w-0">
+          <h3 id="bill-review-title" className="truncate text-base font-semibold text-[color:var(--portal-text)]">{bill.provider}</h3>
+          <p className="mt-1 truncate text-xs text-[color:var(--portal-muted)]">{bill.source_filename || bill.service}</p>
+        </div>
+      </div>
+      <div className="flex shrink-0 items-center gap-2">
+        <span className={`inline-flex shrink-0 rounded-md px-2 py-1 text-[11px] font-bold ${badge.color}`}>{badge.label}</span>
+        {!bill.archived_at && bill.status !== 'paid' ? (
+          <PortalGhostIconButton
+            size="sm"
+            onClick={() => onReview('mark_paid')}
+            disabled={Boolean(busy)}
+            aria-label="Mark bill paid"
+            title="Mark bill paid"
+            className="!h-8 !w-8 text-emerald-600 hover:bg-emerald-500/10 hover:text-emerald-700 dark:text-emerald-400 dark:hover:text-emerald-300"
+          >
+            <Check size={16} />
+          </PortalGhostIconButton>
+        ) : null}
+        {!bill.archived_at && bill.status !== 'paid' ? (
+          <PortalGhostIconButton
+            size="sm"
+            onClick={onEdit}
+            disabled={Boolean(busy)}
+            aria-label="Edit bill details"
+            title="Edit bill details"
+            className="!h-8 !w-8"
+          >
+            <FilePenLine size={16} />
+          </PortalGhostIconButton>
+        ) : null}
+        {showClose ? <PortalCloseButton onClick={onClose} aria-label="Close bill detail" className="-mr-1" /> : null}
+      </div>
+    </div>
     <BillDocumentPreview key={bill.id} bill={bill} />
 
-    <section><p className="text-[11px] font-black uppercase tracking-[0.18em] text-[color:var(--portal-muted)]">{bill.source_type === 'manual' ? 'Manually entered details' : 'AI-extracted details'}</p><p className="mt-2 text-xs text-[color:var(--portal-muted)]">{bill.source_type === 'manual' ? 'No source document was provided for AI analysis.' : 'Check these suggestions against the source document before approval.'}</p><dl className="mt-3 grid grid-cols-2 gap-x-3 gap-y-4"><Fact label="Total" value={billAmount(bill)} /><Fact label="Due date" value={dateLabel(bill.due_date)} /><Fact label="Invoice" value={bill.invoice_number || 'Not found'} /><Fact label="Confidence" value={bill.extraction_confidence === null ? 'Manual' : `${Math.round(bill.extraction_confidence * 100)}%`} /><Fact label="Service" value={bill.service} wide /><Fact label="Frequency" value={bill.frequency} /></dl></section>
-    <section><p className="text-xs font-semibold text-[color:var(--portal-text)]">Payment balance</p><p className="mt-1 text-xs tabular-nums text-[color:var(--portal-muted)]">{balance.remaining === null ? balance.reason : `${money(balance.paid ?? 0)} paid · ${money(balance.remaining)} remaining`}</p>{balance.expense && Array.isArray(balance.expense.payments) ? <BillDisclosure title="Payment history"><ul className="mt-2 space-y-1 text-xs text-[color:var(--portal-muted)]">{balance.expense.payments.length ? balance.expense.payments.map((payment) => <li key={payment.id} className="tabular-nums">{formatLuxorDate(payment.payment_date) || 'Date unavailable'} · {money(Number(payment.amount))} · {payment.transaction_type} · {payment.payment_method || 'Method not recorded'}</li>) : <li>No recorded payments.</li>}</ul></BillDisclosure> : null}</section>
+    <section>
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-[11px] font-black uppercase tracking-[0.18em] text-[color:var(--portal-muted)]">{bill.source_type === 'manual' ? 'Manually entered details' : 'AI-extracted details'}</p>
+        {!bill.archived_at && bill.status !== 'paid' ? (
+          <button
+            type="button"
+            onClick={onEdit}
+            disabled={Boolean(busy)}
+            className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs font-semibold text-[#9a712e] hover:bg-[color:var(--portal-soft)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 disabled:opacity-50 dark:text-[#e6c77f]"
+          >
+            <FilePenLine size={13} />
+            <span>Edit details</span>
+          </button>
+        ) : null}
+      </div>
+      <p className="mt-2 text-xs text-[color:var(--portal-muted)]">{bill.source_type === 'manual' ? 'No source document was provided for AI analysis.' : 'Check these suggestions against the source document before approval.'}</p>
+      <dl className="mt-3 grid grid-cols-2 gap-x-3 gap-y-4"><Fact label="Total" value={billAmount(bill)} /><Fact label="Due date" value={dateLabel(bill.due_date)} /><Fact label="Invoice" value={bill.invoice_number || 'Not found'} /><Fact label="Confidence" value={bill.extraction_confidence === null ? 'Manual' : `${Math.round(bill.extraction_confidence * 100)}%`} /><Fact label="Service" value={bill.service} wide /><Fact label="Frequency" value={bill.frequency} /></dl>
+    </section>
+
+    <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/40 p-4">
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <CreditCard size={15} className="text-[color:var(--portal-muted)]" />
+          <p className="text-xs font-bold uppercase tracking-wider text-[color:var(--portal-muted)]">Payment balance</p>
+        </div>
+        {balance.remaining !== null ? (
+          <span className={`inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[11px] font-semibold ${balance.remaining === 0 ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300' : (balance.paid ?? 0) > 0 ? 'bg-amber-500/10 text-amber-700 dark:text-amber-300' : 'bg-[color:var(--portal-soft)] text-[color:var(--portal-muted)]'}`}>
+            {balance.remaining === 0 ? <Check size={12} /> : null}
+            {balance.remaining === 0 ? 'Paid in full' : (balance.paid ?? 0) > 0 ? 'Partially paid' : 'Unpaid'}
+          </span>
+        ) : null}
+      </div>
+      <div className="mt-3 flex flex-wrap items-baseline justify-between gap-2 border-b border-[color:var(--portal-border)]/60 pb-3">
+        {balance.remaining === null ? (
+          <p className="text-xs text-[color:var(--portal-muted)]">{balance.reason}</p>
+        ) : (
+          <>
+            <div>
+              <p className="text-2xl font-bold tabular-nums tracking-tight text-[color:var(--portal-text)]">{money(balance.remaining)}</p>
+              <p className="mt-0.5 text-[11px] font-medium text-[color:var(--portal-muted)]">Remaining balance</p>
+            </div>
+            <div className="text-right">
+              <p className="text-sm font-semibold tabular-nums text-[color:var(--portal-muted)]">{money(balance.paid ?? 0)}</p>
+              <p className="text-[11px] text-[color:var(--portal-muted)]">Paid to date</p>
+            </div>
+          </>
+        )}
+      </div>
+      {balance.expense && Array.isArray(balance.expense.payments) ? (
+        <div className="pt-2">
+          <BillDisclosure title="Payment history">
+            <ul className="mt-2 space-y-1.5 text-xs text-[color:var(--portal-muted)]">
+              {balance.expense.payments.length ? (
+                balance.expense.payments.map((payment) => (
+                  <li key={payment.id} className="flex items-center justify-between gap-2 rounded-lg bg-[color:var(--portal-card)] px-3 py-2 text-xs">
+                    <span className="tabular-nums font-medium text-[color:var(--portal-text)]">{money(Number(payment.amount))}</span>
+                    <span className="text-[color:var(--portal-muted)]">{formatLuxorDate(payment.payment_date) || 'Date unavailable'} · {payment.payment_method || payment.transaction_type}</span>
+                  </li>
+                ))
+              ) : (
+                <li className="px-1 text-xs text-[color:var(--portal-muted)]">No recorded payments.</li>
+              )}
+            </ul>
+          </BillDisclosure>
+        </div>
+      ) : null}
+    </section>
     <section><p className="text-xs font-semibold text-[color:var(--portal-text)]">Category</p><p className="mt-1 text-xs text-[color:var(--portal-muted)]">{bill.bill_category || (isLuxorBillCategory(bill.extracted_fields?.category_suggestion) ? `Suggested: ${bill.extracted_fields.category_suggestion} · not confirmed` : 'Not categorized')}</p></section>
     {bill.duplicate_of_bill_id ? <section className="space-y-2"><p className="text-xs text-[color:var(--portal-text)]">Another bill has the same company and invoice number. Compare both documents before proceeding.</p><button type="button" onClick={() => onOpenBill?.(bill.duplicate_of_bill_id!)} disabled={!onOpenBill || Boolean(busy)} className="min-h-10 text-xs font-semibold text-[#9a712e] dark:text-[#e6c77f] disabled:opacity-50">View possible duplicate</button><PortalButton type="button" disabled={Boolean(busy) || Boolean(bill.archived_at)} onClick={() => onReview('confirm_distinct')} className="w-full">I compared them; this is a separate bill</PortalButton></section> : null}
     <section className="space-y-2"><p className="text-sm font-semibold text-[color:var(--portal-text)]">Company</p>{bill.vendor_id ? <><button type="button" onClick={() => setCompanyOpen(true)} disabled={!company || Boolean(busy)} className="flex min-h-12 w-full items-center justify-between gap-3 rounded-xl bg-[color:var(--portal-soft)] px-3 text-left text-sm font-medium text-[color:var(--portal-text)] disabled:opacity-50">{company?.name || bill.provider}<ChevronRight size={16} /></button>{onFilterCompany ? <button type="button" onClick={() => onFilterCompany(bill.vendor_id!)} className="min-h-10 text-xs font-semibold text-[#9a712e] dark:text-[#e6c77f]">Show all bills for this company</button> : null}{bill.vendor_link_method === 'matched' ? <p className="text-xs text-[color:var(--portal-muted)]">Matched from a previously confirmed sender. Check the company before approval.</p> : null}</> : <p className="text-xs text-[color:var(--portal-muted)]">Confirm the company shown on this bill: {bill.provider}.</p>}
@@ -368,7 +504,7 @@ export function BillReview({ bill, balance, busy, message, onClose, onReview, on
       </>}
       </>}
     </section>
-    <section className={`rounded-xl border p-3 ${bill.arithmetic_status === 'mismatch' ? 'border-rose-500/25 bg-rose-500/5' : bill.arithmetic_status === 'balanced' ? 'border-emerald-500/20 bg-emerald-500/5' : 'border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]'}`}><div className="flex gap-2">{bill.arithmetic_status === 'mismatch' ? <AlertCircle size={15} className="mt-0.5 text-rose-500" /> : bill.arithmetic_status === 'balanced' ? <ShieldCheck size={15} className="mt-0.5 text-emerald-600 dark:text-emerald-400" /> : <FileText size={15} className="mt-0.5 text-[color:var(--portal-muted)]" />}<div><p className="text-xs font-bold text-[color:var(--portal-text)]">Arithmetic {bill.arithmetic_status === 'balanced' ? 'checks out' : bill.arithmetic_status === 'mismatch' ? 'needs review' : 'not available'}</p><p className="mt-1 text-[11px] leading-4 text-[color:var(--portal-muted)]">{bill.arithmetic_status === 'balanced' ? 'Line items match the extracted total.' : bill.arithmetic_status === 'mismatch' ? 'Line items do not match the extracted total.' : 'The document did not provide enough line-item detail.'}</p></div></div></section>
+    <section className={`rounded-xl p-3 ${bill.arithmetic_status === 'mismatch' ? 'bg-rose-500/10' : bill.arithmetic_status === 'balanced' ? 'bg-emerald-500/10' : 'bg-[color:var(--portal-soft)]'}`}><div className="flex gap-2">{bill.arithmetic_status === 'mismatch' ? <AlertCircle size={15} className="mt-0.5 shrink-0 text-rose-500" /> : bill.arithmetic_status === 'balanced' ? <ShieldCheck size={15} className="mt-0.5 shrink-0 text-emerald-600 dark:text-emerald-400" /> : <FileText size={15} className="mt-0.5 shrink-0 text-[color:var(--portal-muted)]" />}<div><p className="text-xs font-bold text-[color:var(--portal-text)]">Arithmetic {bill.arithmetic_status === 'balanced' ? 'checks out' : bill.arithmetic_status === 'mismatch' ? 'needs review' : 'not available'}</p><p className="mt-1 text-[11px] leading-4 text-[color:var(--portal-muted)]">{bill.arithmetic_status === 'balanced' ? 'Line items match the extracted total.' : bill.arithmetic_status === 'mismatch' ? 'Line items do not match the extracted total.' : 'The document did not provide enough line-item detail.'}</p></div></div></section>
     {message ? <p role="status" className="rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 py-2 text-xs text-[color:var(--portal-text)]">{message}</p> : null}
     {bill.status === 'paid' && bill.linked_expense_id && onOpenExpense ? <PortalButton type="button" onClick={() => onOpenExpense(bill.linked_expense_id!)} className="w-full">View payment history <ChevronRight size={14} /></PortalButton> : null}
     {bill.archived_at ? <p className="text-sm leading-6 text-[color:var(--portal-muted)]">This bill is archived. Restore it from the Bills archive to make changes.</p> : bill.status !== 'paid' ? <div className="space-y-2">{bill.linked_expense_id && onOpenExpense ? <PortalButton type="button" onClick={() => onOpenExpense(bill.linked_expense_id!)} className="w-full">Record or review payment <ChevronRight size={14} /></PortalButton> : bill.linked_expense_id ? <Link href={`/portal/finances/expenses/${encodeURIComponent(bill.linked_expense_id)}`} className="flex min-h-10 items-center justify-center gap-2 rounded-lg border border-[color:var(--portal-border)] px-3 text-xs font-semibold text-[#9a712e] hover:bg-[color:var(--portal-soft)] dark:text-[#e6c77f]">Record payment in Expense Management <ArrowUpRight size={13} aria-hidden="true" /></Link> : bill.extraction_status === 'ready' && bill.payment_ready_at && onCreateExpense ? <PortalButton type="button" onClick={() => onCreateExpense(bill.id)} className="w-full">Set up payment tracking <ChevronRight size={14} /></PortalButton> : bill.extraction_status === 'ready' && bill.payment_ready_at ? <Link href="/portal/finances/expenses/business" className="flex min-h-10 items-center justify-center gap-2 rounded-lg border border-[color:var(--portal-border)] px-3 text-xs font-semibold text-[#9a712e] hover:bg-[color:var(--portal-soft)] dark:text-[#e6c77f]">Link a reviewed bill to an expense <ArrowUpRight size={13} aria-hidden="true" /></Link> : null}{bill.extraction_status === 'needs_review' ? <PortalButton type="button" variant="primary" disabled={Boolean(busy)} onClick={() => onReview('approve')} className="w-full"><CheckCircle2 size={13} />{busy === 'approve' ? 'Approving…' : 'Approve & mark ready'}</PortalButton> : null}<PortalButton type="button" disabled={Boolean(busy) || Boolean(bill.linked_expense_id)} onClick={() => onReview('flag')} className="w-full"><Clock3 size={13} /> Keep in review</PortalButton></div> : <div className="flex items-center gap-2 rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-3 text-xs font-semibold text-emerald-700 dark:text-emerald-300"><Check size={14} /> {balance.paid === null ? 'Marked paid · payment details unavailable' : 'Payment recorded'}</div>}
@@ -406,10 +542,10 @@ function BillDisclosure({ title, children }: { title: string; children: ReactNod
   const id = useId()
   return <section className="border-t border-[color:var(--portal-border)] pt-2">
     <button type="button" aria-expanded={open} aria-controls={id} onClick={() => setOpen((value) => !value)} className="flex min-h-11 w-full items-center justify-between gap-3 rounded-lg text-left text-sm font-semibold text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/40">
-      {title}<ChevronDown size={16} className={`shrink-0 text-[color:var(--portal-muted)] transition-transform duration-300 motion-reduce:transition-none ${open ? 'rotate-180' : ''}`} />
+      {title}<ChevronDown size={16} className={`shrink-0 text-[color:var(--portal-muted)] transition-transform duration-[520ms] ease-[cubic-bezier(0.25,1,0.5,1)] motion-reduce:transition-none ${open ? 'rotate-180' : ''}`} />
     </button>
-    <div id={id} className="grid transition-[grid-template-rows] duration-[350ms] ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none" style={{ gridTemplateRows: open ? '1fr' : '0fr' }} inert={!open} aria-hidden={!open}>
-      <div className="min-h-0 overflow-hidden"><div className="space-y-4 pb-3 pt-1">{children}</div></div>
+    <div id={id} className="grid transition-[grid-template-rows,opacity] duration-[520ms] ease-[cubic-bezier(0.25,1,0.5,1)] motion-reduce:transition-none" style={{ gridTemplateRows: open ? '1fr' : '0fr', opacity: open ? 1 : 0 }} inert={!open} aria-hidden={!open}>
+      <div className="min-h-0 overflow-hidden"><div className={`space-y-4 pb-3 pt-1 transition-transform duration-[520ms] ease-[cubic-bezier(0.25,1,0.5,1)] motion-reduce:transition-none ${open ? 'translate-y-0' : '-translate-y-1.5'}`}>{children}</div></div>
     </div>
   </section>
 }

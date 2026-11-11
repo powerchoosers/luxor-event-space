@@ -1034,8 +1034,8 @@ export function PortalPhoneButton({
       className={
         className ||
         (compact
-          ? 'portal-header-action relative flex h-9 w-9 !min-w-0 !min-h-0 items-center justify-center rounded-full transition-all active:scale-95 cursor-pointer text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)] hover:bg-[color:var(--portal-soft)] active:bg-[#caa24c]/10 group'
-          : 'relative flex items-center justify-center rounded-full p-2 transition-colors hover:bg-[color:var(--portal-soft)] cursor-pointer group')
+          ? 'portal-header-action portal-ghost-icon-button relative flex h-9 w-9 !min-w-0 !min-h-0 items-center justify-center rounded-xl transition-all active:scale-95 cursor-pointer text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)] hover:bg-[color:var(--portal-soft)] active:bg-[#caa24c]/10 group'
+          : 'relative flex items-center justify-center rounded-xl p-2 transition-colors hover:bg-[color:var(--portal-soft)] cursor-pointer group')
       }
       aria-label={activeCall || isStartingCall ? 'Open active call' : 'Open Luxor phone'}
       title={

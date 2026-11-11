@@ -3,7 +3,7 @@
 import React, { useCallback, useMemo, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { Check, Loader2, Minus, X } from '@/lib/icons/phosphor-compat'
-import { PortalButton, PortalModal, PortalSelect } from '@/components/portal/PortalUI'
+import { PortalButton, PortalCloseButton, PortalModal, PortalSelect } from '@/components/portal/PortalUI'
 
 export type PortalBulkAction = {
   id: string
@@ -220,9 +220,7 @@ export function PortalBulkActionDeck({
                   {action.label}
                 </button>
               ))}
-              <button type="button" onClick={onClear} disabled={Boolean(busyAction)} aria-label="Clear selection" className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-xl text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 disabled:opacity-45">
-                <X size={15} />
-              </button>
+              <PortalCloseButton onClick={onClear} disabled={Boolean(busyAction)} aria-label="Clear selection" />
             </div>
           </div>
         </motion.aside>

@@ -63,12 +63,14 @@ export async function POST(request: NextRequest) {
     const notification_emails = body.notification_emails !== undefined
       ? String(body.notification_emails).trim()
       : existing.notification_emails || 'booking@luxoratlaspalmas.com'
-    const displayName = body.display_name !== undefined
-      ? String(body.display_name).trim()
-      : existing.display_name?.trim() || ''
-    const roleTitle = body.role_title !== undefined
-      ? String(body.role_title).trim()
-      : existing.role_title?.trim() || ''
+    const hasDisplayName = body.display_name !== undefined
+    const hasRoleTitle = body.role_title !== undefined
+    const displayName = hasDisplayName
+      ? String(body.display_name ?? '').trim()
+      : existing.display_name?.trim() || null
+    const roleTitle = hasRoleTitle
+      ? String(body.role_title ?? '').trim()
+      : existing.role_title?.trim() || null
     const avatarUrl = body.avatar_url !== undefined
       ? safeProfileAvatarUrl(body.avatar_url)
       : safeProfileAvatarUrl(existing.avatar_url)
@@ -77,11 +79,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Invalid theme. Must be "light" or "dark".' }, { status: 400 })
     }
 
-    if (!displayName || displayName.length > 100) {
+    if (hasDisplayName && (!displayName || displayName.length > 100)) {
       return NextResponse.json({ error: 'Your sender name is required and must be 100 characters or fewer.' }, { status: 400 })
     }
 
-    if (!roleTitle || roleTitle.length > 120) {
+    if (hasRoleTitle && (!roleTitle || roleTitle.length > 120)) {
       return NextResponse.json({ error: 'Your title is required and must be 120 characters or fewer.' }, { status: 400 })
     }
 

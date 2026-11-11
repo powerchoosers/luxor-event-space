@@ -1,10 +1,16 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Minus, Plus, RotateCcw } from '@/lib/icons/phosphor-compat'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
-import { PortalCloseButton } from '@/components/portal/PortalUI'
+import {
+  PortalCloseButton,
+  PORTAL_MODAL_CLOSE_DURATION,
+  PORTAL_MODAL_EASE,
+  PORTAL_MODAL_EXIT_EASE,
+  PORTAL_MODAL_OPEN_DURATION,
+} from '@/components/portal/PortalUI'
 
 export type BrandAssetLightboxAsset = {
   name: string
@@ -21,44 +27,50 @@ export function BrandAssetLightbox({
 }) {
   const reduceMotion = useReducedMotion()
   const [scale, setScale] = useState(1)
-  const closeViewer = () => {
+  const closeViewer = useCallback(() => {
     setScale(1)
     onClose()
-  }
+  }, [onClose])
 
   useEffect(() => {
     if (!asset) return
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') closeViewer()
+      if (event.key === 'Escape') {
+        event.preventDefault()
+        event.stopPropagation()
+        closeViewer()
+      }
       if (event.key === '+' || event.key === '=') setScale((value) => Math.min(3, value + 0.25))
       if (event.key === '-') setScale((value) => Math.max(1, value - 0.25))
       if (event.key === '0') setScale(1)
     }
     document.addEventListener('keydown', handleKeyDown)
     return () => document.removeEventListener('keydown', handleKeyDown)
-  }, [asset, onClose])
+  }, [asset, closeViewer])
 
   if (typeof document === 'undefined') return null
 
   return createPortal(
-    <AnimatePresence>
+    <AnimatePresence initial={!reduceMotion}>
       {asset ? (
         <motion.div
+          key="brand-asset-lightbox"
+          data-portal-backdrop="true"
           className="fixed inset-0 z-[9999] bg-[#090806] text-white"
           initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
+          animate={{ opacity: 1, transition: { duration: reduceMotion ? 0.05 : PORTAL_MODAL_OPEN_DURATION, ease: PORTAL_MODAL_EASE } }}
+          exit={{ opacity: 0, pointerEvents: 'none', transition: { duration: reduceMotion ? 0.04 : PORTAL_MODAL_CLOSE_DURATION, ease: PORTAL_MODAL_EXIT_EASE } }}
           onClick={closeViewer}
         >
           <motion.div
             role="dialog"
+            data-portal-dialog="true"
             aria-modal="true"
             aria-label={`${asset.name} image viewer`}
             className="relative flex h-full w-full items-center justify-center overflow-hidden"
-            initial={reduceMotion ? { opacity: 0 } : { opacity: 0, y: 16, scale: 0.98 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={reduceMotion ? { opacity: 0 } : { opacity: 0, y: 8, scale: 0.99 }}
-            transition={{ duration: reduceMotion ? 0.08 : 0.22, ease: [0.23, 1, 0.32, 1] }}
+            initial={reduceMotion ? { opacity: 0 } : { opacity: 0, y: 12, scale: 0.98 }}
+            animate={{ opacity: 1, y: 0, scale: 1, transition: { duration: reduceMotion ? 0.06 : PORTAL_MODAL_OPEN_DURATION, ease: PORTAL_MODAL_EASE } }}
+            exit={reduceMotion ? { opacity: 0, transition: { duration: 0.05 } } : { opacity: 0, y: 8, scale: 0.99, transition: { duration: PORTAL_MODAL_CLOSE_DURATION, ease: PORTAL_MODAL_EXIT_EASE } }}
             onClick={(event) => event.stopPropagation()}
           >
             <div className="pointer-events-none absolute inset-x-0 top-0 z-10 flex items-start justify-between bg-gradient-to-b from-black/75 to-transparent px-5 py-5 sm:px-8">

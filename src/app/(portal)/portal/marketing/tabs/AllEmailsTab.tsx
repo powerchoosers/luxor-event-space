@@ -40,6 +40,7 @@ import dynamic from 'next/dynamic'
 import {
   PortalButton,
   PortalCloseButton,
+  PortalGhostIconButton,
   PortalContactAvatar,
   PortalModal,
   PortalSkeleton,
@@ -1688,15 +1689,12 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
                     rows={2}
                     className="portal-input-transparent min-h-16 max-h-32 w-full resize-none border-0 bg-transparent pr-10 text-base leading-6 text-[color:var(--portal-text)] outline-none placeholder:text-[color:var(--portal-faint)]"
                   />
-                  <button
-                    type="button"
+                  <PortalCloseButton
                     onClick={() => setReplyPromptOpen(false)}
                     aria-label="Hide Elena prompt"
                     title="Hide prompt"
-                    className="absolute right-1.5 top-1.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-xl text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45"
-                  >
-                    <X size={14} />
-                  </button>
+                    className="absolute right-1.5 top-1.5"
+                  />
                   <div className="mt-1 flex items-center justify-between gap-3">
                     <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-[color:var(--portal-muted)]">
                       <FilePenLine size={13} /> Elena
@@ -1751,16 +1749,12 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
       <div className="flex shrink-0 items-center justify-between gap-3 border-b border-[color:var(--portal-border)] px-3 py-2.5 sm:px-4">
         <p className="min-w-0 truncate text-xs font-semibold text-[color:var(--portal-text)]">To: {currentInquiry ? <Link href={`/portal/leads/${currentInquiry.id}`} className="no-underline transition-colors hover:text-[#a8792f] dark:hover:text-[#f1d27a]">{currentInquiry.full_name || mailboxLabel(thread?.clientEmail || (messageDetail?.direction === 'incoming' ? messageDetail.from : messageDetail?.to || ''), inquiryByEmail)}</Link> : mailboxLabel(thread?.clientEmail || (messageDetail?.direction === 'incoming' ? messageDetail.from : messageDetail?.to || ''), inquiryByEmail)} <span className="font-normal text-[color:var(--portal-muted)]">{thread?.clientEmail || (messageDetail?.direction === 'incoming' ? firstMailboxEmail(messageDetail.from) : firstMailboxEmail(messageDetail?.to || ''))}</span></p>
         <div className="flex shrink-0 items-center gap-3">
-          <button
-            type="button"
+          <PortalCloseButton
             onClick={collapseReplyComposer}
             disabled={sendingReply}
-            className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-xl text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 disabled:cursor-wait disabled:opacity-50"
             aria-label="Collapse reply composer and keep draft"
             title="Collapse reply composer and keep draft"
-          >
-            <X size={15} />
-          </button>
+          />
         </div>
       </div>
 
@@ -2026,15 +2020,13 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
         {/* Top header bar: Back button + Folder Name (e.g. Inbox) + Count + Refresh button */}
         <div className="flex shrink-0 items-center justify-between gap-3 border-b border-[color:var(--portal-border)]/70 bg-[color:var(--portal-card)] px-2.5 py-2.5 sm:px-4">
           <div className="flex min-w-0 items-center gap-2">
-            <button
-              type="button"
+            <PortalGhostIconButton
               onClick={handleGoBack}
-              className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-xl text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 cursor-pointer"
               aria-label="Go back"
               title="Go back"
             >
               <ArrowLeft size={15} />
-            </button>
+            </PortalGhostIconButton>
             <div className="flex min-w-0 items-baseline gap-2">
               <h3 className="truncate text-base font-bold text-[color:var(--portal-text)] sm:text-lg" title={activeFolderLabel}>{activeFolderLabel}</h3>
               <span className="shrink-0 text-xs tabular-nums text-[color:var(--portal-muted)]">{totalItems.toLocaleString()}</span>

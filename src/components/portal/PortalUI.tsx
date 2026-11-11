@@ -3,12 +3,66 @@
 import React, { useState, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { AnimatePresence, motion, useAnimate, useReducedMotion } from 'framer-motion'
-const LUXOR_PORTAL_EASE = [0.22, 1, 0.36, 1] as const
 import { AlertTriangle, Calendar, ChevronDown, ChevronLeft, ChevronRight, X, Pencil, Loader2, ArrowLeft, Check, Search, SlidersHorizontal, Menu } from '@/lib/icons/phosphor-compat'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { useToast } from '@/components/portal/ToastProvider'
 import { LuxorDatePicker } from '@/components/LuxorDatePicker'
+
+const LUXOR_PORTAL_EASE = [0.22, 1, 0.36, 1] as const
+/** Shared modal open/close curves and durations across PortalModal, sheets, and PortalSettingsModal. */
+export const PORTAL_MODAL_EASE = LUXOR_PORTAL_EASE
+export const PORTAL_MODAL_EXIT_EASE = [0.25, 0.1, 0.25, 1] as const
+export const PORTAL_MODAL_OPEN_DURATION = 0.24
+export const PORTAL_MODAL_CLOSE_DURATION = 0.25
+export const PORTAL_MODAL_BACKDROP_OPEN_DURATION = 0.22
+export const PORTAL_MODAL_BACKDROP_CLOSE_DURATION = 0.24
+/** Every right-side panel shares this duration and curve so they all open and close identically. */
+export const PORTAL_SIDE_PANEL_DURATION = 0.44
+export const PORTAL_SIDE_PANEL_EXIT_DURATION = 0.34
+export const PORTAL_SIDE_PANEL_EASE = [0.32, 0.72, 0, 1] as const
+export const PORTAL_SHEET_OPEN_DURATION = 0.34
+export const PORTAL_SHEET_CLOSE_DURATION = 0.26
+
+let portalScrollLockCount = 0
+let savedBodyOverflow: string | null = null
+let savedBodyPaddingRight: string | null = null
+
+/**
+ * Ref-counted body scroll lock with scrollbar-width padding compensation so
+ * stacked or exiting modals never cause a mid-transition layout jump.
+ */
+export function acquirePortalScrollLock() {
+  if (typeof document === 'undefined' || typeof window === 'undefined') {
+    return () => {}
+  }
+
+  if (portalScrollLockCount === 0) {
+    savedBodyOverflow = document.body.style.overflow
+    savedBodyPaddingRight = document.body.style.paddingRight
+    const scrollbarWidth = window.innerWidth - document.documentElement.clientWidth
+    document.body.style.overflow = 'hidden'
+    if (scrollbarWidth > 0) {
+      const computedPaddingRight = Number.parseFloat(window.getComputedStyle(document.body).paddingRight) || 0
+      document.body.style.paddingRight = `${computedPaddingRight + scrollbarWidth}px`
+    }
+  }
+
+  portalScrollLockCount += 1
+  let released = false
+
+  return () => {
+    if (released) return
+    released = true
+    portalScrollLockCount = Math.max(0, portalScrollLockCount - 1)
+    if (portalScrollLockCount === 0 && typeof document !== 'undefined') {
+      document.body.style.overflow = savedBodyOverflow ?? ''
+      document.body.style.paddingRight = savedBodyPaddingRight ?? ''
+      savedBodyOverflow = null
+      savedBodyPaddingRight = null
+    }
+  }
+}
 
 export function PortalPageFrame({
   children,
@@ -64,15 +118,13 @@ export function PortalPageHeader({
       <div className={`${description ? 'space-y-1' : ''} ${mobileActionsInline ? 'min-w-0 shrink-0' : ''}`}>
         <div className={`flex items-center ${mobileActionsInline ? 'gap-2 sm:gap-2.5' : 'gap-2.5'}`}>
           {canGoBack && !hideBackButton ? (
-            <button
-              type="button"
+            <PortalGhostIconButton
               onClick={goBack}
-              className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-xl text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45"
               aria-label="Go back"
               title="Go back"
             >
               <ArrowLeft size={15} />
-            </button>
+            </PortalGhostIconButton>
           ) : null}
           {icon && isPortalHome ? <span className="shrink-0 text-[#caa24c]">{icon}</span> : null}
           <h1 suppressHydrationWarning className={`font-sans font-bold tracking-tight leading-tight text-[color:var(--portal-text)] ${titleClassName || (mobileActionsInline ? 'whitespace-nowrap text-xl sm:text-2xl' : 'text-xl sm:text-2xl')}`}>
@@ -124,7 +176,7 @@ export function PortalButton({
   return (
     <button
       type={type}
-      className={`inline-flex items-center justify-center gap-2 rounded-xl border font-semibold tracking-normal transition-all duration-150 ease-[cubic-bezier(0.23,1,0.32,1)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/40 disabled:pointer-events-none disabled:opacity-40 ${variantClasses[variant]} ${sizeClasses[size]} ${className}`}
+      className={`inline-flex cursor-pointer items-center justify-center gap-2 rounded-xl border font-semibold tracking-normal transition-all duration-150 ease-[cubic-bezier(0.23,1,0.32,1)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/40 disabled:pointer-events-none disabled:opacity-40 ${variantClasses[variant]} ${sizeClasses[size]} ${className}`}
       {...props}
     >
       {children}
@@ -252,6 +304,12 @@ export function PortalMobileTabPicker<T extends string>({
   const [internalOpen, setInternalOpen] = React.useState(false)
   const isControlled = typeof controlledOpen === 'boolean'
   const open = isControlled ? controlledOpen : internalOpen
+  const reduceMotion = useReducedMotion()
+  const releaseScrollLockRef = React.useRef<(() => void) | null>(null)
+  const openRef = React.useRef(open)
+  React.useEffect(() => {
+    openRef.current = open
+  }, [open])
   const setOpen = React.useCallback(
     (nextOpen: boolean) => {
       if (isControlled) {
@@ -266,12 +324,22 @@ export function PortalMobileTabPicker<T extends string>({
 
   React.useEffect(() => {
     if (!open) return
+    if (!releaseScrollLockRef.current) {
+      releaseScrollLockRef.current = acquirePortalScrollLock()
+    }
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') setOpen(false)
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [open, setOpen])
+
+  React.useEffect(() => {
+    return () => {
+      releaseScrollLockRef.current?.()
+      releaseScrollLockRef.current = null
+    }
+  }, [])
 
   const groupedTabs = React.useMemo(() => {
     const hasGroups = tabs.some((t) => Boolean(t.group))
@@ -313,40 +381,61 @@ export function PortalMobileTabPicker<T extends string>({
       </button>
 
       {typeof document !== 'undefined' ? createPortal(
-        <AnimatePresence initial={false}>
+        <AnimatePresence
+          initial={!reduceMotion}
+          onExitComplete={() => {
+            if (openRef.current) return
+            releaseScrollLockRef.current?.()
+            releaseScrollLockRef.current = null
+          }}
+        >
           {open ? (
             <motion.div
-              className="fixed inset-0 z-[70] flex items-end justify-center bg-black/60 p-3 pb-[calc(4.5rem+env(safe-area-inset-bottom))] backdrop-blur-sm sm:items-center sm:p-6"
+              key="portal-mobile-tab-picker-backdrop"
+              data-portal-backdrop="true"
+              aria-hidden="true"
+              className="portal-modal-backdrop fixed inset-0 z-[70]"
               initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.2 }}
+              animate={{
+                opacity: 1,
+                transition: { duration: reduceMotion ? 0.06 : PORTAL_MODAL_BACKDROP_OPEN_DURATION, ease: PORTAL_MODAL_EASE },
+              }}
+              exit={{
+                opacity: 0,
+                pointerEvents: 'none',
+                transition: { duration: reduceMotion ? 0.05 : PORTAL_MODAL_BACKDROP_CLOSE_DURATION, ease: PORTAL_MODAL_EXIT_EASE },
+              }}
               onMouseDown={() => setOpen(false)}
+            />
+          ) : null}
+          {open ? (
+            <motion.section
+              key="portal-mobile-tab-picker-dialog"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="portal-mobile-tab-picker-title"
+              className="fixed inset-x-3 bottom-[calc(4.5rem+env(safe-area-inset-bottom))] z-[70] mx-auto flex max-h-[calc(100dvh-6rem-env(safe-area-inset-bottom))] w-auto max-w-lg flex-col overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] shadow-2xl will-change-transform sm:inset-0 sm:m-auto sm:h-fit"
+              initial={reduceMotion ? { opacity: 0 } : { opacity: 0, y: 44, scale: 0.985 }}
+              animate={{
+                opacity: 1,
+                y: 0,
+                scale: 1,
+                transition: { duration: reduceMotion ? 0.06 : PORTAL_SHEET_OPEN_DURATION, ease: PORTAL_SIDE_PANEL_EASE },
+              }}
+              exit={reduceMotion
+                ? { opacity: 0, pointerEvents: 'none', transition: { duration: 0.05 } }
+                : { opacity: 0, y: 36, scale: 0.985, pointerEvents: 'none', transition: { duration: PORTAL_SHEET_CLOSE_DURATION, ease: PORTAL_SIDE_PANEL_EASE } }}
+              onMouseDown={(event) => event.stopPropagation()}
             >
-              <motion.section
-                role="dialog"
-                aria-modal="true"
-                aria-labelledby="portal-mobile-tab-picker-title"
-                className="flex max-h-[calc(100dvh-6rem-env(safe-area-inset-bottom))] w-full max-w-lg flex-col overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] shadow-2xl"
-                initial={{ opacity: 0, y: 56, scale: 0.985 }}
-                animate={{ opacity: 1, y: 0, scale: 1 }}
-                exit={{ opacity: 0, y: 40, scale: 0.985 }}
-                transition={{ duration: 0.32, ease: [0.23, 1, 0.32, 1] }}
-                onMouseDown={(event) => event.stopPropagation()}
-              >
                 <div className="sticky top-0 z-10 flex shrink-0 items-center justify-between border-b border-[color:var(--portal-border)] bg-[color:var(--portal-card)]/95 px-5 py-4 backdrop-blur-xl">
                   <div>
                     <h2 id="portal-mobile-tab-picker-title" className="text-base font-bold text-[color:var(--portal-text)]">{title}</h2>
                     <p className="mt-0.5 text-xs text-[color:var(--portal-muted)]">{subtitle}</p>
                   </div>
-                  <button
-                    type="button"
+                  <PortalCloseButton
                     onClick={() => setOpen(false)}
                     aria-label="Close views menu"
-                    className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-xl text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45"
-                  >
-                    <X size={15} />
-                  </button>
+                  />
                 </div>
                 <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4 pb-6 portal-scrollbar">
                   <nav aria-label={title} className="space-y-4">
@@ -393,7 +482,6 @@ export function PortalMobileTabPicker<T extends string>({
                   </nav>
                 </div>
               </motion.section>
-            </motion.div>
           ) : null}
         </AnimatePresence>,
         document.body,
@@ -555,15 +643,22 @@ export function PortalTabTransition({
   mode?: 'sync' | 'wait' | 'popLayout'
 }) {
   const shouldReduceMotion = useReducedMotion()
+  const panelRef = React.useRef<HTMLDivElement>(null)
 
   return (
     <AnimatePresence mode={mode} initial={false}>
       <motion.div
+        ref={panelRef}
         key={activeKey}
-        initial={shouldReduceMotion ? { opacity: 1 } : { opacity: 0.72, filter: 'blur(10px)' }}
+        initial={shouldReduceMotion ? { opacity: 1 } : { opacity: 0.72, filter: 'blur(6px)' }}
         animate={{ opacity: 1, filter: 'blur(0px)' }}
-        exit={shouldReduceMotion ? { opacity: 1 } : { opacity: 0, filter: 'blur(10px)' }}
-        transition={{ duration: shouldReduceMotion ? 0 : 0.22, ease: LUXOR_PORTAL_EASE }}
+        exit={shouldReduceMotion ? { opacity: 1 } : { opacity: 0, filter: 'blur(6px)' }}
+        transition={{ duration: shouldReduceMotion ? 0 : 0.18, ease: PORTAL_MODAL_EASE }}
+        onAnimationComplete={() => {
+          if (panelRef.current) {
+            panelRef.current.style.filter = 'none'
+          }
+        }}
         className={className}
       >
         {children}
@@ -1118,17 +1213,58 @@ export function PortalTimelineItem({
   )
 }
 
+export interface PortalGhostIconButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
+  size?: 'sm' | 'md' | 'lg'
+  active?: boolean
+}
+
+export function PortalGhostIconButton({
+  children,
+  size = 'md',
+  active = false,
+  className = '',
+  type = 'button',
+  ...props
+}: PortalGhostIconButtonProps) {
+  const sizeClasses =
+    size === 'sm'
+      ? 'h-7 w-7 text-xs'
+      : size === 'lg'
+      ? 'h-9 w-9 text-base'
+      : 'h-8 w-8 text-sm'
+
+  return (
+    <button
+      type={type}
+      className={`portal-ghost-icon-button relative inline-flex shrink-0 items-center justify-center rounded-xl transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 cursor-pointer disabled:cursor-not-allowed disabled:opacity-40 ${sizeClasses} ${
+        active
+          ? 'bg-[color:var(--portal-soft)] text-[color:var(--portal-text)] shadow-xs'
+          : 'text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] active:bg-[#caa24c]/10'
+      } ${className}`}
+      {...props}
+    >
+      {children}
+    </button>
+  )
+}
+
+export interface PortalCloseButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
+  ref?: React.Ref<HTMLButtonElement>
+}
+
 export function PortalCloseButton({
   onClick,
   className = '',
   'aria-label': ariaLabel = 'Close',
+  ref,
   ...props
-}: React.ButtonHTMLAttributes<HTMLButtonElement>) {
+}: PortalCloseButtonProps) {
   return (
     <button
+      ref={ref}
       type="button"
       onClick={onClick}
-      className={`portal-close-button relative inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-xl text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 cursor-pointer ${className}`}
+      className={`portal-close-button portal-ghost-icon-button relative inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-xl text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] active:bg-[#caa24c]/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 cursor-pointer disabled:cursor-not-allowed disabled:opacity-40 ${className}`}
       aria-label={ariaLabel}
       {...props}
     >
@@ -1186,10 +1322,11 @@ export function PortalModal({
   className = '',
   fullScreenOnCompact = false,
   fullScreenOnMobile = false,
-  animateClose = false,
+  animateClose: _animateClose = true,
   sidePanel = false,
   headerIcon,
   headerBack = false,
+  headerAction,
 }: {
   isOpen: boolean
   onClose: () => void
@@ -1203,17 +1340,24 @@ export function PortalModal({
   className?: string
   fullScreenOnCompact?: boolean
   fullScreenOnMobile?: boolean
+  /** Smooth close is now always active; kept for backward compatibility. */
   animateClose?: boolean
   sidePanel?: boolean
   headerIcon?: React.ReactNode
   headerBack?: boolean
+  headerAction?: React.ReactNode
 }) {
+  void _animateClose
   const depth = React.useContext(ModalDepthContext)
   const computedZIndex = zIndex ?? (200 + depth * 10)
   const [mounted, setMounted] = React.useState(false)
-  const [holdVisible, setHoldVisible] = React.useState(isOpen && animateClose)
   const dialogRef = React.useRef<HTMLDivElement>(null)
   const previouslyFocusedRef = React.useRef<HTMLElement | null>(null)
+  const releaseScrollLockRef = React.useRef<(() => void) | null>(null)
+  const isOpenRef = React.useRef(isOpen)
+  React.useEffect(() => {
+    isOpenRef.current = isOpen
+  }, [isOpen])
   const onCloseRef = React.useRef(onClose)
   const titleId = React.useId()
   const reduceMotion = useReducedMotion()
@@ -1229,41 +1373,76 @@ export function PortalModal({
   )
 
   const isCompactFullScreen = (fullScreenOnCompact && isCompactMatch) || (fullScreenOnMobile && isMobileMatch)
+  const isSheetSlideUp = isCompactFullScreen && !sidePanel
 
-  const dialogInitial = isCompactFullScreen || sidePanel
-    ? reduceMotion ? { opacity: 0 } : { x: '100%' }
-    : { opacity: 0, scale: 0.95, y: 8, filter: 'blur(8px)' }
-  const dialogAnimate = isCompactFullScreen || sidePanel
-    ? { opacity: 1, x: 0 }
-    : { opacity: 1, scale: 1, y: 0, filter: 'blur(0px)' }
-  const dialogExit = isCompactFullScreen || sidePanel
-    ? reduceMotion ? { opacity: 0 } : { x: '100%' }
-    : { opacity: 0, scale: 0.95, y: 8, filter: 'blur(8px)' }
+  const dialogInitial = reduceMotion
+    ? { opacity: 0 }
+    : sidePanel
+      ? { x: '100%' }
+      : isSheetSlideUp
+        ? { y: '100%' }
+        : { opacity: 0, scale: 0.965, y: 10 }
+
+  const dialogAnimate = reduceMotion
+    ? { opacity: 1, transition: { duration: 0.06 } }
+    : sidePanel
+      ? { opacity: 1, x: 0, transition: { duration: PORTAL_SIDE_PANEL_DURATION, ease: PORTAL_SIDE_PANEL_EASE } }
+      : isSheetSlideUp
+        ? { opacity: 1, y: 0, transition: { duration: PORTAL_SHEET_OPEN_DURATION, ease: PORTAL_SIDE_PANEL_EASE } }
+        : { opacity: 1, scale: 1, y: 0, transition: { duration: PORTAL_MODAL_OPEN_DURATION, ease: PORTAL_MODAL_EASE } }
+
+  const dialogExit = reduceMotion
+    ? { opacity: 0, pointerEvents: 'none' as const, transition: { duration: 0.05 } }
+    : sidePanel
+      ? { x: '100%', pointerEvents: 'none' as const, transition: { duration: PORTAL_SIDE_PANEL_EXIT_DURATION, ease: PORTAL_SIDE_PANEL_EASE } }
+      : isSheetSlideUp
+        ? { y: '100%', pointerEvents: 'none' as const, transition: { duration: PORTAL_SHEET_CLOSE_DURATION, ease: PORTAL_SIDE_PANEL_EASE } }
+        : { opacity: 0, scale: 0.965, y: 10, pointerEvents: 'none' as const, transition: { duration: PORTAL_MODAL_CLOSE_DURATION, ease: PORTAL_MODAL_EXIT_EASE } }
+
+  const backdropOpenTransition = reduceMotion
+    ? { duration: 0.06 }
+    : sidePanel
+      ? { duration: PORTAL_SIDE_PANEL_DURATION * 0.72, ease: PORTAL_SIDE_PANEL_EASE }
+      : isSheetSlideUp
+        ? { duration: 0.24, ease: PORTAL_MODAL_EASE }
+        : { duration: PORTAL_MODAL_BACKDROP_OPEN_DURATION, ease: PORTAL_MODAL_EASE }
+
+  const backdropCloseTransition = reduceMotion
+    ? { duration: 0.05 }
+    : sidePanel
+      ? { duration: PORTAL_SIDE_PANEL_EXIT_DURATION, ease: PORTAL_SIDE_PANEL_EASE }
+      : isSheetSlideUp
+        ? { duration: 0.22, ease: PORTAL_MODAL_EXIT_EASE }
+        : { duration: PORTAL_MODAL_BACKDROP_CLOSE_DURATION, ease: PORTAL_MODAL_EXIT_EASE }
+
+  const restoreFocusAndScrollLock = React.useCallback(() => {
+    releaseScrollLockRef.current?.()
+    releaseScrollLockRef.current = null
+    const prev = previouslyFocusedRef.current
+    previouslyFocusedRef.current = null
+    if (prev && prev.isConnected) {
+      prev.focus({ preventScroll: true })
+    }
+  }, [])
 
   React.useEffect(() => {
     onCloseRef.current = onClose
   }, [onClose])
 
   React.useEffect(() => {
-    if (isOpen && animateClose) setHoldVisible(true)
-  }, [isOpen, animateClose])
-
-  React.useEffect(() => {
     setMounted(true)
-    return () => setMounted(false)
-  }, [])
+    return () => {
+      setMounted(false)
+      restoreFocusAndScrollLock()
+    }
+  }, [restoreFocusAndScrollLock])
 
   React.useEffect(() => {
     if (!isOpen) return
 
-    previouslyFocusedRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
-    const originalOverflow = document.body.style.overflow
-    const originalPaddingRight = document.body.style.paddingRight
-
-    const scrollbarWidth = window.innerWidth - document.documentElement.clientWidth
-    document.body.style.overflow = 'hidden'
-    if (scrollbarWidth > 0) {
-      document.body.style.paddingRight = `${scrollbarWidth}px`
+    if (!releaseScrollLockRef.current) {
+      previouslyFocusedRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
+      releaseScrollLockRef.current = acquirePortalScrollLock()
     }
 
     const focusFrame = window.requestAnimationFrame(() => {
@@ -1313,80 +1492,88 @@ export function PortalModal({
     return () => {
       window.cancelAnimationFrame(focusFrame)
       document.removeEventListener('keydown', handleKeyDown)
-      document.body.style.overflow = originalOverflow
-      document.body.style.paddingRight = originalPaddingRight
-      previouslyFocusedRef.current?.focus()
     }
   }, [isOpen])
 
   if (!mounted) return null
 
   return createPortal(
-    <AnimatePresence initial={false} mode="wait">
-      {(isOpen || (animateClose && holdVisible)) && (
+    <AnimatePresence
+      initial={!reduceMotion}
+      onExitComplete={() => {
+        if (isOpenRef.current) return
+        restoreFocusAndScrollLock()
+      }}
+    >
+      {isOpen ? (
         <motion.div
-          initial={isCompactFullScreen || sidePanel ? false : { opacity: 0 }}
-          animate={{ opacity: isOpen ? 1 : 0 }}
-          exit={animateClose || isCompactFullScreen || sidePanel ? {} : { opacity: 0 }}
-          transition={{ duration: reduceMotion ? 0 : 0.26, ease: [0.23, 1, 0.32, 1] }}
-          aria-hidden={!isOpen}
-          inert={!isOpen}
+          key="portal-modal-backdrop"
+          data-portal-backdrop="true"
+          aria-hidden="true"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1, transition: backdropOpenTransition }}
+          exit={{ opacity: 0, pointerEvents: 'none', transition: backdropCloseTransition }}
           style={{ zIndex: computedZIndex }}
-          className={sidePanel ? 'fixed inset-0 flex justify-end' : `fixed inset-0 flex items-center justify-center p-3 pt-[calc(env(safe-area-inset-top)+0.75rem)] pb-[calc(env(safe-area-inset-bottom)+0.75rem)] sm:p-4 ${fullScreenOnCompact ? 'max-lg:!p-0' : ''} ${fullScreenOnMobile ? 'max-md:!p-0' : ''}`}
+          className={`fixed inset-0 cursor-default will-change-[opacity] ${
+            sidePanel
+              ? depth > 0 ? 'bg-transparent' : 'portal-modal-backdrop--sheet'
+              : isCompactFullScreen
+                ? 'portal-modal-backdrop--compact'
+                : 'portal-modal-backdrop'
+          }`}
+          onClick={onClose}
+        />
+      ) : null}
+      {isOpen ? (
+        <motion.div
+          key="portal-modal-dialog"
+          ref={dialogRef}
+          role="dialog"
+          data-portal-dialog="true"
+          aria-modal="true"
+          aria-labelledby={title ? titleId : undefined}
+          aria-label={title ? undefined : ariaLabel ?? 'Portal dialog'}
+          tabIndex={-1}
+          initial={dialogInitial}
+          animate={dialogAnimate}
+          exit={dialogExit}
+          style={{ zIndex: computedZIndex, contain: 'layout style' }}
+          className={sidePanel
+            ? `fixed inset-y-0 right-0 flex h-dvh w-full ${maxWidth} ${className} will-change-[transform,opacity] flex-col overflow-hidden border-l border-[color:var(--portal-border)] bg-[color:var(--portal-card)] shadow-[-18px_0_48px_rgba(0,0,0,0.22)] outline-none`
+            : `fixed inset-x-0 top-[calc(env(safe-area-inset-top)+0.75rem)] bottom-[calc(env(safe-area-inset-bottom)+0.75rem)] sm:inset-0 m-auto flex h-fit max-h-[calc(100dvh-env(safe-area-inset-top)-env(safe-area-inset-bottom)-1.5rem)] w-[calc(100%-1.5rem)] sm:w-[calc(100%-2rem)] ${maxWidth} ${className} transform-gpu will-change-[transform,opacity] flex-col overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-bg)] shadow-2xl outline-none sm:max-h-[90vh] ${fullScreenOnCompact ? 'max-lg:!inset-0 max-lg:!m-0 max-lg:!w-full max-lg:!max-w-none max-lg:!h-dvh max-lg:!max-h-dvh max-lg:!rounded-none max-lg:!border-0 max-lg:!shadow-none' : ''} ${fullScreenOnMobile ? 'max-md:!inset-0 max-md:!m-0 max-md:!w-full max-md:!max-w-none max-md:!h-dvh max-md:!max-h-dvh max-md:!rounded-none max-md:!border-0 max-md:!shadow-none' : ''}`}
         >
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: reduceMotion ? 0 : sidePanel ? 0.3 : 0.22, ease: [0.23, 1, 0.32, 1] }}
-            className={`absolute inset-0 cursor-default ${sidePanel ? depth > 0 ? 'bg-transparent' : 'bg-black/45 backdrop-blur-[2px]' : isCompactFullScreen ? 'bg-transparent' : 'bg-black/75 backdrop-blur-md'}`}
-            onClick={onClose}
-          />
-          <motion.div
-            ref={dialogRef}
-            role="dialog"
-            data-portal-dialog="true"
-            aria-modal="true"
-            aria-labelledby={title ? titleId : undefined}
-            aria-label={title ? undefined : ariaLabel ?? 'Portal dialog'}
-            tabIndex={-1}
-            initial={dialogInitial}
-            animate={isOpen ? dialogAnimate : dialogExit}
-            exit={dialogExit}
-            onAnimationComplete={() => { if (animateClose && !isOpen) setHoldVisible(false) }}
-            transition={{ duration: reduceMotion ? 0 : sidePanel ? 0.32 : isCompactFullScreen ? 0.36 : 0.26, ease: [0.23, 1, 0.32, 1] }}
-            className={sidePanel ? `relative z-10 flex h-dvh w-full ${maxWidth} ${className} flex-col overflow-hidden border-l border-[color:var(--portal-border)] bg-[color:var(--portal-card)] shadow-[-18px_0_48px_rgba(0,0,0,0.22)] outline-none` : `relative z-10 flex max-h-[calc(100dvh-env(safe-area-inset-top)-env(safe-area-inset-bottom)-1.5rem)] w-full ${maxWidth} ${className} transform-gpu flex-col overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-bg)] shadow-2xl outline-none sm:max-h-[90vh] ${fullScreenOnCompact ? 'max-lg:!h-dvh max-lg:!max-h-dvh max-lg:!rounded-none max-lg:!border-0 max-lg:!shadow-none' : ''} ${fullScreenOnMobile ? 'max-md:!h-dvh max-md:!max-h-dvh max-md:!rounded-none max-md:!border-0 max-md:!shadow-none' : ''}`}
-          >
-            <ModalDepthContext.Provider value={depth + 1}>
-              {title ? (
-                <div className={`sticky top-0 z-10 flex shrink-0 items-start justify-between gap-4 border-b border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-4 py-3.5 sm:px-6 sm:py-4 ${fullScreenOnCompact ? 'max-lg:!pt-[calc(env(safe-area-inset-top)+0.75rem)]' : ''} ${fullScreenOnMobile ? 'max-md:!pt-[calc(env(safe-area-inset-top)+0.75rem)]' : ''}`}>
-                  <div className="flex min-w-0 items-center gap-3">
-                    {headerBack ? <button type="button" onClick={onClose} aria-label="Back to previous panel" className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45"><ArrowLeft size={18} /></button> : headerIcon}
-                    {headerBack && headerIcon ? headerIcon : null}
-                    <div className="min-w-0">
-                      <h3 id={titleId} className="text-base font-semibold tracking-tight text-[color:var(--portal-text)]">{title}</h3>
-                      {description ? <p className="mt-0.5 max-w-xl text-xs leading-5 text-[color:var(--portal-muted)]">{description}</p> : null}
-                    </div>
+          <ModalDepthContext.Provider value={depth + 1}>
+            {title ? (
+              <div className={`sticky top-0 z-10 flex shrink-0 items-start justify-between gap-4 border-b border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-4 py-3.5 sm:px-6 sm:py-4 ${fullScreenOnCompact ? 'max-lg:!pt-[calc(env(safe-area-inset-top)+0.75rem)]' : ''} ${fullScreenOnMobile ? 'max-md:!pt-[calc(env(safe-area-inset-top)+0.75rem)]' : ''}`}>
+                <div className="flex min-w-0 items-center gap-3">
+                  {headerBack ? <PortalGhostIconButton onClick={onClose} aria-label="Back to previous panel" className="!h-10 !w-10"><ArrowLeft size={18} /></PortalGhostIconButton> : headerIcon}
+                  {headerBack && headerIcon ? headerIcon : null}
+                  <div className="min-w-0">
+                    <h3 id={titleId} className="text-base font-semibold tracking-tight text-[color:var(--portal-text)]">{title}</h3>
+                    {description ? <p className="mt-0.5 max-w-xl text-xs leading-5 text-[color:var(--portal-muted)]">{description}</p> : null}
                   </div>
+                </div>
+                <div className="flex shrink-0 items-center gap-2">
+                  {headerAction}
                   {!headerBack ? <PortalCloseButton onClick={onClose} aria-label={`Close ${title}`} /> : null}
                 </div>
-              ) : null}
-              {title || footer ? (
-                <>
-                  <div data-portal-modal-scroller className={`min-h-0 flex-1 overflow-y-auto overscroll-contain p-4 portal-scrollbar sm:p-6 ${fullScreenOnCompact ? 'max-lg:!pb-[calc(1rem+env(safe-area-inset-bottom))]' : ''} ${fullScreenOnMobile ? 'max-md:!pb-[calc(1rem+env(safe-area-inset-bottom))]' : ''}`}>
-                    {children}
+              </div>
+            ) : null}
+            {title || footer ? (
+              <>
+                <div data-portal-modal-scroller className={`min-h-0 flex-1 overflow-y-auto overscroll-contain p-4 portal-scrollbar sm:p-6 ${fullScreenOnCompact ? 'max-lg:!pb-[calc(1rem+env(safe-area-inset-bottom))]' : ''} ${fullScreenOnMobile ? 'max-md:!pb-[calc(1rem+env(safe-area-inset-bottom))]' : ''}`}>
+                  {children}
+                </div>
+                {footer ? (
+                  <div className="shrink-0 border-t border-[color:var(--portal-border)] bg-[color:var(--portal-bg)] p-4 sm:px-6 sm:py-4">
+                    {footer}
                   </div>
-                  {footer ? (
-                    <div className="shrink-0 border-t border-[color:var(--portal-border)] bg-[color:var(--portal-bg)] p-4 sm:px-6 sm:py-4">
-                      {footer}
-                    </div>
-                  ) : null}
-                </>
-              ) : children}
-            </ModalDepthContext.Provider>
-          </motion.div>
+                ) : null}
+              </>
+            ) : children}
+          </ModalDepthContext.Provider>
         </motion.div>
-      )}
+      ) : null}
     </AnimatePresence>,
     document.body
   )
@@ -1517,7 +1704,7 @@ export function PortalSelect({
         }}
         aria-haspopup="listbox"
         aria-expanded={isOpen}
-        className={`portal-select-trigger flex min-h-11 w-full cursor-pointer items-center justify-between gap-2.5 rounded-xl border px-3.5 py-2 text-xs font-medium transition-all duration-150 hover:border-[#caa24c]/35 focus:outline-none focus:ring-2 focus:ring-[#caa24c]/15 disabled:cursor-not-allowed disabled:opacity-40 sm:min-h-9 ${isLight ? 'border-[#d8c4a4]/80 bg-[#f6efe2] text-[#3b2b1d]' : 'border-transparent bg-[color:var(--portal-soft)] text-[color:var(--portal-text)]'} ${buttonClassName}`}
+        className={`portal-select-trigger flex min-h-11 w-full cursor-pointer items-center justify-between gap-2.5 rounded-xl border px-3.5 py-2 text-xs font-medium transition-all duration-150 hover:border-[#caa24c]/35 focus:outline-none focus:ring-2 focus:ring-[#caa24c]/15 focus-visible:border-[#caa24c]/40 focus-visible:ring-2 focus-visible:ring-[#caa24c]/15 disabled:cursor-not-allowed disabled:opacity-40 sm:min-h-9 ${isLight ? 'border-[#d8c4a4]/80 bg-[#f6efe2] text-[#3b2b1d]' : 'border-transparent bg-[color:var(--portal-soft)] text-[color:var(--portal-text)]'} ${buttonClassName}`}
       >
         <span className="truncate">{selectedOption ? selectedOption.label : placeholder}</span>
         <ChevronDown size={14} className={`shrink-0 text-[color:var(--portal-muted)] transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
@@ -1525,66 +1712,65 @@ export function PortalSelect({
       {typeof document !== 'undefined' ? createPortal(
         <AnimatePresence initial={false}>
           {isOpen ? (
-            <React.Fragment key="portal-select">
-              <motion.div
-                aria-hidden="true"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                transition={{ duration: 0.16, ease: [0.23, 1, 0.32, 1] }}
-                className="fixed inset-0 z-[9990] cursor-default"
-                onClick={() => setIsOpen(false)}
-              />
-              <motion.div
-                ref={dropdownRef}
-                role="listbox"
-                data-portal-popover="true"
-                data-scroll-lock="true"
-                initial={reduceMotion ? false : { opacity: 0, y: coords.opensAbove ? 6 : -6, scale: 0.99 }}
-                animate={{ opacity: 1, y: 0, scale: 1 }}
-                exit={reduceMotion ? { opacity: 0 } : { opacity: 0, y: coords.opensAbove ? 4 : -4, scale: 0.99 }}
-                transition={{ duration: reduceMotion ? 0 : 0.16, ease: [0.22, 1, 0.36, 1] }}
-                className={`portal-scrollbar fixed z-[9999] max-h-[380px] overflow-y-auto overscroll-contain rounded-xl border p-1.5 shadow-xl ring-1 ring-black/5 ${isLight ? 'portal-scrollbar-light border-[#d8c4a4] bg-[#fffdfa] shadow-[#3b2b1d]/12' : 'border-[color:var(--portal-border,rgba(202,162,76,0.18))] shadow-black/25'}`}
-                style={{
-                  top: `${coords.top}px`,
-                  left: `${coords.left}px`,
-                  width: `${coords.width}px`,
-                  maxHeight: `${coords.maxHeight}px`,
-                  transformOrigin: coords.opensAbove ? 'bottom center' : 'top center',
-                  backgroundColor: isLight ? '#fffdfa' : 'color-mix(in srgb, var(--portal-bg, #080706) 88%, transparent)',
-                  backdropFilter: isLight ? 'none' : 'blur(24px)',
-                  WebkitBackdropFilter: 'blur(24px)'
-                }}
-              >
-                  <div className="space-y-0.5">
-                    {options.map((opt) => {
-                      const isSelected = opt.value === value
-                      return (
-                        <button
-                          key={opt.value}
-                          type="button"
-                          role="option"
-                          aria-selected={isSelected}
-                          onClick={() => {
-                            onChange(opt.value)
-                            setIsOpen(false)
-                          }}
-                            className={`group flex w-full cursor-pointer items-center justify-between rounded-lg border px-3 py-2 text-left text-xs font-medium transition-all duration-150 ease-[cubic-bezier(0.23,1,0.32,1)] ${
-                            isSelected
-                              ? isLight ? 'border-[#b98a3d]/30 bg-[#f5ead8] font-semibold text-[#6f4d1f]' : 'border-[#caa24c]/20 bg-[#caa24c]/12 font-semibold text-[#f1d27a]'
-                              : isLight ? 'border-transparent text-[#5b4632] hover:bg-[#f8f1e6] hover:text-[#3b2b1d]' : 'border-transparent text-[color:var(--portal-muted,#d7c29a)] hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text,#f7efe3)]'
-                          }`}
-                        >
-                          <span>{opt.label}</span>
-                          <span className={`text-[9px] transition-opacity duration-150 ${isSelected ? isLight ? 'text-[#8d672b]' : 'text-[#f1d27a]' : isLight ? 'text-[#8d672b] opacity-0 group-hover:opacity-100' : 'text-[color:var(--portal-muted,#d7c29a)] opacity-0 group-hover:opacity-100'}`}>
-                            ●
-                          </span>
-                        </button>
-                      )
-                    })}
-                  </div>
-              </motion.div>
-            </React.Fragment>
+            <motion.div
+              key="portal-select-backdrop"
+              aria-hidden="true"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0, pointerEvents: 'none' }}
+              transition={{ duration: reduceMotion ? 0.04 : 0.14, ease: PORTAL_MODAL_EXIT_EASE }}
+              className="fixed inset-0 z-[9990] cursor-default"
+              onClick={() => setIsOpen(false)}
+            />
+          ) : null}
+          {isOpen ? (
+            <motion.div
+              key="portal-select-menu"
+              ref={dropdownRef}
+              role="listbox"
+              data-portal-popover="true"
+              data-scroll-lock="true"
+              initial={reduceMotion ? { opacity: 0 } : { opacity: 0, y: coords.opensAbove ? 6 : -6, scale: 0.99 }}
+              animate={{ opacity: 1, y: 0, scale: 1, transition: { duration: reduceMotion ? 0.05 : 0.16, ease: PORTAL_MODAL_EASE } }}
+              exit={reduceMotion ? { opacity: 0, pointerEvents: 'none', transition: { duration: 0.04 } } : { opacity: 0, y: coords.opensAbove ? 4 : -4, scale: 0.99, pointerEvents: 'none', transition: { duration: 0.12, ease: PORTAL_MODAL_EXIT_EASE } }}
+              className={`portal-scrollbar fixed z-[9999] max-h-[380px] overflow-y-auto overscroll-contain rounded-xl border p-1.5 shadow-xl ring-1 ring-black/5 ${isLight ? 'portal-scrollbar-light border-[#d8c4a4] bg-[#fffdfa] shadow-[#3b2b1d]/12' : 'portal-popover-surface border-[color:var(--portal-border,rgba(202,162,76,0.18))] shadow-black/25'}`}
+              style={{
+                top: `${coords.top}px`,
+                left: `${coords.left}px`,
+                width: `${coords.width}px`,
+                maxHeight: `${coords.maxHeight}px`,
+                transformOrigin: coords.opensAbove ? 'bottom center' : 'top center',
+                ...(isLight ? { backgroundColor: '#fffdfa', backdropFilter: 'none', WebkitBackdropFilter: 'none' } : {}),
+              }}
+            >
+              <div className="space-y-0.5">
+                {options.map((opt) => {
+                  const isSelected = opt.value === value
+                  return (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      role="option"
+                      aria-selected={isSelected}
+                      onClick={() => {
+                        onChange(opt.value)
+                        setIsOpen(false)
+                      }}
+                      className={`group flex w-full cursor-pointer items-center justify-between rounded-lg border px-3 py-2 text-left text-xs font-medium transition-all duration-150 ease-[cubic-bezier(0.23,1,0.32,1)] ${
+                        isSelected
+                          ? isLight ? 'border-[#b98a3d]/30 bg-[#f5ead8] font-semibold text-[#6f4d1f]' : 'border-[#caa24c]/20 bg-[#caa24c]/12 font-semibold text-[#f1d27a]'
+                          : isLight ? 'border-transparent text-[#5b4632] hover:bg-[#f8f1e6] hover:text-[#3b2b1d]' : 'border-transparent text-[color:var(--portal-muted,#d7c29a)] hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text,#f7efe3)]'
+                      }`}
+                    >
+                      <span>{opt.label}</span>
+                      <span className={`text-[9px] transition-opacity duration-150 ${isSelected ? isLight ? 'text-[#8d672b]' : 'text-[#f1d27a]' : isLight ? 'text-[#8d672b] opacity-0 group-hover:opacity-100' : 'text-[color:var(--portal-muted,#d7c29a)] opacity-0 group-hover:opacity-100'}`}>
+                        ●
+                      </span>
+                    </button>
+                  )
+                })}
+              </div>
+            </motion.div>
           ) : null}
         </AnimatePresence>,
         document.body

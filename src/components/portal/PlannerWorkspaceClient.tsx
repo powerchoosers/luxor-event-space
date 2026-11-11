@@ -12,7 +12,7 @@ import {
   LayoutGrid, ListTodo, Loader2, Menu, Plus, Search, Trash2, Users, Video, Palette, Pencil, X,
 } from '@/lib/icons/phosphor-compat'
 import {
-  PortalButton, PortalDatePicker, PortalEmptyState, PortalModal, PortalPageFrame, PortalPageHeader,
+  PortalButton, PortalCloseButton, PortalDatePicker, PortalEmptyState, PortalModal, PortalPageFrame, PortalPageHeader,
   PortalAnimatedTabs, PortalSelect, PortalSkeletonTransition, PortalStatusBadge, PortalTabTransition,
 } from '@/components/portal/PortalUI'
 import { EventLayoutDesigner, type EventLayoutDocument } from '@/components/portal/EventLayoutDesigner'
@@ -543,9 +543,7 @@ export function PlannerWorkspaceClient({ initialSection, bookingId, greetingName
                   <h2 id="planner-view-menu-title" className="text-base font-bold text-[color:var(--portal-text)]">Browse views</h2>
                   <p className="mt-0.5 text-xs text-[color:var(--portal-muted)]">Choose a planning view.</p>
                 </div>
-                <button type="button" onClick={() => setViewPickerOpen(false)} aria-label="Close views menu" className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-xl text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45">
-                  <X size={18}/>
-                </button>
+                <PortalCloseButton onClick={() => setViewPickerOpen(false)} aria-label="Close views menu" />
               </div>
               <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4 pb-6 portal-scrollbar">
                 <nav aria-label="Planner views" className="space-y-4">

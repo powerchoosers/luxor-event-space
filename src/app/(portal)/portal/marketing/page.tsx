@@ -1143,14 +1143,10 @@ function MarketingMobileViewPicker({
                     <h2 id="marketing-view-menu-title" className="text-base font-bold text-[color:var(--portal-text)]">Browse views</h2>
                     <p className="mt-0.5 text-xs text-[color:var(--portal-muted)]">Choose a marketing view.</p>
                   </div>
-                  <button
-                    type="button"
+                  <PortalCloseButton
                     onClick={() => onOpenChange(false)}
                     aria-label="Close views menu"
-                    className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-xl text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45"
-                  >
-                    <X size={15} />
-                  </button>
+                  />
                 </div>
                 <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-4 pb-6 portal-scrollbar">
                   <nav aria-label="Marketing views" className="space-y-5">

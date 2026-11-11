@@ -17,7 +17,19 @@ import {
 } from '@phosphor-icons/react'
 import { LogInstallmentPaymentDialog } from '@/components/portal/LogInstallmentPaymentDialog'
 import { RescheduleInstallmentDialog } from '@/components/portal/RevenueCollectionsView'
-import { PortalButton, PortalCloseButton, PortalContactAvatar, PortalModal, PortalSelect, PortalSkeleton, PortalStatusBadge } from '@/components/portal/PortalUI'
+import {
+  PortalButton,
+  PortalCloseButton,
+  PortalContactAvatar,
+  PortalModal,
+  PortalSelect,
+  PortalSkeleton,
+  PortalStatusBadge,
+  PORTAL_SIDE_PANEL_DURATION,
+  PORTAL_SIDE_PANEL_EASE,
+  PORTAL_SIDE_PANEL_EXIT_DURATION,
+  acquirePortalScrollLock,
+} from '@/components/portal/PortalUI'
 import {
   getLuxorCategoryShares,
   getLuxorOverviewChart,
@@ -211,39 +223,40 @@ function PaymentScheduleDrawer({
 }) {
   const reduceMotion = useReducedMotion()
   const [mounted, setMounted] = useState(false)
-  const [holdVisible, setHoldVisible] = useState(false)
   const drawerRef = useRef<HTMLDivElement>(null)
-
+  const previouslyFocusedRef = useRef<HTMLElement | null>(null)
+  const releaseScrollLockRef = useRef<(() => void) | null>(null)
+  const openRef = useRef(open)
   useEffect(() => {
-    if (!open) return
-    const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null
-    const frame = requestAnimationFrame(() => drawerRef.current?.focus())
-    return () => { cancelAnimationFrame(frame); previous?.focus() }
+    openRef.current = open
   }, [open])
 
-  React.useEffect(() => {
-    setMounted(true)
-    return () => setMounted(false)
+  const restoreFocusAndScrollLock = React.useCallback(() => {
+    releaseScrollLockRef.current?.()
+    releaseScrollLockRef.current = null
+    const previous = previouslyFocusedRef.current
+    previouslyFocusedRef.current = null
+    if (previous && previous.isConnected) {
+      previous.focus({ preventScroll: true })
+    }
   }, [])
 
   React.useEffect(() => {
-    if (open && !reduceMotion) {
-      const timer = setTimeout(() => setHoldVisible(true), 0)
-      return () => clearTimeout(timer)
+    setMounted(true)
+    return () => {
+      setMounted(false)
+      restoreFocusAndScrollLock()
     }
-    if (!open) setHoldVisible(false)
-  }, [open, reduceMotion])
+  }, [restoreFocusAndScrollLock])
 
   React.useEffect(() => {
     if (!open) return
 
-    const originalOverflow = document.body.style.overflow
-    const originalPaddingRight = document.body.style.paddingRight
-    const scrollbarWidth = window.innerWidth - document.documentElement.clientWidth
-    document.body.style.overflow = 'hidden'
-    if (scrollbarWidth > 0) {
-      document.body.style.paddingRight = `${scrollbarWidth}px`
+    if (!releaseScrollLockRef.current) {
+      previouslyFocusedRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
+      releaseScrollLockRef.current = acquirePortalScrollLock()
     }
+    const frame = requestAnimationFrame(() => drawerRef.current?.focus())
 
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape' && !suspendDismiss) {
@@ -257,49 +270,59 @@ function PaymentScheduleDrawer({
     document.addEventListener('keydown', handleKeyDown)
 
     return () => {
+      cancelAnimationFrame(frame)
       document.removeEventListener('keydown', handleKeyDown)
-      document.body.style.overflow = originalOverflow
-      document.body.style.paddingRight = originalPaddingRight
     }
   }, [open, onClose, suspendDismiss, dateEdit, onDateEditClose])
 
   if (!mounted) return null
 
   return createPortal(
-    <AnimatePresence initial={false} mode="wait">
-      {(open || holdVisible) && (
+    <AnimatePresence
+      initial={!reduceMotion}
+      onExitComplete={() => {
+        if (openRef.current) return
+        restoreFocusAndScrollLock()
+      }}
+    >
+      {open ? (
         <motion.div
-          initial={reduceMotion ? false : { opacity: 0 }}
-          animate={{ opacity: open ? 1 : 0 }}
-          exit={reduceMotion ? {} : { opacity: 0 }}
-          transition={{ duration: reduceMotion ? 0 : 0.26, ease: [0.23, 1, 0.32, 1] }}
-          onAnimationComplete={() => {
-            if (!open) setHoldVisible(false)
+          key="payment-schedule-backdrop"
+          data-portal-backdrop="true"
+          aria-hidden="true"
+          initial={{ opacity: 0 }}
+          animate={{
+            opacity: 1,
+            transition: { duration: reduceMotion ? 0.06 : PORTAL_SIDE_PANEL_DURATION * 0.72, ease: PORTAL_SIDE_PANEL_EASE },
           }}
+          exit={{
+            opacity: 0,
+            pointerEvents: 'none',
+            transition: { duration: reduceMotion ? 0.05 : PORTAL_SIDE_PANEL_EXIT_DURATION, ease: PORTAL_SIDE_PANEL_EASE },
+          }}
+          className="portal-modal-backdrop--sheet fixed inset-0 z-[200]"
+          onClick={onClose}
+        />
+      ) : null}
+      {open ? (
+        <motion.div
+          key="payment-schedule-drawer"
+          ref={drawerRef}
+          role="dialog"
+          aria-modal="true"
           aria-hidden={!open}
           inert={!open}
-          className="fixed inset-0 z-[200]"
+          aria-labelledby="payment-schedule-title"
+          tabIndex={-1}
+          initial={reduceMotion ? { opacity: 0 } : { x: '100%' }}
+          animate={reduceMotion
+            ? { opacity: 1, transition: { duration: 0.06 } }
+            : { x: 0, transition: { duration: PORTAL_SIDE_PANEL_DURATION, ease: PORTAL_SIDE_PANEL_EASE } }}
+          exit={reduceMotion
+            ? { opacity: 0, pointerEvents: 'none', transition: { duration: 0.05 } }
+            : { x: '100%', pointerEvents: 'none', transition: { duration: PORTAL_SIDE_PANEL_EXIT_DURATION, ease: PORTAL_SIDE_PANEL_EASE } }}
+          className="fixed inset-y-0 right-0 z-[200] h-full w-full max-w-[600px] overflow-hidden border-l border-[color:var(--portal-border)] bg-[color:var(--portal-card)] shadow-[-18px_0_48px_rgba(0,0,0,0.22)] will-change-transform"
         >
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.22, ease: [0.23, 1, 0.32, 1] }}
-            className="absolute inset-0 bg-black/45 backdrop-blur-[2px]"
-            onClick={onClose}
-          />
-          <motion.div
-            ref={drawerRef}
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="payment-schedule-title"
-            tabIndex={-1}
-            initial={reduceMotion ? false : { x: '100%' }}
-            animate={{ x: open ? 0 : '100%' }}
-            exit={reduceMotion ? {} : { x: '100%' }}
-            transition={{ duration: reduceMotion ? 0 : 0.32, ease: [0.23, 1, 0.32, 1] }}
-            className="absolute right-0 top-0 h-full w-full max-w-[600px] overflow-hidden border-l border-[color:var(--portal-border)] bg-[color:var(--portal-card)] shadow-[-18px_0_48px_rgba(0,0,0,0.22)]"
-          >
             {plan && (
               <div className="flex h-full flex-col">
                 {/* Header */}
@@ -374,8 +397,7 @@ function PaymentScheduleDrawer({
               </div>
             )}
           </motion.div>
-        </motion.div>
-      )}
+      ) : null}
     </AnimatePresence>,
     document.body,
   )

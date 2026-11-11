@@ -28,6 +28,7 @@ import {
   Sun,
   Moon,
   HelpCircle,
+  CalendarClock,
 } from '@/lib/icons/phosphor-compat'
 import Link from 'next/link'
 import dynamic from 'next/dynamic'
@@ -41,7 +42,7 @@ import type { LuxorPortalSession } from '@/lib/luxorPortalAuth'
 import type { PortalPermission, PortalRole } from '@/lib/luxorPortalAccess'
 import Image from 'next/image'
 import { ToastProvider, useToast } from '@/components/portal/ToastProvider'
-import { PortalCloseButton, PortalContactAvatar, PortalConstellationLoader } from '@/components/portal/PortalUI'
+import { PortalCloseButton, PortalContactAvatar, PortalConstellationLoader, PortalGhostIconButton } from '@/components/portal/PortalUI'
 import { PortalGlobalTooltip } from '@/components/portal/PortalGlobalTooltip'
 import { PortalViewportDiagnostics } from '@/components/portal/PortalViewportDiagnostics'
 import { MobileActiveCallStrip, PortalPhoneButton, PortalVoiceProvider } from '@/components/portal/PortalVoiceProvider'
@@ -49,6 +50,7 @@ import { usePortalNotifications } from '@/hooks/usePortalNotifications'
 import type { EmailComposeDraft } from '@/components/portal/EmailComposeDrawer'
 import type { Tab as SettingsTabType } from '@/components/portal/PortalSettingsManager'
 import { getRecentLeads, getRecentLeadsServerSnapshot, subscribeRecentLeads, saveRecentLead, clearRecentLeads, type RecentLeadItem } from '@/lib/luxorRecentLeads'
+import { PortalFloatingScrollbar } from '@/components/portal/PortalFloatingScrollbar'
 
 type PortalUserProfile = {
   displayName: string
@@ -170,6 +172,11 @@ const EmailComposeDrawer = dynamic(
 
 const NewLeadDrawer = dynamic(
   () => import('@/components/portal/NewLeadDrawer').then((mod) => mod.NewLeadDrawer),
+  { ssr: false }
+)
+
+const AddRecurringCostModal = dynamic(
+  () => import('@/components/portal/AddRecurringCostModal').then((mod) => mod.AddRecurringCostModal),
   { ssr: false }
 )
 
@@ -557,6 +564,9 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
 
   // Global Add Client / Lead Drawer State
   const [isNewLeadDrawerOpen, setIsNewLeadDrawerOpen] = useState(false)
+  const [isRecurringCostModalOpen, setIsRecurringCostModalOpen] = useState(false)
+  const [isHeaderAddMenuOpen, setIsHeaderAddMenuOpen] = useState(false)
+  const headerAddMenuRef = useRef<HTMLDivElement>(null)
 
   // Global SMS / Text Modal State & Event Listener
   const [activeTextMessage, setActiveTextMessage] = useState<{
@@ -621,22 +631,44 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
     }
 
     const handleOpenNewLead = () => setIsNewLeadDrawerOpen(true)
+    const handleOpenRecurringCost = () => setIsRecurringCostModalOpen(true)
 
     window.addEventListener('luxor-compose-email', handleComposeEvent)
     window.addEventListener('luxor-open-elena', handleOpenElena)
     window.addEventListener('luxor-open-text', handleTextEvent)
     window.addEventListener('luxor-open-new-lead', handleOpenNewLead)
     window.addEventListener('luxor:open-new-lead', handleOpenNewLead)
+    window.addEventListener('luxor-open-recurring-cost', handleOpenRecurringCost)
+    window.addEventListener('luxor:open-recurring-cost', handleOpenRecurringCost)
     return () => {
       window.removeEventListener('luxor-compose-email', handleComposeEvent)
       window.removeEventListener('luxor-open-elena', handleOpenElena)
       window.removeEventListener('luxor-open-text', handleTextEvent)
       window.removeEventListener('luxor-open-new-lead', handleOpenNewLead)
       window.removeEventListener('luxor:open-new-lead', handleOpenNewLead)
+      window.removeEventListener('luxor-open-recurring-cost', handleOpenRecurringCost)
+      window.removeEventListener('luxor:open-recurring-cost', handleOpenRecurringCost)
     }
   }, [])
   
-  // Header Global Search State
+  useEffect(() => {
+    if (!isHeaderAddMenuOpen) return
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target as Node | null
+      if (!target) return
+      if (headerAddMenuRef.current?.contains(target)) return
+      setIsHeaderAddMenuOpen(false)
+    }
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setIsHeaderAddMenuOpen(false)
+    }
+    document.addEventListener('pointerdown', handlePointerDown)
+    document.addEventListener('keydown', handleKeyDown)
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown)
+      document.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [isHeaderAddMenuOpen])
   const [searchQuery, setSearchQuery] = useState('')
   const [searchFocused, setSearchFocused] = useState(false)
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false)
@@ -905,14 +937,14 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
               {sidebarIsCollapsed ? <PanelLeftOpen size={17} /> : <PanelLeftClose size={17} />}
             </button>
             </div>
-            <button
-              type="button"
+            <PortalGhostIconButton
+              size="lg"
               onClick={toggleSidebar}
-              className={`h-9 w-9 shrink-0 items-center justify-center rounded-lg text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/50 ${sidebarIsCollapsed ? 'hidden' : 'inline-flex'}`}
+              className={sidebarIsCollapsed ? '!hidden' : ''}
               aria-label="Collapse sidebar"
             >
               <PanelLeftClose size={17} />
-            </button>
+            </PortalGhostIconButton>
           </div>
 
           <nav className="flex flex-col space-y-1">
@@ -1067,7 +1099,7 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
                 onBlur={() => setAccountHovered(false)}
                 aria-label="Open account menu"
                 aria-expanded={accountMenuOpen}
-                className={`group relative flex items-center rounded-lg border border-transparent transition-all ${sidebarIsCollapsed ? 'mx-auto h-10 w-10 justify-center gap-0 p-0 hover:bg-[color:var(--portal-soft)]/40' : 'w-full gap-3 px-2 py-2 hover:bg-[color:var(--portal-soft)]/40'}`}
+                className="group relative flex w-full items-center rounded-xl border border-transparent px-1.5 py-2 transition-colors duration-200 hover:bg-[color:var(--portal-soft)]/40 cursor-pointer"
               >
                 <div
                   className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full border border-[#caa24c]/25 bg-gradient-to-br from-[#f1d27a] via-[#caa24c] to-[#9b6d24] bg-cover bg-center font-serif text-[11px] font-bold text-[#18130d] ring-2 ring-[color:var(--portal-soft)] transition-transform duration-200 ease-out group-hover:scale-110"
@@ -1088,9 +1120,11 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
                     </motion.span>
                   )}
                 </AnimatePresence>
-                <span className={`min-w-0 overflow-hidden text-left transition-[max-width,opacity,transform] duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] ${sidebarIsCollapsed ? 'max-w-0 opacity-0 -translate-x-1' : 'max-w-[180px] opacity-100 translate-x-0'}`}>
-                  <span className="block truncate text-xs font-bold text-[color:var(--portal-text)]">{userProfile.displayName}</span>
-                  <span className="mt-0.5 block truncate text-[10px] text-[color:var(--portal-muted)]">Account</span>
+                <span className={`min-w-0 overflow-hidden whitespace-nowrap text-left transition-[max-width,opacity,transform] duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] ${sidebarIsCollapsed ? 'max-w-0 opacity-0 -translate-x-1 pointer-events-none' : 'max-w-[180px] opacity-100 translate-x-0'}`}>
+                  <span className="block pl-3">
+                    <span className="block truncate text-xs font-bold text-[color:var(--portal-text)]">{userProfile.displayName}</span>
+                    <span className="mt-0.5 block truncate text-[10px] text-[color:var(--portal-muted)]">Account</span>
+                  </span>
                 </span>
               </button>
             </div>
@@ -1331,16 +1365,74 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
             </AnimatePresence>
             </div>
 
-            <button
-              type="button"
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={() => setIsNewLeadDrawerOpen(true)}
-              aria-label="Add new client or lead"
-              title="Add new client or lead"
-              className="luxor-gold-raised inline-flex h-9 w-9 !min-h-9 !min-w-9 shrink-0 items-center justify-center rounded-xl text-white shadow-xs transition-all active:scale-95 cursor-pointer"
-            >
-              <Plus size={16} strokeWidth={2.5} aria-hidden="true" />
-            </button>
+            <div ref={headerAddMenuRef} className="relative shrink-0">
+              <button
+                type="button"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => setIsHeaderAddMenuOpen((prev) => !prev)}
+                aria-label="Add inquiry or recurring cost"
+                aria-expanded={isHeaderAddMenuOpen}
+                aria-haspopup="menu"
+                title="Quick add"
+                className="luxor-gold-raised inline-flex h-9 w-9 !min-h-9 !min-w-9 shrink-0 items-center justify-center rounded-xl text-white shadow-xs transition-all active:scale-95 cursor-pointer"
+              >
+                <Plus size={16} strokeWidth={2.5} aria-hidden="true" className={`transition-transform duration-200 ${isHeaderAddMenuOpen ? 'rotate-45' : ''}`} />
+              </button>
+
+              <AnimatePresence>
+                {isHeaderAddMenuOpen && (
+                  <motion.div
+                    role="menu"
+                    aria-label="Quick add options"
+                    initial={reduceMotion ? { opacity: 0 } : { opacity: 0, y: 6, scale: 0.96 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={reduceMotion ? { opacity: 0 } : { opacity: 0, y: 4, scale: 0.96 }}
+                    transition={{ duration: 0.15, ease: [0.16, 1, 0.3, 1] }}
+                    className="absolute right-0 top-full z-[120] mt-2 w-56 rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-1.5 shadow-2xl backdrop-blur-2xl"
+                  >
+                    <div className="px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-[color:var(--portal-faint)]">
+                      Quick Add
+                    </div>
+
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={() => {
+                        setIsHeaderAddMenuOpen(false)
+                        setIsNewLeadDrawerOpen(true)
+                      }}
+                      className="group flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-left text-xs font-semibold text-[color:var(--portal-text)] transition-colors hover:bg-[color:var(--portal-soft)] hover:text-[#9e7627] dark:hover:text-[#f1d27a] cursor-pointer"
+                    >
+                      <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] text-[#caa24c] transition-colors group-hover:border-[#caa24c]/40 group-hover:bg-[#caa24c]/10">
+                        <Users size={14} />
+                      </span>
+                      <span className="flex-1 min-w-0">
+                        <span className="block truncate">Add client</span>
+                        <span className="block text-[10px] font-normal text-[color:var(--portal-muted)]">New inquiry or lead</span>
+                      </span>
+                    </button>
+
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={() => {
+                        setIsHeaderAddMenuOpen(false)
+                        setIsRecurringCostModalOpen(true)
+                      }}
+                      className="group flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-left text-xs font-semibold text-[color:var(--portal-text)] transition-colors hover:bg-[color:var(--portal-soft)] hover:text-[#9e7627] dark:hover:text-[#f1d27a] cursor-pointer"
+                    >
+                      <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] text-[#caa24c] transition-colors group-hover:border-[#caa24c]/40 group-hover:bg-[#caa24c]/10">
+                        <CalendarClock size={14} />
+                      </span>
+                      <span className="flex-1 min-w-0">
+                        <span className="block truncate">Add recurring payment</span>
+                        <span className="block text-[10px] font-normal text-[color:var(--portal-muted)]">Rent, utilities, subscriptions</span>
+                      </span>
+                    </button>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
           </div>
 
           <div className="flex items-center justify-self-end">
@@ -1357,7 +1449,7 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
                     return next
                   })
                 }}
-                className={`portal-header-action relative flex h-9 w-9 !min-w-0 !min-h-0 shrink-0 items-center justify-center rounded-full transition-all active:scale-95 cursor-pointer ${
+                className={`portal-header-action portal-ghost-icon-button relative flex h-9 w-9 !min-w-0 !min-h-0 shrink-0 items-center justify-center rounded-xl transition-all active:scale-95 cursor-pointer ${
                   mobileSearchOpen
                     ? 'bg-[#caa24c]/15 text-[#caa24c] shadow-xs'
                     : 'text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)] hover:bg-[color:var(--portal-soft)] active:bg-[#caa24c]/10'
@@ -1374,7 +1466,7 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
               {/* 2. Phone Button */}
               <PortalPhoneButton
                 compact
-                className="portal-header-action relative flex h-9 w-9 !min-w-0 !min-h-0 shrink-0 items-center justify-center rounded-full transition-all active:scale-95 cursor-pointer text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)] hover:bg-[color:var(--portal-soft)] active:bg-[#caa24c]/10 group"
+                className="portal-header-action portal-ghost-icon-button relative flex h-9 w-9 !min-w-0 !min-h-0 shrink-0 items-center justify-center rounded-xl transition-all active:scale-95 cursor-pointer text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)] hover:bg-[color:var(--portal-soft)] active:bg-[#caa24c]/10 group"
               />
 
               {/* Vertical divider */}
@@ -1386,7 +1478,7 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
                   <Link
                     href="/portal/messages?tab=sms"
                     prefetch
-                    className="portal-header-action hidden min-[420px]:flex relative h-9 w-9 !min-w-0 !min-h-0 shrink-0 items-center justify-center rounded-full transition-all active:scale-95 cursor-pointer text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)] hover:bg-[color:var(--portal-soft)] active:bg-[#caa24c]/10"
+                    className="portal-header-action portal-ghost-icon-button hidden min-[420px]:flex relative h-9 w-9 !min-w-0 !min-h-0 shrink-0 items-center justify-center rounded-xl transition-all active:scale-95 cursor-pointer text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)] hover:bg-[color:var(--portal-soft)] active:bg-[#caa24c]/10"
                     aria-label="Text messages"
                     title="Text messages"
                   >
@@ -1406,7 +1498,7 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
                   }}
                   type="button"
                   onClick={() => setNotificationsOpen((prev) => !prev)}
-                  className={`portal-header-action relative flex h-9 w-9 !min-w-0 !min-h-0 shrink-0 items-center justify-center rounded-full transition-all active:scale-95 cursor-pointer ${
+                  className={`portal-header-action portal-ghost-icon-button relative flex h-9 w-9 !min-w-0 !min-h-0 shrink-0 items-center justify-center rounded-xl transition-all active:scale-95 cursor-pointer ${
                     notificationsOpen
                       ? 'bg-[#caa24c]/15 text-[#caa24c] shadow-xs'
                       : 'text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)] hover:bg-[color:var(--portal-soft)] active:bg-[#caa24c]/10'
@@ -1431,7 +1523,7 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
               {/* 1. Phone Button */}
               <PortalPhoneButton
                 compact
-                className="portal-header-action relative flex h-9 w-9 !min-w-0 !min-h-0 shrink-0 items-center justify-center rounded-lg transition-all active:scale-95 cursor-pointer text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)] hover:bg-[color:var(--portal-soft)] active:bg-[#caa24c]/10 group"
+                className="portal-header-action portal-ghost-icon-button relative flex h-9 w-9 !min-w-0 !min-h-0 shrink-0 items-center justify-center rounded-xl transition-all active:scale-95 cursor-pointer text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)] hover:bg-[color:var(--portal-soft)] active:bg-[#caa24c]/10 group"
               />
 
               {/* Vertical divider 1 */}
@@ -1445,7 +1537,7 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
                   }}
                   type="button"
                   onClick={() => setNotificationsOpen((prev) => !prev)}
-                  className={`portal-header-action relative flex h-9 w-9 !min-w-0 !min-h-0 shrink-0 items-center justify-center rounded-lg transition-all active:scale-95 cursor-pointer ${
+                  className={`portal-header-action portal-ghost-icon-button relative flex h-9 w-9 !min-w-0 !min-h-0 shrink-0 items-center justify-center rounded-xl transition-all active:scale-95 cursor-pointer ${
                     notificationsOpen
                       ? 'bg-[#caa24c]/15 text-[#caa24c] shadow-xs'
                       : 'text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)] hover:bg-[color:var(--portal-soft)] active:bg-[#caa24c]/10'
@@ -1471,7 +1563,7 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
               <Link
                 href="/portal/messages?tab=sms"
                 prefetch
-                className="portal-header-action relative flex h-9 w-9 !min-w-0 !min-h-0 shrink-0 items-center justify-center rounded-lg transition-all active:scale-95 cursor-pointer text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)] hover:bg-[color:var(--portal-soft)] active:bg-[#caa24c]/10"
+                className="portal-header-action portal-ghost-icon-button relative flex h-9 w-9 !min-w-0 !min-h-0 shrink-0 items-center justify-center rounded-xl transition-all active:scale-95 cursor-pointer text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)] hover:bg-[color:var(--portal-soft)] active:bg-[#caa24c]/10"
                 aria-label="Text messages"
                 title="Text messages"
               >
@@ -1713,12 +1805,15 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
       </AnimatePresence>
 
         {/* The shell reserves the bottom bar; detail pages also reserve their action row. */}
-        <div ref={contentScrollRef} className={`portal-scrollbar min-h-0 min-w-0 flex-1 bg-[color:var(--portal-bg)] transition-[border-radius] duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] lg:rounded-tl-[28px] ${usesInternalPaneScroll ? 'flex flex-col overflow-y-hidden' : 'overflow-y-auto'} overflow-x-hidden ${isCallsPage || isMessagesPage ? 'p-0 lg:p-8' : isCustomWorkflowEditor ? 'p-0 lg:p-8' : isEmailPage ? 'p-0 lg:p-8' : isLeadDetailPage ? 'px-4 pt-4 pb-44 sm:p-6 lg:px-8 lg:pt-8 lg:pb-0' : pathname === '/portal/leads' ? 'p-4 max-md:pt-0 max-md:pb-[calc(4rem+env(safe-area-inset-bottom))] sm:p-6 lg:p-8' : 'p-4 sm:p-6 lg:p-8'} ${
-          portalTheme === 'light'
-            ? 'bg-[image:radial-gradient(circle_at_78%_0%,rgba(189,101,117,0.06),transparent_24rem),radial-gradient(circle_at_8%_12%,rgba(202,162,76,0.08),transparent_22rem)]'
-            : 'bg-[image:radial-gradient(circle_at_78%_0%,rgba(189,101,117,0.08),transparent_24rem),radial-gradient(circle_at_8%_12%,rgba(202,162,76,0.08),transparent_22rem)]'
-        }`}>
-          <RouteTransition surface="portal" fillAvailableHeight={usesInternalPaneScroll}>{children}</RouteTransition>
+        <div className="relative min-h-0 min-w-0 flex-1 flex flex-col overflow-hidden">
+          <div ref={contentScrollRef} className={`portal-scrollbar min-h-0 min-w-0 flex-1 bg-[color:var(--portal-bg)] transition-[border-radius] duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] lg:rounded-tl-[28px] ${usesInternalPaneScroll ? 'flex flex-col overflow-y-hidden' : 'overflow-y-auto'} overflow-x-hidden ${isCallsPage || isMessagesPage ? 'p-0 lg:p-8' : isCustomWorkflowEditor ? 'p-0 lg:p-8' : isEmailPage ? 'p-0 lg:p-8' : isLeadDetailPage ? 'px-4 pt-4 pb-44 sm:p-6 lg:px-8 lg:pt-8 lg:pb-0' : pathname === '/portal/leads' ? 'p-4 max-md:pt-0 max-md:pb-[calc(4rem+env(safe-area-inset-bottom))] sm:p-6 lg:p-8' : 'p-4 sm:p-6 lg:p-8'} ${
+            portalTheme === 'light'
+              ? 'bg-[image:radial-gradient(circle_at_78%_0%,rgba(189,101,117,0.06),transparent_24rem),radial-gradient(circle_at_8%_12%,rgba(202,162,76,0.08),transparent_22rem)]'
+              : 'bg-[image:radial-gradient(circle_at_78%_0%,rgba(189,101,117,0.08),transparent_24rem),radial-gradient(circle_at_8%_12%,rgba(202,162,76,0.08),transparent_22rem)]'
+          }`}>
+            <RouteTransition surface="portal" fillAvailableHeight={usesInternalPaneScroll}>{children}</RouteTransition>
+          </div>
+          <PortalFloatingScrollbar containerRef={contentScrollRef} />
         </div>
       </main>
 
@@ -1917,6 +2012,13 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
         }}
         pagePath={pathname}
       />
+      <AddRecurringCostModal
+        isOpen={isRecurringCostModalOpen}
+        onClose={() => setIsRecurringCostModalOpen(false)}
+        onCreated={() => {
+          window.dispatchEvent(new CustomEvent('luxor:recurring-costs-updated'))
+        }}
+      />
       <AnimatePresence>
         {activeTextMessage && (
           <LuxorDraggableTextModal
@@ -1979,7 +2081,7 @@ function SidebarLink({
       onFocus={() => setIsHovered(true)}
       onBlur={() => setIsHovered(false)}
       aria-label={label}
-      className={`group relative flex items-center rounded-lg border border-transparent py-2.5 text-sm font-medium transition-colors ${
+      className={`group relative flex items-center rounded-xl border border-transparent py-2.5 text-sm font-medium transition-colors ${
         collapsed ? 'mx-auto h-11 w-11 justify-center gap-0 p-0' : 'w-full gap-3 px-3'
       } ${
         isSelected
@@ -1990,7 +2092,7 @@ function SidebarLink({
       {isSelected && (
         <motion.span
           layoutId="sidebar-active-pill"
-          className="absolute inset-0 rounded-lg bg-[#caa24c]/15 dark:bg-[#caa24c]/10 pointer-events-none"
+          className="absolute inset-0 rounded-xl bg-[#caa24c]/15 dark:bg-[#caa24c]/10 pointer-events-none"
           transition={{
             type: 'spring',
             stiffness: 450,

@@ -2,12 +2,16 @@
 
 import { Check, Loader2, QrCode, WalletCards } from '@/lib/icons/phosphor-compat'
 import { useCallback, useEffect, useState } from 'react'
-import { useToast } from './ToastProvider'
+import { PortalButton, PortalSkeleton, PortalSkeletonTransition } from '@/components/portal/PortalUI'
+import { useToast } from '@/components/portal/ToastProvider'
 
 type PaymentSettings = {
   zelle_recipient: string | null
   zelle_qr_code_url: string | null
 }
+
+const INPUT_CLASS =
+  'min-h-10 w-full rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3.5 py-2 text-sm text-[color:var(--portal-text)] outline-none transition-colors placeholder:text-[color:var(--portal-faint)] focus:border-[#caa24c]/50 focus:bg-[color:var(--portal-card)] focus:ring-2 focus:ring-[#caa24c]/15'
 
 export function PortalPaymentSettings() {
   const { notify } = useToast()
@@ -20,18 +24,24 @@ export function PortalPaymentSettings() {
     setLoading(true)
     try {
       const response = await fetch('/api/portal/payment-settings', { cache: 'no-store' })
-      const payload = await response.json().catch(() => ({})) as PaymentSettings & { error?: string }
+      const payload = (await response.json().catch(() => ({}))) as PaymentSettings & { error?: string }
       if (!response.ok) throw new Error(payload.error || 'Could not load payment settings.')
       setRecipient(payload.zelle_recipient || '')
       setQrCodeUrl(payload.zelle_qr_code_url || '')
     } catch (error) {
-      notify({ title: 'Payment settings unavailable', description: error instanceof Error ? error.message : 'Could not load payment settings.', variant: 'error' })
+      notify({
+        title: 'Payment settings unavailable',
+        description: error instanceof Error ? error.message : 'Could not load payment settings.',
+        variant: 'error',
+      })
     } finally {
       setLoading(false)
     }
   }, [notify])
 
-  useEffect(() => { void load() }, [load])
+  useEffect(() => {
+    void load()
+  }, [load])
 
   const save = async () => {
     setSaving(true)
@@ -41,45 +51,90 @@ export function PortalPaymentSettings() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ zelleRecipient: recipient, zelleQrCodeUrl: qrCodeUrl }),
       })
-      const payload = await response.json().catch(() => ({})) as PaymentSettings & { error?: string }
+      const payload = (await response.json().catch(() => ({}))) as PaymentSettings & { error?: string }
       if (!response.ok) throw new Error(payload.error || 'Could not save payment settings.')
       setRecipient(payload.zelle_recipient || '')
       setQrCodeUrl(payload.zelle_qr_code_url || '')
-      notify({ title: 'Zelle payment details saved', description: 'Clients see these details only after they have signed their agreement.', variant: 'success' })
+      notify({
+        title: 'Zelle payment details saved',
+        description: 'Clients see these details only after signing their agreement.',
+        variant: 'success',
+      })
     } catch (error) {
-      notify({ title: 'Payment settings not saved', description: error instanceof Error ? error.message : 'Please try again.', variant: 'error' })
+      notify({
+        title: 'Payment settings not saved',
+        description: error instanceof Error ? error.message : 'Please try again.',
+        variant: 'error',
+      })
     } finally {
       setSaving(false)
     }
   }
 
-  if (loading) return <div className="flex min-h-40 items-center justify-center text-xs text-[color:var(--portal-muted)]"><Loader2 size={15} className="mr-2 animate-spin" /> Loading payment details</div>
-
   return (
-    <section className="luxor-glass-card rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-6">
+    <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 sm:p-6">
       <div className="flex items-start gap-3">
-        <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl border border-[#caa24c]/25 bg-[#caa24c]/10 text-[#a8792f] dark:text-[#f1d27a]"><WalletCards size={17} /></span>
+        <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl border border-[#caa24c]/25 bg-[#caa24c]/10 text-[#a8792f] dark:text-[#f1d27a]">
+          <WalletCards size={17} />
+        </span>
         <div>
-          <h3 className="text-sm font-semibold text-[color:var(--portal-text)]">In-person payment</h3>
-          <p className="mt-1.5 text-xs leading-5 text-[color:var(--portal-muted)]">Give clients the Zelle details they need after signing, without storing them inside an individual proposal.</p>
+          <h3 className="font-sans text-base font-bold text-[color:var(--portal-text)]">In-person payment</h3>
+          <p className="mt-1 text-xs text-[color:var(--portal-muted)]">
+            Zelle details revealed to clients after they sign their agreement.
+          </p>
         </div>
       </div>
 
       <div className="mt-5 space-y-4">
-        <label className="block">
-          <span className="text-xs font-medium text-[color:var(--portal-muted)]">Zelle recipient</span>
-          <input value={recipient} onChange={(event) => setRecipient(event.target.value)} maxLength={160} placeholder="Business email, phone, or recipient name" className="mt-1.5 h-10.5 w-full rounded-xl border border-transparent bg-[color:var(--portal-soft)] px-3.5 text-sm text-[color:var(--portal-text)] outline-none transition-all placeholder:text-[color:var(--portal-muted)] focus:border-[#caa24c]/40 focus:bg-[color:var(--portal-card)] focus:ring-2 focus:ring-[#caa24c]/10" />
-          <span className="mt-1.5 block text-xs leading-4 text-[color:var(--portal-muted)]">Shown only to a client who has completed the secure agreement step.</span>
+        <label className="block space-y-1.5">
+          <span className="block text-xs font-medium text-[color:var(--portal-muted)]">Zelle recipient</span>
+          <PortalSkeletonTransition
+            loading={loading}
+            overlap
+            skeleton={<PortalSkeleton className="h-10 w-full rounded-xl" />}
+          >
+            <input
+              value={recipient}
+              onChange={(event) => setRecipient(event.target.value)}
+              maxLength={160}
+              placeholder="Email, phone, or business name"
+              className={INPUT_CLASS}
+            />
+          </PortalSkeletonTransition>
         </label>
-        <label className="block">
-          <span className="flex items-center gap-1.5 text-xs font-medium text-[color:var(--portal-muted)]"><QrCode size={13} /> Zelle QR image URL</span>
-          <input value={qrCodeUrl} onChange={(event) => setQrCodeUrl(event.target.value)} inputMode="url" placeholder="https://…" className="mt-1.5 h-10.5 w-full rounded-xl border border-transparent bg-[color:var(--portal-soft)] px-3.5 text-sm text-[color:var(--portal-text)] outline-none transition-all placeholder:text-[color:var(--portal-muted)] focus:border-[#caa24c]/40 focus:bg-[color:var(--portal-card)] focus:ring-2 focus:ring-[#caa24c]/10" />
-          <span className="mt-1.5 block text-xs leading-4 text-[color:var(--portal-muted)]">Optional. Paste a secure image URL for the QR code the client can scan with their phone.</span>
+
+        <label className="block space-y-1.5">
+          <span className="flex items-center gap-1.5 text-xs font-medium text-[color:var(--portal-muted)]">
+            <QrCode size={13} />
+            Zelle QR image URL (optional)
+          </span>
+          <PortalSkeletonTransition
+            loading={loading}
+            overlap
+            skeleton={<PortalSkeleton className="h-10 w-full rounded-xl" />}
+          >
+            <input
+              value={qrCodeUrl}
+              onChange={(event) => setQrCodeUrl(event.target.value)}
+              inputMode="url"
+              placeholder="https://…"
+              className={INPUT_CLASS}
+            />
+          </PortalSkeletonTransition>
         </label>
-        <button type="button" onClick={() => void save()} disabled={saving} className="luxor-gold-raised inline-flex h-10 w-full items-center justify-center gap-2 rounded-xl px-4 text-xs font-semibold !text-white disabled:cursor-wait disabled:opacity-45">
-          {saving ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
-          {saving ? 'Saving payment details' : 'Save Zelle details'}
-        </button>
+
+        <div className="flex justify-end pt-1">
+          <PortalButton
+            type="button"
+            variant="primary"
+            onClick={() => void save()}
+            disabled={loading || saving}
+            className="w-full sm:w-auto"
+          >
+            {saving ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
+            {saving ? 'Saving…' : 'Save Zelle details'}
+          </PortalButton>
+        </div>
       </div>
     </section>
   )

@@ -27,7 +27,7 @@ import {
   X,
   Zap,
 } from '@/lib/icons/phosphor-compat'
-import { PortalPageFrame, PortalSelect, PortalButton, PortalModal, PortalAnimatedTabs, PortalTabTransition, PortalStaggerGroup, PortalStaggerCard } from '@/components/portal/PortalUI'
+import { PortalPageFrame, PortalSelect, PortalButton, PortalCloseButton, PortalModal, PortalAnimatedTabs, PortalTabTransition, PortalStaggerGroup, PortalStaggerCard } from '@/components/portal/PortalUI'
 import {
   addCustomWorkflowStep,
   canEditCustomWorkflowStep,
@@ -1724,14 +1724,11 @@ export default function CustomWorkflowEditorPage() {
               ariaLabel="Step inspector views"
             />
 
-            <button
-              type="button"
+            <PortalCloseButton
               onClick={() => setMobileInspectorOpen(false)}
-              className="lg:hidden inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-xl text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45"
+              className="lg:hidden"
               aria-label="Close configuration panel"
-            >
-              <X size={15} />
-            </button>
+            />
           </div>
 
           {/* Inspector Body */}

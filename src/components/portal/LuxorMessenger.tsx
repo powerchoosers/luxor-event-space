@@ -10,7 +10,7 @@ import type { LuxorMessage } from '@/lib/luxorMessageTypes'
 import type { LuxorInquiry } from '@/lib/luxorInquiryTypes'
 import { formatPhoneDisplay, normalizePhoneNumber } from '@/lib/luxorPhoneClient'
 import { startLuxorBrowserCall } from '@/lib/luxorVoiceClient'
-import { PortalContactAvatar, PortalCloseButton, PortalSkeleton, PortalSkeletonTransition, PortalTabTransition } from './PortalUI'
+import { PortalContactAvatar, PortalCloseButton, PortalGhostIconButton, PortalSkeleton, PortalSkeletonTransition, PortalTabTransition } from './PortalUI'
 import { PortalSmsConsentBadge, type SmsConsentState } from './PortalSmsConsentBadge'
 import { useToast } from './ToastProvider'
 import { TextAnimate } from '@/components/ui/text-animate'
@@ -452,8 +452,7 @@ export function LuxorMessenger() {
         <div className="border-b border-[color:var(--portal-border)]/70 p-4">
           <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-2">
-              <button
-                type="button"
+              <PortalGhostIconButton
                 onClick={() => {
                   if (typeof window !== 'undefined' && window.history.length > 1) {
                     router.back()
@@ -461,12 +460,11 @@ export function LuxorMessenger() {
                     router.push('/portal')
                   }
                 }}
-                className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-xl text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45"
                 aria-label="Go back"
                 title="Go back"
               >
                 <ArrowLeft size={16} />
-              </button>
+              </PortalGhostIconButton>
               <h1 className="text-2xl font-bold tracking-tight text-[color:var(--portal-text)]">Messages</h1>
             </div>
             <div className="flex items-center gap-1.5">

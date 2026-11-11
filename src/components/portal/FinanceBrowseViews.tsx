@@ -1,9 +1,9 @@
 'use client'
 
-import React, { useCallback, useEffect } from 'react'
+import React, { useCallback, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import Link from 'next/link'
-import { AnimatePresence, motion } from 'framer-motion'
+import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import {
   CalendarDots,
   CreditCard,
@@ -16,6 +16,17 @@ import {
   Wallet,
 } from '@phosphor-icons/react'
 import { ChevronRight, X } from '@/lib/icons/phosphor-compat'
+import {
+  PortalCloseButton,
+  PORTAL_MODAL_BACKDROP_CLOSE_DURATION,
+  PORTAL_MODAL_BACKDROP_OPEN_DURATION,
+  PORTAL_MODAL_EASE,
+  PORTAL_MODAL_EXIT_EASE,
+  PORTAL_SHEET_CLOSE_DURATION,
+  PORTAL_SHEET_OPEN_DURATION,
+  PORTAL_SIDE_PANEL_EASE,
+  acquirePortalScrollLock,
+} from '@/components/portal/PortalUI'
 
 export type FinanceBrowseView =
   | 'overview'
@@ -212,9 +223,18 @@ export function FinanceBrowseViews({
   onLegacySelect?: (view: 'dashboard' | 'revenue' | 'receivables' | 'invoices' | 'payments' | 'expenses' | 'reports' | 'bill-review' | 'bill-providers') => void
 }) {
   const handleClose = useCallback(() => close(), [close])
+  const reduceMotion = useReducedMotion()
+  const releaseScrollLockRef = useRef<(() => void) | null>(null)
+  const openRef = useRef(open)
+  useEffect(() => {
+    openRef.current = open
+  }, [open])
 
   useEffect(() => {
     if (!open) return
+    if (!releaseScrollLockRef.current) {
+      releaseScrollLockRef.current = acquirePortalScrollLock()
+    }
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') handleClose()
     }
@@ -222,30 +242,62 @@ export function FinanceBrowseViews({
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [open, handleClose])
 
+  useEffect(() => {
+    return () => {
+      releaseScrollLockRef.current?.()
+      releaseScrollLockRef.current = null
+    }
+  }, [])
+
   if (typeof document === 'undefined') return null
 
   return createPortal(
-    <AnimatePresence initial={false}>
+    <AnimatePresence
+      initial={!reduceMotion}
+      onExitComplete={() => {
+        if (openRef.current) return
+        releaseScrollLockRef.current?.()
+        releaseScrollLockRef.current = null
+      }}
+    >
       {open ? (
         <motion.div
-          className="fixed inset-0 z-[70] flex items-end justify-center bg-black/60 p-3 pb-[calc(4.5rem+env(safe-area-inset-bottom))] backdrop-blur-sm sm:items-center sm:p-6"
+          key="finance-browse-views-backdrop"
+          data-portal-backdrop="true"
+          aria-hidden="true"
+          className="portal-modal-backdrop fixed inset-0 z-[70]"
           initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          transition={{ duration: 0.2 }}
+          animate={{
+            opacity: 1,
+            transition: { duration: reduceMotion ? 0.06 : PORTAL_MODAL_BACKDROP_OPEN_DURATION, ease: PORTAL_MODAL_EASE },
+          }}
+          exit={{
+            opacity: 0,
+            pointerEvents: 'none',
+            transition: { duration: reduceMotion ? 0.05 : PORTAL_MODAL_BACKDROP_CLOSE_DURATION, ease: PORTAL_MODAL_EXIT_EASE },
+          }}
           onMouseDown={close}
+        />
+      ) : null}
+      {open ? (
+        <motion.section
+          key="finance-browse-views-dialog"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="finance-browse-views-title"
+          className="fixed inset-x-3 bottom-[calc(4.5rem+env(safe-area-inset-bottom))] z-[70] mx-auto flex max-h-[calc(100dvh-6rem-env(safe-area-inset-bottom))] w-auto max-w-lg flex-col overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] shadow-2xl will-change-transform sm:inset-0 sm:m-auto sm:h-fit"
+          initial={reduceMotion ? { opacity: 0 } : { opacity: 0, y: 44, scale: 0.985 }}
+          animate={{
+            opacity: 1,
+            y: 0,
+            scale: 1,
+            transition: { duration: reduceMotion ? 0.06 : PORTAL_SHEET_OPEN_DURATION, ease: PORTAL_SIDE_PANEL_EASE },
+          }}
+          exit={reduceMotion
+            ? { opacity: 0, pointerEvents: 'none', transition: { duration: 0.05 } }
+            : { opacity: 0, y: 36, scale: 0.985, pointerEvents: 'none', transition: { duration: PORTAL_SHEET_CLOSE_DURATION, ease: PORTAL_SIDE_PANEL_EASE } }}
+          onMouseDown={(event) => event.stopPropagation()}
         >
-          <motion.section
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="finance-browse-views-title"
-            className="flex max-h-[calc(100dvh-6rem-env(safe-area-inset-bottom))] w-full max-w-lg flex-col overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] shadow-2xl"
-            initial={{ opacity: 0, y: 56, scale: 0.985 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 40, scale: 0.985 }}
-          transition={{ duration: 0.22, ease: [0.23, 1, 0.32, 1] }}
-            onMouseDown={(event) => event.stopPropagation()}
-          >
             <div className="sticky top-0 z-10 flex shrink-0 items-center justify-between border-b border-[color:var(--portal-border)] bg-[color:var(--portal-card)]/95 px-5 py-4 backdrop-blur-xl">
               <div>
                 <h2 id="finance-browse-views-title" className="text-base font-bold text-[color:var(--portal-text)]">
@@ -253,14 +305,10 @@ export function FinanceBrowseViews({
                 </h2>
                 <p className="mt-0.5 text-xs text-[color:var(--portal-muted)]">Choose a Financial Center workspace view.</p>
               </div>
-              <button
-                type="button"
+              <PortalCloseButton
                 onClick={close}
                 aria-label="Close views menu"
-                className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-xl text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45"
-              >
-                <X size={15} />
-              </button>
+              />
             </div>
 
             <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4 pb-6 portal-scrollbar">
@@ -338,7 +386,6 @@ export function FinanceBrowseViews({
               </nav>
             </div>
           </motion.section>
-        </motion.div>
       ) : null}
     </AnimatePresence>,
     document.body,

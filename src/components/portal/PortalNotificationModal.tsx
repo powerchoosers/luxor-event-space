@@ -5,6 +5,16 @@ import { createPortal } from 'react-dom'
 import { useRouter } from 'next/navigation'
 import { AnimatePresence, motion, useMotionValue, useReducedMotion, useTransform } from 'framer-motion'
 import { AlertCircle, Bell, CalendarCheck2, Check, CheckCircle2, ClipboardList, Eye, FileSignature, Mail, MessageSquare, PhoneMissed, Receipt, RotateCw, Search, X } from '@/lib/icons/phosphor-compat'
+import {
+  PortalCloseButton,
+  PortalGhostIconButton,
+  PORTAL_MODAL_BACKDROP_CLOSE_DURATION,
+  PORTAL_MODAL_BACKDROP_OPEN_DURATION,
+  PORTAL_MODAL_CLOSE_DURATION,
+  PORTAL_MODAL_EASE,
+  PORTAL_MODAL_EXIT_EASE,
+  PORTAL_MODAL_OPEN_DURATION,
+} from '@/components/portal/PortalUI'
 import { NotificationType, PortalNotificationItem, usePortalNotifications } from '@/hooks/usePortalNotifications'
 
 interface PortalNotificationModalProps {
@@ -215,22 +225,38 @@ export function PortalNotificationModal({ isOpen, triggerRef, onClose, items, un
     { id: 'all', label: 'All' }, { id: 'messages', label: 'Messages' }, { id: 'leads', label: 'Leads' }, { id: 'billing', label: 'Billing' },
   ]
 
-  const modal = <AnimatePresence>{isOpen ? <React.Fragment key="notification-center">
-    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.16 }} className="portal-modal-layer fixed inset-0 z-[200] bg-black/40 backdrop-blur-xs sm:hidden" onClick={onClose} />
-    <motion.section
-      ref={containerRef}
-      initial={{ opacity: 0, y: -8, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -6, scale: 0.98 }}
-      transition={{ duration: 0.2, ease: [0.23, 1, 0.32, 1] }} role="dialog" aria-modal="true" aria-label="Notifications"
-      className="portal-modal-body fixed inset-x-3 top-[calc(env(safe-area-inset-top)+4.5rem)] bottom-[calc(env(safe-area-inset-bottom)+4.5rem)] z-[210] flex w-auto flex-col overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] text-[color:var(--portal-text)] shadow-2xl sm:inset-x-auto sm:bottom-auto sm:right-4 sm:top-20 sm:h-[min(42rem,calc(100vh-6rem))] sm:w-[min(27rem,calc(100vw-2rem))]"
-    >
+  const modal = <AnimatePresence initial={!reduceMotion}>
+    {isOpen ? (
+      <motion.div
+        key="notification-backdrop"
+        data-portal-backdrop="true"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1, transition: { duration: reduceMotion ? 0.05 : PORTAL_MODAL_BACKDROP_OPEN_DURATION, ease: PORTAL_MODAL_EASE } }}
+        exit={{ opacity: 0, pointerEvents: 'none', transition: { duration: reduceMotion ? 0.04 : PORTAL_MODAL_BACKDROP_CLOSE_DURATION, ease: PORTAL_MODAL_EXIT_EASE } }}
+        className="portal-modal-layer portal-modal-backdrop--sheet fixed inset-0 z-[200] sm:hidden"
+        onClick={onClose}
+      />
+    ) : null}
+    {isOpen ? (
+      <motion.section
+        key="notification-panel"
+        ref={containerRef}
+        initial={reduceMotion ? { opacity: 0 } : { opacity: 0, y: -8, scale: 0.98 }}
+        animate={{ opacity: 1, y: 0, scale: 1, transition: { duration: reduceMotion ? 0.06 : PORTAL_MODAL_OPEN_DURATION, ease: PORTAL_MODAL_EASE } }}
+        exit={reduceMotion ? { opacity: 0, pointerEvents: 'none', transition: { duration: 0.05 } } : { opacity: 0, y: -6, scale: 0.98, pointerEvents: 'none', transition: { duration: PORTAL_MODAL_CLOSE_DURATION, ease: PORTAL_MODAL_EXIT_EASE } }}
+        role="dialog" aria-modal="true" aria-label="Notifications"
+        className="portal-modal-body fixed inset-x-3 top-[calc(env(safe-area-inset-top)+4.5rem)] bottom-[calc(env(safe-area-inset-bottom)+4.5rem)] z-[210] flex w-auto flex-col overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] text-[color:var(--portal-text)] shadow-2xl sm:inset-x-auto sm:bottom-auto sm:right-4 sm:top-20 sm:h-[min(42rem,calc(100vh-6rem))] sm:w-[min(27rem,calc(100vw-2rem))]"
+      >
       <header className="flex items-start justify-between border-b border-[color:var(--portal-border)] px-4 py-4">
         <div>
           <h3 className="text-[15px] font-bold tracking-tight">Notifications</h3>
           <p className="mt-0.5 text-[11px] text-[color:var(--portal-muted)]">{unreadCount ? `${unreadCount} need attention` : 'You are all caught up'}</p>
         </div>
         <div className="flex items-center gap-1">
-          <button type="button" onClick={onRefresh} disabled={loading} className="rounded-lg p-2 text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] disabled:opacity-50" aria-label="Refresh notifications"><RotateCw size={15} className={loading ? 'animate-spin' : ''} /></button>
-          <button type="button" onClick={onClose} className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-xl text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45" aria-label="Close notifications"><X size={15} /></button>
+          <PortalGhostIconButton onClick={onRefresh} disabled={loading} aria-label="Refresh notifications">
+            <RotateCw size={15} className={loading ? 'animate-spin' : ''} />
+          </PortalGhostIconButton>
+          <PortalCloseButton onClick={onClose} aria-label="Close notifications" />
         </div>
       </header>
 
@@ -321,7 +347,8 @@ export function PortalNotificationModal({ isOpen, triggerRef, onClose, items, un
         {view === 'unread' && unreadCount ? <button type="button" onClick={onMarkAllAsRead} className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[11px] font-semibold text-[#9b7425] hover:bg-[#caa24c]/10 dark:text-[#dfbd6d]"><Check size={13} /> Mark all handled</button> : null}
       </footer>
     </motion.section>
-  </React.Fragment> : null}</AnimatePresence>
+    ) : null}
+  </AnimatePresence>
 
   return typeof document === 'undefined' ? null : createPortal(modal, document.body)
 }

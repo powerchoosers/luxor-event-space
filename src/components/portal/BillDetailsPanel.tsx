@@ -10,15 +10,16 @@ import type { LuxorBill, LuxorVendor } from '@/lib/luxorInquiryTypes'
 type Records = { bills: LuxorBill[]; vendors: LuxorVendor[]; expenses: BillExpense[] | null }
 
 /** The same bill review journey can be opened from schedules or company records. */
-export default function BillDetailsPanel({ billId, onClose, onOpenExpense, onCreateExpense, onBillChanged, refreshKey = 0 }: {
+export default function BillDetailsPanel({ billId, onClose, onOpenExpense, onCreateExpense, onBillChanged, refreshKey = 0, initialBill }: {
   billId: string
   refreshKey?: number
   onClose: () => void
   onOpenExpense?: (id: string) => void
   onCreateExpense?: (billId: string) => void
   onBillChanged?: (bill: LuxorBill) => void
+  initialBill?: LuxorBill | null
 }) {
-  const [records, setRecords] = useState<Records | null>(null)
+  const [records, setRecords] = useState<Records | null>(() => initialBill ? { bills: [initialBill], vendors: [], expenses: null } : null)
   const [open, setOpen] = useState(true)
   const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   useEffect(() => () => { if (closeTimer.current) clearTimeout(closeTimer.current) }, [])
@@ -96,12 +97,32 @@ export default function BillDetailsPanel({ billId, onClose, onOpenExpense, onCre
     else if (activeId !== billId) { setActiveId(billId); setMessage(null); setCompanyChoice(''); setCompanyName('') }
     else {
       setOpen(false)
-      closeTimer.current = setTimeout(onClose, 340)
+      closeTimer.current = setTimeout(onClose, 380)
     }
   }
   const field = 'mt-1 min-h-11 w-full rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 text-sm text-[color:var(--portal-text)] outline-none focus:border-[#caa24c]/40 focus:bg-[color:var(--portal-card)] focus:ring-2 focus:ring-[#caa24c]/10'
   return <PortalModal isOpen={open} onClose={back} title={draft ? 'Edit bill details' : 'Bill details'} description={bill?.service} headerBack sidePanel maxWidth="max-w-[600px]" animateClose>
-    {error ? <div role="alert" className="space-y-3 text-sm text-[color:var(--portal-text)]"><p>{error}</p><PortalButton onClick={() => setRetry((value) => value + 1)}>Try again</PortalButton></div> : !records ? <p role="status" className="text-sm text-[color:var(--portal-muted)]">Loading bill…</p> : !bill ? <p role="alert" className="text-sm text-[color:var(--portal-text)]">This bill is no longer available.</p> : <PortalTabTransition activeKey={draft ? 'edit' : activeId}>
+    {error ? <div role="alert" className="space-y-3 text-sm text-[color:var(--portal-text)]"><p>{error}</p><PortalButton onClick={() => setRetry((value) => value + 1)}>Try again</PortalButton></div> : !records ? (
+      <div className="space-y-6 animate-pulse" aria-busy="true" aria-label="Loading bill details">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className="h-10 w-10 rounded-xl bg-[color:var(--portal-soft)]" />
+            <div className="space-y-2">
+              <div className="h-4 w-32 rounded bg-[color:var(--portal-soft)]" />
+              <div className="h-3 w-24 rounded bg-[color:var(--portal-soft)]" />
+            </div>
+          </div>
+          <div className="h-6 w-16 rounded-md bg-[color:var(--portal-soft)]" />
+        </div>
+        <div className="h-32 rounded-xl bg-[color:var(--portal-soft)]/50" />
+        <div className="grid grid-cols-2 gap-4">
+          <div className="h-10 rounded-lg bg-[color:var(--portal-soft)]" />
+          <div className="h-10 rounded-lg bg-[color:var(--portal-soft)]" />
+          <div className="h-10 rounded-lg bg-[color:var(--portal-soft)]" />
+          <div className="h-10 rounded-lg bg-[color:var(--portal-soft)]" />
+        </div>
+      </div>
+    ) : !bill ? <p role="alert" className="text-sm text-[color:var(--portal-text)]">This bill is no longer available.</p> : <PortalTabTransition activeKey={draft ? 'edit' : activeId}>
       {draft ? <form onSubmit={(event) => void save(event)} className="space-y-4">
         <label className="block text-sm text-[color:var(--portal-text)]">Bill title<input required value={draft.service || ''} onChange={(event) => setDraft({ ...draft, service: event.target.value })} className={field} /></label>
         <label className="block text-sm text-[color:var(--portal-text)]">Company<input required value={draft.provider || ''} onChange={(event) => setDraft({ ...draft, provider: event.target.value })} className={field} /></label>

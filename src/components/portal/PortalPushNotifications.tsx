@@ -2,6 +2,12 @@
 
 import { BellOff, BellRing, Check, Loader2, Smartphone } from '@/lib/icons/phosphor-compat'
 import { useCallback, useEffect, useState } from 'react'
+import {
+  PortalButton,
+  PortalSkeleton,
+  PortalSkeletonTransition,
+  PortalStatusBadge,
+} from '@/components/portal/PortalUI'
 import { useToast } from '@/components/portal/ToastProvider'
 
 type PushType = 'email' | 'booking' | 'call'
@@ -79,7 +85,11 @@ export function PortalPushNotifications() {
 
   const enableNotifications = async () => {
     if (state === 'install-required') {
-      notify({ title: 'Install Luxor Portal first', description: 'In Safari, tap Share → Add to Home Screen, then open the new Luxor Portal icon.', variant: 'info' })
+      notify({
+        title: 'Install Luxor Portal first',
+        description: 'In Safari, tap Share → Add to Home Screen, then open the Luxor Portal icon.',
+        variant: 'info',
+      })
       return
     }
 
@@ -92,13 +102,19 @@ export function PortalPushNotifications() {
       }
       const registration = await navigator.serviceWorker.register('/luxor-portal-sw.js', { scope: '/portal/' })
       const existing = await registration.pushManager.getSubscription()
-      const subscription = existing || await registration.pushManager.subscribe({
-        userVisibleOnly: true,
-        applicationServerKey: urlBase64ToUint8Array(publicKey),
-      })
+      const subscription =
+        existing ||
+        (await registration.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: urlBase64ToUint8Array(publicKey),
+        }))
       await saveSubscription(subscription, types)
       setState('enabled')
-      notify({ title: 'iPhone notifications enabled', description: 'Luxor alerts can now arrive when the portal is closed.', variant: 'success' })
+      notify({
+        title: 'Notifications enabled',
+        description: 'Luxor alerts can now arrive when the portal is closed.',
+        variant: 'success',
+      })
     } catch (error) {
       console.error('Failed to enable Luxor Web Push:', error)
       setState('error')
@@ -153,61 +169,118 @@ export function PortalPushNotifications() {
 
   const statusCopy: Record<PushState, string> = {
     loading: 'Checking this device…',
-    unsupported: 'This browser does not support Web Push notifications.',
-    'install-required': 'Install Luxor Portal on the Home Screen before enabling iPhone notifications.',
-    unconfigured: 'Web Push keys must be configured on the server before notifications can be enabled.',
-    denied: 'Notifications are blocked in iPhone Settings. Allow them for Luxor Portal, then return here.',
-    disabled: 'Notifications are available but turned off on this device.',
-    enabled: 'Notifications are active on this device—even when the portal is closed.',
-    error: 'Notification status could not be verified. Try again.',
+    unsupported: 'This browser does not support push alerts.',
+    'install-required': 'Add Luxor Portal to your iPhone Home Screen to turn on push alerts.',
+    unconfigured: 'Push alerts are not configured on this server yet.',
+    denied: 'Alerts are blocked in your browser or iPhone Settings.',
+    disabled: 'Ready to turn on for this device.',
+    enabled: 'Active on this device, even when the portal is closed.',
+    error: 'Could not check alert status. Try again.',
   }
 
   return (
-    <section className="luxor-glass-card space-y-5 rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-6 xl:col-span-2">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+    <section className="space-y-5 rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 sm:p-6">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="flex items-start gap-3">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[#caa24c]/25 bg-[#caa24c]/10 text-[#9b6d24] dark:text-[#f1d27a]">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[#caa24c]/25 bg-[#caa24c]/10 text-[#a8792f] dark:text-[#f1d27a]">
             {state === 'enabled' ? <BellRing size={18} /> : <Smartphone size={18} />}
           </div>
           <div>
-            <h3 className="text-xs font-black uppercase tracking-[0.2em] text-[color:var(--portal-text)]">iPhone App Notifications</h3>
-            <p className="mt-1 max-w-2xl text-[11px] leading-relaxed text-[color:var(--portal-muted)]">{statusCopy[state]}</p>
+            <h3 className="font-sans text-base font-bold text-[color:var(--portal-text)]">Device notifications</h3>
+            <PortalSkeletonTransition
+              loading={state === 'loading'}
+              overlap
+              skeleton={<PortalSkeleton className="mt-1.5 h-4 w-44 rounded-md" />}
+            >
+              <p className="mt-1 text-xs text-[color:var(--portal-muted)]">{statusCopy[state]}</p>
+            </PortalSkeletonTransition>
           </div>
         </div>
-        <span className={`w-fit shrink-0 rounded-full border px-2.5 py-1 text-[9px] font-black uppercase tracking-widest ${state === 'enabled' ? 'border-emerald-500/25 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400' : 'border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] text-[color:var(--portal-muted)]'}`}>
-          {state === 'enabled' ? 'Active' : state === 'loading' ? 'Checking' : 'Not active'}
-        </span>
+        <div className="shrink-0">
+          <PortalSkeletonTransition
+            loading={state === 'loading'}
+            overlap
+            skeleton={<PortalSkeleton className="h-5 w-16 rounded-md" />}
+          >
+            <PortalStatusBadge
+              status={state === 'enabled' ? 'Active' : 'Not active'}
+              tone={state === 'enabled' ? 'green' : 'neutral'}
+              borderless
+            />
+          </PortalSkeletonTransition>
+        </div>
       </div>
 
       <div className="grid gap-3 sm:grid-cols-3">
-        {([
-          { type: 'email' as const, title: 'New emails', copy: 'Alert when a new message reaches the Luxor inbox.' },
-          { type: 'booking' as const, title: 'Inquiries & bookings', copy: 'Alert for new inquiries and newly created event bookings.' },
-          { type: 'call' as const, title: 'Incoming calls', copy: 'Show who is calling and open the Luxor call workspace.' },
-        ]).map((option) => {
+        {(
+          [
+            { type: 'email' as const, title: 'New emails', copy: 'When a guest message arrives.' },
+            { type: 'booking' as const, title: 'Inquiries & bookings', copy: 'New leads and booked events.' },
+            { type: 'call' as const, title: 'Incoming calls', copy: 'Caller name and quick answer.' },
+          ] as const
+        ).map((option) => {
           const selected = types.includes(option.type)
           return (
-            <button key={option.type} type="button" onClick={() => void toggleType(option.type)} disabled={busy || state === 'unconfigured'} className={`flex items-start gap-3 rounded-xl border p-4 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${selected ? 'border-[#caa24c]/40 bg-[#caa24c]/8' : 'border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]'}`}>
-              <span className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-md border ${selected ? 'border-[#caa24c] bg-[#caa24c] text-white' : 'border-[color:var(--portal-border)] text-transparent'}`}><Check size={13} /></span>
-              <span><span className="block text-xs font-bold text-[color:var(--portal-text)]">{option.title}</span><span className="mt-1 block text-[10px] leading-relaxed text-[color:var(--portal-muted)]">{option.copy}</span></span>
+            <button
+              key={option.type}
+              type="button"
+              role="checkbox"
+              aria-checked={selected}
+              onClick={() => void toggleType(option.type)}
+              disabled={busy || state === 'unconfigured'}
+              className={`flex items-start gap-3 rounded-xl border p-3.5 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 disabled:cursor-not-allowed disabled:opacity-50 ${
+                selected
+                  ? 'border-[#caa24c]/45 bg-[#caa24c]/8'
+                  : 'border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] hover:border-[#caa24c]/30'
+              }`}
+            >
+              <span
+                className={`mt-0.5 flex h-4.5 w-4.5 shrink-0 items-center justify-center rounded border transition-colors ${
+                  selected
+                    ? 'border-[#caa24c] bg-[#caa24c]'
+                    : 'border-[color:var(--portal-border)] bg-[color:var(--portal-card)] text-transparent'
+                }`}
+              >
+                {selected ? (
+                  <Check size={12} strokeWidth={3} style={{ color: '#ffffff', stroke: '#ffffff' }} />
+                ) : null}
+              </span>
+              <span className="min-w-0">
+                <span className="block text-xs font-semibold text-[color:var(--portal-text)]">{option.title}</span>
+                <span className="mt-0.5 block text-xs text-[color:var(--portal-muted)]">{option.copy}</span>
+              </span>
             </button>
           )
         })}
       </div>
 
-      <div className="flex flex-wrap items-center gap-2 border-t border-[color:var(--portal-border)] pt-4">
+      <div className="flex flex-col gap-3 border-t border-[color:var(--portal-border)] pt-4 sm:flex-row sm:items-center sm:justify-between">
+        <p className="text-xs text-[color:var(--portal-muted)]">
+          Lock-screen previews omit private guest details.
+        </p>
         {state === 'enabled' ? (
-          <>
-            <button type="button" onClick={() => void disableNotifications()} disabled={busy} className="inline-flex h-10 items-center gap-2 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-4 text-[10px] font-bold text-[color:var(--portal-muted)] transition-colors hover:text-[color:var(--portal-text)] disabled:opacity-50">
-              <BellOff size={14} /> Disable on this device
-            </button>
-          </>
+          <PortalButton
+            type="button"
+            variant="secondary"
+            onClick={() => void disableNotifications()}
+            disabled={busy}
+            className="w-full shrink-0 sm:w-auto"
+          >
+            <BellOff size={14} />
+            Disable on this device
+          </PortalButton>
         ) : (
-          <button type="button" onClick={() => void enableNotifications()} disabled={busy || ['loading', 'unsupported', 'unconfigured', 'denied'].includes(state)} className="inline-flex h-10 items-center gap-2 rounded-xl bg-[#caa24c] px-4 text-[10px] font-black uppercase tracking-widest text-white transition-colors hover:bg-[#b58e39] disabled:cursor-not-allowed disabled:opacity-45">
-            {busy || state === 'loading' ? <Loader2 size={14} className="animate-spin" /> : <BellRing size={14} />} {state === 'install-required' ? 'How to install' : 'Enable notifications'}
-          </button>
+          <PortalButton
+            type="button"
+            variant="primary"
+            onClick={() => void enableNotifications()}
+            disabled={busy || ['loading', 'unsupported', 'unconfigured', 'denied'].includes(state)}
+            className="w-full shrink-0 sm:w-auto"
+          >
+            {busy || state === 'loading' ? <Loader2 size={14} className="animate-spin" /> : <BellRing size={14} />}
+            {state === 'install-required' ? 'How to install' : 'Enable notifications'}
+          </PortalButton>
         )}
-        <p className="text-[9px] leading-relaxed text-[color:var(--portal-faint)]">Email and booking previews avoid private details. Call alerts show the caller name and number.</p>
       </div>
     </section>
   )

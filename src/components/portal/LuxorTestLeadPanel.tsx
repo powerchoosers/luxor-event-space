@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { FlaskConical, History, RotateCcw, Settings2, X } from '@/lib/icons/phosphor-compat'
-import { PortalDatePicker, PortalSelect } from '@/components/portal/PortalUI'
+import { PortalCloseButton, PortalDatePicker, PortalSelect } from '@/components/portal/PortalUI'
 import { formatLuxorTourDate } from '@/lib/luxorTourMetrics'
 import { isValidCalendarDateKey } from '@/lib/publicEventDate'
 
@@ -229,7 +229,7 @@ export function LuxorTestLeadPanel({ leadId }: { leadId: string }) {
         <section aria-label={view === 'history' ? 'Test History' : 'Test Settings'} aria-modal="true" role="dialog" className="mx-auto flex max-h-full max-w-6xl flex-col overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] shadow-2xl">
           <header className="flex shrink-0 items-center justify-between gap-4 border-b border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-4 py-3 sm:px-6">
             <h2 className="text-sm font-bold text-[color:var(--portal-text)]">{view === 'history' ? 'Test History' : 'Test Settings'}</h2>
-            <button type="button" onClick={() => setView(null)} className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-xl text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45" aria-label="Close test panel"><X size={15} /></button>
+            <PortalCloseButton onClick={() => setView(null)} aria-label="Close test panel" />
           </header>
           <div className="min-h-0 flex-1 overflow-y-auto p-3 sm:p-5">
       {notice ? <p role="status" className="mb-3 text-xs text-[color:var(--portal-text)]">{notice}</p> : null}

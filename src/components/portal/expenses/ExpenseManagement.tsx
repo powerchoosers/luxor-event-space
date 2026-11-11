@@ -481,8 +481,14 @@ export default function ExpenseManagement({ view, expenseId, embedded = false, s
     window.addEventListener('focus', refreshWhenVisible)
     document.addEventListener('visibilitychange', refreshWhenVisible)
 
+    const handleGlobalUpdate = () => {
+      void loadData(true)
+    }
+    window.addEventListener('luxor:recurring-costs-updated', handleGlobalUpdate)
+
     return () => {
       active = false
+      window.removeEventListener('luxor:recurring-costs-updated', handleGlobalUpdate)
       if (refreshTimer !== null) window.clearTimeout(refreshTimer)
       window.removeEventListener('focus', refreshWhenVisible)
       document.removeEventListener('visibilitychange', refreshWhenVisible)
@@ -558,7 +564,7 @@ export default function ExpenseManagement({ view, expenseId, embedded = false, s
   const panelCloseTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   useEffect(() => () => { if (panelCloseTimer.current) clearTimeout(panelCloseTimer.current) }, [])
   function finishPanelOnly() {
-    if (panelOnly && onBack) panelCloseTimer.current = setTimeout(onBack, 360)
+    if (panelOnly && onBack) panelCloseTimer.current = setTimeout(onBack, 600)
   }
   function closeExpensePanel() {
     if (busy) return
@@ -1091,7 +1097,7 @@ export default function ExpenseManagement({ view, expenseId, embedded = false, s
       <span aria-hidden="true" className="text-[color:var(--portal-muted)]">⌄</span>
     </button>
     {view === 'recurring' && onBrowseCompanies ? <PortalButton type="button" onClick={onBrowseCompanies}>Company details</PortalButton> : null}
-    {view === 'recurring' ? <PortalButton type="button" variant="primary" onClick={() => openNewTemplate()} className="!hidden md:!inline-flex"><Plus size={15} /> Add recurring cost</PortalButton> : null}
+    {view === 'recurring' ? <PortalButton type="button" variant="primary" onClick={() => openNewTemplate()} className="!hidden"><Plus size={15} /> Add recurring cost</PortalButton> : null}
     {view === 'business' || view === 'dashboard' ? <PortalButton type="button" variant="primary" onClick={() => openNewExpense('business')}><Plus size={15} /> Log expense</PortalButton> : null}
     {view === 'events' ? <PortalButton type="button" variant="primary" onClick={() => openNewExpense('event')}><Plus size={15} /> Add event expense</PortalButton> : null}
     {view === 'receipts' ? <PortalButton type="button" variant="primary" onClick={() => document.getElementById('expense-receipt-file')?.click()}><UploadSimple size={15} /> Upload receipt</PortalButton> : null}
