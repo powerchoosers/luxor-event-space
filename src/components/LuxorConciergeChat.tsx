@@ -838,7 +838,7 @@ export function LuxorConciergeChat() {
             aria-label={spanish ? 'Abrir el chat de la concierge de Luxor' : 'Open Luxor concierge chat'}
           >
             <span className="relative flex h-12 w-12 shrink-0 overflow-hidden rounded-full border border-[#caa24c]/45 bg-[#f1e9df] sm:h-14 sm:w-14 sm:border-[#caa24c]/55 sm:bg-[#120d0c]">
-              <Image src="/luxor-concierge.png" alt="" fill sizes="56px" className="object-cover" />
+              <Image src="/luxor-concierge.png" alt="" fill sizes="48px" className="object-cover" />
             </span>
             <span className="hidden sm:block">
               <span className="block font-serif text-lg leading-none text-[#f7efe3]">{spanish ? 'Pregúntale a Elena' : 'Ask Elena'}</span>

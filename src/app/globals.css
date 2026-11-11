@@ -2042,6 +2042,30 @@ body[data-luxor-site] .luxor-concierge-launcher {
   box-shadow: 0 24px 60px -28px rgba(61, 43, 23, 0.34) !important;
 }
 
+@media (max-width: 639px) {
+  body[data-luxor-site] .luxor-concierge-launcher {
+    width: 60px !important;
+    height: 60px !important;
+    padding: 4px !important;
+    border: 1px solid rgba(155, 111, 36, 0.58) !important;
+    border-radius: 9999px !important;
+    background: #fffdf9 !important;
+    box-shadow: 0 5px 16px rgba(61, 43, 23, 0.22) !important;
+  }
+
+  body[data-luxor-site] .luxor-concierge-launcher > span:first-child {
+    width: 48px !important;
+    height: 48px !important;
+    border: 0 !important;
+    background: #f1e9df !important;
+  }
+
+  body[data-luxor-site] .luxor-concierge-launcher > span:nth-child(2),
+  body[data-luxor-site] .luxor-concierge-launcher > svg {
+    display: none !important;
+  }
+}
+
 body[data-luxor-site] .luxor-concierge-panel {
   background: #fffdf9 !important;
 }
