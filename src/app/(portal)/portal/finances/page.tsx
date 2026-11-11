@@ -516,7 +516,7 @@ type LuxorBookingExpense = {
       </div>
 
       {error && (
-        <div className="rounded-xl border border-red-500/20 bg-red-500/5 p-4 text-xs font-medium text-red-400 shrink-0">
+        <div role="alert" className="rounded-xl border border-rose-500/20 bg-rose-500/10 p-4 text-xs font-medium text-rose-700 dark:text-rose-300 shrink-0">
           Telemetry Alert: {error}
         </div>
       )}

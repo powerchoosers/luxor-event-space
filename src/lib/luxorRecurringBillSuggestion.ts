@@ -18,9 +18,9 @@ function isRecurringFrequency(value: string | null | undefined): boolean {
 export function suggestsRecurringBill(bill: LuxorBill): boolean {
   if (!isReviewableBill(bill)) return false
   const category = bill.bill_category || bill.extracted_fields?.category_suggestion
-  if (typeof category === 'string' && /^(rent|utilities)$/i.test(category.trim())) return true
+  if (typeof category === 'string' && /^(rent|utilities|maintenance|overhead)$/i.test(category.trim())) return true
   if (isRecurringFrequency(bill.frequency)) return true
-  return /\b(water|wastewater|sewer(?:age)?|electric(?:ity)?|natural gas|propane|gas utility|internet|broadband|fiber|isp|telecom(?:munications)?|phone|telephone|cellular|wireless|mobile plan|tv|television|cable|satellite|dish|streaming|trash|waste|recycl(?:ing)?|rent|lease|subscription)\b/i.test(`${bill.service || ''} ${bill.provider || ''}`)
+  return /\b(water|wastewater|sewer(?:age)?|electric(?:ity)?|natural gas|propane|gas utility|internet|broadband|fiber|isp|telecom(?:munications)?|phone|telephone|cellular|wireless|mobile plan|tv|television|cable|satellite|dish|streaming|trash|waste|recycl(?:ing)?|rent|lease|subscription|software|saas|hosting|security|alarm|monitoring|pest control|landscaping|hvac|janitorial|cleaning service)\b/i.test(`${bill.service || ''} ${bill.provider || ''}`)
 }
 
 const RECURRING_FREQUENCY_MAP: Record<string, 'weekly' | 'biweekly' | 'monthly' | 'quarterly' | 'annually'> = {

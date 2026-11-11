@@ -152,13 +152,16 @@ export async function POST(request: NextRequest) {
     }
     const fileName = inspected.safeName
     uploadedPath = await uploadLuxorExpenseReceipt(inspected.bytes, inspected.contentType, fileName)
+    const candidateFacts = extractedFields.status === 'candidate' && extractedFields.facts
+      ? (extractedFields.facts as Record<string, unknown>)
+      : null
     const metadata: LuxorExpenseReceipt['metadata'] = {
-      vendor_name: input.vendorName || null,
-      transaction_date: input.transactionDate || null,
-      total_amount: input.totalAmount,
-      subtotal_amount: input.subtotalAmount,
-      tax_amount: input.taxAmount,
-      category: category?.name || null,
+      vendor_name: input.vendorName || (candidateFacts?.vendor_name ? String(candidateFacts.vendor_name) : null),
+      transaction_date: input.transactionDate || (candidateFacts?.transaction_date ? String(candidateFacts.transaction_date) : null),
+      total_amount: input.totalAmount !== null ? input.totalAmount : (typeof candidateFacts?.total_amount === 'number' ? candidateFacts.total_amount : null),
+      subtotal_amount: input.subtotalAmount !== null ? input.subtotalAmount : (typeof candidateFacts?.subtotal_amount === 'number' ? candidateFacts.subtotal_amount : null),
+      tax_amount: input.taxAmount !== null ? input.taxAmount : (typeof candidateFacts?.tax_amount === 'number' ? candidateFacts.tax_amount : null),
+      category: category?.name || (candidateFacts?.category_suggestion ? String(candidateFacts.category_suggestion) : null),
       booking_id: bookingId,
       notes: input.notes || null,
       sha256: inspected.sha256,
