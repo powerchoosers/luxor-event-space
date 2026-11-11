@@ -1334,7 +1334,7 @@ export async function processLuxorEmailJobs(
         results.push({ id: job.id, status: delivery.status })
         continue
       }
-      if (job.job_type === 'calendar_invitation' || job.job_type === 'inquiry_notification' || job.job_type === 'transactional_notice' || job.tour_revision_id) {
+      if (job.job_type === 'calendar_invitation' || job.job_type === 'elena_call_email' || job.job_type === 'inquiry_notification' || job.job_type === 'transactional_notice' || job.tour_revision_id) {
         if (markSending && !isPreparedTourResend) {
           const [claimed] = await supabaseRest<LuxorEmailJob[]>(`luxor_email_jobs?select=*&id=eq.${job.id}&status=eq.queued`, {
             method: 'PATCH', headers: { Prefer: 'return=representation' },
@@ -1348,7 +1348,10 @@ export async function processLuxorEmailJobs(
           continue
         }
         let delivery: { status: 'sent' | 'skipped' }
-        if (job.job_type === 'transactional_notice') {
+        if (job.job_type === 'elena_call_email') {
+          const { deliverElenaCallEmail } = await import('./luxorElenaCallEmailServer')
+          delivery = await deliverElenaCallEmail(job)
+        } else if (job.job_type === 'transactional_notice') {
           const { deliverLuxorTransactionalNotice } = await import('./luxorTransactionalNoticeServer')
           delivery = await deliverLuxorTransactionalNotice(job)
         } else if (job.job_type === 'inquiry_notification') {
@@ -1651,11 +1654,12 @@ export async function processLuxorEmailJobs(
         continue
       }
       const retryCalendar = (job.job_type === 'calendar_invitation' || Boolean(job.tour_revision_id)) && Number(job.attempts || 0) < 3
+      const retryElenaEmail = job.job_type === 'elena_call_email' && Number(job.attempts || 0) < 3
       const retryAlert = job.job_type === 'inquiry_notification' && Number(job.attempts || 0) < 3
         && (job.metadata.notificationProvider || luxorMailProvider()) === 'resend'
       const notice = job.metadata?.transactionalNotice as { provider?: string } | undefined
       const retryNotice = job.job_type === 'transactional_notice' && Number(job.attempts || 0) < 3 && notice?.provider === 'resend'
-      const retry = retryCalendar || retryAlert || retryNotice
+      const retry = retryCalendar || retryElenaEmail || retryAlert || retryNotice
       const retrySafeReminder = job.job_type === 'installment_payment_reminder' && !providerAttemptStarted && !providerAccepted
       const nextMetadata = job.job_type === 'installment_payment_reminder'
         ? { ...job.metadata, paymentReminderRetrySafe: retrySafeReminder }

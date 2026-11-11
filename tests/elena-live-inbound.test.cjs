@@ -56,6 +56,9 @@ const integrations = {
   './luxorPhoneRoutingServer': { getLuxorPhoneRoutingSettings: async () => ({ ring_to_number: state.target }) },
   './luxorElenaInboundSettingsServer': { getElenaInboundSettings: async () => ({ voice: 'brise', ariannaAvailable: state.available }) },
   './luxorElenaInboundNotificationServer': { notifyElenaInboundAnswered: async (input) => { state.notices.push(input) } },
+  './luxorElenaInboundRecordingServer': { prepareElenaRecording: async () => ({ nonce: '77777777-7777-4777-8777-777777777777', expiresAt: new Date(Date.now() + 120_000).toISOString(), question: 'May I record and transcribe?' }), confirmElenaRecording: async (_call, _session, _nonce, consented) => { state.recordings.push(consented); return { consented } }, stopElenaRecording: async () => ({ stopped: true }) },
+  './luxorElenaInboundLeadServer': { ElenaLeadUpdateError: class extends Error {}, prepareElenaLeadUpdate: async () => ({ nonce: '66666666-6666-4666-8666-666666666666', expiresAt: new Date(Date.now() + 120_000).toISOString(), question: 'May I save this?' }), confirmElenaLeadUpdate: async () => { state.leadUpdates.push(true); return { saved: true } } },
+  './luxorElenaCallEmailServer': { prepareElenaCallEmail: async () => ({ nonce: '55555555-5555-4555-8555-555555555555', expires_at: new Date(Date.now() + 120_000).toISOString(), question: 'May I send this email?' }), confirmElenaCallEmail: async () => { state.emails.push(true); return { queued: true } }, getElenaCallEmailStatus: async () => ({ status: 'pending' }) },
   './luxorElenaInboundToursServer': { ElenaInboundTourBookingError: class extends Error {},
     prepareElenaLiveTourBooking: async () => ({ nonce: '88888888-8888-4888-8888-888888888888', expiresAt: new Date(Date.now() + 180_000).toISOString(), question: 'Book this published venue tour?', slot: { date: '2099-01-01', time: '4 PM' } }),
     confirmElenaLiveTourBooking: async () => { state.bookings.push(true); return { booked: true, message: 'The venue tour is booked. No email or text was sent.' } } },
@@ -75,7 +78,7 @@ const status = compile('src/app/api/elena-inbound/status/route.ts', {
 test.beforeEach(() => {
   Object.assign(process.env, { LUXOR_ELENA_LIVE_INBOUND_ENABLED: 'true', LUXOR_ELENA_LIVE_NUMBER: number, LUXOR_ELENA_LIVE_NUMBER_SID: numberSid,
     OPENAI_PROJECT_ID: 'proj_synthetic', OPENAI_VOICE_WEBHOOK_SECRET: secret, OPENAI_API_KEY: 'synthetic-do-not-call', LUXOR_TWILIO_ACCOUNT_SID: accountSid, LUXOR_TWILIO_AUTH_TOKEN: 'synthetic' })
-  state = { available: true, target, owned: [], operations: [], captures: [], transfers: [], bookings: [], notices: [], signed: true,
+  state = { available: true, target, owned: [], operations: [], captures: [], transfers: [], bookings: [], recordings: [], leadUpdates: [], emails: [], notices: [], signed: true,
     row: { id: 'call', twilio_call_sid: callSid, direction: 'inbound', to_number: number, status: 'in-progress', updated_at: '2026-11-11T12:00:00.000Z', metadata: { scope: 'elena_live_inbound', ingress_mode: 'programmable_sip', accepted: true, rehearsal_only: false, openai_session_id: 'live_synthetic', transfer_state: 'none' } } }
   global.fetch = async (url) => { assert.match(String(url), /^https:\/\/api\.openai\.com\/v1\/live\/sessions\/live_synthetic\/accept$/); if (state.onAccept) state.onAccept(); return Response.json({}) }
 })
@@ -87,6 +90,18 @@ async function tool(name, args = {}) {
   return { error: result.isError === true, output: result.isError ? result.content[0].text : JSON.parse(result.content[0].text) }
 }
 const contact = { full_name: 'Synthetic Caller', phone: '(555) 123-4567', purpose: 'transfer' }
+test('recording, lead changes and emails require their own explicit caller decisions', async () => {
+  const recording = (await tool('prepare_recording')).output.token
+  const update = (await tool('prepare_lead_update', { notes: 'Interested in a tour' })).output.token
+  const email = (await tool('prepare_call_email', { subject: 'Tour', body: 'Tour information' })).output.token
+  assert.equal((await tool('confirm_call_email', { token: update, spoken_confirmation: 'yes' })).error, true)
+  assert.equal((await tool('confirm_lead_update', { token: update, spoken_confirmation: 'no' })).error, true)
+  assert.equal((await tool('confirm_recording', { token: recording, spoken_confirmation: 'no' })).output.consented, false)
+  assert.equal((await tool('stop_recording', { spoken_request: 'please stop recording' })).output.stopped, true)
+  assert.equal((await tool('confirm_lead_update', { token: update, spoken_confirmation: 'yes' })).output.saved, true)
+  assert.equal((await tool('confirm_call_email', { token: email, spoken_confirmation: 'yes' })).output.queued, true)
+  assert.deepEqual(state.recordings, [false]); assert.equal(state.leadUpdates.length, 1); assert.equal(state.emails.length, 1)
+})
 test('disabled live config and the rehearsal number fail closed', () => {
   process.env.LUXOR_ELENA_LIVE_INBOUND_ENABLED = 'false'; assert.equal(service.elenaLiveInboundReady(), false)
   process.env.LUXOR_ELENA_LIVE_INBOUND_ENABLED = 'true'; process.env.LUXOR_ELENA_LIVE_NUMBER = '+18176630380'; assert.equal(service.elenaLiveInboundReady(), false)
@@ -199,7 +214,7 @@ test('unanswered transfer retains confirmed callback and gives truthful follow-u
   assert.match(await response.text(), /name and callback number are saved/)
 })
 test('real tour confirmation uses a booking-specific token and later explicit affirmative', async () => {
-  const prepared = await tool('prepare_tour_booking', { slot_id: '88888888-8888-4888-8888-888888888888' })
+  const prepared = await tool('prepare_tour_booking', { slot_id: '88888888-8888-4888-8888-888888888888', send_invite: true })
   assert.equal(prepared.error, false)
   assert.equal(service.verifyElenaLiveClaim(prepared.output.token, secret).kind, 'booking')
   assert.equal((await tool('confirm_tour_booking', { token: prepared.output.token, spoken_confirmation: 'no' })).error, true)

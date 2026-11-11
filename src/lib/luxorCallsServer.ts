@@ -389,11 +389,17 @@ export async function saveLuxorRecordingCopy(input: { callSid: string; recording
   } as RequestInit & { duplex: 'half' })
   if (!copied.ok) throw new Error(`Private recording copy failed (${copied.status}).`)
   const recordingStartedAt = input.recordingStartedAt && Number.isFinite(Date.parse(input.recordingStartedAt)) ? new Date(input.recordingStartedAt).toISOString() : null
-  const [updated] = await supabaseRest<LuxorCall[]>(`luxor_calls?select=*&id=eq.${encodeURIComponent(call.id)}`, {
-    method: 'PATCH', headers: { Prefer: 'return=representation' },
-    body: JSON.stringify({ recording_sid: input.recordingSid, recording_url: input.recordingUrl, recording_duration_seconds: input.durationSeconds, recording_storage_path: path, recording_started_at: recordingStartedAt, is_voicemail: isVoicemail, is_read: isVoicemail ? false : call.is_read, updated_at: new Date().toISOString(), metadata: { ...call.metadata, recording_copy_status: 'stored_private', recording_retention: 'indefinite' } }),
-  })
-  return updated ?? call
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    const current = await getLuxorCallBySid(input.callSid)
+    if (!current || (!isVoicemail && current.recording_consent_status !== 'consented')) return null
+    const updatedAt = new Date(Math.max(Date.now(), Date.parse(current.updated_at) + 1)).toISOString()
+    const [updated] = await supabaseRest<LuxorCall[]>(`luxor_calls?select=*&id=eq.${encodeURIComponent(current.id)}&updated_at=eq.${encodeURIComponent(current.updated_at)}`, {
+      method: 'PATCH', headers: { Prefer: 'return=representation' },
+      body: JSON.stringify({ recording_sid: input.recordingSid, recording_url: input.recordingUrl, recording_duration_seconds: input.durationSeconds, recording_storage_path: path, recording_started_at: recordingStartedAt, is_voicemail: isVoicemail, ...(isVoicemail ? { is_read: false } : {}), updated_at: updatedAt, metadata: { ...current.metadata, recording_copy_status: 'stored_private', recording_retention: 'indefinite' } }),
+    })
+    if (updated) return updated
+  }
+  throw new Error('Recording metadata changed while saving. Retry the signed callback.')
 }
 
 type TranscriptRow = {

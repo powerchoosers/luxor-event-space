@@ -30,9 +30,9 @@ Live tour booking uses only currently published times at least 24 hours ahead.
 It requires a confirmed name, phone and email, a unique matching customer, and
 an explicit later answer to the full date/time/contact readback. The booking
 transaction uses the existing calendar, visit, capacity and receipt system.
-It suppresses this booking's queued email/text jobs before the transaction
-commits. The caller hears that the venue tour is booked and no email/text was
-sent only after the authoritative transaction succeeds. An existing tour,
+When the caller approves an invitation, its email is queued for immediate
+dispatch; other queued reminders are cancelled. Provider acceptance, delivery,
+and reading are distinct. An existing tour,
 ambiguous customer match or changed slot is sent to Arianna for review. A venue
 tour does not reserve the event date or book a phone meeting.
 
@@ -50,8 +50,13 @@ canonical phone matching. A single existing live inquiry is linked without
 overwriting that inquiry's identity, status or consent. Multiple existing
 matches retain the confirmed details on the call for owner review, without
 creating another duplicate. Retries of the same capture return the existing
-result. Protected test phone/email identifiers are rejected. Marketing consent
-is never inferred from a phone conversation.
+result. Subsequent caller-confirmed contact and event changes use a separate
+version-checked transaction and preserve owner edits. Protected test phone/email
+identifiers are rejected. Marketing consent is never inferred from a phone conversation.
+
+Caller-requested informational emails require a complete readback of the
+confirmed recipient, subject and message before the job is queued. The queue
+verifies the approved snapshot before delivery and uses provider idempotency.
 
 Only a signed SIP child `in-progress`/`answered` callback proves Elena's phone
 connection answered. Both that proof and the persisted OpenAI acceptance are
@@ -62,9 +67,12 @@ terminal callback can recover a missed-call stub after an initial database
 outage. It cannot create a voice authorization ticket.
 
 SIP and human legs use explicit signed callback URLs, so a late SIP completion
-cannot replace the human transfer's call identifier. No call audio or full
-transcripts are stored by this flow. Audio quality, smoothness and a human
-answer still require a real caller acceptance test after deployment.
+cannot replace the human transfer's call identifier. Recording and transcription
+start only after the caller explicitly agrees and can be stopped on request.
+Audio before consent is not recorded. Approved recordings are copied to private
+storage under the existing retention policy; transcription depends on provider
+availability. Audio quality, playback, transcription and a human answer require
+a real caller acceptance test after deployment.
 
 ## Server configuration
 

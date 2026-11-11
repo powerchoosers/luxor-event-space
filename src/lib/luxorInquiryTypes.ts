@@ -906,6 +906,7 @@ export type LuxorDepositType = 'solidify_date' | 'non_refundable_booking'
 
 export type LuxorEmailJobStatus = 'queued' | 'sending' | 'sent' | 'failed' | 'cancelled'
 export type LuxorEmailJobKind =
+  | 'elena_call_email'
   | 'inquiry_notification'
   | 'transactional_notice'
   | 'calendar_invitation'

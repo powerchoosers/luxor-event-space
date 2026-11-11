@@ -10,7 +10,7 @@ const ts = require('typescript')
 
 const root = path.resolve(__dirname, '..')
 const read = (p) => fs.readFileSync(path.join(root, p), 'utf8')
-const migration = 'supabase/migrations/20261111160930_elena_live_tour_booking.sql'
+const migration = 'supabase/migrations/20261111202609_elena_tour_invitation.sql'
 function functionSql(file, name) {
   const source = read(file)
   const start = source.search(new RegExp(`create(?:\\s+or\\s+replace)?\\s+function\\s+public\\.${name}\\s*\\(`, 'i'))
@@ -62,10 +62,10 @@ function helperFixture() {
 
 test('booking helper freezes a server readback, retries the same nonce and performs no scheduling while preparing',async()=>{
   const state=helperFixture(),service=helperService(state)
-  const input={callSid:state.call.twilio_call_sid,sessionId:'live_synthetic',slotId:state.slots[0].id}
+  const input={callSid:state.call.twilio_call_sid,sessionId:'live_synthetic',slotId:state.slots[0].id,sendInvite:false}
   const result=await service.prepareElenaLiveTourBooking(input)
   assert.match(result.question,/San Antonio time/)
-  assert.match(result.question,/No email or text will be sent/)
+  assert.match(result.question,/without sending an email/)
   assert.equal(state.call.metadata.booking_pending.venue_location,'Luxor at Las Palmas Events, Synthetic authoritative location')
   assert.equal((await service.prepareElenaLiveTourBooking(input)).nonce,result.nonce)
   assert.equal(state.operations.filter(({init})=>init.method==='PATCH').length,1)
@@ -80,7 +80,7 @@ test('booking helper rejects stale, mismatched, ended and rehearsal calls before
   for(const change of [state=>{state.stale=true},state=>{state.inquiry.email='different@example.invalid'},state=>{state.call.status='completed'},state=>{state.call.metadata.rehearsal_only=true},state=>{state.call.metadata.sip_answered=false},state=>{state.calendars=[{id:randomUUID()}]},state=>{state.call.metadata.inbound_capture.matching_review_needed=true}]) {
     const state=helperFixture();change(state)
     const service=helperService(state)
-    await assert.rejects(service.prepareElenaLiveTourBooking({callSid:state.call.twilio_call_sid,sessionId:'live_synthetic',slotId:state.slots[0].id}))
+    await assert.rejects(service.prepareElenaLiveTourBooking({callSid:state.call.twilio_call_sid,sessionId:'live_synthetic',slotId:state.slots[0].id,sendInvite:false}))
     assert.equal(state.operations.some(({query})=>query.startsWith('rpc/')),false)
     assert.equal(state.call.metadata.booking_pending,undefined)
   }
@@ -108,16 +108,20 @@ test('real tour scheduling commits capacity, visit, receipt and no-send jobs ato
       if (!options.slotId) await db.query("insert into luxor_tour_slots(id,slot_date,start_time,end_time,status,capacity,booked_count,title) values($1,current_date+5,'16:00','16:30','available',2,0,'Private venue tour') on conflict(slot_date,start_time) do update set id=excluded.id", [slotId])
       const [slot] = await query("select slot_date::text,start_time::text from luxor_tour_slots where id=$1", [slotId])
       const capture = { confirmed:true,matching_review_needed:false,nonce:contactNonce,inquiry_id:inquiryId,full_name:'Synthetic Caller',phone:'+12105550111',email:'caller@example.invalid' }
-      const pending = { nonce,slot_id:slotId,slot_date:slot.slot_date,slot_time:slot.start_time,expires_at:new Date(Date.now()+180000).toISOString(),inquiry_id:inquiryId,inquiry_updated_at:inquiry.updated_at.toISOString(),contact_nonce:contactNonce,request_id:randomUUID(),visit_id:randomUUID(),response_token:'a'.repeat(43),venue_location:'Synthetic Luxor location' }
+      const pending = { nonce,slot_id:slotId,slot_date:slot.slot_date,slot_time:slot.start_time,expires_at:new Date(Date.now()+180000).toISOString(),inquiry_id:inquiryId,inquiry_updated_at:inquiry.updated_at.toISOString(),contact_nonce:contactNonce,request_id:randomUUID(),visit_id:randomUUID(),response_token:'a'.repeat(43),venue_location:'Synthetic Luxor location',send_invite:options.sendInvite === true }
       const metadata = { scope:'elena_live_inbound',ingress_mode:'programmable_sip',openai_session_id:sessionId,accepted:true,sip_answered:true,rehearsal_only:false,inbound_capture:capture,booking_pending:pending }
       await db.query("insert into luxor_calls(twilio_call_sid,direction,to_number,status,inquiry_id,metadata) values($1,'inbound','+19563652037','in-progress',$2,$3)", [callSid,inquiryId,metadata])
       return { inquiryId,nonce,slotId,callSid,sessionId,metadata }
     }
     const confirm = async (f) => (await query('select luxor_confirm_elena_inbound_tour($1,$2,$3) as result', [f.callSid,f.sessionId,f.nonce]))[0].result
     const first = await fixture()
+    // A call may have prepared its readback on the previous deployment, which
+    // did not include the invitation choice. It must remain a no-send booking.
+    await db.query("update luxor_calls set metadata=jsonb_set(metadata,'{booking_pending}',(metadata->'booking_pending')-'send_invite') where twilio_call_sid=$1",[first.callSid])
     const saved = await confirm(first)
     assert.equal(saved.booked,true)
     assert.equal(saved.replayed,false)
+    assert.equal(saved.invitation_queued,false)
     assert.equal((await query('select booked_count from luxor_tour_slots where id=$1',[first.slotId]))[0].booked_count,1)
     assert.equal((await query('select count(*)::int as n from luxor_tour_visits'))[0].n,1)
     assert.equal((await query("select count(*)::int as n from luxor_email_jobs where status='queued'"))[0].n,0)
@@ -126,8 +130,11 @@ test('real tour scheduling commits capacity, visit, receipt and no-send jobs ato
     assert.equal((await confirm(first)).replayed,true)
     assert((await Promise.all([confirm(first),confirm(first)])).every((result) => result.replayed === true))
     assert.equal((await query('select booked_count from luxor_tour_slots where id=$1',[first.slotId]))[0].booked_count,1)
-    const second = await fixture({slotId:first.slotId})
-    await confirm(second)
+    const second = await fixture({slotId:first.slotId,sendInvite:true})
+    const sent = await confirm(second)
+    assert.equal(sent.invitation_queued,true)
+    assert.equal((await query("select count(*)::int as n from luxor_email_jobs where inquiry_id=$1 and status='queued' and job_type='calendar_invitation' and recipient_email='caller@example.invalid'",[second.inquiryId]))[0].n,1)
+    assert.equal((await query("select count(*)::int as n from luxor_email_jobs where inquiry_id=$1 and status='queued' and job_type<>'calendar_invitation'",[second.inquiryId]))[0].n,0)
     const full = await fixture({slotId:first.slotId})
     await assert.rejects(confirm(full),/no longer available/)
     assert.equal((await query('select booked_count from luxor_tour_slots where id=$1',[first.slotId]))[0].booked_count,2)

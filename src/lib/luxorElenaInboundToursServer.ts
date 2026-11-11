@@ -4,11 +4,12 @@ import { randomBytes, randomUUID } from 'node:crypto'
 import { supabaseRestStrict } from './supabaseRestServer'
 import { listAvailableLuxorTourSlots } from './luxorTourSlotsServer'
 import { LUXOR_VENUE_ADDRESS } from './luxorVenue'
+import type { LuxorEmailJob } from './luxorInquiryTypes'
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 type Call = { twilio_call_sid: string; direction: string; to_number: string; status: string; inquiry_id: string | null; metadata: Record<string, unknown>; updated_at: string }
 type Contact = { confirmed?: boolean; nonce?: string; inquiry_id?: string; matching_review_needed?: boolean; full_name?: string; phone?: string; email?: string }
-type Pending = { nonce: string; slot_id: string; slot_date: string; slot_time: string; expires_at: string; question: string; inquiry_id: string; inquiry_updated_at: string; contact_nonce: string; request_id: string; visit_id: string; response_token: string; venue_location: string }
+type Pending = { nonce: string; slot_id: string; slot_date: string; slot_time: string; expires_at: string; question: string; inquiry_id: string; inquiry_updated_at: string; contact_nonce: string; request_id: string; visit_id: string; response_token: string; venue_location: string; send_invite: boolean }
 type Inquiry = { id: string; full_name: string; email: string | null; phone: string | null; status: string; archived_at: string | null; is_test: boolean; preferred_tour_date: string | null; preferred_tour_time: string | null; current_tour_visit_id: string | null; updated_at: string }
 
 export class ElenaInboundTourBookingError extends Error {}
@@ -28,7 +29,8 @@ async function readVerifiedCall(callSid: string, sessionId: string) {
 }
 
 /** Prepare an immutable, short-lived caller readback; no inventory or messages are changed. */
-export async function prepareElenaLiveTourBooking(input: { callSid: string; sessionId: string; slotId: string }) {
+export async function prepareElenaLiveTourBooking(input: { callSid: string; sessionId: string; slotId: string; sendInvite: boolean }) {
+  if (typeof input.sendInvite !== 'boolean') throw new ElenaInboundTourBookingError('Ask whether the caller wants a calendar invitation by email.')
   if (!UUID.test(input.slotId)) throw new ElenaInboundTourBookingError('Choose one of the published tour times.')
   const row = await readVerifiedCall(input.callSid, input.sessionId)
   const capture = row.metadata.inbound_capture as Contact | undefined
@@ -52,17 +54,17 @@ export async function prepareElenaLiveTourBooking(input: { callSid: string; sess
   if (!slot) throw new ElenaInboundTourBookingError('That published tour time is no longer available. Choose another time.')
   const prior = row.metadata.booking_pending as Pending | undefined
   if (prior?.slot_id === slot.id && prior.inquiry_id === inquiry.id && prior.inquiry_updated_at === inquiry.updated_at
-    && prior.contact_nonce === capture.nonce && prior.venue_location === `Luxor at Las Palmas Events, ${LUXOR_VENUE_ADDRESS}`
+    && prior.contact_nonce === capture.nonce && prior.send_invite === input.sendInvite && prior.venue_location === `Luxor at Las Palmas Events, ${LUXOR_VENUE_ADDRESS}`
     && Date.parse(prior.expires_at) > Date.now()) {
     return { nonce: prior.nonce, question: prior.question, expiresAt: prior.expires_at, slot }
   }
   const pending: Pending = {
     nonce: randomUUID(), slot_id: slot.id, slot_date: slot.date, slot_time: slot.time,
     expires_at: new Date(Date.now() + 180_000).toISOString(),
-    question: `Shall I book your private venue tour for ${slot.dateLabel} at ${slot.time}, San Antonio time, under ${capture.full_name}, phone ${capture.phone}, and email ${capture.email}? No email or text will be sent.`,
+    question: `Shall I book your private venue tour for ${slot.dateLabel} at ${slot.time}, San Antonio time, under ${capture.full_name}, phone ${capture.phone}, and email ${capture.email}${input.sendInvite ? ', and email your calendar invitation to that address' : ', without sending an email'}?`,
     inquiry_id: inquiry.id, inquiry_updated_at: inquiry.updated_at, contact_nonce: capture.nonce!,
     request_id: randomUUID(), visit_id: randomUUID(), response_token: randomBytes(32).toString('base64url'),
-    venue_location: `Luxor at Las Palmas Events, ${LUXOR_VENUE_ADDRESS}`,
+    venue_location: `Luxor at Las Palmas Events, ${LUXOR_VENUE_ADDRESS}`, send_invite: input.sendInvite,
   }
   const updated = await supabaseRestStrict<Call[]>(`luxor_calls?twilio_call_sid=eq.${input.callSid}&updated_at=eq.${encodeURIComponent(row.updated_at)}&metadata->>scope=eq.elena_live_inbound&metadata->>openai_session_id=eq.${encodeURIComponent(input.sessionId)}&select=twilio_call_sid`, {
     method: 'PATCH', headers: { Prefer: 'return=representation' },
@@ -76,7 +78,39 @@ export async function prepareElenaLiveTourBooking(input: { callSid: string; sess
 export async function confirmElenaLiveTourBooking(input: { callSid: string; sessionId: string; nonce: string }) {
   validIdentity(input.callSid, input.sessionId)
   if (!UUID.test(input.nonce)) throw new ElenaInboundTourBookingError('A current tour readback is required before booking.')
-  return supabaseRestStrict<{ booked: boolean; replayed: boolean; slot: { date: string; time: string }; message: string }>('rpc/luxor_confirm_elena_inbound_tour', {
+  const result = await supabaseRestStrict<{ booked: boolean; replayed: boolean; invitation_queued: boolean; slot: { date: string; time: string }; message: string }>('rpc/luxor_confirm_elena_inbound_tour', {
     method: 'POST', body: JSON.stringify({ p_call_sid: input.callSid, p_session_id: input.sessionId, p_nonce: input.nonce }),
   })
+  if (result.booked && result.invitation_queued) {
+    try {
+      const row = await readVerifiedCall(input.callSid, input.sessionId)
+      const receipt = row.metadata.booking_receipt as { nonce?: string; invitation_job_id?: string } | undefined
+      if (receipt?.nonce === input.nonce && UUID.test(receipt.invitation_job_id || '')) {
+        const [job] = await supabaseRestStrict<LuxorEmailJob[]>(`luxor_email_jobs?select=*&id=eq.${receipt.invitation_job_id}&inquiry_id=eq.${row.inquiry_id}&job_type=eq.calendar_invitation&status=eq.queued&limit=1`)
+        if (job) {
+          const { processLuxorEmailJobs } = await import('./luxorEmailJobsServer')
+          await processLuxorEmailJobs([job], { markSending: true })
+        }
+      }
+    } catch { /* The durable queue remains responsible for retrying; booking already succeeded. */ }
+  }
+  return result
+}
+
+/** Report only delivery evidence for this exact call's approved invitation. */
+export async function getElenaLiveTourInvitationStatus(input: { callSid: string; sessionId: string }) {
+  const row = await readVerifiedCall(input.callSid, input.sessionId)
+  const receipt = row.metadata.booking_receipt as { invitation_job_id?: string; inquiry_id?: string } | undefined
+  if (!receipt?.invitation_job_id || !UUID.test(receipt.invitation_job_id) || receipt.inquiry_id !== row.inquiry_id) return { status: 'not_requested', message: 'No calendar invitation was requested for this tour.' }
+  const [jobs, messages] = await Promise.all([
+    supabaseRestStrict<Array<{ status: string }>>(`luxor_email_jobs?select=status&id=eq.${receipt.invitation_job_id}&inquiry_id=eq.${row.inquiry_id}&job_type=eq.calendar_invitation&limit=1`),
+    supabaseRestStrict<Array<{ status: string }>>(`luxor_mail_messages?select=status&direction=eq.outgoing&metadata->>emailJobId=eq.${receipt.invitation_job_id}&order=created_at.desc&limit=1`),
+  ])
+  const job = jobs[0], message = messages[0]
+  if (!job) return { status: 'unavailable', message: 'The invitation status could not be verified.' }
+  if (['bounced', 'failed', 'suppressed', 'complained'].includes(message?.status || '')) return { status: 'failed', message: 'The invitation could not be confirmed as delivered. Arianna can help follow up.' }
+  if (['delivered', 'opened', 'clicked'].includes(message?.status || '')) return { status: 'delivered', message: 'The email provider reports that the invitation was delivered. The recipient can check their inbox.' }
+  if (['failed', 'cancelled'].includes(job.status)) return { status: 'failed', message: 'The invitation could not be confirmed as delivered. Arianna can help follow up.' }
+  if (job.status === 'sent' || ['sent', 'delivery_delayed'].includes(message?.status || '')) return { status: 'accepted', message: 'The invitation was sent to the email provider. Delivery is not confirmed yet.' }
+  return { status: 'pending', message: 'The invitation is queued or sending. Delivery is not confirmed yet.' }
 }

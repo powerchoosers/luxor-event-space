@@ -7535,7 +7535,7 @@ export default function LeadDetailPage({
                       const savedTranscript = typeof call.metadata?.voicemail_transcript === 'string' ? call.metadata.voicemail_transcript : typeof call.metadata?.transcript === 'string' ? call.metadata.transcript : ''
                       const hasTranscript = Boolean(call.transcript_segments?.length || savedTranscript)
                       return (
-                        <LeadActivityDisclosure key={entry.id} icon={<Phone size={16} />} label={call.is_voicemail ? 'Voicemail' : 'Call'} title={describeActivityEntry(entry)} description={`${formatPhoneDisplay(otherNumber)} · ${call.duration_seconds === null ? call.status.replaceAll('_', ' ') : formatCallDuration(call.duration_seconds)}`} preview={call.notes || savedTranscript || (call.recording_sid ? 'Recording available' : undefined)} timestamp={formatActivityDate(entry.createdAt)} badge={<PortalStatusBadge status={call.status} borderless />}>
+                        <LeadActivityDisclosure key={entry.id} icon={<Phone size={16} />} label={call.is_voicemail ? 'Voicemail' : call.metadata?.scope === 'elena_live_inbound' ? 'Elena call' : 'Call'} title={describeActivityEntry(entry)} description={`${formatPhoneDisplay(otherNumber)} · ${call.duration_seconds === null ? call.status.replaceAll('_', ' ') : formatCallDuration(call.duration_seconds)}`} preview={call.notes || savedTranscript || (call.recording_sid ? 'Recording available' : undefined)} timestamp={formatActivityDate(entry.createdAt)} badge={<PortalStatusBadge status={call.status} borderless />}>
                           {call.recording_sid ? (
                             <div className="mt-3">
                               <PortalAudioPlayer
@@ -10733,6 +10733,7 @@ function describeActivityEntry(entry: ActivityEntry) {
 
   if (entry.kind === 'call') {
     if (entry.call.is_voicemail) return 'Voicemail received'
+    if (entry.call.metadata?.scope === 'elena_live_inbound') return entry.call.metadata?.sip_answered === true ? 'Elena answered a call' : 'Elena call not answered'
     if (entry.call.direction === 'inbound') {
       return ['busy', 'failed', 'no-answer', 'canceled'].includes(entry.call.status) ? 'Inbound call missed' : 'Inbound call received'
     }
