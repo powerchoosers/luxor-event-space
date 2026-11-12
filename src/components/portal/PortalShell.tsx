@@ -23,6 +23,7 @@ import {
   MoreHorizontal,
   SlidersHorizontal,
   ArrowUpRight,
+  ChevronRight,
   Loader2,
   X,
   Sun,
@@ -1072,17 +1073,20 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
                         </span>
                       </button>
 
-                      {/* Help & About */}
-                      <a
-                        href="mailto:support@luxoratlaspalmas.com"
-                        className="group flex w-full items-center justify-between rounded-xl px-2.5 py-2 text-xs font-medium text-[color:var(--portal-text)] transition-all hover:bg-[color:var(--portal-soft)] hover:text-[#9e7627] dark:hover:text-[#f1d27a]"
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setAccountMenuOpen(false)
+                          router.push('/portal/help')
+                        }}
+                        className="group flex w-full items-center justify-between rounded-xl px-2.5 py-2 text-xs font-medium text-[color:var(--portal-text)] transition-all hover:bg-[color:var(--portal-soft)] hover:text-[#9e7627] dark:hover:text-[#f1d27a] cursor-pointer"
                       >
                         <span className="flex items-center gap-2.5">
                           <HelpCircle size={15} className="text-[color:var(--portal-muted)] group-hover:text-[#caa24c] transition-colors" />
                           <span>Help &amp; About</span>
                         </span>
-                        <ArrowUpRight size={13} className="text-[color:var(--portal-muted)] group-hover:text-[color:var(--portal-text)] transition-colors" />
-                      </a>
+                        <ChevronRight size={13} className="text-[color:var(--portal-muted)] group-hover:text-[color:var(--portal-text)] transition-colors" />
+                      </button>
                     </div>
 
                     {/* Divider & Logout */}
