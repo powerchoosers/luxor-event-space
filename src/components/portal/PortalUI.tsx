@@ -2308,8 +2308,10 @@ export function PortalSkeletonTransition({
     )
   }
 
+  const fillsAvailableHeight = /(?:^|\s)(?:flex-1|h-full)(?:\s|$)/.test(className)
+
   return (
-    <div style={style} className="min-w-0">
+    <div style={style} className={fillsAvailableHeight ? `min-h-0 min-w-0 ${className}` : 'min-w-0'}>
       <AnimatePresence mode="wait" initial={false}>
         {loading ? (
           <motion.div
@@ -2318,7 +2320,7 @@ export function PortalSkeletonTransition({
             animate={reduceMotion ? { opacity: 1 } : { opacity: 1, filter: 'blur(0px)' }}
             exit={reduceMotion ? { opacity: 0 } : { opacity: 0, filter: 'blur(12px)' }}
             transition={{ duration: reduceMotion ? 0.05 : 0.28, ease: LUXOR_PORTAL_EASE }}
-            className={className}
+            className={fillsAvailableHeight ? 'flex h-full min-h-0 min-w-0 w-full flex-col' : className}
           >
             {skeleton}
           </motion.div>
@@ -2339,7 +2341,7 @@ export function PortalSkeletonTransition({
               }
             }}
             data-portal-blur-cleanup="true"
-            className={className}
+            className={fillsAvailableHeight ? 'flex h-full min-h-0 min-w-0 w-full flex-col' : className}
           >
             {children}
           </motion.div>

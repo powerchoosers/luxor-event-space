@@ -510,19 +510,19 @@ export function LuxorMessenger() {
         </div>
       </aside>
 
-      <main className={`absolute inset-0 z-20 flex min-h-0 min-w-0 flex-1 flex-col bg-[color:var(--portal-card)] lg:static lg:z-auto lg:border-l lg:border-[color:var(--portal-border)] ${showThreadOnMobile ? 'max-lg:translate-x-0 max-lg:visible max-lg:[transition:translate_0.36s_cubic-bezier(0.22,1,0.36,1),visibility_0s]' : 'max-lg:invisible max-lg:translate-x-full max-lg:[transition:translate_0.36s_cubic-bezier(0.22,1,0.36,1),visibility_0s_linear_0.36s]'} motion-reduce:!transition-none`}>
+      <main className={`absolute inset-0 z-20 flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-[color:var(--portal-card)] lg:static lg:z-auto lg:border-l lg:border-[color:var(--portal-border)] ${showThreadOnMobile ? 'max-lg:translate-x-0 max-lg:visible max-lg:[transition:translate_0.36s_cubic-bezier(0.22,1,0.36,1),visibility_0s]' : 'max-lg:invisible max-lg:translate-x-full max-lg:[transition:translate_0.36s_cubic-bezier(0.22,1,0.36,1),visibility_0s_linear_0.36s]'} motion-reduce:!transition-none`}>
         <PortalSkeletonTransition
           loading={loading}
           skeleton={<LoadingMessagePane />}
-          className="flex min-h-0 min-w-0 flex-1 flex-col"
+          className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden"
         >
           <div
             key={newMessageOpen ? 'new-message' : selectedConversation ? selectedConversation.key : 'empty'}
-            className="luxor-pane-enter-desktop flex min-h-0 min-w-0 flex-1 flex-col"
+            className="luxor-pane-enter-desktop flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden"
           >
             {newMessageOpen ? <NewMessagePane query={contactQuery} results={contactResults} searching={searchingContacts} onQueryChange={(value) => { setContactQuery(value); setContactResults([]); setSearchingContacts(value.trim().length >= 2) }} onSelect={startNewConversation} onClose={() => { setNewMessageOpen(false); setContactQuery(''); setShowThreadOnMobile(false) }} /> : selectedConversation ? (
             <>
-              <header className="flex min-h-18 shrink-0 items-center justify-between gap-1 border-b border-[color:var(--portal-border)]/70 px-2 py-3 sm:gap-4 sm:px-5">
+              <header className="flex shrink-0 items-center justify-between gap-1 border-b border-[color:var(--portal-border)]/70 px-2 py-2.5 sm:gap-4 sm:px-5">
                 <div className="flex min-w-0 flex-1 items-center gap-1 sm:gap-3">
                   <button type="button" onClick={() => setShowThreadOnMobile(false)} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/40 lg:hidden" aria-label="Back to conversations"><ArrowLeft size={18}/></button>
                   {selectedConversation.inquiryId ? (
@@ -533,23 +533,23 @@ export function LuxorMessenger() {
                     <PortalContactAvatar name={selectedConversation.contactName} inquiryId={selectedConversation.inquiryId || undefined} size="md" className="hidden sm:flex" />
                   )}
                   <div className="min-w-0 flex-1">
-                    <div className="flex min-w-0 flex-row flex-wrap items-center gap-x-0.5 gap-y-0.5 sm:gap-x-2">
+                    <div className="flex min-w-0 items-center gap-1.5 sm:gap-2">
                       {selectedConversation.inquiryId ? (
                         <Link
                           href={`/portal/leads/${selectedConversation.inquiryId}`}
                           title={selectedConversation.contactName}
-                          className="order-1 max-w-full truncate text-[15px] font-semibold leading-5 text-[color:var(--portal-text)] no-underline transition-colors hover:text-[#a8792f] dark:hover:text-[#f1d27a] sm:text-sm sm:font-bold"
+                          className="min-w-0 truncate text-[15px] font-semibold leading-5 text-[color:var(--portal-text)] no-underline transition-colors hover:text-[#a8792f] dark:hover:text-[#f1d27a] sm:text-sm sm:font-bold"
                         >
                           {selectedConversation.contactName}
                         </Link>
                       ) : (
-                        <p title={selectedConversation.contactName} className="order-1 max-w-full truncate text-[15px] font-semibold leading-5 text-[color:var(--portal-text)] sm:text-sm sm:font-bold">{selectedConversation.contactName}</p>
+                        <p title={selectedConversation.contactName} className="min-w-0 truncate text-[15px] font-semibold leading-5 text-[color:var(--portal-text)] sm:text-sm sm:font-bold">{selectedConversation.contactName}</p>
                       )}
-                      <div className="order-3 basis-full whitespace-nowrap tabular-nums text-xs leading-4 text-[color:var(--portal-muted)]">
-                        <span className="sm:hidden">{formatPhoneDisplay(selectedConversation.phoneNumber)}</span>
-                        <button type="button" aria-label={`Call ${selectedConversation.contactName} at ${formatPhoneDisplay(selectedConversation.phoneNumber)}`} onClick={() => startLuxorBrowserCall({ phoneNumber: selectedConversation.phoneNumber, contactName: selectedConversation.contactName, inquiryId: selectedConversation.inquiryId })} className="hidden rounded-sm transition-colors hover:text-emerald-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/40 sm:inline-block">{formatPhoneDisplay(selectedConversation.phoneNumber)}</button>
-                      </div>
-                      <span className="order-2"><PortalSmsConsentBadge phone={selectedConversation.phoneNumber} initialConsent={smsConsent} compact shortUnknownOnMobile shortOptedInOnMobile /></span>
+                      <span className="shrink-0"><PortalSmsConsentBadge phone={selectedConversation.phoneNumber} initialConsent={smsConsent} compact shortUnknownOnMobile shortOptedInOnMobile /></span>
+                    </div>
+                    <div className="mt-0.5 truncate whitespace-nowrap tabular-nums text-xs leading-4 text-[color:var(--portal-muted)]">
+                      <span className="sm:hidden">{formatPhoneDisplay(selectedConversation.phoneNumber)}</span>
+                      <button type="button" aria-label={`Call ${selectedConversation.contactName} at ${formatPhoneDisplay(selectedConversation.phoneNumber)}`} onClick={() => startLuxorBrowserCall({ phoneNumber: selectedConversation.phoneNumber, contactName: selectedConversation.contactName, inquiryId: selectedConversation.inquiryId })} className="portal-inline-action hidden leading-4 transition-colors hover:text-emerald-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/40 sm:inline">{formatPhoneDisplay(selectedConversation.phoneNumber)}</button>
                     </div>
                   </div>
                 </div>
@@ -606,7 +606,7 @@ export function LuxorMessenger() {
                 </div>
               </header>
 
-              <div ref={threadScrollRef} className="portal-scrollbar min-h-0 flex-1 overflow-y-auto px-4 py-6 sm:px-7">
+              <div ref={threadScrollRef} className="portal-scrollbar min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-6 sm:px-7">
                 <div className="mx-auto max-w-4xl space-y-3">
                   {selectedConversation.messages.length ? selectedConversation.messages.map((message, index, thread) => {
                     const previous = thread[index - 1]
@@ -907,7 +907,7 @@ function LoadingConversations() {
 function LoadingMessagePane() {
   return (
     <div className="flex min-h-0 flex-1 flex-col" aria-label="Loading message thread">
-      <div className="flex min-h-20 items-center justify-between gap-4 border-b border-[color:var(--portal-border)] px-4 py-3 sm:px-5">
+      <div className="flex items-center justify-between gap-4 border-b border-[color:var(--portal-border)] px-4 py-2.5 sm:px-5">
         <div className="flex min-w-0 items-center gap-3">
           <PortalSkeleton className="h-10 w-10 shrink-0 rounded-full" />
           <div className="min-w-0 space-y-1.5">
