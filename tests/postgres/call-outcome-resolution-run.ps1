@@ -13,9 +13,18 @@ $started=$false
 function Run-Pg([string]$Program,[string[]]$Arguments,[string]$Log){
  # Wait only for this command, not the PostgreSQL server child. Do not pipe pg_ctl
  # output: Windows descendants can inherit the pipe and keep it open indefinitely.
+ # cmd file redirection also gives a readable exit code. Start-Process -PassThru
+ # leaves ExitCode blank under Windows PowerShell 5.1.
  $quoted=$Arguments | ForEach-Object { '"'+($_ -replace '"','\"')+'"' }
- $process=Start-Process -FilePath (Join-Path $PgBin $Program) -ArgumentList $quoted -WindowStyle Hidden -PassThru -RedirectStandardOutput $Log -RedirectStandardError "$Log.stderr"
+ $command='"'+(Join-Path $PgBin $Program)+'" '+($quoted -join ' ')+' > "'+$Log+'" 2> "'+$Log+'.stderr"'
+ $process=New-Object System.Diagnostics.Process
+ $process.StartInfo.FileName='C:\Windows\System32\cmd.exe'
+ $process.StartInfo.Arguments='/d /s /c "'+$command+'"'
+ $process.StartInfo.UseShellExecute=$false
+ $process.StartInfo.CreateNoWindow=$true
+ if(-not $process.Start()){throw "Could not start $Program"}
  if(-not $process.WaitForExit(60000)){throw "$Program did not exit within 60 seconds; inspect its process before retrying"}
+ $null=$process.WaitForExit()
  Get-Content $Log
  if(Test-Path "$Log.stderr"){Get-Content "$Log.stderr"}
  if($process.ExitCode -ne 0){throw "$Program exited $($process.ExitCode); see $Log"}

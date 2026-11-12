@@ -14,7 +14,7 @@ The candidate adds two durable tables, private classification/admission helpers,
 - `luxor_restart_prospect_workflow(uuid, uuid, uuid, text)`
 - `luxor_enroll_workflow_with_resolution(uuid, uuid, uuid[], text, boolean)`
 
-The database snapshot reported PostgreSQL 17.6, all 17 manifest tables, required columns and six helper signatures. It also confirms the signed-booking task guard and the invoice/receipt triggers are present. The trigger-function snapshot was reviewed. The new isolated coverage is `tests/postgres/call-outcome-existing-triggers.sql`, executed by `tests/postgres/call-outcome-resolution-run.ps1` only inside its disposable local PostgreSQL cluster.
+The database snapshot reported PostgreSQL 17.6, all 17 manifest tables, required columns and six helper signatures. It also confirms the signed-booking task guard and the invoice/receipt triggers are present. The trigger-function snapshot was reviewed. The new isolated coverage is `tests/postgres/call-outcome-resolution-existing-triggers.sql`, executed by `tests/postgres/call-outcome-resolution-run.ps1` only inside its disposable local PostgreSQL cluster.
 
 ## Trigger interaction findings
 
@@ -47,7 +47,7 @@ Then redeploy the previous application with both flags off. Do not drop the new 
 
 ## Remaining release blockers
 
-- Run the new trigger-compatibility SQL in the isolated PostgreSQL runner. The current sandbox denied its prior loopback PostgreSQL connection; do not bypass that policy denial.
+- The isolated trigger-compatibility runner passed on a disposable local PostgreSQL 17 cluster, including the existing brochure stop, receipt, and invoice guards. That run is not full production-schema parity.
 - Run a fresh-schema integration fixture that includes current per-visit, post-tour, booking/payment, notification, and all queue triggers. The saved production snapshot lists relevant trigger definitions and bodies but is not itself executable schema parity evidence.
 - Finish portal browser flows for all seven call outcomes, retries, light mode and dark mode.
 - Finish a production build in an environment permitted to resolve `fonts.googleapis.com`; the previous local build exited on DNS `ENOTFOUND` for that host. Do not work around the network restriction.

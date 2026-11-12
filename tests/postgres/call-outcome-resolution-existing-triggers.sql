@@ -61,24 +61,24 @@ insert into public.luxor_payments values
 -- Valid invoice-linked work is retained; canceled invoices reject queued work
 -- but permit cancellation/history updates. Malformed or dangling references fail.
 insert into public.luxor_email_jobs(id,job_type,recipient_email,subject,body,metadata,status)
-values ('30000000-0000-4000-8000-000000000001','invoice_notice','x@example.invalid','Invoice','test',
+values ('30000000-0000-4000-8000-000000000001','unpaid_invoice_reminder','x@example.invalid','Invoice','test',
   '{"invoice_id":"10000000-0000-4000-8000-000000000001"}','queued');
 do $$ begin
   begin
     insert into public.luxor_email_jobs(id,job_type,recipient_email,subject,body,metadata,status)
-    values ('30000000-0000-4000-8000-000000000002','invoice_notice','x@example.invalid','Void','test',
+    values ('30000000-0000-4000-8000-000000000002','unpaid_invoice_reminder','x@example.invalid','Void','test',
       '{"invoice_id":"10000000-0000-4000-8000-000000000002"}','queued');
     raise exception 'expected void-invoice queue rejection';
   exception when check_violation then null; end;
   begin
     insert into public.luxor_email_jobs(id,job_type,recipient_email,subject,body,metadata,status)
-    values ('30000000-0000-4000-8000-000000000003','invoice_notice','x@example.invalid','Malformed','test',
+    values ('30000000-0000-4000-8000-000000000003','unpaid_invoice_reminder','x@example.invalid','Malformed','test',
       '{"invoice_id":"bad"}','cancelled');
     raise exception 'expected malformed invoice reference rejection';
   exception when check_violation then null; end;
 end $$;
 insert into public.luxor_email_jobs(id,job_type,recipient_email,subject,body,metadata,status)
-values ('30000000-0000-4000-8000-000000000004','invoice_notice','x@example.invalid','Void history','test',
+values ('30000000-0000-4000-8000-000000000004','unpaid_invoice_reminder','x@example.invalid','Void history','test',
   '{"invoice_id":"10000000-0000-4000-8000-000000000002"}','cancelled');
 
 -- Receipt guard permits only an unchanged paid receipt identity while queued or
