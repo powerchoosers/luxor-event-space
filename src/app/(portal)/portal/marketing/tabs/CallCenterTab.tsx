@@ -11,7 +11,7 @@ import {
   Loader2,
   CalendarCheck
 } from '@/lib/icons/phosphor-compat'
-import { PortalSelect, PortalDatePicker } from '@/components/portal/PortalUI'
+import { PortalSelect, PortalDatePicker, PortalSkeleton } from '@/components/portal/PortalUI'
 import { LuxorInquiry, LuxorInquiryStatus } from '@/lib/luxorInquiryTypes'
 import { useToast } from '@/components/portal/ToastProvider'
 import { startLuxorBrowserCall } from '@/lib/luxorVoiceClient'
@@ -198,7 +198,7 @@ export function CallCenterTab({
       <div className="portal-card rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 flex flex-col space-y-4 min-h-0 overflow-hidden shadow-sm">
         <div className="shrink-0">
           <h3 className="text-xs font-black uppercase tracking-[0.2em] text-[color:var(--portal-text)]">Call Queue</h3>
-          <p className="text-[10px] text-[color:var(--portal-muted)] mt-0.5">{loading ? 'Loading queue...' : `${queueLeads.length} leads waiting for contact`}</p>
+          <div className="mt-0.5">{loading ? <PortalSkeleton className="h-3 w-28 rounded" /> : <p className="text-[10px] text-[color:var(--portal-muted)]">{queueLeads.length} leads waiting for contact</p>}</div>
         </div>
 
         <div className="flex-1 overflow-y-auto portal-scrollbar space-y-2.5 pr-1 min-h-0">

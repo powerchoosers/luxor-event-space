@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { ChevronLeft, ChevronRight, LoaderCircle, RotateCcw, ZoomIn, ZoomOut } from '@/lib/icons/phosphor-compat'
 import { Document, Page, pdfjs } from 'react-pdf'
+import { PortalSkeleton } from '@/components/portal/PortalUI'
 import type { PortalPdfViewerProps } from './PortalPdfViewer'
 
 pdfjs.GlobalWorkerOptions.workerSrc = new URL('pdfjs-dist/build/pdf.worker.min.mjs', import.meta.url).toString()
@@ -149,7 +150,7 @@ function PdfDocumentViewer({ url, title }: PortalPdfViewerProps) {
               setCurrentPage(1)
             }}
             onLoadError={(error) => setLoadError(error.message || 'Please refresh the preview and try again.')}
-            loading={<div className="flex min-h-[440px] items-center justify-center rounded-xl bg-white/65 text-sm text-[#6d655b]"><LoaderCircle className="mr-2 animate-spin text-[#8c6529]" size={18} /> Loading {title.toLowerCase()}…</div>}
+            loading={<div className="flex min-h-[440px] w-full max-w-xl flex-col items-center justify-center p-6 space-y-3" role="status" aria-label={`Loading ${title}`}><PortalSkeleton className="h-[400px] w-full rounded-xl" /><PortalSkeleton className="h-4 w-32 rounded" /></div>}
             className="flex min-w-max flex-col items-center gap-5"
           >
             {pageWidth > 0 && Array.from({ length: pageCount }, (_, index) => {

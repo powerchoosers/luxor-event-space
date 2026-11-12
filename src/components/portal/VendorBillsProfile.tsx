@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { Building2, ChevronRight } from '@/lib/icons/phosphor-compat'
-import { PortalModal, PortalPagination, PortalPageFrame, PortalPageHeader } from '@/components/portal/PortalUI'
+import { PortalModal, PortalPagination, PortalPageFrame, PortalPageHeader, PortalSkeleton, PortalSkeletonTransition } from '@/components/portal/PortalUI'
 import type { BillExpense } from '@/lib/luxorBillBalances'
 import BillDetailsPanel from '@/components/portal/BillDetailsPanel'
 import ExpenseManagement from '@/components/portal/expenses/ExpenseManagement'
@@ -70,8 +70,38 @@ export default function VendorBillsProfile({ vendorId, embedded = false, hideUnl
   return <PortalPageFrame>
     {!embedded ? <><PortalPageHeader icon={<Building2 size={22} />} title={vendor?.name || 'Vendor profile'} description="Bills, payment history, and documents linked to this company." />
     <Link href="/portal/finances?view=bill-providers" className="w-fit text-sm font-semibold text-[#9a712e] dark:text-[#e6c77f]">Back to providers</Link></> : null}
-    {error ? <p role="alert" className="text-sm text-[color:var(--portal-text)]">{error} <button onClick={() => void refresh()} className="font-semibold text-[#9a712e]">Try again</button></p> : !data ? <p role="status" className="text-sm text-[color:var(--portal-muted)]">Loading vendor records…</p> : !vendor ? <p role="alert" className="text-sm text-[color:var(--portal-text)]">Vendor not found or no longer available.</p> : <>
-      <section className="relative border-b border-[color:var(--portal-border)] pb-6">
+    {error ? (
+      <p role="alert" className="text-sm text-[color:var(--portal-text)]">{error} <button onClick={() => void refresh()} className="font-semibold text-[#9a712e]">Try again</button></p>
+    ) : (
+      <PortalSkeletonTransition
+        loading={!data}
+        overlap
+        skeleton={
+          <div className="space-y-6" aria-hidden="true">
+            <div className="border-b border-[color:var(--portal-border)] pb-6 space-y-3">
+              <PortalSkeleton className="h-5 w-36 rounded" />
+              <div className="grid gap-4 sm:grid-cols-2 pt-2">
+                <PortalSkeleton className="h-4 w-32 rounded" />
+                <PortalSkeleton className="h-4 w-40 rounded" />
+                <PortalSkeleton className="h-4 w-28 rounded" />
+                <PortalSkeleton className="h-4 w-36 rounded" />
+              </div>
+            </div>
+            <div className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 space-y-3">
+              <PortalSkeleton className="h-5 w-48 rounded" />
+              <div className="space-y-2">
+                <PortalSkeleton className="h-10 w-full rounded-lg" />
+                <PortalSkeleton className="h-10 w-full rounded-lg" />
+              </div>
+            </div>
+          </div>
+        }
+      >
+        {!vendor && data ? (
+          <p role="alert" className="text-sm text-[color:var(--portal-text)]">Vendor not found or no longer available.</p>
+        ) : vendor ? (
+          <>
+            <section className="relative border-b border-[color:var(--portal-border)] pb-6">
         <div className="pr-12"><h2 className="text-base font-bold text-[color:var(--portal-text)]">Company details</h2><p className="mt-1 text-xs text-[color:var(--portal-muted)]">{vendor.vendor_type || 'Provider'}</p></div><VendorBusinessDetails vendor={vendor} onWebsiteSuggested={onWebsiteSuggested} onSaved={(updated) => { if (updated.business_website || updated.name !== vendor.name || updated.vendor_type !== vendor.vendor_type) onWebsiteSuggested?.(vendor.id, null); fence.current.invalidate(); setData((current) => current ? { ...current, vendors: current.vendors.map((item) => item.id === updated.id ? updated : item) } : current); void refresh() }} >
         <dl className="mt-5 grid gap-x-6 gap-y-4 text-sm sm:grid-cols-2">{([['Contact', vendor.contact_person], ['Email', vendor.email], ['Phone', vendor.phone], ['Website', vendor.business_website], ['Mailing address', vendor.mailing_address], ['Category', vendor.vendor_category], ['Notes', vendor.internal_notes]] as Array<[string, string | null | undefined]>).filter(([, value]) => Boolean(value)).map(([label, value]) => <div key={label} className="min-w-0"><dt className="text-xs text-[color:var(--portal-muted)]">{label}</dt><dd className="mt-1 whitespace-pre-wrap break-words font-medium text-[color:var(--portal-text)]">{value}</dd></div>)}</dl>
         <div className="mt-5 border-t border-[color:var(--portal-border)] pt-4"><p className="text-xs font-medium tabular-nums text-[color:var(--portal-text)]">{bills.length} linked {bills.length === 1 ? 'bill' : 'bills'}</p><p className="mt-1 text-xs leading-5 text-[color:var(--portal-muted)]">Provider totals are unavailable. Open an expense to review its payment history.</p></div>
@@ -96,6 +126,9 @@ export default function VendorBillsProfile({ vendorId, embedded = false, hideUnl
       {!hideUnlinkedBills && possibleBills.length ? <section className="space-y-2"><h2 className="text-base font-bold text-[color:var(--portal-text)]">Possible unlinked bills</h2><p className="text-sm text-[color:var(--portal-muted)]">These bills have the same recorded name, but aren’t linked to this provider. Check each one before linking it.</p><ul className="divide-y divide-[color:var(--portal-border)]">{possibleBills.map((bill) => <li key={bill.id} className="space-y-2 py-3"><div className="flex flex-wrap items-start justify-between gap-3"><span className="text-sm font-semibold text-[color:var(--portal-text)]">{bill.service}</span><span className="text-sm tabular-nums text-[color:var(--portal-text)]">{bill.amount_state === 'known' && bill.amount != null && String(bill.amount).trim() !== '' && Number.isFinite(Number(bill.amount)) && Number(bill.amount) >= 0 ? money(Number(bill.amount), bill.currency) : 'Amount unknown'}</span></div><p className="text-xs text-[color:var(--portal-muted)]">Due {date(bill.due_date)}</p><BillDocumentPreview bill={bill} /><button type="button" onClick={() => setSelectedBillId(bill.id)} className="inline-flex min-h-11 items-center gap-1 text-xs font-semibold text-[#9a712e] dark:text-[#e6c77f]">Review bill <ChevronRight size={14} /></button></li>)}</ul></section> : null}
       <VendorDocuments key={vendor.id} vendorId={vendor.id} archived={Boolean(vendor.archived_at)} onOpenBill={setSelectedBillId} />
       <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5"><h2 className="text-base font-bold text-[color:var(--portal-text)]">Linked intake history</h2><p className="mt-1 text-xs text-[color:var(--portal-muted)]">Includes intake records linked to these bills or flagged as possible duplicates.</p>{intakes.length ? <ul className="mt-3 divide-y divide-[color:var(--portal-border)]">{intakes.map((intake) => <li key={intake.id} className="flex flex-wrap justify-between gap-2 py-3 text-sm"><span className="text-[color:var(--portal-text)]">{intake.filename}</span><span className="text-xs text-[color:var(--portal-muted)]">{date(intake.received_at)} · {intake.status.replaceAll('_', ' ')}</span></li>)}</ul> : <p className="mt-3 text-sm text-[color:var(--portal-muted)]">No linked intake records.</p>}</section>
-    </>}
+          </>
+        ) : null}
+      </PortalSkeletonTransition>
+    )}
   </PortalPageFrame>
 }

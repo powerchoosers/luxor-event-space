@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { ArrowUpRight, ReceiptText } from '@/lib/icons/phosphor-compat'
+import { PortalSkeleton, PortalSkeletonTransition } from '@/components/portal/PortalUI'
 
 type EventExpense = {
   id: string
@@ -107,41 +108,57 @@ export function BookingExpenseSummary({ bookingId, contractTotal }: { bookingId:
         ) : null}
       </div>
 
-      {state === 'loading' ? <p className="mt-3 text-xs text-[color:var(--portal-muted)]" role="status">Loading event expenses…</p> : null}
       {state === 'forbidden' ? <p className="mt-3 text-xs leading-5 text-[color:var(--portal-muted)]">Expense totals are available to team members with Financial Center access.</p> : null}
       {state === 'error' ? <p className="mt-3 text-xs leading-5 text-[color:var(--portal-muted)]" role="status">Event expenses could not be verified. Refresh this page to retry.</p> : null}
 
-      {state === 'ready' ? (
-        <>
-          <div className="mt-3 grid grid-cols-2 gap-2 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-3 sm:grid-cols-3">
-            <SummaryValue label="Contract total (expected)" value={contractTotal} />
-            <SummaryValue label="Payments received" value={result.paymentsReceived} />
-            <SummaryValue label="Total expenses" value={totals.total} />
-            <SummaryValue label="Expenses paid" value={totals.paid} />
-            <SummaryValue label="Outstanding expenses" value={totals.outstanding} />
-            <SummaryValue label="Income after paid expenses" value={incomeAfterPaidExpenses} />
+      <PortalSkeletonTransition
+        loading={state === 'loading'}
+        overlap
+        skeleton={
+          <div className="mt-3 space-y-3" aria-hidden="true">
+            <div className="grid grid-cols-2 gap-2 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-3 sm:grid-cols-3">
+              {Array.from({ length: 6 }).map((_, i) => (
+                <div key={i} className="space-y-1.5 p-1">
+                  <PortalSkeleton className="h-3 w-20 rounded" />
+                  <PortalSkeleton className="h-4 w-16 rounded" />
+                </div>
+              ))}
+            </div>
           </div>
-          {unknownAmountCount > 0 ? <p className="mt-2 text-xs leading-5 text-[color:var(--portal-muted)]" role="status">Totals exclude {unknownAmountCount} expense{unknownAmountCount === 1 ? '' : 's'} awaiting {unknownAmountCount === 1 ? 'its bill' : 'their bills'}.</p> : null}
-          {activeExpenses.length ? <ul className="mt-2 divide-y divide-[color:var(--portal-border)]">
-            {activeExpenses.map((expense) => {
-              const unknownVariableAmount = amountIsUnknown(expense)
-              return (
-                <li key={expense.id} className="flex flex-col gap-2 py-3 sm:flex-row sm:items-start sm:justify-between">
-                  <div className="min-w-0">
-                    <p className="break-words text-sm font-semibold text-[color:var(--portal-text)]">{expense.description?.trim() || 'Event expense'}</p>
-                    <p className="mt-1 text-xs text-[color:var(--portal-muted)]">{expense.category.replaceAll('_', ' ')} / {expenseDate(expense.incurred_on || expense.due_date)}{expense.vendor_name ? ` / ${expense.vendor_name}` : ''}</p>
-                    <p className="mt-1 text-xs text-[color:var(--portal-muted)]">{statusLabel(expense)}</p>
-                  </div>
-                  <div className="shrink-0 text-left sm:text-right">
-                    <p className="text-sm font-semibold tabular-nums text-[color:var(--portal-text)]">{unknownVariableAmount ? 'Awaiting bill' : money(Number(expense.amount) || 0)}</p>
-                    <p className="mt-1 text-xs tabular-nums text-[color:var(--portal-muted)]">{unknownVariableAmount ? 'Paid / remaining pending' : `Paid ${money(Number(expense.paid_amount) || 0)} / Remaining ${money(Number(expense.remaining_balance) || 0)}`}</p>
-                  </div>
-                </li>
-              )
-            })}
-          </ul> : <p className="mt-3 text-xs text-[color:var(--portal-muted)]">No expenses are linked to this event yet.</p>}
-        </>
-      ) : null}
+        }
+      >
+        {state === 'ready' ? (
+          <>
+            <div className="mt-3 grid grid-cols-2 gap-2 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-3 sm:grid-cols-3">
+              <SummaryValue label="Contract total (expected)" value={contractTotal} />
+              <SummaryValue label="Payments received" value={result.paymentsReceived} />
+              <SummaryValue label="Total expenses" value={totals.total} />
+              <SummaryValue label="Expenses paid" value={totals.paid} />
+              <SummaryValue label="Outstanding expenses" value={totals.outstanding} />
+              <SummaryValue label="Income after paid expenses" value={incomeAfterPaidExpenses} />
+            </div>
+            {unknownAmountCount > 0 ? <p className="mt-2 text-xs leading-5 text-[color:var(--portal-muted)]" role="status">Totals exclude {unknownAmountCount} expense{unknownAmountCount === 1 ? '' : 's'} awaiting {unknownAmountCount === 1 ? 'its bill' : 'their bills'}.</p> : null}
+            {activeExpenses.length ? <ul className="mt-2 divide-y divide-[color:var(--portal-border)]">
+              {activeExpenses.map((expense) => {
+                const unknownVariableAmount = amountIsUnknown(expense)
+                return (
+                  <li key={expense.id} className="flex flex-col gap-2 py-3 sm:flex-row sm:items-start sm:justify-between">
+                    <div className="min-w-0">
+                      <p className="break-words text-sm font-semibold text-[color:var(--portal-text)]">{expense.description?.trim() || 'Event expense'}</p>
+                      <p className="mt-1 text-xs text-[color:var(--portal-muted)]">{expense.category.replaceAll('_', ' ')} / {expenseDate(expense.incurred_on || expense.due_date)}{expense.vendor_name ? ` / ${expense.vendor_name}` : ''}</p>
+                      <p className="mt-1 text-xs text-[color:var(--portal-muted)]">{statusLabel(expense)}</p>
+                    </div>
+                    <div className="shrink-0 text-left sm:text-right">
+                      <p className="text-sm font-semibold tabular-nums text-[color:var(--portal-text)]">{unknownVariableAmount ? 'Awaiting bill' : money(Number(expense.amount) || 0)}</p>
+                      <p className="mt-1 text-xs tabular-nums text-[color:var(--portal-muted)]">{unknownVariableAmount ? 'Paid / remaining pending' : `Paid ${money(Number(expense.paid_amount) || 0)} / Remaining ${money(Number(expense.remaining_balance) || 0)}`}</p>
+                    </div>
+                  </li>
+                )
+              })}
+            </ul> : <p className="mt-3 text-xs text-[color:var(--portal-muted)]">No expenses are linked to this event yet.</p>}
+          </>
+        ) : null}
+      </PortalSkeletonTransition>
       <p className="mt-3 text-[11px] leading-5 text-[color:var(--portal-muted)]">Contract totals are expected revenue. Payments received include only verified event cash after allocations and completed refunds; refundable security deposits are excluded.</p>
     </section>
   )

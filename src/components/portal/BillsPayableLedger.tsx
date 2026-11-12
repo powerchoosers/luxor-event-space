@@ -7,7 +7,7 @@ import {
   AlertCircle, ArrowUpRight, Check, CheckCircle2, ChevronDown, ChevronRight,
   Building2, Clock3, CreditCard, FileCheck2, FilePenLine, FileText, Inbox, Mail, Plus, ShieldCheck, X,
 } from '@/lib/icons/phosphor-compat'
-import { PortalAnimatedTabs, PortalButton, PortalCloseButton, PortalFilterBar, PortalGhostIconButton, PortalModal, PortalSelect } from '@/components/portal/PortalUI'
+import { PortalAnimatedTabs, PortalButton, PortalCloseButton, PortalFilterBar, PortalGhostIconButton, PortalModal, PortalSelect, PortalTableCard, PortalTableResultFooter, PORTAL_DATA_TABLE_HEAD_CLASS, PORTAL_TABLE_LIST_CARD_CLASS, PORTAL_TABLE_LIST_EDGE_CLASS, PORTAL_TABLE_LIST_SCROLL_PAD_CLASS } from '@/components/portal/PortalUI'
 import { formatLuxorDate } from '@/lib/luxorDateFormatting'
 import ManualBillAnalysis from '@/components/portal/ManualBillAnalysis'
 import BillPlanning from '@/components/portal/BillPlanning'
@@ -107,10 +107,11 @@ function vendorDomain(bill: LuxorBill) {
 
 export function BillsPayableLedger({
   bills, intakes, vendors, invoiceAnalysisConfigured, resendReceivingConfigured, onAddBill, onBillChanged, onEditBill,
-  onIntakeChanged, onVendorChanged, onOpenExpense, onCreateExpense, refreshKey = 0,
+  onIntakeChanged, onVendorChanged, onOpenExpense, onCreateExpense, refreshKey = 0, embedded = false,
 }: {
   bills: LuxorBill[]
   refreshKey?: number
+  embedded?: boolean
   intakes: LuxorBillIntake[]
   invoiceAnalysisConfigured: boolean | null
   resendReceivingConfigured: boolean | null
@@ -287,56 +288,53 @@ export function BillsPayableLedger({
   const activeReminders = reminders ? billReminders(bills.filter((bill) => !bill.archived_at), expenses, reminders, chicagoToday()) : []
   const dueOptions = [{ value: 'all', label: 'All due dates' }, { value: 'overdue', label: 'Overdue' }, { value: '7', label: 'Next 7 days' }, { value: '30', label: 'Next 30 days' }, { value: 'missing', label: 'Missing due date' }]
   const sourceOptions = [{ value: 'all', label: 'All sources' }, { value: 'email', label: 'Invoice inbox' }, { value: 'portal_upload', label: 'Uploaded' }, { value: 'manual', label: 'Entered manually' }]
-  return <>
-    <section className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)]">
-      <div className="border-b border-[color:var(--portal-border)] px-4 py-5 sm:px-6">
-        <div className="flex items-start justify-between gap-4">
-          <div><h2 className="text-lg font-bold text-[color:var(--portal-text)]">Bills</h2><p className="mt-1 text-sm text-[color:var(--portal-muted)]">Review incoming bills, track due dates, and see what’s paid.</p></div>
-          <PortalButton type="button" size="sm" variant="primary" onClick={onAddBill} className="shrink-0"><Plus size={15} /> Add bill</PortalButton>
-        </div>
-        <details className="mt-3 text-xs text-[color:var(--portal-muted)]">
-          <summary className="w-fit cursor-pointer py-2 font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/40">Inbox & balance summary{processingIntakes.length ? ` · ${processingIntakes.length} analyzing` : ''}{failedIntakes.length ? ` · ${failedIntakes.length} needs attention` : ''}</summary>
-          <div className="space-y-3 pb-2 pt-2">
-            <p className="tabular-nums">{expenses ? `${money(knownDue)} confirmed outstanding` : 'Payment balances unavailable'}{unresolvedCount ? ` · ${unresolvedCount} ${unresolvedCount === 1 ? 'bill has' : 'bills have'} an unverified balance` : ''}</p>
-            {nextDue ? <p>Earliest open due date: {dateLabel(nextDue.due_date)} · {nextDue.provider}</p> : null}
-            <div className="flex flex-wrap items-center justify-between gap-2"><p className="flex items-center gap-2 break-all"><Inbox size={16} className="shrink-0" /> invoices@luxoratlaspalmas.com</p><Link href="/portal/emails?mailbox=invoices" className="inline-flex min-h-10 items-center gap-1 font-semibold text-[#9a712e] dark:text-[#e6c77f]">Open inbox <ArrowUpRight size={13} /></Link></div>
-            {activeReminders.length ? <ul className="space-y-2">{activeReminders.map(({ bill, remaining, days }) => <li key={bill.id}><button type="button" onClick={() => selectBill(bill.id)} className="min-h-10 text-left font-semibold text-[#9a712e] dark:text-[#e6c77f]">{bill.provider} · {days < 0 ? `${Math.abs(days)} days overdue` : days === 0 ? 'Due today' : `Due in ${days} days`} · <span className="tabular-nums">{money(remaining)} remaining</span></button></li>)}</ul> : null}
-          </div>
-        </details>
-        {resendReceivingConfigured === false ? <p role="status" className="mt-2 text-xs text-amber-700 dark:text-amber-300">Email intake needs setup. Add bills here until receiving is connected.</p> : null}
-        {invoiceAnalysisConfigured === false ? <p role="status" className="mt-2 text-xs text-amber-700 dark:text-amber-300">Automatic analysis is unavailable. Enter bill details manually.</p> : null}
-        {attentionIntakes.length ? <details className="mt-3 text-xs text-[color:var(--portal-text)]"><summary className="min-h-10 cursor-pointer py-2 font-semibold">{attentionIntakes.length} uploaded {attentionIntakes.length === 1 ? 'document needs' : 'documents need'} attention</summary><div className="divide-y divide-[color:var(--portal-border)]">{(showAllIntakeIssues ? attentionIntakes : attentionIntakes.slice(0, 4)).map((intake) => <div key={intake.id} className="flex flex-wrap items-center justify-between gap-2 py-3"><div className="min-w-0"><p className="break-words font-semibold">{intake.filename}</p><p className="mt-1 text-[color:var(--portal-muted)]">{intake.status === 'ignored' ? (intake.last_error_message ? 'Analysis stopped after repeated failures' : 'Ignored') : intake.last_error_message || 'Analysis failed'}</p></div><div className="flex gap-2"><PortalButton size="sm" disabled={Boolean(busy)} onClick={() => void intakeAction(intake, 'retry')}>Retry</PortalButton>{intake.status !== 'ignored' ? <PortalButton size="sm" disabled={Boolean(busy)} onClick={() => void intakeAction(intake, 'ignore')}>Ignore</PortalButton> : null}</div></div>)}</div>{attentionIntakes.length > 4 ? <button type="button" onClick={() => setShowAllIntakeIssues((value) => !value)} aria-expanded={showAllIntakeIssues} className="min-h-11 font-semibold text-[#9a712e] dark:text-[#e6c77f]">{showAllIntakeIssues ? 'Show fewer' : `Show all ${attentionIntakes.length}`}</button> : null}</details> : null}
-        {!selected && message ? <p role="status" className="mt-2 text-xs text-[color:var(--portal-text)]">{message}</p> : null}
-      </div>
-      <div className="border-b border-[color:var(--portal-border)] px-4 py-3 sm:px-6">
-        <PortalAnimatedTabs variant="slider" ariaLabel="Bill status" tabs={[
-          { id: 'all', label: 'All bills' }, { id: 'review', label: `Needs review${counts.review ? ` (${counts.review})` : ''}` }, { id: 'due', label: 'Due soon' }, { id: 'ready', label: 'Ready to pay' }, { id: 'paid', label: 'Paid' }, { id: 'hold', label: 'On hold' },
-        ]} activeTab={tab} onTabChange={(value) => setTab(value as LedgerTab)} />
-      </div>
-      <div className="border-b border-[color:var(--portal-border)] px-4 py-3 sm:px-6">
-        <PortalFilterBar searchValue={query} onSearchChange={setQuery} searchPlaceholder="Search company, bill or invoice" resultLabel={`${visible.length} ${visible.length === 1 ? 'bill' : 'bills'}`} activeFilters={[
-          ...(dueWindow !== 'all' ? [{ id: 'due', label: dueOptions.find((item) => item.value === dueWindow)?.label || dueWindow, onRemove: () => setDueWindow('all') }] : []),
-          ...(vendor !== 'all' ? [{ id: 'company', label: vendorOptions.find((item) => item.value === vendor)?.label || 'Company', onRemove: () => setVendor('all') }] : []),
-          ...(source !== 'all' ? [{ id: 'source', label: sourceOptions.find((item) => item.value === source)?.label || source, onRemove: () => setSource('all') }] : []),
-        ]} onClearFilters={() => { setSource('all'); setVendor('all'); setDueWindow('all') }}>
-          <div className="grid gap-3 sm:grid-cols-3"><PortalSelect aria-label="Due date filter" value={dueWindow} onChange={setDueWindow} options={dueOptions} /><PortalSelect aria-label="Company filter" value={vendor} onChange={setVendor} options={vendorOptions} /><PortalSelect aria-label="Source filter" value={source} onChange={setSource} options={sourceOptions} /></div>
-        </PortalFilterBar>
-      </div>
-      <div className="min-h-0 flex-1 overflow-y-auto portal-scrollbar">
-        {!visible.length ? <div className="flex min-h-48 flex-col items-center justify-center px-4 text-center"><FileCheck2 size={24} className="text-[color:var(--portal-faint)]" /><p className="mt-3 text-sm font-semibold text-[color:var(--portal-text)]">No bills in this view</p><p className="mt-1 text-xs text-[color:var(--portal-muted)]">Change the filters or add a bill.</p></div> : groups.map((group) => <div key={group.key}>
-          <div className="border-b border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-4 py-2 sm:px-6"><p className="text-xs font-semibold text-[color:var(--portal-muted)]">{group.key === 'review' ? 'Needs review' : group.key === 'due' ? 'Due soon' : group.key === 'ready' ? 'Ready to pay' : group.key === 'paid' ? 'Paid' : group.key === 'hold' ? 'On hold' : 'Open bills'} <span className="ml-1 tabular-nums font-normal">{group.rows.length}</span></p></div>
-          {group.rows.map((bill) => {
-            const badge = statusLabel(bill)
-            return <button key={bill.id} type="button" onClick={() => selectBill(bill.id)} className={`grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-2 border-b border-[color:var(--portal-border)] px-4 py-4 text-left transition-colors hover:bg-[color:var(--portal-soft)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#caa24c]/40 sm:grid-cols-[minmax(0,1fr)_8rem_9rem_7rem_1rem] sm:px-6 ${selectedId === bill.id ? 'bg-[#caa24c]/[0.07]' : ''}`}>
-              <div className="min-w-0"><p className="flex items-center gap-2 text-sm font-semibold text-[color:var(--portal-text)]"><span className="truncate">{bill.provider}</span>{bill.source_type === 'email' ? <Mail size={13} className="shrink-0 text-[color:var(--portal-muted)]" /> : null}</p><p className="mt-1 truncate text-xs text-[color:var(--portal-muted)]">{bill.service}{bill.invoice_number ? ` · #${bill.invoice_number}` : ''}</p></div>
-              <span className="hidden text-xs tabular-nums text-[color:var(--portal-muted)] sm:block">{shortDate(bill.due_date)}</span>
-              <p className="text-right text-sm font-semibold tabular-nums text-[color:var(--portal-text)]">{billAmount(bill)}</p>
-              <span className={`w-fit rounded-md px-2 py-1 text-[11px] font-semibold ${badge.color}`}>{badge.label}</span><span className="text-right text-xs tabular-nums text-[color:var(--portal-muted)] sm:hidden">{shortDate(bill.due_date)}</span><ChevronRight size={15} className="hidden text-[color:var(--portal-faint)] sm:block" />
-            </button>
-          })}
-        </div>)}
-      </div>
-    </section>
+
+  const statusTabs = (
+    <PortalAnimatedTabs variant="slider" ariaLabel="Bill status" tabs={[
+      { id: 'all', label: 'All bills' }, { id: 'review', label: `Needs review${counts.review ? ` (${counts.review})` : ''}` }, { id: 'due', label: 'Due soon' }, { id: 'ready', label: 'Ready to pay' }, { id: 'paid', label: 'Paid' }, { id: 'hold', label: 'On hold' },
+    ]} activeTab={tab} onTabChange={(value) => setTab(value as LedgerTab)} />
+  )
+
+  const billFilterBar = (
+    <PortalFilterBar searchValue={query} onSearchChange={setQuery} searchPlaceholder="Search company, bill or invoice" resultLabel={`${visible.length} ${visible.length === 1 ? 'bill' : 'bills'}`} activeFilters={[
+      ...(dueWindow !== 'all' ? [{ id: 'due', label: dueOptions.find((item) => item.value === dueWindow)?.label || dueWindow, onRemove: () => setDueWindow('all') }] : []),
+      ...(vendor !== 'all' ? [{ id: 'company', label: vendorOptions.find((item) => item.value === vendor)?.label || 'Company', onRemove: () => setVendor('all') }] : []),
+      ...(source !== 'all' ? [{ id: 'source', label: sourceOptions.find((item) => item.value === source)?.label || source, onRemove: () => setSource('all') }] : []),
+    ]} onClearFilters={() => { setSource('all'); setVendor('all'); setDueWindow('all') }} actions={embedded ? (
+      <PortalButton type="button" size="sm" variant="primary" onClick={onAddBill} className="shrink-0"><Plus size={15} /> Add bill</PortalButton>
+    ) : undefined}>
+      <div className="grid gap-3 sm:grid-cols-3"><PortalSelect aria-label="Due date filter" value={dueWindow} onChange={setDueWindow} options={dueOptions} /><PortalSelect aria-label="Company filter" value={vendor} onChange={setVendor} options={vendorOptions} /><PortalSelect aria-label="Source filter" value={source} onChange={setSource} options={sourceOptions} /></div>
+    </PortalFilterBar>
+  )
+
+  const billColumnHeader = (
+    <div className={`${PORTAL_DATA_TABLE_HEAD_CLASS} hidden sm:grid sm:grid-cols-[minmax(0,1fr)_8rem_9rem_7rem_1rem] sm:gap-3`}>
+      <span>Company / bill</span>
+      <span>Due</span>
+      <span className="text-right">Amount</span>
+      <span>Status</span>
+      <span />
+    </div>
+  )
+
+  const billRows = !visible.length ? (
+    <div className="flex min-h-48 flex-col items-center justify-center px-4 text-center"><FileCheck2 size={24} className="text-[color:var(--portal-faint)]" /><p className="mt-3 text-sm font-semibold text-[color:var(--portal-text)]">No bills in this view</p><p className="mt-1 text-xs text-[color:var(--portal-muted)]">Change the filters or add a bill.</p></div>
+  ) : groups.map((group) => (
+    <div key={group.key}>
+      <div className={`${PORTAL_DATA_TABLE_HEAD_CLASS} py-1.5`}><p className="font-semibold">{group.key === 'review' ? 'Needs review' : group.key === 'due' ? 'Due soon' : group.key === 'ready' ? 'Ready to pay' : group.key === 'paid' ? 'Paid' : group.key === 'hold' ? 'On hold' : 'Open bills'} <span className="ml-1 tabular-nums font-normal">{group.rows.length}</span></p></div>
+      {group.rows.map((bill) => {
+        const badge = statusLabel(bill)
+        return <button key={bill.id} type="button" onClick={() => selectBill(bill.id)} className={`grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-2 border-b border-[color:var(--portal-border)] px-4 py-3 text-left transition-colors hover:bg-[color:var(--portal-soft)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#caa24c]/40 sm:grid-cols-[minmax(0,1fr)_8rem_9rem_7rem_1rem] sm:px-6 ${selectedId === bill.id ? 'bg-[#caa24c]/[0.07]' : ''}`}>
+          <div className="min-w-0"><p className="flex items-center gap-2 text-sm font-semibold text-[color:var(--portal-text)]"><span className="truncate">{bill.provider}</span>{bill.source_type === 'email' ? <Mail size={13} className="shrink-0 text-[color:var(--portal-muted)]" /> : null}</p><p className="mt-1 truncate text-xs text-[color:var(--portal-muted)]">{bill.service}{bill.invoice_number ? ` · #${bill.invoice_number}` : ''}</p></div>
+          <span className="hidden text-xs tabular-nums text-[color:var(--portal-muted)] sm:block">{shortDate(bill.due_date)}</span>
+          <p className="text-right text-sm font-semibold tabular-nums text-[color:var(--portal-text)]">{billAmount(bill)}</p>
+          <span className={`w-fit rounded-md px-2 py-1 text-[11px] font-semibold ${badge.color}`}>{badge.label}</span><span className="text-right text-xs tabular-nums text-[color:var(--portal-muted)] sm:hidden">{shortDate(bill.due_date)}</span><ChevronRight size={15} className="hidden text-[color:var(--portal-faint)] sm:block" />
+        </button>
+      })}
+    </div>
+  ))
+
+  const billModal = (
     <PortalModal
       isOpen={Boolean(selected)}
       onClose={() => { if (!busy) selectBill(null) }}
@@ -376,6 +374,56 @@ export function BillsPayableLedger({
     >
       {displayedBill ? <BillReview key={displayedBill.id} bill={displayedBill} balance={getBillBalance(displayedBill, expenses)} busy={busy} message={message} onClose={() => selectBill(null)} onReview={review} onBillChanged={onBillChanged} onEdit={() => { if (selected) onEditBill(selected) }} vendors={vendors} companyChoice={companyChoice} setCompanyChoice={setCompanyChoice} companyName={companyName} setCompanyName={setCompanyName} onLinkCompany={linkCompany} onOpenBill={(id) => void openRelatedBill(id)} onOpenExpense={onOpenExpense} onCreateExpense={onCreateExpense} onVendorChanged={onVendorChanged} onFilterCompany={(id) => { setVendor(id); setSelectedId(null); const params = new URLSearchParams(searchParams.toString()); params.set('company', id); params.delete('bill'); router.replace(`${pathname}?${params.toString()}`, { scroll: false }) }} /> : null}
     </PortalModal>
+  )
+
+  if (embedded) {
+    return <>
+      <PortalTableCard
+        mobilePageScroll
+        mobilePageScrollUntil="lg"
+        footerClassName="max-lg:hidden"
+        className={`${PORTAL_TABLE_LIST_CARD_CLASS} ${PORTAL_TABLE_LIST_EDGE_CLASS}`}
+        controls={<div className="space-y-3">{statusTabs}{billFilterBar}{resendReceivingConfigured === false ? <p role="status" className="text-xs text-amber-700 dark:text-amber-300">Email intake needs setup. Add bills here until receiving is connected.</p> : null}{invoiceAnalysisConfigured === false ? <p role="status" className="text-xs text-amber-700 dark:text-amber-300">Automatic analysis is unavailable. Enter bill details manually.</p> : null}{!selected && message ? <p role="status" className="text-xs text-[color:var(--portal-text)]">{message}</p> : null}</div>}
+        footer={<PortalTableResultFooter label={<span><span className="tabular-nums text-[color:var(--portal-text)]">{visible.length}</span> {visible.length === 1 ? 'bill' : 'bills'}</span>} />}
+      >
+        <div className={PORTAL_TABLE_LIST_SCROLL_PAD_CLASS}>
+          {billColumnHeader}
+          {billRows}
+        </div>
+      </PortalTableCard>
+      {billModal}
+    </>
+  }
+
+  return <>
+    <section className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)]">
+      <div className="border-b border-[color:var(--portal-border)] px-4 py-5 sm:px-6">
+        <div className="flex items-start justify-between gap-4">
+          <div><h2 className="text-lg font-bold text-[color:var(--portal-text)]">Bills</h2><p className="mt-1 text-sm text-[color:var(--portal-muted)]">Review incoming bills, track due dates, and see what’s paid.</p></div>
+          <PortalButton type="button" size="sm" variant="primary" onClick={onAddBill} className="shrink-0"><Plus size={15} /> Add bill</PortalButton>
+        </div>
+        <details className="mt-3 text-xs text-[color:var(--portal-muted)]">
+          <summary className="w-fit cursor-pointer py-2 font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/40">Inbox & balance summary{processingIntakes.length ? ` · ${processingIntakes.length} analyzing` : ''}{failedIntakes.length ? ` · ${failedIntakes.length} needs attention` : ''}</summary>
+          <div className="space-y-3 pb-2 pt-2">
+            <p className="tabular-nums">{expenses ? `${money(knownDue)} confirmed outstanding` : 'Payment balances unavailable'}{unresolvedCount ? ` · ${unresolvedCount} ${unresolvedCount === 1 ? 'bill has' : 'bills have'} an unverified balance` : ''}</p>
+            {nextDue ? <p>Earliest open due date: {dateLabel(nextDue.due_date)} · {nextDue.provider}</p> : null}
+            <div className="flex flex-wrap items-center justify-between gap-2"><p className="flex items-center gap-2 break-all"><Inbox size={16} className="shrink-0" /> invoices@luxoratlaspalmas.com</p><Link href="/portal/emails?mailbox=invoices" className="inline-flex min-h-10 items-center gap-1 font-semibold text-[#9a712e] dark:text-[#e6c77f]">Open inbox <ArrowUpRight size={13} /></Link></div>
+            {activeReminders.length ? <ul className="space-y-2">{activeReminders.map(({ bill, remaining, days }) => <li key={bill.id}><button type="button" onClick={() => selectBill(bill.id)} className="min-h-10 text-left font-semibold text-[#9a712e] dark:text-[#e6c77f]">{bill.provider} · {days < 0 ? `${Math.abs(days)} days overdue` : days === 0 ? 'Due today' : `Due in ${days} days`} · <span className="tabular-nums">{money(remaining)} remaining</span></button></li>)}</ul> : null}
+          </div>
+        </details>
+        {resendReceivingConfigured === false ? <p role="status" className="mt-2 text-xs text-amber-700 dark:text-amber-300">Email intake needs setup. Add bills here until receiving is connected.</p> : null}
+        {invoiceAnalysisConfigured === false ? <p role="status" className="mt-2 text-xs text-amber-700 dark:text-amber-300">Automatic analysis is unavailable. Enter bill details manually.</p> : null}
+        {attentionIntakes.length ? <details className="mt-3 text-xs text-[color:var(--portal-text)]"><summary className="min-h-10 cursor-pointer py-2 font-semibold">{attentionIntakes.length} uploaded {attentionIntakes.length === 1 ? 'document needs' : 'documents need'} attention</summary><div className="divide-y divide-[color:var(--portal-border)]">{(showAllIntakeIssues ? attentionIntakes : attentionIntakes.slice(0, 4)).map((intake) => <div key={intake.id} className="flex flex-wrap items-center justify-between gap-2 py-3"><div className="min-w-0"><p className="break-words font-semibold">{intake.filename}</p><p className="mt-1 text-[color:var(--portal-muted)]">{intake.status === 'ignored' ? (intake.last_error_message ? 'Analysis stopped after repeated failures' : 'Ignored') : intake.last_error_message || 'Analysis failed'}</p></div><div className="flex gap-2"><PortalButton size="sm" disabled={Boolean(busy)} onClick={() => void intakeAction(intake, 'retry')}>Retry</PortalButton>{intake.status !== 'ignored' ? <PortalButton size="sm" disabled={Boolean(busy)} onClick={() => void intakeAction(intake, 'ignore')}>Ignore</PortalButton> : null}</div></div>)}</div>{attentionIntakes.length > 4 ? <button type="button" onClick={() => setShowAllIntakeIssues((value) => !value)} aria-expanded={showAllIntakeIssues} className="min-h-11 font-semibold text-[#9a712e] dark:text-[#e6c77f]">{showAllIntakeIssues ? 'Show fewer' : `Show all ${attentionIntakes.length}`}</button> : null}</details> : null}
+        {!selected && message ? <p role="status" className="mt-2 text-xs text-[color:var(--portal-text)]">{message}</p> : null}
+      </div>
+      <div className="border-b border-[color:var(--portal-border)] px-4 py-3 sm:px-6">{statusTabs}</div>
+      <div className="border-b border-[color:var(--portal-border)] px-4 py-3 sm:px-6">{billFilterBar}</div>
+      <div className="min-h-0 flex-1 overflow-y-auto portal-scrollbar">
+        {billColumnHeader}
+        {billRows}
+      </div>
+    </section>
+    {billModal}
   </>
 }
 

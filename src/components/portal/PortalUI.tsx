@@ -3,7 +3,7 @@
 import React, { useState, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { AnimatePresence, motion, useAnimate, useReducedMotion } from 'framer-motion'
-import { AlertTriangle, Calendar, ChevronDown, ChevronLeft, ChevronRight, X, Pencil, Loader2, ArrowLeft, Check, Search, SlidersHorizontal, Menu } from '@/lib/icons/phosphor-compat'
+import { AlertTriangle, Calendar, ChevronDown, ChevronLeft, ChevronRight, X, Pencil, Loader2, ArrowLeft, Check, Search, SlidersHorizontal, Menu, MoreVertical } from '@/lib/icons/phosphor-compat'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { useToast } from '@/components/portal/ToastProvider'
@@ -67,15 +67,21 @@ export function acquirePortalScrollLock() {
 export function PortalPageFrame({
   children,
   className = '',
+  bleed = false,
 }: {
   children: React.ReactNode
   className?: string
+  /** Full-width embed inside a parent that already applies list bleed (Finances payables, etc.). */
+  bleed?: boolean
 }) {
   // Replace 'overflow-hidden' with 'overflow-visible' to prevent clipping of the page header icon's glow
   // and table card shadows. Since the content containers (like PortalTableCard) handle their own internal scroll,
   // the page frame can safely allow shadows/glows to overflow into the surrounding page padding.
   const processedClassName = className.replace(/\boverflow-hidden\b/g, 'overflow-visible')
-  return <div className={`mx-auto flex min-h-full min-w-0 w-full max-w-[1500px] flex-col gap-4 sm:gap-6 ${processedClassName}`}>{children}</div>
+  const shell = bleed
+    ? 'flex min-h-0 min-w-0 w-full max-w-none flex-col'
+    : 'mx-auto flex min-h-full min-w-0 w-full max-w-[1500px] flex-col gap-4 sm:gap-6'
+  return <div className={`${shell} ${processedClassName}`}>{children}</div>
 }
 
 export function PortalPageHeader({
@@ -822,13 +828,30 @@ export function PortalTableCard({
           {controls}
         </div>
       ) : null}
-      <div className={`portal-scrollbar flex-1 overflow-auto ${mobilePageScrollContentClass}`} data-portal-table-scroller>
+      <div className={`portal-scrollbar min-h-0 flex-1 overflow-auto ${mobilePageScrollContentClass}`} data-portal-table-scroller>
         {children}
       </div>
-      {footer ? <div className={`shrink-0 border-t border-[color:var(--portal-border)] bg-[color:var(--portal-card)] py-3.5 px-4 sm:px-6 flex items-center ${footerClassName}`}>{footer}</div> : null}
+      {footer ? <div className={`mt-auto shrink-0 border-t border-[color:var(--portal-border)] bg-[color:var(--portal-card)] py-3.5 px-4 sm:px-6 flex w-full items-center ${footerClassName}`}>{footer}</div> : null}
     </section>
   )
 }
+
+/** Desktop column header row for portal data tables (matches Leads list density). */
+export const PORTAL_DATA_TABLE_HEAD_CLASS =
+  'border-b border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/45 px-4 py-2 text-xs font-semibold text-[color:var(--portal-muted)] sm:px-6'
+
+/** Cancel portal shell padding so list tables run edge-to-edge through tablet (lg = desktop contained). */
+export const PORTAL_TABLE_LIST_BLEED_CLASS = '-mx-4 sm:-mx-6 lg:mx-0'
+
+/** Flat list-table chrome on phone and iPad; rounded contained card from lg up. */
+export const PORTAL_TABLE_LIST_EDGE_CLASS =
+  'max-lg:!rounded-none max-lg:!border-0 max-lg:!shadow-none'
+
+/** List table card height: page-scroll on phone/tablet, contained flex fill on desktop. */
+export const PORTAL_TABLE_LIST_CARD_CLASS = 'min-h-0 flex-1 max-lg:h-auto max-lg:flex-none lg:h-full'
+
+/** Clear fixed pagination bar when list uses page scroll (phone/tablet). */
+export const PORTAL_TABLE_LIST_SCROLL_PAD_CLASS = 'max-lg:pb-[calc(4.3125rem+0.5rem)] lg:pb-0'
 
 export type PortalActiveFilter = {
   id: string
@@ -836,11 +859,82 @@ export type PortalActiveFilter = {
   onRemove: () => void
 }
 
+export type PortalFilterOverflowMenuItem = {
+  id: string
+  label: string
+  onSelect: () => void
+  icon?: React.ReactNode
+}
+
+export function PortalFilterOverflowMenu({
+  ariaLabel = 'More options',
+  items,
+}: {
+  ariaLabel?: string
+  items: PortalFilterOverflowMenuItem[]
+}) {
+  const [open, setOpen] = useState(false)
+  const reduceMotion = useReducedMotion()
+  const menuId = React.useId()
+
+  if (!items.length) return null
+
+  return (
+    <div className="relative shrink-0" onClick={(event) => event.stopPropagation()}>
+      <button
+        type="button"
+        aria-label={ariaLabel}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        aria-controls={open ? menuId : undefined}
+        onClick={() => setOpen((current) => !current)}
+        className="portal-inline-action inline-flex h-8 w-8 items-center justify-center rounded-lg text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/40 cursor-pointer"
+      >
+        <MoreVertical size={16} aria-hidden="true" />
+      </button>
+      <AnimatePresence initial={false}>
+        {open ? (
+          <>
+            <button type="button" className="fixed inset-0 z-[60] cursor-default" aria-label="Close menu" onClick={() => setOpen(false)} />
+            <motion.div
+              id={menuId}
+              role="menu"
+              data-portal-dropdown="true"
+              initial={{ opacity: 0, y: reduceMotion ? 0 : -4, scale: reduceMotion ? 1 : 0.98 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: reduceMotion ? 0 : -4, scale: reduceMotion ? 1 : 0.98 }}
+              transition={{ duration: 0.16, ease: [0.23, 1, 0.32, 1] }}
+              className="portal-dropdown absolute right-0 top-full z-[61] mt-1.5 w-44 min-w-[10rem] rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-1.5 shadow-2xl backdrop-blur-xl [&_[role=menuitem]]:min-h-10 [&_[role=menuitem]]:text-xs [&_[role=menuitem]]:font-semibold"
+            >
+              {items.map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    setOpen(false)
+                    item.onSelect()
+                  }}
+                  className="flex min-h-10 w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-[color:var(--portal-text)] transition-colors hover:bg-[color:var(--portal-soft)]"
+                >
+                  {item.icon ? <span className="shrink-0">{item.icon}</span> : null}
+                  <span>{item.label}</span>
+                </button>
+              ))}
+            </motion.div>
+          </>
+        ) : null}
+      </AnimatePresence>
+    </div>
+  )
+}
+
 export function PortalFilterBar({
   searchValue,
   onSearchChange,
   searchPlaceholder = 'Search…',
   resultLabel,
+  resultTrailing,
   activeFilters = [],
   onClearFilters,
   children,
@@ -853,6 +947,7 @@ export function PortalFilterBar({
   onSearchChange: (value: string) => void
   searchPlaceholder?: string
   resultLabel?: React.ReactNode
+  resultTrailing?: React.ReactNode
   activeFilters?: PortalActiveFilter[]
   onClearFilters?: () => void
   children?: React.ReactNode
@@ -928,9 +1023,14 @@ export function PortalFilterBar({
           {actions}
         </div>
 
-        {resultLabel ? (
-          <div className="shrink-0 px-1 tabular-nums text-xs font-medium text-[color:var(--portal-muted)]">
-            {resultLabel}
+        {resultLabel || resultTrailing ? (
+          <div className="flex shrink-0 items-center gap-0.5">
+            {resultLabel ? (
+              <div className="px-1 tabular-nums text-xs font-medium text-[color:var(--portal-muted)]">
+                {resultLabel}
+              </div>
+            ) : null}
+            {resultTrailing}
           </div>
         ) : null}
       </div>
@@ -1079,6 +1179,71 @@ export function PortalPagination({
         <ChevronRight size={15} strokeWidth={2.25} aria-hidden="true" />
       </button>
     </nav>
+  )
+}
+
+const PORTAL_TABLE_MOBILE_FOOTER_CLASS =
+  'fixed inset-x-0 bottom-[var(--portal-mobile-nav-height)] z-[55] flex h-[69px] items-center justify-between gap-2 border-t border-[color:var(--portal-border)] bg-[#fffdf9]/85 px-4 py-3 text-[10px] font-bold uppercase tracking-wider text-[color:var(--portal-muted)] backdrop-blur-2xl dark:bg-[#080706]/80 lg:hidden'
+
+/** Desktop table footer plus fixed mobile bar — matches Leads & Clients list tables. */
+export function PortalTableListPagination({
+  count,
+  pageSize,
+  currentPage,
+  totalPages,
+  startIndex,
+  noun,
+  onPageChange,
+  scrollToTop = true,
+}: {
+  count: number
+  pageSize: number
+  currentPage: number
+  totalPages: number
+  startIndex: number
+  noun: string
+  onPageChange: (page: number) => void
+  scrollToTop?: boolean
+}) {
+  const rangeEnd = Math.min(startIndex + pageSize, count)
+  const rangeLabel = (
+    <span>
+      <span className="tabular-nums text-[color:var(--portal-text)]">{count ? startIndex + 1 : 0}–{rangeEnd}</span> of{' '}
+      <span className="tabular-nums text-[color:var(--portal-text)]">{count}</span> {noun}
+    </span>
+  )
+
+  return (
+    <>
+      <div className="hidden w-full items-center justify-between gap-4 text-[10px] font-bold uppercase tracking-widest text-[color:var(--portal-muted)] select-none lg:flex">
+        {rangeLabel}
+        <PortalPagination currentPage={currentPage} totalPages={totalPages} onPageChange={onPageChange} scrollToTop={scrollToTop} />
+      </div>
+      {typeof document !== 'undefined' ? createPortal(
+        <div data-portal-fixed-pagination className={PORTAL_TABLE_MOBILE_FOOTER_CLASS} style={{ WebkitBackdropFilter: 'blur(24px)' }}>
+          <span className="min-w-0">{rangeLabel}</span>
+          <PortalPagination currentPage={currentPage} totalPages={totalPages} onPageChange={onPageChange} scrollToTop={scrollToTop} />
+        </div>,
+        document.body,
+      ) : null}
+    </>
+  )
+}
+
+/** Fixed desktop footer and mobile summary bar without pagination (full result sets). */
+export function PortalTableResultFooter({ label }: { label: React.ReactNode }) {
+  return (
+    <>
+      <div className="hidden w-full items-center justify-between gap-4 text-[10px] font-bold uppercase tracking-widest text-[color:var(--portal-muted)] select-none lg:flex">
+        {label}
+      </div>
+      {typeof document !== 'undefined' ? createPortal(
+        <div data-portal-fixed-pagination className={PORTAL_TABLE_MOBILE_FOOTER_CLASS} style={{ WebkitBackdropFilter: 'blur(24px)' }}>
+          <span className="min-w-0">{label}</span>
+        </div>,
+        document.body,
+      ) : null}
+    </>
   )
 }
 

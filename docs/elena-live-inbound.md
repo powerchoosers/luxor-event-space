@@ -67,12 +67,13 @@ terminal callback can recover a missed-call stub after an initial database
 outage. It cannot create a voice authorization ticket.
 
 SIP and human legs use explicit signed callback URLs, so a late SIP completion
-cannot replace the human transfer's call identifier. Recording and transcription
-start only after the caller explicitly agrees and can be stopped on request.
-Audio before consent is not recorded. Approved recordings are copied to private
-storage under the existing retention policy; transcription depends on provider
-availability. Audio quality, playback, transcription and a human answer require
-a real caller acceptance test after deployment.
+cannot replace the human transfer's call identifier. Live Elena calls start
+recording and transcription automatically after the call is answered, and both
+can be stopped on request. The automatic state does not assert that the caller
+gave consent. Startup is subject to provider timing and may miss the opening;
+audio quality, opening coverage, playback and transcription require a real call
+to verify. Recordings are copied to private storage under the existing retention
+policy. Call recording requirements can depend on where participants are located.
 
 ## Server configuration
 

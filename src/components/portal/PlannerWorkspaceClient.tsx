@@ -13,7 +13,7 @@ import {
 } from '@/lib/icons/phosphor-compat'
 import {
   PortalButton, PortalCloseButton, PortalDatePicker, PortalEmptyState, PortalModal, PortalPageFrame, PortalPageHeader,
-  PortalAnimatedTabs, PortalSelect, PortalSkeletonTransition, PortalStatusBadge, PortalTabTransition,
+  PortalAnimatedTabs, PortalSelect, PortalSkeleton, PortalSkeletonTransition, PortalStatusBadge, PortalTabTransition,
 } from '@/components/portal/PortalUI'
 import { EventLayoutDesigner, type EventLayoutDocument } from '@/components/portal/EventLayoutDesigner'
 import { normalizePlannerEventLayout } from '@/lib/luxorPlannerLayout'
@@ -769,7 +769,7 @@ function DesignRevisionHistory({designId}:{designId:string}) {
   }
   return <details className="mt-3 rounded-lg border border-[color:var(--portal-border)] p-3" onToggle={(event)=>{if(event.currentTarget.open&&!loaded&&!busy)void load()}}>
     <summary className="cursor-pointer text-xs font-bold text-[color:var(--portal-text)]">Revision history</summary>
-    {busy&&!loaded?<p className="mt-2 text-xs text-[color:var(--portal-muted)]">Loading revisions…</p>:null}
+    {busy&&!loaded?<div className="mt-2 space-y-2"><PortalSkeleton className="h-4 w-32 rounded" /><PortalSkeleton className="h-3 w-48 rounded" /></div>:null}
     {rows.length?<ol className="mt-2 space-y-2">{rows.map((row)=>{const snapshot=row.snapshot&&typeof row.snapshot==='object'?row.snapshot as Row:{} as Row;const assets=asRows(snapshot.assets);return <li key={row.id} className="border-t border-[color:var(--portal-border)] pt-2 text-xs text-[color:var(--portal-muted)]"><span className="font-semibold text-[color:var(--portal-text)]">Revision {row.revision}</span>{row.saved_at?` · ${displayDate(row.saved_at,{month:'short',day:'numeric',year:'numeric'})}`:''}<p className="mt-1">{snapshot.name||'Design'}{snapshot.status?` · ${labelStatus(snapshot.status)}`:''}</p>{assets.length?<div className="mt-1 flex flex-wrap gap-2">{assets.map((asset)=><a key={asset.id} href={`/api/planner/files?id=${asset.id}`} target="_blank" rel="noreferrer" className="font-bold text-[#a17b35]">{asset.title||asset.file_name} ↗</a>)}</div>:<p className="mt-1">No attached assets in this revision.</p>}</li>})}</ol>:loaded?<p className="mt-2 text-xs text-[color:var(--portal-muted)]">No previous revisions.</p>:null}
     {hasMore?<button type="button" disabled={busy} onClick={()=>{const oldest=Math.min(...rows.map((row)=>Number(row.revision)));if(Number.isFinite(oldest))void load(oldest)}} className="mt-3 text-xs font-bold text-[#a17b35]">{busy?'Loading…':'Load older revisions'}</button>:null}
   </details>

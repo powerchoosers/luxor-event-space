@@ -74,7 +74,7 @@ import { LUXOR_DEFAULT_SECURITY_DEPOSIT } from '@/lib/luxorBookingMoney'
 import { saveRecentLead } from '@/lib/luxorRecentLeads'
 import { decodeHtmlEntities } from '@/lib/luxorTextUtils'
 import { LUXOR_TIME_DROPDOWN_OPTIONS, normalizeLuxorTimeDropdownValue } from '@/lib/luxorTimeOptions'
-import { PortalPageFrame, PortalStatusBadge, PortalSelect, PortalDatePicker, PortalModal, PortalContactAvatar, PortalCloseButton, PortalFilterBar, PortalAnimatedTabs, PortalButton } from '@/components/portal/PortalUI'
+import { PortalPageFrame, PortalStatusBadge, PortalSelect, PortalDatePicker, PortalModal, PortalContactAvatar, PortalCloseButton, PortalFilterBar, PortalAnimatedTabs, PortalButton, PortalSkeleton } from '@/components/portal/PortalUI'
 import { MagicCard } from '@/components/ui/magic-card'
 import { AnimatedCircularProgressBar } from '@/components/ui/animated-circular-progress-bar'
 import { useToast } from '@/components/portal/ToastProvider'
@@ -8344,7 +8344,7 @@ export default function LeadDetailPage({
               </div>
               <span className="font-mono text-xs text-[color:var(--portal-muted)]">{isLuxorTestInquiry(lead) ? 'Run-scoped test files' : `${documents.length + signatureRequests.length} files`}</span>
             </div>
-            {isLuxorTestInquiry(lead) ? activeTestRunId ? <LuxorTestLeadWorkflow leadName={lead.full_name} runId={activeTestRunId} section="documents" onOpenProposal={() => openProposalBuilder()} /> : <p className="mt-5 text-xs text-[color:var(--portal-muted)]">Loading the isolated Test Lead run…</p> : documents.length === 0 && signatureRequests.length === 0 ? (
+            {isLuxorTestInquiry(lead) ? activeTestRunId ? <LuxorTestLeadWorkflow leadName={lead.full_name} runId={activeTestRunId} section="documents" onOpenProposal={() => openProposalBuilder()} /> : <div className="mt-5 space-y-3"><PortalSkeleton className="h-14 w-full rounded-xl" /><PortalSkeleton className="h-14 w-full rounded-xl" /></div> : documents.length === 0 && signatureRequests.length === 0 ? (
               <div className="mt-5 rounded-xl border border-dashed border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-5 text-xs leading-5 text-[color:var(--portal-muted)]">PDFs will appear here after a final proposal or agreement is generated.</div>
             ) : (
               <div className="mt-5 grid gap-3 lg:grid-cols-2">
@@ -8389,7 +8389,7 @@ export default function LeadDetailPage({
               <span className="font-mono text-xs text-[color:var(--portal-muted)]">{isLuxorTestInquiry(lead) ? 'Isolated test run' : `${sortedBookings.length} records`}</span>
             </h3>
 
-            {isLuxorTestInquiry(lead) ? activeTestRunId ? <LuxorTestLeadWorkflow leadName={lead.full_name} runId={activeTestRunId} section="contract" onOpenProposal={() => openProposalBuilder()} /> : <p className="text-xs text-[color:var(--portal-muted)]">Loading the isolated Test Lead run…</p> : (
+            {isLuxorTestInquiry(lead) ? activeTestRunId ? <LuxorTestLeadWorkflow leadName={lead.full_name} runId={activeTestRunId} section="contract" onOpenProposal={() => openProposalBuilder()} /> : <div className="space-y-3"><PortalSkeleton className="h-20 w-full rounded-xl" /><PortalSkeleton className="h-16 w-full rounded-xl" /></div> : (
             <>
             {proposalInvoice && !agreementBooking ? (
               <div className="mb-4 rounded-xl border border-[#caa24c]/30 bg-[#caa24c]/5 p-4 text-xs leading-5 text-[color:var(--portal-muted)]">
@@ -8834,7 +8834,11 @@ export default function LeadDetailPage({
         </div>
         <div className="max-h-[70vh] overflow-y-auto bg-[color:var(--portal-card)] p-6 portal-scrollbar">
           {loadingVendors ? (
-            <div className="rounded-xl border border-dashed border-[color:var(--portal-border)] p-6 text-center text-xs text-[color:var(--portal-muted)]">Loading vendors...</div>
+            <div className="space-y-3">
+              <PortalSkeleton className="h-16 w-full rounded-xl" />
+              <PortalSkeleton className="h-16 w-full rounded-xl" />
+              <PortalSkeleton className="h-16 w-full rounded-xl" />
+            </div>
           ) : allVendors.length === 0 ? (
             <div className="rounded-xl border border-dashed border-[color:var(--portal-border)] p-6 text-center text-xs leading-5 text-[color:var(--portal-muted)]">
               <p className="font-semibold text-[color:var(--portal-text)]">No vendor records found.</p>

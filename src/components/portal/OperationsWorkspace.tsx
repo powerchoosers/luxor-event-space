@@ -685,7 +685,7 @@ export function OperationsPageContent({ embeddedBills = false }: { embeddedBills
   const sensorsOnline = utilities.length > 0
 
   return (
-    <PortalPageFrame className="h-full min-h-0 overflow-hidden flex flex-col gap-4 xl:gap-6">
+    <PortalPageFrame bleed={embeddedBills} className={embeddedBills ? 'min-h-0 flex-1 gap-0 overflow-hidden' : 'h-full min-h-0 overflow-hidden flex flex-col gap-4 xl:gap-6'}>
       {!embeddedBills && <PortalPageHeader
         icon={<Wrench size={18} />}
         title="Venue Operations"
@@ -730,7 +730,7 @@ export function OperationsPageContent({ embeddedBills = false }: { embeddedBills
         />
       </div>}
 
-      <PortalTabTransition activeKey={activeTab} className="flex-1 min-h-0 overflow-hidden">
+      <PortalTabTransition activeKey={activeTab} className={`min-h-0 flex-1 overflow-hidden ${embeddedBills ? 'flex flex-col' : ''}`}>
       {loading ? (
         <div className="p-4 space-y-6">
           <PortalCardSkeleton count={4} />
@@ -837,9 +837,10 @@ export function OperationsPageContent({ embeddedBills = false }: { embeddedBills
 
       {/* BILLS & PAYMENTS TAB */}
       {activeTab === 'bills' && (
-        <div className="flex h-full min-h-0 flex-col gap-3 overflow-hidden">
-        <OperationsArchivePanel type="bill" records={bills.map((bill) => ({ id: bill.id, updated_at: bill.updated_at, archived_at: bill.archived_at, label: `${bill.provider} · ${bill.service}` }))} onUpdated={() => void loadOperationsData(false)} />
+        <div className={`flex min-h-0 flex-1 flex-col overflow-hidden ${embeddedBills ? 'gap-2' : 'h-full gap-3'}`}>
+        {embeddedBills ? null : <OperationsArchivePanel type="bill" records={bills.map((bill) => ({ id: bill.id, updated_at: bill.updated_at, archived_at: bill.archived_at, label: `${bill.provider} · ${bill.service}` }))} onUpdated={() => void loadOperationsData(false)} />}
         <BillsPayableLedger
+          embedded={embeddedBills}
           bills={bills}
           intakes={billIntakes}
           onOpenExpense={setBillExpenseId}

@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { PortalDatePicker, PortalSelect } from '@/components/portal/PortalUI'
+import { PortalDatePicker, PortalSelect, PortalSkeleton, PortalSkeletonTransition } from '@/components/portal/PortalUI'
 import { isAccountingSetupRecord, resolvePendingAccountingSetup, type AccountingSetupKind, type AccountingSetupRecord } from '@/lib/luxorAccountingSetup'
 
 const inputClass = 'portal-input w-full'
@@ -80,8 +80,25 @@ export function AccountingSetup({ canEdit = false, onRecordsChange }: { canEdit?
     {canEdit && !SETUP_WRITES_AVAILABLE && <p className="text-sm text-[color:var(--portal-muted)]">Saving setup changes is unavailable until secure user identity is verified.</p>}
     {error && <div role="alert" className="space-x-2 text-sm text-[color:var(--portal-text)]">{error} <button type="button" className="underline" disabled={busy} onClick={() => void load()}>Refresh history</button>{locked && pending.current && <button type="button" className="underline" disabled={busy} onClick={() => pending.current && void perform(pending.current)}>Retry same request</button>}</div>}
     {notice && <p role="status" className="text-sm">{notice}</p>}
-    {loading ? <p className="text-sm text-[color:var(--portal-muted)]">Loading setup…</p> : ready ? <>
-      {canEdit && SETUP_WRITES_AVAILABLE && <fieldset disabled={busy || locked} className="space-y-3 border-t border-[color:var(--portal-border)] pt-4 disabled:opacity-70">
+    <PortalSkeletonTransition
+      loading={loading}
+      overlap
+      skeleton={
+        <div className="space-y-4 pt-3 border-t border-[color:var(--portal-border)]" aria-hidden="true">
+          <div className="space-y-2">
+            <PortalSkeleton className="h-4 w-32 rounded" />
+            <PortalSkeleton className="h-10 w-full rounded-xl" />
+          </div>
+          <div className="space-y-2 pt-2">
+            <PortalSkeleton className="h-4 w-28 rounded" />
+            <PortalSkeleton className="h-16 w-full rounded-xl" />
+          </div>
+        </div>
+      }
+    >
+      {ready ? (
+        <>
+          {canEdit && SETUP_WRITES_AVAILABLE && <fieldset disabled={busy || locked} className="space-y-3 border-t border-[color:var(--portal-border)] pt-4 disabled:opacity-70">
         <PortalSelect aria-label="Setup item" value={kind} onChange={(v) => { formRevision.current += 1; setKind(v as AccountingSetupKind); setDetails({}) }} disabled={busy || locked} options={Object.entries(labels).map(([value, label]) => ({ value, label }))} />
         {kind === 'basis' && <><p className="text-sm">Record an intention to use cash basis. The exact treatment still needs accountant review.</p><PortalSelect aria-label="Accounting basis" value={details.basis || ''} onChange={(v) => update('basis', v)} placeholder="Choose basis" options={[{ value: 'cash', label: 'Cash basis' }]} />{field('notes', 'Notes (optional)')}</>}
         {kind === 'account' && <>{field('name', 'Account name')}<PortalSelect aria-label="Account classification" value={details.classification || ''} onChange={(v) => update('classification', v)} placeholder="Choose classification" options={['asset', 'liability', 'equity', 'income', 'expense'].map((v) => ({ value: v, label: v[0].toUpperCase() + v.slice(1) }))} />{field('number', 'Account number (optional)')}{field('description', 'Description (optional)')}</>}
@@ -98,6 +115,8 @@ export function AccountingSetup({ canEdit = false, onRecordsChange }: { canEdit?
           {canEdit && SETUP_WRITES_AVAILABLE && r.status === 'draft' && <button type="button" className={`${buttonClass} mt-2`} disabled={busy || locked} onClick={() => void submit({ action: 'confirm', draft_id: r.id, confirm: true })}>Confirm this choice</button>}
         </article>)}
       </div>
-    </> : null}
+    </>
+      ) : null}
+    </PortalSkeletonTransition>
   </section>
 }

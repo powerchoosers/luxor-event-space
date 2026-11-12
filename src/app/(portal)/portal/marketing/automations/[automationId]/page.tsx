@@ -4,7 +4,7 @@ import React from 'react'
 import Link from 'next/link'
 import { useParams, useRouter } from 'next/navigation'
 import { ArrowLeft, CalendarClock, Clock3, Mail, MessageSquareText, Phone, RefreshCw, Save, Workflow } from '@/lib/icons/phosphor-compat'
-import { PortalButton, PortalModal, PortalPageFrame } from '@/components/portal/PortalUI'
+import { PortalButton, PortalModal, PortalPageFrame, PortalSkeleton } from '@/components/portal/PortalUI'
 import type { AutomationLibraryEntry, AutomationLibraryTotals, AutomationStatus } from '@/lib/luxorAutomationsLibrary'
 import { BrochureWorkflowContacts } from '@/components/portal/BrochureWorkflowContacts'
 import { BrochureStepSettings, type BrochureSettingsStep } from '@/components/portal/BrochureStepSettings'
@@ -788,7 +788,16 @@ function Notice({ tone, title, body, action }: { tone: 'error' | 'info'; title: 
 }
 
 function DetailSkeleton() {
-  return <div className="space-y-5 p-1" role="status" aria-label="Loading automation details"><div className="h-20 animate-pulse rounded-xl bg-[color:var(--portal-soft)]" /><div className="h-24 animate-pulse rounded-xl bg-[color:var(--portal-soft)]" /><div className="grid gap-5 lg:grid-cols-2"><div className="h-96 animate-pulse rounded-2xl bg-[color:var(--portal-soft)]" /><div className="h-96 animate-pulse rounded-2xl bg-[color:var(--portal-soft)]" /></div></div>
+  return (
+    <div className="space-y-5 p-1" role="status" aria-label="Loading automation details">
+      <PortalSkeleton className="h-20 w-full rounded-xl" />
+      <PortalSkeleton className="h-24 w-full rounded-xl" />
+      <div className="grid gap-5 lg:grid-cols-2">
+        <PortalSkeleton className="h-96 w-full rounded-2xl" />
+        <PortalSkeleton className="h-96 w-full rounded-2xl" />
+      </div>
+    </div>
+  )
 }
 
 const inputClass = 'min-h-11 w-full rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 py-2.5 text-sm leading-5 text-[color:var(--portal-text)] outline-none transition placeholder:text-[color:var(--portal-muted)] focus:border-[#caa24c]/70 focus:ring-2 focus:ring-[#caa24c]/20'

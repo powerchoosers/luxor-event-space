@@ -1,7 +1,7 @@
 'use client'
 
 import dynamic from 'next/dynamic'
-import { LoaderCircle } from '@/lib/icons/phosphor-compat'
+import { PortalSkeleton } from '@/components/portal/PortalUI'
 
 export type PortalPdfViewerProps = {
   url: string
@@ -15,9 +15,9 @@ const PortalPdfViewerRenderer = dynamic<PortalPdfViewerProps>(
   {
     ssr: false,
     loading: () => (
-      <div className="flex min-h-0 flex-1 items-center justify-center bg-[color:var(--portal-soft)] px-6 text-center text-sm text-[color:var(--portal-muted)]">
-        <LoaderCircle className="mr-2 animate-spin text-[#a8792f] dark:text-[#f1d27a]" size={18} />
-        Preparing document viewer…
+      <div className="flex min-h-0 flex-1 flex-col items-center justify-center p-8 space-y-4" role="status" aria-label="Preparing document viewer">
+        <PortalSkeleton className="h-[480px] w-full max-w-xl rounded-2xl" />
+        <PortalSkeleton className="h-4 w-40 rounded" />
       </div>
     ),
   },

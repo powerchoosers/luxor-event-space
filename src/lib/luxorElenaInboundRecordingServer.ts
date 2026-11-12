@@ -43,6 +43,32 @@ export async function confirmElenaRecording(callSid: string, sessionId: string, 
   const next = await update(row, { recording_consent_status: consented ? 'consented' : 'declined', recording_consent_at: new Date().toISOString(), transcription_status: consented ? 'pending' : 'not_requested' }, { recording_pending: null, recording_consent_source: 'caller_voice_confirmation', recording_start_status: consented ? 'starting' : 'declined', transcription_start_status: consented ? 'starting' : 'declined' }, '&recording_consent_status=eq.not_requested')
   if (!next) throw new Error('Recording consent was already handled or the call changed.')
   if (!consented) return { consented: false, recordingStarted: false, transcriptionStarted: false }
+  return startElenaRecordingSessions(callSid, sessionId, true)
+}
+
+/** Automatically start once the bound parent has answered; never imply caller consent. */
+export async function startAutomaticElenaRecording(callSid: string, sessionId: string) {
+  let row = await readBoundCall(callSid, sessionId)
+  if (row.recording_consent_status === 'automatic') return { automatic: true, alreadyStarted: true, recordingStarted: row.metadata.recording_start_status === 'started', transcriptionStarted: row.metadata.transcription_start_status === 'started' }
+  if (row.recording_consent_status !== 'not_requested') throw new Error('Recording has already been decided for this call.')
+  const config = getLuxorTwilioConfig()
+  const client = twilio(config.accountSid, config.authToken, { timeout: 8000, autoRetry: false })
+  const parent = await client.calls(callSid).fetch()
+  if (parent.accountSid !== config.accountSid || parent.to !== process.env.LUXOR_ELENA_LIVE_NUMBER || parent.direction !== 'inbound') throw new Error('Live call does not match.')
+  // Acceptance can precede the SIP bridge. Leave the row untouched so a later
+  // signed answered callback can retry instead of consuming the sole claim.
+  if (parent.status !== 'in-progress') return { automatic: false, deferred: true, recordingStarted: false, transcriptionStarted: false }
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const claimed = await update(row, { recording_consent_status: 'automatic', recording_consent_at: null, transcription_status: 'pending' }, { recording_pending: null, recording_consent_source: 'automatic', recording_start_status: 'starting', transcription_start_status: 'starting' }, '&recording_consent_status=eq.not_requested')
+    if (claimed) return startElenaRecordingSessions(callSid, sessionId, false)
+    row = await readBoundCall(callSid, sessionId)
+    if (row.recording_consent_status === 'automatic') return { automatic: true, alreadyStarted: true, recordingStarted: row.metadata.recording_start_status === 'started', transcriptionStarted: row.metadata.transcription_start_status === 'started' }
+    if (row.recording_consent_status !== 'not_requested') throw new Error('Recording has already been decided for this call.')
+  }
+  throw new Error('The call changed before recording could start.')
+}
+
+async function startElenaRecordingSessions(callSid: string, sessionId: string, consented: boolean) {
   const config = getLuxorTwilioConfig()
   const client = twilio(config.accountSid, config.authToken, { timeout: 8000, autoRetry: false })
   let recordingStarted = false, transcriptionStarted = false, recordingSid: string | null = null, transcriptionSid: string | null = null
@@ -64,12 +90,13 @@ export async function confirmElenaRecording(callSid: string, sessionId: string, 
   }
   // Preserve callbacks and concurrent call metadata using optimistic updates.
   let metadataSaved = false
+  let stopRequested = false
   try {
     for (let attempt = 0; attempt < 3; attempt += 1) {
       const [current] = await supabaseRestStrict<Call[]>(`luxor_calls?select=twilio_call_sid,direction,to_number,status,recording_consent_status,metadata,updated_at&twilio_call_sid=eq.${callSid}&limit=1`)
       if (!current || current.metadata.scope !== 'elena_live_inbound' || current.metadata.openai_session_id !== sessionId) break
       const saved = await update(current, transcriptionStarted ? {} : { transcription_status: 'failed' }, { recording_start_status: recordingStarted ? 'started' : 'failed', transcription_start_status: transcriptionStarted ? 'started' : 'failed', live_recording_sid: recordingSid, live_transcription_sid: transcriptionSid })
-      if (saved) { metadataSaved = true; break }
+      if (saved) { metadataSaved = true; stopRequested = Boolean(current.metadata.recording_stop_requested_at); break }
     }
   } catch { console.warn('[Elena Inbound] Recording identifiers could not be saved.') }
   if (!metadataSaved) {
@@ -77,15 +104,31 @@ export async function confirmElenaRecording(callSid: string, sessionId: string, 
     // Stop any sessions whose identifiers are known and report uncertainty.
     if (recordingSid) await client.calls(callSid).recordings(recordingSid).update({ status: 'stopped' }).catch(() => undefined)
     if (transcriptionSid) await client.calls(callSid).transcriptions(transcriptionSid).update({ status: 'stopped' }).catch(() => undefined)
-    return { consented: true, recordingStarted: false, transcriptionStarted: false, message: 'Recording could not be confirmed; continue without promising a recording or transcript.' }
+    return { consented, automatic: !consented, recordingStarted: false, transcriptionStarted: false, message: 'Recording could not be confirmed; continue without promising a recording or transcript.' }
   }
-  return { consented: true, recordingStarted, transcriptionStarted, message: recordingStarted ? 'Recording has started for the rest of this call. Playback and transcript will be available only if processing succeeds.' : 'Recording could not be confirmed; continue the call without promising a recording or transcript.' }
+  if (stopRequested) await stopElenaRecording(callSid, sessionId).catch(() => console.warn('[Elena Inbound] Deferred recording stop could not be confirmed.'))
+  return { consented, automatic: !consented, recordingStarted: recordingStarted && !stopRequested, transcriptionStarted: transcriptionStarted && !stopRequested, message: stopRequested ? 'A stop request was received while recording was starting.' : recordingStarted ? 'Recording has started for the rest of this call. Playback and transcript will be available only if processing succeeds.' : 'Recording could not be confirmed; continue the call without promising a recording or transcript.' }
 }
 
 /** Stop only the recording and transcription created for this bound live call. */
 export async function stopElenaRecording(callSid: string, sessionId: string) {
-  const row = await readBoundCall(callSid, sessionId)
-  if (row.recording_consent_status !== 'consented') return { stopped: true, message: 'There is no active consented recording to stop.' }
+  let row = await readBoundCall(callSid, sessionId)
+  // A caller can ask to stop while automatic startup is waiting for answer.
+  // Persist the refusal so the later answered callback cannot start recording.
+  for (let attempt = 0; attempt < 3 && row.recording_consent_status === 'not_requested'; attempt += 1) {
+    const saved = await update(row, { recording_consent_status: 'declined', recording_consent_at: new Date().toISOString(), transcription_status: 'not_requested' }, { recording_pending: null, recording_consent_source: 'caller_stop_request', recording_start_status: 'declined', transcription_start_status: 'declined', recording_stop_requested_at: new Date().toISOString() }, '&recording_consent_status=eq.not_requested')
+    if (saved) return { stopped: true, message: 'Recording and transcription will not be started.' }
+    row = await readBoundCall(callSid, sessionId)
+  }
+  if (row.recording_consent_status === 'not_requested') return { stopped: false, message: 'I could not confirm that recording and transcription have both stopped.' }
+  if (!['consented', 'automatic'].includes(row.recording_consent_status)) return { stopped: true, message: 'There is no active recording to stop.' }
+  // Record the request while the provider identifiers are still being created.
+  // The starter will stop both streams immediately after persisting their IDs.
+  for (let attempt = 0; attempt < 3 && (row.metadata.recording_start_status === 'starting' || row.metadata.transcription_start_status === 'starting'); attempt += 1) {
+    const saved = await update(row, {}, { recording_stop_requested_at: new Date().toISOString() })
+    if (saved) return { stopped: false, message: 'Recording is starting; I cannot yet confirm it has stopped.' }
+    row = await readBoundCall(callSid, sessionId)
+  }
   const recordingSid = row.metadata.live_recording_sid, transcriptionSid = row.metadata.live_transcription_sid
   const recordingNeeded = row.metadata.recording_start_status === 'started'
   const transcriptionNeeded = row.metadata.transcription_start_status === 'started'

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { BillReview } from '@/components/portal/BillsPayableLedger'
-import { PortalButton, PortalDatePicker, PortalModal, PortalSelect, PortalTabTransition } from '@/components/portal/PortalUI'
+import { PortalButton, PortalDatePicker, PortalModal, PortalSelect, PortalTabTransition, PortalSkeleton } from '@/components/portal/PortalUI'
 import { getBillBalance, type BillExpense } from '@/lib/luxorBillBalances'
 import { isLuxorBillCategory, LUXOR_BILL_CATEGORIES } from '@/lib/luxorBillCategories'
 import type { LuxorBill, LuxorVendor } from '@/lib/luxorInquiryTypes'
@@ -103,23 +103,23 @@ export default function BillDetailsPanel({ billId, onClose, onOpenExpense, onCre
   const field = 'mt-1 min-h-11 w-full rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 text-sm text-[color:var(--portal-text)] outline-none focus:border-[#caa24c]/40 focus:bg-[color:var(--portal-card)] focus:ring-2 focus:ring-[#caa24c]/10'
   return <PortalModal isOpen={open} onClose={back} title={draft ? 'Edit bill details' : 'Bill details'} description={bill?.service} headerBack sidePanel maxWidth="max-w-[600px]" animateClose>
     {error ? <div role="alert" className="space-y-3 text-sm text-[color:var(--portal-text)]"><p>{error}</p><PortalButton onClick={() => setRetry((value) => value + 1)}>Try again</PortalButton></div> : !records ? (
-      <div className="space-y-6 animate-pulse" aria-busy="true" aria-label="Loading bill details">
+      <div className="space-y-6 pt-1" aria-busy="true" aria-label="Loading bill details">
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-3">
-            <div className="h-10 w-10 rounded-xl bg-[color:var(--portal-soft)]" />
+            <PortalSkeleton className="h-10 w-10 rounded-xl" />
             <div className="space-y-2">
-              <div className="h-4 w-32 rounded bg-[color:var(--portal-soft)]" />
-              <div className="h-3 w-24 rounded bg-[color:var(--portal-soft)]" />
+              <PortalSkeleton className="h-4 w-32 rounded" />
+              <PortalSkeleton className="h-3 w-24 rounded opacity-60" />
             </div>
           </div>
-          <div className="h-6 w-16 rounded-md bg-[color:var(--portal-soft)]" />
+          <PortalSkeleton className="h-6 w-16 rounded-md" />
         </div>
-        <div className="h-32 rounded-xl bg-[color:var(--portal-soft)]/50" />
+        <PortalSkeleton className="h-32 w-full rounded-xl" />
         <div className="grid grid-cols-2 gap-4">
-          <div className="h-10 rounded-lg bg-[color:var(--portal-soft)]" />
-          <div className="h-10 rounded-lg bg-[color:var(--portal-soft)]" />
-          <div className="h-10 rounded-lg bg-[color:var(--portal-soft)]" />
-          <div className="h-10 rounded-lg bg-[color:var(--portal-soft)]" />
+          <PortalSkeleton className="h-10 w-full rounded-lg" />
+          <PortalSkeleton className="h-10 w-full rounded-lg" />
+          <PortalSkeleton className="h-10 w-full rounded-lg" />
+          <PortalSkeleton className="h-10 w-full rounded-lg" />
         </div>
       </div>
     ) : !bill ? <p role="alert" className="text-sm text-[color:var(--portal-text)]">This bill is no longer available.</p> : <PortalTabTransition activeKey={draft ? 'edit' : activeId}>

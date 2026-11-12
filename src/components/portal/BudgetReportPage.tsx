@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
 import { ChevronLeft, ChevronRight } from '@/lib/icons/phosphor-compat'
-import { PortalPageFrame, PortalPageHeader } from '@/components/portal/PortalUI'
+import { PortalPageFrame, PortalPageHeader, PortalSkeleton, PortalSkeletonTransition } from '@/components/portal/PortalUI'
 import { BudgetReports, type BudgetForecastRow, type BudgetYearRow } from '@/components/portal/BudgetReports'
 import { chicagoCalendarDate } from '@/lib/luxorPaymentDashboardModel'
 import type { getLuxorBudgetReport } from '@/lib/luxorBudgetReporting'
@@ -55,6 +55,48 @@ export function BudgetReportPage() {
       <span className="min-w-36 text-center text-sm font-bold tabular-nums" aria-live="polite">{monthLabel(month)}</span>
       <button type="button" aria-label="Next month" onClick={() => setMonth((value) => shiftMonth(value, 1))} className="rounded-lg border border-[color:var(--portal-border)] p-2 hover:bg-[color:var(--portal-soft)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]"><ChevronRight size={18} /></button>
     </div>
-    {error ? <div role="alert" className="text-sm text-[color:var(--portal-text)]">{error} <button type="button" className="underline" onClick={() => setRevision((value) => value + 1)}>Try again</button></div> : report ? <BudgetReports report={report} yearRows={result?.yearRows || []} forecastRows={result?.forecastRows || []} revenueTargetsAvailable={result?.revenueTargetsAvailable === true} onSaveTarget={saveTarget} onSaveRevenueTarget={saveRevenueTarget} onSelectMonth={setMonth} /> : <p className="text-sm text-[color:var(--portal-muted)]" role="status">Loading report…</p>}
+    {error ? (
+      <div role="alert" className="text-sm text-[color:var(--portal-text)]">{error} <button type="button" className="underline" onClick={() => setRevision((value) => value + 1)}>Try again</button></div>
+    ) : (
+      <PortalSkeletonTransition
+        loading={!report}
+        overlap
+        skeleton={
+          <div className="space-y-4" aria-hidden="true">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              {Array.from({ length: 3 }).map((_, i) => (
+                <div key={i} className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-4 space-y-2">
+                  <PortalSkeleton className="h-3.5 w-24 rounded" />
+                  <PortalSkeleton className="h-7 w-28 rounded" />
+                </div>
+              ))}
+            </div>
+            <div className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-4 space-y-3">
+              <PortalSkeleton className="h-4 w-36 rounded" />
+              <div className="space-y-2">
+                {Array.from({ length: 6 }).map((_, i) => (
+                  <div key={i} className="flex items-center justify-between py-2 border-b border-[color:var(--portal-border)]/50">
+                    <PortalSkeleton className="h-3.5 w-36 rounded" />
+                    <PortalSkeleton className="h-3.5 w-20 rounded" />
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        }
+      >
+        {report ? (
+          <BudgetReports
+            report={report}
+            yearRows={result?.yearRows || []}
+            forecastRows={result?.forecastRows || []}
+            revenueTargetsAvailable={result?.revenueTargetsAvailable === true}
+            onSaveTarget={saveTarget}
+            onSaveRevenueTarget={saveRevenueTarget}
+            onSelectMonth={setMonth}
+          />
+        ) : null}
+      </PortalSkeletonTransition>
+    )}
   </PortalPageFrame>
 }

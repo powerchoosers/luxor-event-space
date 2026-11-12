@@ -2,6 +2,7 @@
 
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { AlertTriangle, CheckCircle2, RefreshCw, XCircle } from '@/lib/icons/phosphor-compat'
+import { PortalSkeleton } from '@/components/portal/PortalUI'
 
 type QueueStatusData = {
   status: 'healthy' | 'warning'
@@ -155,7 +156,7 @@ export function EmailQueueHealthWidget() {
         <Metric label="In flight" value={data.sending} />
         <Metric label="Sent (30 days)" value={data.sent} tone="success" />
         <Metric label={`Failed (${data.failureWindowHours}h)`} value={data.failed} tone={data.failed ? 'warning' : 'default'} />
-      </dl> : loading ? <div className="mt-5 grid grid-cols-2 gap-2 sm:grid-cols-4" aria-hidden="true">{[0, 1, 2, 3].map((item) => <div key={item} className="h-[4.5rem] animate-pulse rounded-lg bg-[color:var(--portal-soft)]" />)}</div> : null}
+      </dl> : loading ? <div className="mt-5 grid grid-cols-2 gap-2 sm:grid-cols-4" aria-hidden="true">{[0, 1, 2, 3].map((item) => <PortalSkeleton key={item} className="h-[4.5rem] w-full rounded-lg" />)}</div> : null}
 
       {warningMessage ? <p role="alert" className="mt-4 flex items-start gap-2 rounded-lg border border-amber-500/25 bg-amber-500/10 px-3 py-2.5 text-xs leading-5 text-amber-800 dark:text-amber-200"><AlertTriangle size={14} className="mt-0.5 shrink-0" /><span>{warningMessage}</span></p> : null}
       {error ? <p role="alert" className="mt-4 rounded-lg border border-rose-500/25 bg-rose-500/10 px-3 py-2.5 text-xs leading-5 text-rose-700 dark:text-rose-200">{data ? `Refresh failed; showing the last successful status. ${error}` : error}</p> : null}

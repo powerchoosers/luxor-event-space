@@ -3,7 +3,7 @@
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import { Search, X } from '@/lib/icons/phosphor-compat'
 import { useId, useMemo, useState, type FormEvent, type KeyboardEvent } from 'react'
-import { PortalButton, PortalDatePicker, PortalModal, PortalSelect } from '@/components/portal/PortalUI'
+import { PortalButton, PortalDatePicker, PortalModal, PortalSelect, PortalSkeleton } from '@/components/portal/PortalUI'
 import { isLuxorInquiryArchived, type LuxorInquiry } from '@/lib/luxorInquiryTypes'
 import { luxorTodayKey } from '@/lib/luxorTourMetrics'
 
@@ -154,7 +154,7 @@ export function AddCalendarTaskModal({ isOpen, onClose, onCreated }: { isOpen: b
           <AnimatePresence initial={false}>
             {suggestionsOpen && !lead && query.trim() && <motion.div initial={reduceMotion ? { opacity: 0 } : { opacity: 0, height: 0 }} animate={reduceMotion ? { opacity: 1 } : { opacity: 1, height: 'auto' }} exit={reduceMotion ? { opacity: 0 } : { opacity: 0, height: 0 }} transition={{ duration: 0.16 }} className="overflow-hidden">
               <div id={listId} role="listbox" aria-label="Suggested leads" className="mt-1 max-h-48 overflow-y-auto rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-1">
-                {searchLoading ? <p className="p-3 text-xs text-[color:var(--portal-muted)]">Loading contacts…</p> : searchError ? <p className="p-3 text-xs text-red-700 dark:text-red-300">{searchError}</p> : suggestions.length ? suggestions.map((item, index) => <button key={item.id} id={`${listId}-${index}`} type="button" role="option" aria-selected={index === highlighted} onMouseDown={(event) => event.preventDefault()} onClick={() => selectLead(item)} onMouseEnter={() => setHighlighted(index)} className={`block w-full rounded-md px-3 py-2 text-left text-sm ${index === highlighted ? 'bg-[color:var(--portal-soft)]' : ''}`}><span className="block font-medium text-[color:var(--portal-text)]">{item.full_name}</span><span className="block truncate text-xs text-[color:var(--portal-muted)]">{item.email || item.phone || item.event_type || 'Lead'}</span></button>) : <p className="p-3 text-xs text-[color:var(--portal-muted)]">No matching leads. Leave this blank for a standalone task.</p>}
+                {searchLoading ? <div className="space-y-2 p-2"><PortalSkeleton className="h-4 w-32 rounded" /><PortalSkeleton className="h-3 w-48 rounded opacity-60" /></div> : searchError ? <p className="p-3 text-xs text-red-700 dark:text-red-300">{searchError}</p> : suggestions.length ? suggestions.map((item, index) => <button key={item.id} id={`${listId}-${index}`} type="button" role="option" aria-selected={index === highlighted} onMouseDown={(event) => event.preventDefault()} onClick={() => selectLead(item)} onMouseEnter={() => setHighlighted(index)} className={`block w-full rounded-md px-3 py-2 text-left text-sm ${index === highlighted ? 'bg-[color:var(--portal-soft)]' : ''}`}><span className="block font-medium text-[color:var(--portal-text)]">{item.full_name}</span><span className="block truncate text-xs text-[color:var(--portal-muted)]">{item.email || item.phone || item.event_type || 'Lead'}</span></button>) : <p className="p-3 text-xs text-[color:var(--portal-muted)]">No matching leads. Leave this blank for a standalone task.</p>}
               </div>
             </motion.div>}
           </AnimatePresence>

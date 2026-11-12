@@ -4,7 +4,7 @@ import { useEffect, useId, useRef, useState } from 'react'
 import { motion, useReducedMotion } from 'framer-motion'
 import { Download, Eye, FileText, LoaderCircle, Mail, RefreshCw, ShieldCheck } from '@/lib/icons/phosphor-compat'
 import type { LuxorInvoice } from '@/lib/luxorInquiryTypes'
-import { PortalCloseButton, PortalModal } from '@/components/portal/PortalUI'
+import { PortalCloseButton, PortalModal, PortalSkeleton } from '@/components/portal/PortalUI'
 import { PortalPdfViewer } from '@/components/portal/PortalPdfViewer'
 
 type PreviewTab = 'email' | 'pdf'
@@ -200,7 +200,13 @@ export function ProposalDeliveryPreview({
                   <span className="inline-flex shrink-0 items-center gap-1 text-[10px] font-semibold text-[#6d655b]"><Eye size={12} /> Preview only</span>
                 </div>
                 {loadingEmail ? (
-                  <div className="flex min-h-[500px] items-center justify-center px-6 text-center text-sm text-[#6d655b]"><LoaderCircle className="mr-2 animate-spin text-[#8c6529]" size={18} /> Assembling the exact delivery email…</div>
+                  <div className="min-h-[500px] w-full p-6 space-y-4" aria-label="Assembling delivery email" role="status">
+                    <PortalSkeleton className="h-8 w-2/3 rounded" />
+                    <PortalSkeleton className="h-4 w-full rounded" />
+                    <PortalSkeleton className="h-4 w-5/6 rounded" />
+                    <PortalSkeleton className="h-48 w-full rounded-xl mt-4" />
+                    <PortalSkeleton className="h-10 w-36 rounded-lg" />
+                  </div>
                 ) : emailError ? (
                   <div className="flex min-h-[500px] flex-col items-center justify-center px-6 text-center">
                     <p className="text-sm font-bold text-rose-700">Email preview unavailable</p>

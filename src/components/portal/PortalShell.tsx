@@ -29,6 +29,7 @@ import {
   Moon,
   HelpCircle,
   CalendarClock,
+  Receipt,
 } from '@/lib/icons/phosphor-compat'
 import Link from 'next/link'
 import dynamic from 'next/dynamic'
@@ -180,6 +181,11 @@ const AddRecurringCostModal = dynamic(
   { ssr: false }
 )
 
+const LogExpenseModal = dynamic(
+  () => import('@/components/portal/LogExpenseModal').then((mod) => mod.LogExpenseModal),
+  { ssr: false }
+)
+
 const PortalSettingsModal = dynamic(
   () => import('@/components/portal/PortalSettingsModal').then((mod) => mod.PortalSettingsModal),
   { ssr: false }
@@ -301,6 +307,7 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
   const isCustomWorkflowEditor = pathname.startsWith('/portal/marketing/custom-workflows/')
   const usesInternalPaneScroll =
     (!isMobileViewport && pathname === '/portal/leads') ||
+    (!isMobileViewport && pathname === '/portal/finances') ||
     pathname === '/portal/emails' ||
     pathname === '/portal/email-tools' ||
     pathname === '/portal/messages' ||
@@ -565,6 +572,7 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
   // Global Add Client / Lead Drawer State
   const [isNewLeadDrawerOpen, setIsNewLeadDrawerOpen] = useState(false)
   const [isRecurringCostModalOpen, setIsRecurringCostModalOpen] = useState(false)
+  const [isLogExpenseModalOpen, setIsLogExpenseModalOpen] = useState(false)
   const [isHeaderAddMenuOpen, setIsHeaderAddMenuOpen] = useState(false)
   const headerAddMenuRef = useRef<HTMLDivElement>(null)
 
@@ -632,6 +640,7 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
 
     const handleOpenNewLead = () => setIsNewLeadDrawerOpen(true)
     const handleOpenRecurringCost = () => setIsRecurringCostModalOpen(true)
+    const handleOpenLogExpense = () => setIsLogExpenseModalOpen(true)
 
     window.addEventListener('luxor-compose-email', handleComposeEvent)
     window.addEventListener('luxor-open-elena', handleOpenElena)
@@ -640,6 +649,8 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
     window.addEventListener('luxor:open-new-lead', handleOpenNewLead)
     window.addEventListener('luxor-open-recurring-cost', handleOpenRecurringCost)
     window.addEventListener('luxor:open-recurring-cost', handleOpenRecurringCost)
+    window.addEventListener('luxor-open-log-expense', handleOpenLogExpense)
+    window.addEventListener('luxor:open-log-expense', handleOpenLogExpense)
     return () => {
       window.removeEventListener('luxor-compose-email', handleComposeEvent)
       window.removeEventListener('luxor-open-elena', handleOpenElena)
@@ -648,6 +659,8 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
       window.removeEventListener('luxor:open-new-lead', handleOpenNewLead)
       window.removeEventListener('luxor-open-recurring-cost', handleOpenRecurringCost)
       window.removeEventListener('luxor:open-recurring-cost', handleOpenRecurringCost)
+      window.removeEventListener('luxor-open-log-expense', handleOpenLogExpense)
+      window.removeEventListener('luxor:open-log-expense', handleOpenLogExpense)
     }
   }, [])
   
@@ -1370,7 +1383,7 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
                 type="button"
                 onMouseDown={(e) => e.preventDefault()}
                 onClick={() => setIsHeaderAddMenuOpen((prev) => !prev)}
-                aria-label="Add inquiry or recurring cost"
+                aria-label="Add client, expense, or recurring cost"
                 aria-expanded={isHeaderAddMenuOpen}
                 aria-haspopup="menu"
                 title="Quick add"
@@ -1384,11 +1397,11 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
                   <motion.div
                     role="menu"
                     aria-label="Quick add options"
-                    initial={reduceMotion ? { opacity: 0 } : { opacity: 0, y: 6, scale: 0.96 }}
-                    animate={{ opacity: 1, y: 0, scale: 1 }}
-                    exit={reduceMotion ? { opacity: 0 } : { opacity: 0, y: 4, scale: 0.96 }}
+                    initial={reduceMotion ? { opacity: 0, x: '-50%' } : { opacity: 0, x: '-50%', y: 6, scale: 0.96 }}
+                    animate={{ opacity: 1, x: '-50%', y: 0, scale: 1 }}
+                    exit={reduceMotion ? { opacity: 0, x: '-50%' } : { opacity: 0, x: '-50%', y: 4, scale: 0.96 }}
                     transition={{ duration: 0.15, ease: [0.16, 1, 0.3, 1] }}
-                    className="absolute right-0 top-full z-[120] mt-2 w-56 rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-1.5 shadow-2xl backdrop-blur-2xl"
+                    className="absolute left-1/2 top-full z-[120] mt-2 w-56 rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-1.5 shadow-2xl backdrop-blur-2xl"
                   >
                     <div className="px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-[color:var(--portal-faint)]">
                       Quick Add
@@ -1409,6 +1422,24 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
                       <span className="flex-1 min-w-0">
                         <span className="block truncate">Add client</span>
                         <span className="block text-[10px] font-normal text-[color:var(--portal-muted)]">New inquiry or lead</span>
+                      </span>
+                    </button>
+
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={() => {
+                        setIsHeaderAddMenuOpen(false)
+                        setIsLogExpenseModalOpen(true)
+                      }}
+                      className="group flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-left text-xs font-semibold text-[color:var(--portal-text)] transition-colors hover:bg-[color:var(--portal-soft)] hover:text-[#9e7627] dark:hover:text-[#f1d27a] cursor-pointer"
+                    >
+                      <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] text-[#caa24c] transition-colors group-hover:border-[#caa24c]/40 group-hover:bg-[#caa24c]/10">
+                        <Receipt size={14} />
+                      </span>
+                      <span className="flex-1 min-w-0">
+                        <span className="block truncate">Log expense</span>
+                        <span className="block text-[10px] font-normal text-[color:var(--portal-muted)]">One-time business cost</span>
                       </span>
                     </button>
 
@@ -2017,6 +2048,13 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
         onClose={() => setIsRecurringCostModalOpen(false)}
         onCreated={() => {
           window.dispatchEvent(new CustomEvent('luxor:recurring-costs-updated'))
+        }}
+      />
+      <LogExpenseModal
+        isOpen={isLogExpenseModalOpen}
+        onClose={() => setIsLogExpenseModalOpen(false)}
+        onCreated={() => {
+          window.dispatchEvent(new CustomEvent('luxor:expenses-updated'))
         }}
       />
       <AnimatePresence>

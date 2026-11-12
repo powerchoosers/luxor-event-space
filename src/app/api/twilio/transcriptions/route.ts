@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { getLuxorCallBySid, saveLuxorTranscriptEvent } from '@/lib/luxorCallsServer'
+import { canProcessLuxorRecording, getLuxorCallBySid, saveLuxorTranscriptEvent } from '@/lib/luxorCallsServer'
 import { parseTwilioInteger, readTwilioForm, validateTwilioWebhook } from '@/lib/luxorTwilioServer'
 
 export const runtime = 'nodejs'
@@ -15,7 +15,7 @@ export async function POST(request: Request) {
   }
   try {
     const call = await getLuxorCallBySid(callSid)
-    if (!call || call.recording_consent_status !== 'consented') return NextResponse.json({ ok: true, ignored: true })
+    if (!call || !canProcessLuxorRecording(call)) return NextResponse.json({ ok: true, ignored: true })
     let data: Record<string, unknown> = {}
     if (params.TranscriptionData) {
       try { data = JSON.parse(params.TranscriptionData) as Record<string, unknown> } catch { return NextResponse.json({ error: 'Malformed transcription payload.' }, { status: 400 }) }

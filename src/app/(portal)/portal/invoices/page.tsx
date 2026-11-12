@@ -254,21 +254,24 @@ export default function InvoicesPage() {
       <div className="grid shrink-0 grid-cols-1 gap-4 md:grid-cols-3 lg:gap-6">
         <StatsPanel
           label="Event Payments Recorded"
-          value={financialSummary ? `$${financialSummary.eventPaymentsReceived.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : financeLoading ? 'Verifying…' : 'Unavailable'}
+          loading={financeLoading}
+          value={financialSummary ? `$${financialSummary.eventPaymentsReceived.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : 'Unavailable'}
           trend={financialSummary ? `${financialSummary.eventPaymentRows.length} payment rows` : 'Verified records required'}
           highlight
           gaugePercent={financialSummary ? (financialSummary.eventPaymentsReceived + financialSummary.outstandingEventReceivable > 0 ? (financialSummary.eventPaymentsReceived / (financialSummary.eventPaymentsReceived + financialSummary.outstandingEventReceivable)) * 100 : 0) : undefined}
         />
         <StatsPanel
           label="Signed, Confirmed Event Balance Outstanding"
-          value={financialSummary ? `$${financialSummary.outstandingEventReceivable.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : financeLoading ? 'Verifying…' : 'Unavailable'}
+          loading={financeLoading}
+          value={financialSummary ? `$${financialSummary.outstandingEventReceivable.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : 'Unavailable'}
           trend={financialSummary ? `${financialSummary.acceptedInvoiceRows.length} signed, confirmed obligations` : 'Verified records required'}
           isNegative={Boolean(financialSummary?.outstandingEventReceivable)}
           progress={financialSummary ? (financialSummary.eventPaymentsReceived + financialSummary.outstandingEventReceivable > 0 ? (financialSummary.outstandingEventReceivable / (financialSummary.eventPaymentsReceived + financialSummary.outstandingEventReceivable)) * 100 : 0) : undefined}
         />
         <StatsPanel
           label="Overdue Installment Remainder"
-          value={financialSummary ? `$${financialSummary.overdueEventReceivable.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : financeLoading ? 'Verifying…' : 'Unavailable'}
+          loading={financeLoading}
+          value={financialSummary ? `$${financialSummary.overdueEventReceivable.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : 'Unavailable'}
           trend="Past due in Chicago time"
           isNegative={Boolean(financialSummary?.overdueEventReceivable)}
           progress={financialSummary ? (financialSummary.outstandingEventReceivable > 0 ? (financialSummary.overdueEventReceivable / financialSummary.outstandingEventReceivable) * 100 : 0) : undefined}
@@ -461,14 +464,16 @@ function StatsPanel({
   highlight = false,
   gaugePercent,
   progress,
+  loading = false,
 }: {
   label: string
-  value: string
+  value: React.ReactNode
   trend: string
   isNegative?: boolean
   highlight?: boolean
   gaugePercent?: number
   progress?: number
+  loading?: boolean
 }) {
   return (
     <MagicCard className="relative flex flex-row items-center justify-between gap-4 rounded-2xl p-6 overflow-hidden group">
@@ -486,9 +491,15 @@ function StatsPanel({
             {trend}
           </span>
         </div>
-        <h3 className="text-2xl font-extrabold text-[color:var(--portal-text)] tabular-nums tracking-tight relative z-10">
-          {value}
-        </h3>
+        <div className="min-h-[32px] flex items-center">
+          {loading ? (
+            <PortalSkeleton className="h-7 w-32 rounded-md" />
+          ) : (
+            <h3 className="text-2xl font-extrabold text-[color:var(--portal-text)] tabular-nums tracking-tight relative z-10">
+              {value}
+            </h3>
+          )}
+        </div>
         {progress !== undefined ? (
           <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-[color:var(--portal-border)]/50">
             <motion.div

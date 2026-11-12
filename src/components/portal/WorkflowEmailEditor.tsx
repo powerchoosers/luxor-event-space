@@ -3,7 +3,7 @@
 import React from 'react'
 import { motion, useReducedMotion } from 'framer-motion'
 import { ArrowDown, ArrowUp, Check, Copy, Eye, LayoutTemplate, Monitor, Plus, Redo2, Settings2, Smartphone, Trash2, Undo2 } from '@/lib/icons/phosphor-compat'
-import { PortalButton, PortalCloseButton, PortalModal, PortalSelect } from './PortalUI'
+import { PortalButton, PortalCloseButton, PortalModal, PortalSelect, PortalSkeleton } from './PortalUI'
 import { WorkflowVariableChipsBar } from './WorkflowVariableChipsBar'
 import { EmailRichTextEditor, type EmailRichTextEditorHandle } from './EmailRichTextEditor'
 import { BlockInspector } from '@/app/(portal)/portal/marketing/EmailBuilder/BlockInspector'
@@ -338,7 +338,7 @@ export function WorkflowEmailTemplateControls({ step, onChange, venueAddress }: 
     <PortalSelect value={step.emailStyle || 'personal'} onChange={(value) => onChange({ ...step, emailStyle: value as 'personal' | 'template' })} options={[{ value: 'personal', label: 'Personal email · lightly styled' }, { value: 'template', label: 'HTML template · editable design' }]} />
     {step.emailStyle !== 'template' ? <p className="text-xs leading-5 text-[color:var(--portal-muted)]">Uses the same quiet styling and sender signature as compose and replies.</p> : <>
       <PortalSelect value={step.templateId || ''} placeholder="Choose a saved or starter template" onChange={chooseTemplate} options={templates.map((template) => ({ value: template.id, label: `${template.source === 'saved' ? 'Saved' : 'Starter'} · ${template.name}` }))} />
-      {loading ? <p role="status" className="text-xs text-[color:var(--portal-muted)]">Loading saved templates… Starter designs are ready to use.</p> : null}
+      {loading ? <div className="space-y-1.5 pt-1"><PortalSkeleton className="h-3 w-48 rounded" /><PortalSkeleton className="h-2.5 w-64 rounded opacity-60" /></div> : null}
       {error ? <p role="alert" className="text-xs leading-5 text-rose-600 dark:text-rose-400">{error} <button type="button" onClick={() => { setLoading(true); setRetry((value) => value + 1) }} className="underline">Retry</button></p> : null}
       {document ? <div className="flex items-center justify-between gap-3 rounded-xl border border-[color:var(--portal-border)] p-3">
         <p className="text-xs leading-5 text-[color:var(--portal-muted)]">{document.blocks.length} elements · saved with this workflow</p>
@@ -416,7 +416,7 @@ export function WorkflowEmailPreview({ step, emailSettings }: { step: CustomWork
   return <div className="space-y-3">
     <div className="flex flex-wrap items-center justify-between gap-2"><p className="text-xs text-[color:var(--portal-muted)]">Sample preview · no message sent</p><button type="button" onClick={() => setMobile((value) => !value)} aria-pressed={mobile} className="inline-flex min-h-10 items-center gap-2 rounded-md px-2 text-xs text-[color:var(--portal-text)]"><Eye size={14} /> {mobile ? 'Show desktop' : 'Show mobile'}</button></div>
     {step.generationMode === 'ai' ? <p className="text-xs leading-5 text-[color:var(--portal-muted)]">This shows the saved example. Elena writes a new version for each eligible client when this step runs.</p> : null}
-    {error ? <p role="alert" className="text-xs text-rose-600 dark:text-rose-400">{error}</p> : loading ? <p role="status" className="text-xs text-[color:var(--portal-muted)]">Rendering email…</p> : null}
+    {error ? <p role="alert" className="text-xs text-rose-600 dark:text-rose-400">{error}</p> : loading ? <div className="space-y-3 pt-2"><div className="h-10 w-full rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-3"><PortalSkeleton className="h-4 w-36 rounded" /></div><div className="mx-auto h-[500px] w-full rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-6 space-y-4"><PortalSkeleton className="h-8 w-2/3 rounded" /><PortalSkeleton className="h-4 w-full rounded" /><PortalSkeleton className="h-4 w-5/6 rounded" /><PortalSkeleton className="mt-6 h-36 w-full rounded-xl" /><PortalSkeleton className="h-10 w-32 rounded-lg" /></div></div> : null}
     {html && !error ? <iframe title="Delivered workflow email preview" srcDoc={html} sandbox="" className={`mx-auto h-[600px] max-w-full rounded-lg border border-[color:var(--portal-border)] bg-white ${mobile ? 'w-[375px]' : 'w-full'}`} /> : null}
   </div>
 }

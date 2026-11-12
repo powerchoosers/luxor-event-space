@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { PortalDatePicker, PortalSelect } from '@/components/portal/PortalUI'
+import { PortalDatePicker, PortalSelect, PortalSkeleton, PortalSkeletonTransition } from '@/components/portal/PortalUI'
 import { ChevronLeft, ChevronRight } from '@/lib/icons/phosphor-compat'
 import { filterStatementReviewRows, isStatementReviewRows, parseStatementCsv, type StatementReviewFilter, type StatementReviewRow } from '@/lib/luxorStatementReview'
 import { latestDurableReviews, type DurableMatchReviewEvent } from '@/lib/luxorStatementMatchReview'
@@ -132,7 +132,12 @@ export function StatementImportReview({ accounts, canEdit = false }: { accounts:
     {(preview || selected) && <div className="space-y-3">
       <h3 className="break-words font-bold">{selected ? selected.filename : 'Statement rows'}</h3>
       <p className="text-sm text-[color:var(--portal-muted)]">Review choices do not verify settlement or reconcile an account. Possible duplicates are prompts to compare rows in this file; a row without parsing issues has not been verified. Filters do not mark rows reviewed.</p>
-      {selected && reviewStatus === 'loading' && <p role="status" className="text-sm">Loading review history…</p>}
+      {selected && reviewStatus === 'loading' && (
+        <div className="space-y-2 py-2" aria-hidden="true">
+          <PortalSkeleton className="h-4 w-44 rounded" />
+          <PortalSkeleton className="h-3 w-64 rounded opacity-60" />
+        </div>
+      )}
       {selected && reviewStatus === 'error' && <p role="alert" className="text-sm">Review status is unavailable. <button type="button" className="underline" onClick={() => void loadReviewHistory(selected.id)}>Retry</button></p>}
       {currentRows.length > 0 && <div className="grid gap-3 sm:grid-cols-2">
         <PortalSelect aria-label="Filter statement rows" value={filter} onChange={(value) => { setFilter(value as StatementReviewFilter); setPage(0) }} options={[{ value: 'all', label: 'All statement rows' }, { value: 'unresolved', label: 'Needs attention' }, { value: 'duplicates', label: 'Possible duplicates' }, { value: 'parsed', label: 'No parsing issues' }]} />
@@ -152,6 +157,31 @@ export function StatementImportReview({ accounts, canEdit = false }: { accounts:
       </article>)}
       {filteredRows.length > 0 && <div className="flex items-center gap-3"><button type="button" className={button} aria-label="Previous statement rows" disabled={page === 0} onClick={() => setPage((p) => p - 1)}><ChevronLeft size={16} /></button><span className="tabular-nums text-sm">{page + 1} / {Math.ceil(filteredRows.length / 20)}</span><button type="button" className={button} aria-label="Next statement rows" disabled={(page + 1) * 20 >= filteredRows.length} onClick={() => setPage((p) => p + 1)}><ChevronRight size={16} /></button></div>}
     </div>}
-    <div className="space-y-2 border-t border-[color:var(--portal-border)] pt-4"><h3 className="font-bold">Imported statements</h3>{loadingImports ? <p role="status" className="text-sm text-[color:var(--portal-muted)]">Loading imported statements…</p> : importsError ? <p role="alert" className="text-sm">{importsError} <button type="button" className="underline" onClick={() => void load()}>Try again</button></p> : !statements.length ? <p className="text-sm text-[color:var(--portal-muted)]">No statements imported yet.</p> : statements.map((item) => <button key={item.id} type="button" className="block w-full break-words rounded-lg px-2 py-2 text-left text-sm hover:bg-[color:var(--portal-soft)]" disabled={busy} onClick={() => void open(item.id)}>{item.filename} · {accountOptions.find((a) => a.value === item.account_id)?.label || 'Account unavailable'} · <span className="tabular-nums">{item.period_start} - {item.period_end}</span></button>)}{!loadingImports && !importsError && total > statements.length && <p className="text-sm text-[color:var(--portal-muted)]">Showing the most recent {statements.length} of {total} imports.</p>}</div>
+    <div className="space-y-2 border-t border-[color:var(--portal-border)] pt-4">
+      <h3 className="font-bold">Imported statements</h3>
+      <PortalSkeletonTransition
+        loading={loadingImports}
+        overlap
+        skeleton={
+          <div className="space-y-2 py-1" aria-hidden="true">
+            <PortalSkeleton className="h-9 w-full rounded-lg" />
+            <PortalSkeleton className="h-9 w-full rounded-lg" />
+          </div>
+        }
+      >
+        {importsError ? (
+          <p role="alert" className="text-sm">{importsError} <button type="button" className="underline" onClick={() => void load()}>Try again</button></p>
+        ) : !statements.length ? (
+          <p className="text-sm text-[color:var(--portal-muted)]">No statements imported yet.</p>
+        ) : (
+          statements.map((item) => (
+            <button key={item.id} type="button" className="block w-full break-words rounded-lg px-2 py-2 text-left text-sm hover:bg-[color:var(--portal-soft)]" disabled={busy} onClick={() => void open(item.id)}>
+              {item.filename} · {accountOptions.find((a) => a.value === item.account_id)?.label || 'Account unavailable'} · <span className="tabular-nums">{item.period_start} - {item.period_end}</span>
+            </button>
+          ))
+        )}
+      </PortalSkeletonTransition>
+      {!loadingImports && !importsError && total > statements.length && <p className="text-sm text-[color:var(--portal-muted)]">Showing the most recent {statements.length} of {total} imports.</p>}
+    </div>
   </section>
 }

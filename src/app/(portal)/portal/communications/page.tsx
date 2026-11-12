@@ -12,7 +12,7 @@ import {
 import Link from 'next/link'
 import { isLuxorInquiryArchived, LuxorInquiry, LuxorInquiryStatus, LuxorNote } from '@/lib/luxorInquiryTypes'
 import { decodeHtmlEntities } from '@/lib/luxorTextUtils'
-import { PortalPageFrame, PortalPageHeader, PortalSelect, PortalStatusBadge, PortalContactAvatar } from '@/components/portal/PortalUI'
+import { PortalPageFrame, PortalPageHeader, PortalSelect, PortalStatusBadge, PortalContactAvatar, PortalSkeleton, PortalSkeletonTransition } from '@/components/portal/PortalUI'
 
 const INQUIRY_STATUS_OPTIONS: { value: LuxorInquiryStatus; label: string }[] = [
   { value: 'new', label: 'New' },
@@ -565,42 +565,58 @@ export default function CommunicationsPage() {
                     Owner Follow-Up Notes
                   </div>
 
-                  {loadingNotes ? (
-                    <p className="text-xs text-zinc-650 italic text-center">Syncing history...</p>
-                  ) : notes.length === 0 ? (
-                    <p className="text-xs text-zinc-600 italic text-center">No owner follow-up logs recorded.</p>
-                  ) : (
-                    <div className="relative border-l border-zinc-900 pl-6 space-y-6 ml-3">
-                      {notes.map((note) => {
-                        let typeColor = 'bg-zinc-900 text-zinc-450 border-zinc-800'
-                        let typeLabel = 'Note'
-                        if (note.note_type === 'call_log') {
-                          typeColor = 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
-                          typeLabel = 'Call Log'
-                        } else if (note.note_type === 'email_log') {
-                          typeColor = 'bg-purple-500/10 text-purple-400 border-purple-500/20'
-                          typeLabel = 'Email Log'
-                        } else if (note.note_type === 'status_change') {
-                          typeColor = 'bg-amber-500/10 text-amber-400 border-amber-500/20'
-                          typeLabel = 'Status Change'
-                        }
-
-                        return (
-                          <div key={note.id} className="relative">
-                            <div className="absolute -left-[32px] top-1 h-3 w-3 rounded-full bg-zinc-950 border-2 border-zinc-850" />
-                            <div className="flex items-center justify-between gap-3 flex-wrap text-[10px] font-bold uppercase tracking-wider text-zinc-550 mb-1.5">
-                              <span>{note.author}</span>
-                              <div className="flex items-center gap-2">
-                                <span className={`text-[8px] font-bold tracking-widest px-2 py-0.5 rounded border ${typeColor}`}>{typeLabel}</span>
-                                <span className="text-[9px] font-mono text-zinc-600">{new Date(note.created_at).toLocaleDateString('en-US', { dateStyle: 'long' })}</span>
-                              </div>
+                  <PortalSkeletonTransition
+                    loading={loadingNotes}
+                    overlap
+                    skeleton={
+                      <div className="space-y-4 py-2" aria-hidden="true">
+                        {Array.from({ length: 3 }).map((_, i) => (
+                          <div key={i} className="flex gap-3 pl-3">
+                            <PortalSkeleton className="h-5 w-16 rounded-full" />
+                            <div className="flex-1 space-y-1.5">
+                              <PortalSkeleton className="h-3 w-3/4 rounded" />
+                              <PortalSkeleton className="h-2.5 w-1/2 rounded" />
                             </div>
-                            <p className="text-xs text-zinc-300 font-medium whitespace-pre-wrap leading-relaxed">{note.content}</p>
                           </div>
-                        )
-                      })}
-                    </div>
-                  )}
+                        ))}
+                      </div>
+                    }
+                  >
+                    {notes.length === 0 ? (
+                      <p className="text-xs text-zinc-600 italic text-center">No owner follow-up logs recorded.</p>
+                    ) : (
+                      <div className="relative border-l border-zinc-900 pl-6 space-y-6 ml-3">
+                        {notes.map((note) => {
+                          let typeColor = 'bg-zinc-900 text-zinc-450 border-zinc-800'
+                          let typeLabel = 'Note'
+                          if (note.note_type === 'call_log') {
+                            typeColor = 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                            typeLabel = 'Call Log'
+                          } else if (note.note_type === 'email_log') {
+                            typeColor = 'bg-purple-500/10 text-purple-400 border-purple-500/20'
+                            typeLabel = 'Email Log'
+                          } else if (note.note_type === 'status_change') {
+                            typeColor = 'bg-amber-500/10 text-amber-400 border-amber-500/20'
+                            typeLabel = 'Status Change'
+                          }
+
+                          return (
+                            <div key={note.id} className="relative">
+                              <div className="absolute -left-[32px] top-1 h-3 w-3 rounded-full bg-zinc-950 border-2 border-zinc-850" />
+                              <div className="flex items-center justify-between gap-3 flex-wrap text-[10px] font-bold uppercase tracking-wider text-zinc-550 mb-1.5">
+                                <span>{note.author}</span>
+                                <div className="flex items-center gap-2">
+                                  <span className={`text-[8px] font-bold tracking-widest px-2 py-0.5 rounded border ${typeColor}`}>{typeLabel}</span>
+                                  <span className="text-[9px] font-mono text-zinc-600">{new Date(note.created_at).toLocaleDateString('en-US', { dateStyle: 'long' })}</span>
+                                </div>
+                              </div>
+                              <p className="text-xs text-zinc-300 font-medium whitespace-pre-wrap leading-relaxed">{note.content}</p>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )}
+                  </PortalSkeletonTransition>
                 </div>
 
               </div>

@@ -38,6 +38,8 @@ import React, { useCallback, useEffect, useId, useMemo, useState } from 'react'
 import {
   PortalContactAvatar,
   PortalSelect,
+  PortalSkeleton,
+  PortalSkeletonTransition,
 } from '@/components/portal/PortalUI'
 import { PortalAudioPlayer } from '@/components/portal/PortalAudioPlayer'
 import { usePortalVoice } from '@/components/portal/PortalVoiceProvider'
@@ -678,36 +680,42 @@ export default function CallsPage() {
               </div>
             </motion.div>
           ) : (
-            <motion.div initial={reduceMotion ? false : { filter: 'blur(6px)' }} animate={{ filter: pendingPhoneTab && !reduceMotion ? 'blur(6px)' : 'blur(0px)' }} transition={{ duration: reduceMotion ? 0 : pendingPhoneTab ? 0.15 : 0.25, ease: 'easeOut' }} className="flex-1 min-h-0 overflow-y-auto portal-scrollbar divide-y divide-[color:var(--portal-border)]/70">
-              {loading ? (
-                <div className="p-4 space-y-3.5">
-                  {Array.from({ length: 7 }).map((_, i) => (
-                    <div key={i} className="flex items-center gap-3 py-1.5">
-                      <div className="h-10 w-10 rounded-full luxor-skeleton shrink-0" />
-                      <div className="flex-1 space-y-2">
-                        <div className="h-3.5 w-32 rounded luxor-skeleton" />
-                        <div className="h-2.5 w-24 rounded luxor-skeleton" />
+            <motion.div initial={reduceMotion ? false : { filter: 'blur(6px)' }} animate={{ filter: pendingPhoneTab && !reduceMotion ? 'blur(6px)' : 'blur(0px)' }} transition={{ duration: reduceMotion ? 0 : pendingPhoneTab ? 0.15 : 0.25, ease: 'easeOut' }} className="flex-1 min-h-0 overflow-y-auto portal-scrollbar">
+              <PortalSkeletonTransition
+                loading={loading}
+                overlap
+                skeleton={
+                  <div className="p-4 space-y-3.5 divide-y divide-[color:var(--portal-border)]/70">
+                    {Array.from({ length: 7 }).map((_, i) => (
+                      <div key={i} className="flex items-center gap-3 py-1.5" aria-hidden="true">
+                        <PortalSkeleton className="h-10 w-10 rounded-full shrink-0" />
+                        <div className="flex-1 space-y-2">
+                          <PortalSkeleton className="h-3.5 w-32 rounded" />
+                          <PortalSkeleton className="h-2.5 w-24 rounded" />
+                        </div>
                       </div>
-                    </div>
-                  ))}
-                </div>
-              ) : filteredCalls.length === 0 ? (
-                <div className="flex h-full min-h-60 flex-col items-center justify-center px-6 text-center">
-                  <div className="flex h-12 w-12 items-center justify-center rounded-full bg-[color:var(--portal-soft)] text-[color:var(--portal-muted)]">
-                    {activeTab === 'voicemail' ? <Voicemail size={22} /> : <Phone size={22} />}
+                    ))}
                   </div>
-                  <p className="mt-3 text-sm font-semibold text-[color:var(--portal-text)]">
-                    {activeTab === 'voicemail' ? 'No Voicemails' : 'No Recent Calls'}
-                  </p>
-                  <p className="mt-1 text-xs text-[color:var(--portal-muted)]">
-                    {search
-                      ? 'Try a different name or phone number.'
-                      : activeTab === 'voicemail'
-                        ? 'Voicemail messages left by callers will appear here.'
-                        : 'Inbound and outbound calls will appear here.'}
-                  </p>
-                </div>
-              ) : (
+                }
+              >
+                <div className="divide-y divide-[color:var(--portal-border)]/70">
+                  {filteredCalls.length === 0 ? (
+                    <div className="flex h-full min-h-60 flex-col items-center justify-center px-6 text-center">
+                      <div className="flex h-12 w-12 items-center justify-center rounded-full bg-[color:var(--portal-soft)] text-[color:var(--portal-muted)]">
+                        {activeTab === 'voicemail' ? <Voicemail size={22} /> : <Phone size={22} />}
+                      </div>
+                      <p className="mt-3 text-sm font-semibold text-[color:var(--portal-text)]">
+                        {activeTab === 'voicemail' ? 'No Voicemails' : 'No Recent Calls'}
+                      </p>
+                      <p className="mt-1 text-xs text-[color:var(--portal-muted)]">
+                        {search
+                          ? 'Try a different name or phone number.'
+                          : activeTab === 'voicemail'
+                            ? 'Voicemail messages left by callers will appear here.'
+                            : 'Inbound and outbound calls will appear here.'}
+                      </p>
+                    </div>
+                  ) : (
                 filteredCalls.map((call, rowIndex) => {
                   const isSelected = selectedId === call.id
                   const missed = isMissed(call)
@@ -889,6 +897,8 @@ export default function CallsPage() {
                   )
                 })
               )}
+                </div>
+              </PortalSkeletonTransition>
             </motion.div>
           )}
 
@@ -978,7 +988,7 @@ export default function CallsPage() {
 
               {/* 1. Calm Contact Poster Header */}
               <div className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 sm:p-6">
-                <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+                <div className="flex flex-row items-start gap-3 sm:items-center sm:gap-4">
                   {getNamedContact(selectedCall.contact_name) ? (
                     selectedCall.inquiry_id ? (
                       <Link
@@ -1535,27 +1545,49 @@ function CallLeadDetails({ inquiryId }: { inquiryId: string }) {
   }, [inquiryId, retry])
 
   if (error) return <div className="px-1 py-3 text-xs text-[color:var(--portal-muted)]"><span role="status">{error}</span> <button type="button" onClick={() => { setError(''); setRetry(current => current + 1) }} className="font-semibold text-[#a8792f] underline dark:text-[#f1d27a]">Try again</button> <Link className="ml-2 font-semibold text-[#a8792f] underline dark:text-[#f1d27a]" href={`/portal/leads/${encodeURIComponent(inquiryId)}?from=/portal/calls`}>Open lead</Link></div>
-  if (!lead) return <p className="px-1 py-4 text-xs text-[color:var(--portal-muted)]" role="status">Loading lead details…</p>
 
-  const rows = [
+  const rows = lead ? [
     { label: 'Event', value: lead.eventType },
     { label: 'Event date', value: formatCallLeadDate(lead.targetDate) },
     { label: 'Guests', value: lead.guestCount != null ? String(lead.guestCount) : null },
     { label: 'Stage', value: (lead.pipelineStage || lead.status || '').replace(/_/g, ' ') || null },
     { label: 'Package interest', value: lead.packageInterest },
     { label: 'Preferred tour', value: [formatCallLeadDate(lead.preferredTourDate), formatCallLeadTime(lead.preferredTourTime)].filter(Boolean).join(' · ') || null },
-  ].filter((row) => row.value)
+  ].filter((row) => row.value) : []
 
   return (
-    <div className="px-1 pb-2 pt-3 text-left">
-      {rows.length ? <dl className="space-y-2.5">{rows.map(row => <div key={row.label} className="flex items-start justify-between gap-4 text-xs"><dt className="text-[color:var(--portal-muted)]">{row.label}</dt><dd className="min-w-0 text-right font-semibold text-[color:var(--portal-text)] first-letter:uppercase">{row.value}</dd></div>)}</dl> : <p className="text-xs text-[color:var(--portal-muted)]">No event details captured yet.</p>}
-      {lead.message && <div className="mt-4 border-t border-[color:var(--portal-border)] pt-3"><p className="text-[10px] font-bold uppercase tracking-wider text-[color:var(--portal-muted)]">Inquiry</p><p className="mt-1 whitespace-pre-wrap break-words text-xs leading-relaxed text-[color:var(--portal-text)]">{lead.message}</p></div>}
-      <div className="mt-4 flex flex-wrap gap-2">
-        {canText && lead.phone && <button type="button" onClick={() => window.dispatchEvent(new CustomEvent('luxor-open-text', { detail: { inquiryId: lead.id, phone: lead.phone, contactName: lead.fullName } }))} className="inline-flex min-h-10 items-center gap-1.5 rounded-lg bg-[color:var(--portal-soft)] px-3 text-xs font-semibold text-[color:var(--portal-text)] hover:bg-[color:var(--portal-border)]/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/50"><MessageSquare size={14} /> Text</button>}
-        {canEmail && lead.email && <button type="button" onClick={() => window.dispatchEvent(new CustomEvent('luxor-compose-email', { detail: { lead: { id: lead.id, full_name: lead.fullName, email: lead.email, event_type: lead.eventType } } }))} className="inline-flex min-h-10 items-center gap-1.5 rounded-lg bg-[color:var(--portal-soft)] px-3 text-xs font-semibold text-[color:var(--portal-text)] hover:bg-[color:var(--portal-border)]/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/50"><Mail size={14} /> Email</button>}
-        <Link href={`/portal/leads/${encodeURIComponent(lead.id)}?from=/portal/calls`} className="inline-flex min-h-10 items-center gap-1.5 rounded-lg px-2 text-xs font-semibold text-[#a8792f] hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/50 dark:text-[#f1d27a]">Open lead <ChevronRight size={14} /></Link>
-      </div>
-    </div>
+    <PortalSkeletonTransition
+      loading={!lead}
+      overlap
+      skeleton={
+        <div className="px-1 pb-2 pt-3 space-y-3" aria-hidden="true">
+          <div className="space-y-2.5">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <div key={i} className="flex items-center justify-between gap-4">
+                <PortalSkeleton className="h-3 w-16 rounded" />
+                <PortalSkeleton className="h-3.5 w-24 rounded" />
+              </div>
+            ))}
+          </div>
+          <div className="mt-4 border-t border-[color:var(--portal-border)] pt-3 space-y-2">
+            <PortalSkeleton className="h-2.5 w-14 rounded" />
+            <PortalSkeleton className="h-8 w-full rounded-lg" />
+          </div>
+        </div>
+      }
+    >
+      {lead ? (
+        <div className="px-1 pb-2 pt-3 text-left">
+          {rows.length ? <dl className="space-y-2.5">{rows.map(row => <div key={row.label} className="flex items-start justify-between gap-4 text-xs"><dt className="text-[color:var(--portal-muted)]">{row.label}</dt><dd className="min-w-0 text-right font-semibold text-[color:var(--portal-text)] first-letter:uppercase">{row.value}</dd></div>)}</dl> : <p className="text-xs text-[color:var(--portal-muted)]">No event details captured yet.</p>}
+          {lead.message && <div className="mt-4 border-t border-[color:var(--portal-border)] pt-3"><p className="text-[10px] font-bold uppercase tracking-wider text-[color:var(--portal-muted)]">Inquiry</p><p className="mt-1 whitespace-pre-wrap break-words text-xs leading-relaxed text-[color:var(--portal-text)]">{lead.message}</p></div>}
+          <div className="mt-4 flex flex-wrap gap-2">
+            {canText && lead.phone && <button type="button" onClick={() => window.dispatchEvent(new CustomEvent('luxor-open-text', { detail: { inquiryId: lead.id, phone: lead.phone, contactName: lead.fullName } }))} className="inline-flex min-h-10 items-center gap-1.5 rounded-lg bg-[color:var(--portal-soft)] px-3 text-xs font-semibold text-[color:var(--portal-text)] hover:bg-[color:var(--portal-border)]/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/50"><MessageSquare size={14} /> Text</button>}
+            {canEmail && lead.email && <button type="button" onClick={() => window.dispatchEvent(new CustomEvent('luxor-compose-email', { detail: { lead: { id: lead.id, full_name: lead.fullName, email: lead.email, event_type: lead.eventType } } }))} className="inline-flex min-h-10 items-center gap-1.5 rounded-lg bg-[color:var(--portal-soft)] px-3 text-xs font-semibold text-[color:var(--portal-text)] hover:bg-[color:var(--portal-border)]/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/50"><Mail size={14} /> Email</button>}
+            <Link href={`/portal/leads/${encodeURIComponent(lead.id)}?from=/portal/calls`} className="inline-flex min-h-10 items-center gap-1.5 rounded-lg px-2 text-xs font-semibold text-[#a8792f] hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/50 dark:text-[#f1d27a]">Open lead <ChevronRight size={14} /></Link>
+          </div>
+        </div>
+      ) : null}
+    </PortalSkeletonTransition>
   )
 }
 

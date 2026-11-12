@@ -21,6 +21,7 @@ import {
   Plus,
   Receipt,
   Repeat,
+  Tag,
   TrendDown,
   UploadSimple,
   X,
@@ -32,6 +33,7 @@ import {
   PortalExpandTransition,
   PortalDatePicker,
   PortalFilterBar,
+  PortalFilterOverflowMenu,
   PortalPagination,
   PortalModal,
   PortalPageFrame,
@@ -41,7 +43,12 @@ import {
   PortalSkeletonTransition,
   PortalStatusBadge,
   PortalTableCard,
+  PortalTableListPagination,
   PortalTabTransition,
+  PORTAL_DATA_TABLE_HEAD_CLASS,
+  PORTAL_TABLE_LIST_EDGE_CLASS,
+  PORTAL_TABLE_LIST_CARD_CLASS,
+  PORTAL_TABLE_LIST_SCROLL_PAD_CLASS,
   type PortalStatusTone,
 } from '@/components/portal/PortalUI'
 import { ExpenseMobileActionBar } from '@/components/portal/expenses/ExpenseMobileActionBar'
@@ -323,7 +330,7 @@ function EmptyState({ title, detail }: { title: string; detail: string }) {
   return <div className="rounded-2xl border border-dashed border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/35 px-5 py-10 text-center"><p className="font-semibold text-[color:var(--portal-text)]">{title}</p><p className="mx-auto mt-1 max-w-md text-sm leading-6 text-[color:var(--portal-muted)]">{detail}</p></div>
 }
 
-export default function ExpenseManagement({ view, expenseId, embedded = false, selectedRange, provider, onOpenBill, onBrowseCompanies, initialTemplateId, onBack, initialBillId, panelOnly = false }: { view: ExpenseManagementView; expenseId?: string; embedded?: boolean; selectedRange?: { start: string; end: string }; provider?: { id: string; name: string }; onOpenBill?: (billId: string) => void; onBrowseCompanies?: () => void; initialTemplateId?: string; onBack?: () => void; initialBillId?: string; panelOnly?: boolean }) {
+export default function ExpenseManagement({ view, expenseId, embedded = false, selectedRange, provider, onOpenBill, initialTemplateId, onBack, initialBillId, panelOnly = false }: { view: ExpenseManagementView; expenseId?: string; embedded?: boolean; selectedRange?: { start: string; end: string }; provider?: { id: string; name: string }; onOpenBill?: (billId: string) => void; initialTemplateId?: string; onBack?: () => void; initialBillId?: string; panelOnly?: boolean }) {
   const router = useRouter()
   const [data, setData] = useState<ExpenseManagementData>({ expenses: [], templates: [], categories: [], bookings: [], bills: [], receipts: [] })
   const recurringSuggestions = useMemo(() => view === 'recurring' && !provider ? recurringCostEvidence(data.bills, data.expenses, data.templates) : [], [view, provider, data.bills, data.expenses, data.templates])
@@ -481,10 +488,12 @@ export default function ExpenseManagement({ view, expenseId, embedded = false, s
       void loadData(true)
     }
     window.addEventListener('luxor:recurring-costs-updated', handleGlobalUpdate)
+    window.addEventListener('luxor:expenses-updated', handleGlobalUpdate)
 
     return () => {
       active = false
       window.removeEventListener('luxor:recurring-costs-updated', handleGlobalUpdate)
+      window.removeEventListener('luxor:expenses-updated', handleGlobalUpdate)
       if (refreshTimer !== null) window.clearTimeout(refreshTimer)
       void supabase.removeChannel(postgresChannel)
       if (broadcastChannel) void supabase.removeChannel(broadcastChannel)
@@ -1090,16 +1099,18 @@ export default function ExpenseManagement({ view, expenseId, embedded = false, s
       <span className="min-w-0"><span className="block text-[8px] font-black uppercase tracking-[0.14em] text-[color:var(--portal-faint)]">Browse views</span><span className="mt-0.5 block max-w-[170px] truncate text-xs font-bold leading-tight">{page.title}</span></span>
       <span aria-hidden="true" className="text-[color:var(--portal-muted)]">⌄</span>
     </button>
-    {view === 'recurring' && onBrowseCompanies ? <PortalButton type="button" onClick={onBrowseCompanies}>Company details</PortalButton> : null}
     {view === 'recurring' ? <PortalButton type="button" variant="primary" onClick={() => openNewTemplate()} className="!hidden"><Plus size={15} /> Add recurring cost</PortalButton> : null}
-    {view === 'business' || view === 'dashboard' ? <PortalButton type="button" variant="primary" onClick={() => openNewExpense('business')} className={view === 'dashboard' ? '!hidden sm:!inline-flex' : undefined}><Plus size={15} /> Log expense</PortalButton> : null}
     {view === 'events' ? <PortalButton type="button" variant="primary" onClick={() => openNewExpense('event')}><Plus size={15} /> Add event expense</PortalButton> : null}
     {view === 'receipts' ? <PortalButton type="button" variant="primary" onClick={() => document.getElementById('expense-receipt-file')?.click()}><UploadSimple size={15} /> Upload receipt</PortalButton> : null}
   </div>
 
   const detailName = selectedExpense?.description || 'Expense detail'
+  const embeddedTableListView = embedded && !panelOnly && (view === 'recurring' || view === 'business')
 
-  return <PortalPageFrame className={panelOnly ? 'contents' : provider ? 'flex min-w-0 flex-col gap-4' : embedded ? 'flex h-full min-h-0 flex-col gap-3 overflow-hidden' : 'flex h-full min-h-0 flex-col gap-4 overflow-hidden max-md:pt-4'}>
+  return <PortalPageFrame
+    bleed={Boolean(embedded && embeddedTableListView && !panelOnly && !provider)}
+    className={panelOnly ? 'contents' : provider ? 'flex min-w-0 flex-col gap-4' : embedded ? 'min-h-0 flex-1 gap-0 overflow-hidden' : 'flex h-full min-h-0 flex-col gap-4 overflow-hidden max-md:pt-4'}
+  >
     {!panelOnly && <>
     {!embedded && <PortalPageHeader icon={page.icon} title={view === 'detail' ? detailName : page.title} description={page.description} mobileActionsInline actions={headerActions} />}
     {!embedded && <div className="md:hidden">
@@ -1110,19 +1121,19 @@ export default function ExpenseManagement({ view, expenseId, embedded = false, s
       </button>
     </div>}
     {!embedded && <FinanceBrowseViews open={browseOpen} close={() => setBrowseOpen(false)} currentView={page.browse} />}
-    {embedded && !provider && view !== 'detail' ? <div className={`flex-wrap items-center justify-end gap-2.5 pb-1 ${view === 'dashboard' ? 'hidden sm:flex' : 'flex'}`}>{headerActions}</div> : null}
+    {embedded && !provider && view !== 'detail' && view !== 'dashboard' && view !== 'business' && view !== 'recurring' ? <div className="flex flex-wrap items-center justify-end gap-2.5 pb-1">{headerActions}</div> : null}
     {!embedded && <nav aria-label="Expense management views" className="hidden xl:block">
       <PortalAnimatedTabs tabs={EXPENSE_TABS} activeTab={activeView as Exclude<ExpenseManagementView, 'detail'>} onTabChange={navigateTab} ariaLabel="Expense management views" className="flex min-w-max items-center gap-1 overflow-x-auto portal-scrollbar" />
     </nav>}
-    <div className={`min-h-0 flex-1 overflow-y-auto overflow-x-hidden portal-scrollbar ${view === 'dashboard' ? 'pb-24 sm:pb-6' : 'pb-6'}`}>
+    <div className={embeddedTableListView ? 'flex min-h-0 flex-1 flex-col max-lg:overflow-visible lg:overflow-hidden' : `min-h-0 flex-1 overflow-y-auto overflow-x-hidden portal-scrollbar ${view === 'dashboard' ? 'pb-24 sm:pb-6' : 'pb-6'}`}>
       {notice ? <div role="status" className="mb-4 flex items-start justify-between gap-3 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-4 py-3 text-sm text-[color:var(--portal-text)]"><span>{notice}</span><button type="button" aria-label="Dismiss message" onClick={() => setNotice(null)} className="rounded p-1 text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-card)]"><X size={14} /></button></div> : null}
       {error ? <div role="alert" className="mb-4 rounded-xl border border-rose-500/20 bg-rose-500/5 p-4 text-sm text-rose-700 dark:text-rose-300"><p className="font-semibold">Expense records are unavailable</p><p className="mt-1">{error}</p><button type="button" onClick={refresh} className="mt-3 font-semibold underline underline-offset-2">Try again</button></div> : null}
       {loading && !data.expenses.length ? <div className="space-y-4"><div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">{Array.from({ length: 4 }, (_, i) => <div key={i} className={`${CARD_CLASS} p-5`}><PortalSkeleton className="h-3 w-28 rounded" /><PortalSkeleton className="mt-4 h-7 w-32 rounded" /><PortalSkeleton className="mt-3 h-3 w-40 rounded" /></div>)}</div><div className={`${CARD_CLASS} p-5`}><PortalSkeleton className="h-5 w-48 rounded" /><PortalSkeleton className="mt-5 h-52 w-full rounded-xl" /></div></div> : null}
-      {!loading && !error ? <PortalTabTransition activeKey={view}>
+      {!loading && !error ? <PortalTabTransition activeKey={view} className={embeddedTableListView ? 'flex min-h-0 flex-1 flex-col max-lg:overflow-visible lg:overflow-hidden' : undefined}>
         {view === 'dashboard' ? <DashboardView data={data} period={period} setPeriod={setPeriod} periodRange={periodRange} externalRange={Boolean(selectedRange)} customStart={customStart} setCustomStart={setCustomStart} customEnd={customEnd} setCustomEnd={setCustomEnd} trendPeriod={trendPeriod} setTrendPeriod={setTrendPeriod} paidTotal={paidTotal} paidExcluded={paidExcluded} unpaidTotal={unpaidTotal} overdueTotal={overdueTotal} upcomingTotal={upcomingTotal} monthlyFixed={monthlyFixed} variableTotal={variableTotal} unknownVariableCount={unknownVariableCount} eventTotal={eventTotal} recentExpenses={recentExpenses} bookingById={bookingById} onOpenExpense={setPanelExpenseId} /> : null}
-        {view === 'recurring' && recurringSuggestions.length ? <section className={`${CARD_CLASS} p-4 sm:p-5`}><h2 className="text-base font-bold text-[color:var(--portal-text)]">Possible recurring costs</h2><p className="mt-1 text-xs text-[color:var(--portal-muted)]">These reviewed business bills show a repeating cycle. Check the next billing date before saving a schedule.</p><div className="mt-3 divide-y divide-[color:var(--portal-border)]">{recurringSuggestions.map((suggestion) => <div key={suggestion.billIds.join(':')} className="flex flex-wrap items-center justify-between gap-3 py-3"><div><p className="text-sm font-semibold text-[color:var(--portal-text)]">{suggestion.name}</p><p className="mt-1 text-xs text-[color:var(--portal-muted)]">{suggestion.provider} · {suggestion.frequency} · {suggestion.billCount} reviewed bills</p></div><PortalButton type="button" size="sm" onClick={() => openSuggestedTemplate(suggestion)}>Review schedule</PortalButton></div>)}</div></section> : null}
-        {view === 'recurring' ? <RecurringView message={notice} key={initialTemplateId || 'recurring'} initialTemplateId={initialTemplateId} providerMode={Boolean(provider)} data={provider ? { ...data, templates: data.templates.filter((template) => template.vendor_id === provider.id), expenses: data.expenses.filter((expense) => data.templates.some((template) => template.id === expense.recurring_template_id && template.vendor_id === provider.id)) } : data} busy={busy} onAdd={() => openNewTemplate()} onEdit={openNewTemplate} onToggle={toggleTemplate} onViewExpense={setPanelExpenseId} onEditExpense={openEditExpense} onSkip={skipOccurrence} onOpenBill={openBill} /> : null}
-        {view === 'business' ? <BusinessView data={data} categoryOptions={categoryOptions} categoryFilter={categoryFilter} setCategoryFilter={setCategoryFilter} statusFilter={statusFilter} setStatusFilter={setStatusFilter} query={query} setQuery={setQuery} onAdd={() => openNewExpense('business')} onEdit={openEditExpense} onCancel={cancelExpense} onOpen={setPanelExpenseId} onManageCategories={() => setCategoryModalOpen(true)} loading={loading} /> : null}
+        {view === 'recurring' && recurringSuggestions.length ? <section className={`${embeddedTableListView ? 'mb-3 shrink-0' : ''} ${CARD_CLASS} p-4 sm:p-5`}><h2 className="text-base font-bold text-[color:var(--portal-text)]">Possible recurring costs</h2><p className="mt-1 text-xs text-[color:var(--portal-muted)]">These reviewed business bills show a repeating cycle. Check the next billing date before saving a schedule.</p><div className="mt-3 divide-y divide-[color:var(--portal-border)]">{recurringSuggestions.map((suggestion) => <div key={suggestion.billIds.join(':')} className="flex flex-wrap items-center justify-between gap-3 py-3"><div><p className="text-sm font-semibold text-[color:var(--portal-text)]">{suggestion.name}</p><p className="mt-1 text-xs text-[color:var(--portal-muted)]">{suggestion.provider} · {suggestion.frequency} · {suggestion.billCount} reviewed bills</p></div><PortalButton type="button" size="sm" onClick={() => openSuggestedTemplate(suggestion)}>Review schedule</PortalButton></div>)}</div></section> : null}
+        {view === 'recurring' ? <div className={embeddedTableListView ? 'flex min-h-0 flex-1 flex-col max-lg:overflow-visible lg:overflow-hidden' : undefined}><RecurringView message={notice} key={initialTemplateId || 'recurring'} initialTemplateId={initialTemplateId} providerMode={Boolean(provider)} data={provider ? { ...data, templates: data.templates.filter((template) => template.vendor_id === provider.id), expenses: data.expenses.filter((expense) => data.templates.some((template) => template.id === expense.recurring_template_id && template.vendor_id === provider.id)) } : data} busy={busy} onAdd={() => openNewTemplate()} onEdit={openNewTemplate} onToggle={toggleTemplate} onViewExpense={setPanelExpenseId} onEditExpense={openEditExpense} onSkip={skipOccurrence} onOpenBill={openBill} /></div> : null}
+        {view === 'business' ? <div className={embeddedTableListView ? 'flex min-h-0 flex-1 flex-col max-lg:overflow-visible lg:overflow-hidden' : undefined}><BusinessView data={data} categoryOptions={categoryOptions} categoryFilter={categoryFilter} setCategoryFilter={setCategoryFilter} statusFilter={statusFilter} setStatusFilter={setStatusFilter} query={query} setQuery={setQuery} onAdd={() => openNewExpense('business')} onEdit={openEditExpense} onCancel={cancelExpense} onOpen={setPanelExpenseId} onManageCategories={() => setCategoryModalOpen(true)} loading={loading} /></div> : null}
         {view === 'events' ? <EventExpensesView onOpenExpense={setPanelExpenseId} data={data} ledger={ledger} selectedBooking={selectedBooking} setSelectedBooking={setSelectedBooking} onAdd={(id) => { if (!id) { setNotice('Choose a booking before adding an event expense.'); return } if (pendingExpenseRequest) { setExpenseModalOpen(true); setNotice('Resolve the existing expense save before starting another expense.'); return } openNewExpense('event'); setExpenseField('booking_id', id) }} /> : null}
         {view === 'receipts' ? <ReceiptsView data={data} categories={categoryOptions} receiptQuery={receiptQuery} setReceiptQuery={setReceiptQuery} vendorFilter={receiptVendorFilter} setVendorFilter={setReceiptVendorFilter} categoryFilter={receiptCategoryFilter} setCategoryFilter={setReceiptCategoryFilter} bookingFilter={receiptBookingFilter} setBookingFilter={setReceiptBookingFilter} start={receiptStart} setStart={setReceiptStart} end={receiptEnd} setEnd={setReceiptEnd} form={receiptForm} setForm={setReceiptForm} onSubmit={submitReceipt} receiptReview={receiptReview} setReceiptReview={setReceiptReview} onSaveReview={saveReceiptReview} busy={busy} /> : null}
         {view === 'detail' ? <ExpenseDetailView expense={selectedExpense} data={data} booking={selectedExpense?.booking_id ? bookingById.get(selectedExpense.booking_id) || null : null} onBack={onBack || (() => router.back())} compact={embedded} onOpenBill={openBill} onEdit={selectedExpense ? () => openEditExpense(selectedExpense) : undefined} onCancel={selectedExpense ? () => void cancelExpense(selectedExpense) : undefined} onPay={() => openPaymentForExpense(selectedExpense)} onOpenAdjust={() => { setNotice(null); setPaymentForm({ amount: '', payment_date: todayKey(), payment_method: selectedExpense?.payment_method || '', transaction_type: 'refund', reference_number: '', notes: '', idempotency_key: crypto.randomUUID() }); setPaymentRetryLocked(false); setPaymentOpen(true) }} /> : null}
@@ -1591,8 +1602,11 @@ function RecurringView({ data, busy, onAdd, onEdit, onToggle, onViewExpense, onE
   return <>
     {!panelOnly && (
       <PortalTableCard
+        mobilePageScroll
+        mobilePageScrollUntil="lg"
+        footerClassName="max-lg:hidden"
+        className={`${PORTAL_TABLE_LIST_CARD_CLASS} ${PORTAL_TABLE_LIST_EDGE_CLASS}`}
         controls={
-          <div className="px-4 py-3 sm:px-6">
             <PortalFilterBar
               searchValue={search}
               onSearchChange={(value) => {
@@ -1646,33 +1660,34 @@ function RecurringView({ data, busy, onAdd, onEdit, onToggle, onViewExpense, onE
                 />
               </div>
             </PortalFilterBar>
-          </div>
         }
         footer={
-          pageCount > 1 ? (
-            <div className="flex items-center justify-between gap-3 px-4 py-3 sm:px-6">
-              <span className="text-xs tabular-nums text-[color:var(--portal-muted)]">
-                {(currentPage - 1) * 15 + 1}–{Math.min(currentPage * 15, filtered.length)} of {filtered.length}
-              </span>
-              <PortalPagination currentPage={currentPage} totalPages={pageCount} onPageChange={setPage} scrollToTop={false} />
-            </div>
-          ) : null
+          <PortalTableListPagination
+            count={filtered.length}
+            pageSize={15}
+            currentPage={currentPage}
+            totalPages={pageCount}
+            startIndex={(currentPage - 1) * 15}
+            noun={filtered.length === 1 ? 'cost' : 'costs'}
+            onPageChange={setPage}
+            scrollToTop={false}
+          />
         }
       >
-        <div className="hidden grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)_6rem_1rem] gap-4 border-b border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/45 px-6 py-3 text-xs font-semibold text-[color:var(--portal-muted)] md:grid">
+        <div className={`${PORTAL_DATA_TABLE_HEAD_CLASS} hidden md:grid md:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)_6rem_1rem] md:gap-3`}>
           <span>Cost / company</span>
           <span>Repeats</span>
           <span className="text-right">Expected amount</span>
           <span>Status</span>
           <span />
         </div>
-        <div className="divide-y divide-[color:var(--portal-border)]">
+        <div className={`divide-y divide-[color:var(--portal-border)] ${PORTAL_TABLE_LIST_SCROLL_PAD_CLASS}`}>
           {filtered.slice((currentPage - 1) * 15, currentPage * 15).map((template) => (
             <button
               type="button"
               key={template.id}
               onClick={() => openTemplate(template.id)}
-              className="grid w-full grid-cols-[minmax(0,1fr)_auto_1rem] items-center gap-3 px-4 py-4 text-left transition-colors hover:bg-[color:var(--portal-soft)]/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#caa24c]/50 md:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)_6rem_1rem] md:gap-4 md:px-6"
+              className="grid w-full grid-cols-[minmax(0,1fr)_auto_1rem] items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-[color:var(--portal-soft)]/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#caa24c]/50 sm:px-6 md:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)_6rem_1rem] md:gap-3"
             >
               <span className="min-w-0">
                 <span className="block truncate text-sm font-semibold text-[color:var(--portal-text)]">{template.name}</span>
@@ -1741,8 +1756,11 @@ function BusinessView({ data, categoryOptions, categoryFilter, setCategoryFilter
   const pageCount = Math.max(1, Math.ceil(filtered.length / 15)), currentPage = Math.min(page, pageCount)
   return (
     <PortalTableCard
+      mobilePageScroll
+      mobilePageScrollUntil="lg"
+      footerClassName="max-lg:hidden"
+      className={`${PORTAL_TABLE_LIST_CARD_CLASS} ${PORTAL_TABLE_LIST_EDGE_CLASS}`}
       controls={
-        <div className="px-4 py-3 sm:px-6">
           <PortalFilterBar
             searchValue={query}
             onSearchChange={(value) => {
@@ -1751,7 +1769,19 @@ function BusinessView({ data, categoryOptions, categoryFilter, setCategoryFilter
             }}
             searchPlaceholder="Search business expenses"
             resultLabel={`${filtered.length} ${filtered.length === 1 ? 'expense' : 'expenses'}`}
-            actions={data.can_manage_categories ? <PortalButton size="sm" onClick={onManageCategories}>Categories</PortalButton> : undefined}
+            resultTrailing={
+              data.can_manage_categories ? (
+                <PortalFilterOverflowMenu
+                  ariaLabel="Business expense options"
+                  items={[{
+                    id: 'categories',
+                    label: 'Categories',
+                    icon: <Tag size={13} className="text-[#caa24c]" aria-hidden />,
+                    onSelect: onManageCategories,
+                  }]}
+                />
+              ) : undefined
+            }
             activeFilters={[
               ...(categoryFilter !== 'all' ? [{ id: 'category', label: categoryFilter, onRemove: () => { setCategoryFilter('all'); setPage(1) } }] : []),
               ...(statusFilter !== 'all' ? [{ id: 'status', label: expenseStatusLabel(statusFilter), onRemove: () => { setStatusFilter('all'); setPage(1) } }] : []),
@@ -1785,21 +1815,22 @@ function BusinessView({ data, categoryOptions, categoryFilter, setCategoryFilter
               />
             </div>
           </PortalFilterBar>
-        </div>
       }
       footer={
-        pageCount > 1 ? (
-          <div className="flex items-center justify-between gap-3 px-4 py-3 sm:px-6">
-            <span className="text-xs tabular-nums text-[color:var(--portal-muted)]">
-              {(currentPage - 1) * 15 + 1}–{Math.min(currentPage * 15, filtered.length)} of {filtered.length}
-            </span>
-            <PortalPagination currentPage={currentPage} totalPages={pageCount} onPageChange={setPage} scrollToTop={false} />
-          </div>
-        ) : null
+        <PortalTableListPagination
+          count={filtered.length}
+          pageSize={15}
+          currentPage={currentPage}
+          totalPages={pageCount}
+          startIndex={(currentPage - 1) * 15}
+          noun={filtered.length === 1 ? 'expense' : 'expenses'}
+          onPageChange={setPage}
+          scrollToTop={false}
+        />
       }
     >
       {filtered.length ? (
-        <ExpenseTable expenses={filtered.slice((currentPage - 1) * 15, currentPage * 15)} onOpen={onOpen} onEdit={onEdit} onCancel={onCancel} />
+        <div className={PORTAL_TABLE_LIST_SCROLL_PAD_CLASS}><ExpenseTable expenses={filtered.slice((currentPage - 1) * 15, currentPage * 15)} onOpen={onOpen} onEdit={onEdit} onCancel={onCancel} /></div>
       ) : loading ? (
         <div className="space-y-3 p-5">
           <PortalSkeleton className="h-12 rounded-xl" />
@@ -1817,7 +1848,72 @@ function BusinessView({ data, categoryOptions, categoryFilter, setCategoryFilter
 }
 
 function ExpenseTable({ expenses, onOpen, onEdit, onCancel }: { expenses: ExpenseRow[]; onOpen: (id: string) => void; onEdit: (expense: ExpenseRow) => void; onCancel: (expense: ExpenseRow) => void }) {
-  return <><div className="hidden grid-cols-[minmax(0,1fr)_8rem_7rem_7.5rem_7rem] gap-3 border-b border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/45 px-6 py-3 text-xs font-semibold text-[color:var(--portal-muted)] lg:grid"><span>Expense / company</span><span>Total</span><span>Remaining</span><span>Status</span><span/></div><div className="divide-y divide-[color:var(--portal-border)]">{expenses.map(expense => <article key={expense.id} className="flex min-w-0 flex-col gap-2 px-4 py-4 lg:grid lg:grid-cols-[minmax(0,1fr)_8rem_7rem_7.5rem_7rem] lg:items-center lg:gap-3 lg:px-6"><button type="button" onClick={() => onOpen(expense.id)} className="min-h-11 min-w-0 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45"><span className="block truncate text-sm font-semibold text-[color:var(--portal-text)]">{expense.description || 'Expense'}</span><span className="mt-1 block truncate text-xs text-[color:var(--portal-muted)]">{expense.vendor_name || expense.category} · {formatDate(expense.incurred_on)}</span></button><span className="text-sm font-semibold tabular-nums text-[color:var(--portal-text)]"><span className="mr-1 font-normal lg:hidden">Total</span>{expenseAmountLabel(expense)}</span><span className="text-xs tabular-nums text-[color:var(--portal-muted)]"><span className="mr-1 lg:hidden">Remaining</span>{hasKnownAmount(expense) ? money(expense.remaining_balance ?? 0) : 'Pending'}</span><span><StatusBadge status={expense.payment_status}/></span><span className="flex gap-2 lg:justify-end"><button type="button" onClick={() => onEdit(expense)} className="min-h-9 rounded-lg px-2 text-xs font-semibold text-[#9a712e] hover:bg-[#caa24c]/10 dark:text-[#e6c77f]">Edit</button>{!['paid','cancelled'].includes(expense.payment_status) ? <button type="button" onClick={() => onCancel(expense)} className="min-h-9 rounded-lg px-2 text-xs font-semibold text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-soft)]">Cancel</button> : null}</span></article>)}</div></>
+  return (
+    <>
+      <div className={`${PORTAL_DATA_TABLE_HEAD_CLASS} hidden lg:grid lg:grid-cols-[minmax(0,1fr)_8rem_7rem_7.5rem_7rem] lg:gap-3`}>
+        <span>Expense / company</span>
+        <span>Total</span>
+        <span>Remaining</span>
+        <span>Status</span>
+        <span />
+      </div>
+      <div className="divide-y divide-[color:var(--portal-border)]">
+        {expenses.map((expense) => (
+          <article
+            key={expense.id}
+            className="flex min-w-0 flex-col lg:grid lg:grid-cols-[minmax(0,1fr)_8rem_7rem_7.5rem_7rem] lg:items-center lg:gap-3 lg:px-6 lg:py-3"
+          >
+            <div className="flex items-start justify-between gap-3 px-4 pt-3 lg:contents">
+              <button
+                type="button"
+                onClick={() => onOpen(expense.id)}
+                className="min-h-11 min-w-0 flex-1 py-0.5 text-left transition-colors hover:bg-[color:var(--portal-soft)]/70 active:bg-[color:var(--portal-soft)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#caa24c]/45 max-lg:-mx-1 max-lg:rounded-lg max-lg:px-1 lg:w-auto lg:flex-none lg:px-0 lg:py-0 lg:hover:bg-transparent lg:active:bg-transparent"
+              >
+                <span className="block truncate text-sm font-semibold text-[color:var(--portal-text)]">{expense.description || 'Expense'}</span>
+                <span className="mt-1 block truncate text-xs text-[color:var(--portal-muted)]">{expense.vendor_name || expense.category} · {formatDate(expense.incurred_on)}</span>
+              </button>
+              <div className="flex shrink-0 items-center self-center lg:hidden">
+                <button
+                  type="button"
+                  onClick={() => onEdit(expense)}
+                  aria-label="Edit expense"
+                  title="Edit expense"
+                  className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-[color:var(--portal-muted)] opacity-75 transition-[color,background-color,opacity] hover:opacity-100 hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45"
+                >
+                  <NotePencil size={18} />
+                </button>
+                <span aria-hidden className="mx-2 h-5 w-px shrink-0 bg-[color:var(--portal-border)]" />
+                <StatusBadge status={expense.payment_status} />
+              </div>
+            </div>
+            <div className="flex flex-col gap-2 px-4 pb-3 pt-1 lg:contents lg:p-0">
+              <span className="text-sm font-semibold tabular-nums text-[color:var(--portal-text)]">
+                <span className="mr-1 font-normal lg:hidden">Total</span>
+                {expenseAmountLabel(expense)}
+              </span>
+              <span className="text-xs tabular-nums text-[color:var(--portal-muted)]">
+                <span className="mr-1 lg:hidden">Remaining</span>
+                {hasKnownAmount(expense) ? money(expense.remaining_balance ?? 0) : 'Pending'}
+              </span>
+              <span className="hidden lg:block">
+                <StatusBadge status={expense.payment_status} />
+              </span>
+              <span className="flex gap-2 lg:justify-end">
+                <button type="button" onClick={() => onEdit(expense)} className="hidden min-h-9 rounded-lg px-2 text-xs font-semibold text-[#9a712e] hover:bg-[#caa24c]/10 lg:inline-flex dark:text-[#e6c77f]">
+                  Edit
+                </button>
+                {!['paid', 'cancelled'].includes(expense.payment_status) ? (
+                  <button type="button" onClick={() => onCancel(expense)} className="min-h-9 rounded-lg px-2 text-xs font-semibold text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-soft)] max-lg:-ml-2 lg:ml-0">
+                    Cancel
+                  </button>
+                ) : null}
+              </span>
+            </div>
+          </article>
+        ))}
+      </div>
+    </>
+  )
 }
 
 function EventExpensesView({ data, ledger, selectedBooking, setSelectedBooking, onAdd, onOpenExpense }: { data: ExpenseManagementData; ledger: FinanceLedgerData; selectedBooking: string; setSelectedBooking: (value: string) => void; onAdd: (bookingId: string) => void; onOpenExpense: (id: string) => void }) {

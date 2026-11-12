@@ -27,7 +27,7 @@ import {
   X,
   Zap,
 } from '@/lib/icons/phosphor-compat'
-import { PortalPageFrame, PortalSelect, PortalButton, PortalCloseButton, PortalModal, PortalAnimatedTabs, PortalTabTransition, PortalStaggerGroup, PortalStaggerCard } from '@/components/portal/PortalUI'
+import { PortalPageFrame, PortalSelect, PortalButton, PortalCloseButton, PortalModal, PortalAnimatedTabs, PortalTabTransition, PortalStaggerGroup, PortalStaggerCard, PortalSkeleton } from '@/components/portal/PortalUI'
 import {
   addCustomWorkflowStep,
   canEditCustomWorkflowStep,
@@ -1319,8 +1319,27 @@ export default function CustomWorkflowEditorPage() {
   if (loading && !isNew && (isBrochureSystem ? !brochure : isPaidInvoiceEmail ? !paidInvoiceSettings : isZelleInstructions ? !zelleSettings : isAgreementPackage ? !agreementPackageSettings : isProposalBreakdown ? !breakdownSettings : isPlannerInvitation ? !plannerSettings : isPlannerVerification ? !verificationSettings : isAgreementOwner ? !ownerSettings : isLayoutReviewEmail ? !layoutSettings : isTourNoShowEmail ? !noShowSettings : isOfferSystem ? !offerSettings : isInquiryEmailSystem ? !inquiryEmailSettings : isTourEmailSystem ? !tourEmailSettings : isInstallmentSystem ? !installmentSettings : isFinalPaymentSystem ? !finalPaymentSettings : isManualInvoiceReminderSystem ? !manualInvoiceSettings : isCalendarMessageSystem ? !calendarMessageSettings : isEventEmailSystem ? !eventEmailSettings : isAgreementSystem ? !agreementSettings : isMultiSystem ? !invoiceMessages : isPhoneSystem ? !phoneMessage : isTemplateSystem ? !systemMessage : !workflow)) {
     return (
       <PortalPageFrame>
-        <div className="flex h-96 items-center justify-center">
-          <RefreshCw className="animate-spin text-[#caa24c]" size={28} />
+        <div className="space-y-6 pt-2" aria-label="Loading workflow" role="status">
+          <div className="flex flex-wrap items-center justify-between gap-4 border-b border-[color:var(--portal-border)] pb-4">
+            <div className="space-y-2">
+              <PortalSkeleton className="h-6 w-48 rounded" />
+              <PortalSkeleton className="h-3 w-80 rounded opacity-60" />
+            </div>
+            <div className="flex gap-2">
+              <PortalSkeleton className="h-10 w-24 rounded-lg" />
+              <PortalSkeleton className="h-10 w-28 rounded-lg" />
+            </div>
+          </div>
+          <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
+            <div className="space-y-4">
+              <PortalSkeleton className="h-28 w-full rounded-2xl" />
+              <PortalSkeleton className="h-44 w-full rounded-2xl" />
+              <PortalSkeleton className="h-44 w-full rounded-2xl" />
+            </div>
+            <div className="space-y-4">
+              <PortalSkeleton className="h-64 w-full rounded-2xl" />
+            </div>
+          </div>
         </div>
       </PortalPageFrame>
     )
@@ -1455,7 +1474,7 @@ export default function CustomWorkflowEditorPage() {
         {emailOptions && !(readOnlyVersion && !definitionDraft.emailSettings) ? <div className="grid min-w-0 gap-3 sm:grid-cols-2">
           <div><label className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-[color:var(--portal-muted)]">Send as</label><PortalSelect disabled={!editable} value={definitionDraft.emailSettings?.senderMode || 'operator'} onChange={(value) => updateEmailSettings({ senderMode: value as 'operator' | 'elena' })} options={[{ value: 'operator', label: readOnlyVersion && definitionDraft.emailSettings?.senderActorEmail ? `Saved user · ${definitionDraft.emailSettings.senderActorEmail}` : `${emailOptions.operator.displayName} · signed-in user` }, { value: 'elena', label: 'Elena · Luxor concierge' }]} /></div>
           <div><label className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-[color:var(--portal-muted)]">From email address</label><PortalSelect disabled={!editable} value={definitionDraft.emailSettings?.senderEmail || emailOptions.senders[0] || ''} onChange={(value) => updateEmailSettings({ senderEmail: value })} placeholder="No approved sender available" options={emailOptions.senders.map((email) => ({ value: email, label: email }))} /></div>
-        </div> : readOnlyVersion && !definitionDraft.emailSettings ? <p className="text-xs leading-5 text-[color:var(--portal-muted)]">Uses the existing Luxor business sender. Duplicate this workflow to choose a user or Elena and a sending address.</p> : <p role="status" className="text-xs text-[color:var(--portal-muted)]">{emailOptionsError ? 'Sender options unavailable.' : 'Loading approved sender options…'}</p>}
+        </div> : readOnlyVersion && !definitionDraft.emailSettings ? <p className="text-xs leading-5 text-[color:var(--portal-muted)]">Uses the existing Luxor business sender. Duplicate this workflow to choose a user or Elena and a sending address.</p> : emailOptionsError ? <p role="alert" className="text-xs text-[color:var(--portal-muted)]">Sender options unavailable.</p> : <div className="grid min-w-0 gap-3 sm:grid-cols-2 pt-1"><PortalSkeleton className="h-10 w-full rounded-lg" /><PortalSkeleton className="h-10 w-full rounded-lg" /></div>}
         </div>
         {emailOptionsError ? <p role="alert" className="text-xs leading-5 text-rose-600 dark:text-rose-400">{emailOptionsError} <button type="button" onClick={() => setEmailOptionsRetry((value) => value + 1)} className="underline">Retry</button></p> : null}
         {emailOptions && !emailOptions.senders.length ? <p role="alert" className="text-xs text-rose-600 dark:text-rose-400">Configure an approved sending address in Settings before activating email steps.</p> : null}

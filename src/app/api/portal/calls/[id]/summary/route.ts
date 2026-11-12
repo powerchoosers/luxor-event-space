@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createHash } from 'node:crypto'
-import { getLuxorCallById, getLuxorTranscriptSegments } from '@/lib/luxorCallsServer'
+import { canProcessLuxorRecording, getLuxorCallById, getLuxorTranscriptSegments } from '@/lib/luxorCallsServer'
 import { supabaseRest } from '@/lib/supabaseRestServer'
 import { getLuxorPortalSession } from '@/lib/luxorPortalAuth'
 import { luxorTranscriptSpeaker, type LuxorCall } from '@/lib/luxorCallTypes'
@@ -29,7 +29,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
     const inquiryId = String(body.inquiryId || '')
     const call = await getLuxorCallById(id)
     if (!call || (inquiryId && call.inquiry_id !== inquiryId)) return NextResponse.json({ error: 'Call not found for this lead.' }, { status: 404 })
-    if (call.recording_consent_status !== 'consented') return NextResponse.json({ error: 'A summary is available only for calls recorded with caller consent.' }, { status: 409 })
+    if (!canProcessLuxorRecording(call)) return NextResponse.json({ error: 'A summary is unavailable for this call.' }, { status: 409 })
     if (call.summary_status === 'completed' && call.summary_text) return NextResponse.json({ status: 'completed', summary: call.summary_text, cached: true })
     const segments = await getLuxorTranscriptSegments(call.id)
     if (call.transcription_status !== 'completed' || !segments.length) {

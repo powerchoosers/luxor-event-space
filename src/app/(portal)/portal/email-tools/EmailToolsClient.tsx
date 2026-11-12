@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Activity, ArrowUpRight, FlaskConical, Mail, Send, FileText, Wrench } from '@/lib/icons/phosphor-compat'
 import { EmailQueueHealthWidget } from '@/components/portal/EmailQueueHealthWidget'
-import { PortalAnimatedTabs, PortalPageFrame, PortalPageHeader, PortalTabTransition } from '@/components/portal/PortalUI'
+import { PortalAnimatedTabs, PortalPageFrame, PortalPageHeader, PortalTabTransition, PortalSkeleton } from '@/components/portal/PortalUI'
 import { EMAIL_TEMPLATES } from '@/app/(portal)/portal/marketing/emailTemplates'
 import type { LuxorMarketingTemplate } from '@/lib/luxorInquiryTypes'
 import type { LuxorMailboxPageResult } from '@/lib/luxorMailboxPage'
@@ -85,7 +85,18 @@ function TemplatesPanel() {
 
   const openComposer = (templateId: string) => window.dispatchEvent(new CustomEvent('luxor-compose-email', { detail: { templateId } }))
 
-  if (loading) return <PanelMessage title="Loading templates" detail="Checking the saved Luxor templates." loading />
+  if (loading) return (
+    <div className="space-y-6 pt-1" aria-label="Loading templates" role="status">
+      <div className="space-y-2">
+        <PortalSkeleton className="h-5 w-40 rounded" />
+        <PortalSkeleton className="h-3 w-72 rounded opacity-60" />
+      </div>
+      <div className="grid gap-3 lg:grid-cols-2">
+        <PortalSkeleton className="h-28 w-full rounded-xl" />
+        <PortalSkeleton className="h-28 w-full rounded-xl" />
+      </div>
+    </div>
+  )
   if (error) return <PanelMessage title="Templates unavailable" detail={error} actionLabel="Retry" onAction={() => void load()} />
 
   return (
@@ -149,7 +160,22 @@ function ActivityPanel() {
 
   useEffect(() => { void load() }, [load])
 
-  if (loading) return <PanelMessage title="Loading email activity" detail="Loading the latest saved mailbox messages." loading />
+  if (loading) return (
+    <div className="space-y-4 pt-1" aria-label="Loading email activity" role="status">
+      <div className="flex justify-between items-center border-b border-[color:var(--portal-border)] pb-4">
+        <div className="space-y-1.5">
+          <PortalSkeleton className="h-5 w-44 rounded" />
+          <PortalSkeleton className="h-3 w-64 rounded opacity-60" />
+        </div>
+        <PortalSkeleton className="h-9 w-24 rounded-lg" />
+      </div>
+      <div className="space-y-3">
+        <PortalSkeleton className="h-16 w-full rounded-xl" />
+        <PortalSkeleton className="h-16 w-full rounded-xl" />
+        <PortalSkeleton className="h-16 w-full rounded-xl" />
+      </div>
+    </div>
+  )
   if (error) return <PanelMessage title="Email activity unavailable" detail={error} actionLabel="Retry" onAction={() => void load()} />
 
   return (
@@ -196,7 +222,15 @@ function TestToolsPanel() {
 
   useEffect(() => { void load() }, [load])
 
-  if (loading) return <PanelMessage title="Checking isolated test tools" detail="Looking up the existing Test Lead workflow." loading />
+  if (loading) return (
+    <div className="space-y-4 pt-1" aria-label="Checking isolated test tools" role="status">
+      <div className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-6 space-y-3">
+        <PortalSkeleton className="h-5 w-48 rounded" />
+        <PortalSkeleton className="h-3 w-80 rounded opacity-60" />
+        <PortalSkeleton className="h-10 w-36 rounded-lg pt-2" />
+      </div>
+    </div>
+  )
   if (restricted) return <PanelMessage title="Test tools are restricted" detail="The existing Test Lead workflow is available to portal owners and admins." />
   if (error) return <PanelMessage title="Test tools unavailable" detail={error} actionLabel="Retry" onAction={() => void load()} />
   if (!data?.lead?.is_test) return <PanelMessage title="Test Lead unavailable" detail="The existing isolated Test Lead is not available right now." />

@@ -27,7 +27,14 @@ import {
   PortalTabTransition,
   PortalStickyTable,
   PortalStickyThead,
+  PortalFilterBar,
   PortalTableCard,
+  PortalTableResultFooter,
+  PORTAL_DATA_TABLE_HEAD_CLASS,
+  PORTAL_TABLE_LIST_BLEED_CLASS,
+  PORTAL_TABLE_LIST_EDGE_CLASS,
+  PORTAL_TABLE_LIST_CARD_CLASS,
+  PORTAL_TABLE_LIST_SCROLL_PAD_CLASS,
   PortalStatusBadge,
   PortalSelect,
   PortalDatePicker,
@@ -39,7 +46,6 @@ import {
 import { useFinanceLedgerRealtime } from '@/hooks/useFinanceLedgerRealtime'
 import FinancialOverview from '@/components/portal/FinancialOverview'
 import ExpenseManagement from '@/components/portal/expenses/ExpenseManagement'
-import ProvidersWorkspace from '@/components/portal/ProvidersWorkspace'
 import BillDetailsPanel from '@/components/portal/BillDetailsPanel'
 import { OperationsPageContent } from '@/components/portal/OperationsWorkspace'
 import { chicagoCalendarDate } from '@/lib/luxorPaymentDashboardModel'
@@ -81,7 +87,6 @@ export default function FinancesPage() {
   const routeSearchParams = useSearchParams()
   const [overviewRange, setOverviewRange] = useState(() => { const today = chicagoCalendarDate(); const [year, month] = today.split('-').map(Number); return { start: `${today.slice(0, 7)}-01`, end: new Date(Date.UTC(year, month, 0)).toISOString().slice(0, 10) } })
   const [activeTab, setActiveTab] = useState<Tab>('dashboard')
-  const [companiesOpen, setCompaniesOpen] = useState(false)
   const [panelBillId, setPanelBillId] = useState<string | null>(null)
   const [panelExpenseId, setPanelExpenseId] = useState<string | null>(null)
   const [importBillId, setImportBillId] = useState<string | null>(null)
@@ -394,6 +399,21 @@ type LuxorBookingExpense = {
     )
   })
 
+  const filteredLedgerTransactions = useMemo(() => {
+    const query = searchTerm.trim().toLowerCase()
+    if (!query) return allLedgerTransactions
+    return allLedgerTransactions.filter((transaction) => {
+      const id = transaction.kind === 'refund' ? transaction.refund.id : transaction.payment.id
+      const payment = transaction.kind === 'payment' ? transaction.payment : null
+      const refund = transaction.kind === 'refund' ? transaction.refund : null
+      const invoiceId = refund?.invoice_id || payment?.invoice_id
+      const bookingId = refund?.booking_id || payment?.booking_id || (invoiceId ? invoices.find((invoice) => invoice.id === invoiceId)?.booking_id : null)
+      const booking = bookingId ? bookings.find((item) => item.id === bookingId) : null
+      const haystack = [id, payment?.notes, payment?.payment_method, refund?.processor, booking?.client_name, booking?.event_type].filter(Boolean).join(' ').toLowerCase()
+      return haystack.includes(query)
+    })
+  }, [allLedgerTransactions, bookings, invoices, searchTerm])
+
   const FINANCE_TAB_LABELS: Record<Tab, string> = {
     dashboard: 'Financial Overview',
     revenue: 'Revenue',
@@ -452,6 +472,8 @@ type LuxorBookingExpense = {
   </div>
 
   const isPayables = ['expenses', 'bill-review', 'bill-providers', 'expense-recurring', 'expense-business', 'expense-events', 'expense-receipts', 'expense-detail'].includes(activeTab)
+  const financesTableTabs = ['invoices', 'payments', 'bill-review', 'expense-recurring', 'expense-business', 'bill-providers'] as const
+  const financesTableActive = financesTableTabs.includes(activeTab as (typeof financesTableTabs)[number])
   const financeWorkspaceTab = isPayables ? 'expenses' : 'dashboard'
   const financeWorkspaceKey = isPayables ? 'payables' : 'receivables'
   const workspaceSwitcher = (
@@ -470,7 +492,7 @@ type LuxorBookingExpense = {
   )
 
   return (
-    <PortalPageFrame className="h-full min-h-0 overflow-hidden flex flex-col gap-6 max-md:pt-4">
+    <PortalPageFrame className="min-h-0 flex-1 max-md:pt-4">
       <PortalPageHeader
         icon={<CurrencyDollar size={18} weight="regular" />}
         title="Finances"
@@ -560,17 +582,17 @@ type LuxorBookingExpense = {
           </motion.div>
         </AnimatePresence>
       </div>
-      <PortalTabTransition activeKey={financeWorkspaceKey} className="flex min-h-0 flex-1 flex-col overflow-hidden">
+      <PortalTabTransition activeKey={financeWorkspaceKey} className={`flex min-h-0 flex-1 flex-col max-md:![transform:none] max-md:![filter:none] ${financesTableActive ? 'overflow-visible' : 'overflow-hidden'}`}>
       {(financeViewsReady || activeTab === 'revenue') && <motion.div initial={false} animate={{ opacity: activeTab === 'revenue' ? 1 : 0, filter: activeTab === 'revenue' || reduceMotion ? 'blur(0px)' : 'blur(10px)' }} transition={{ duration: reduceMotion ? 0 : 0.22 }} className={`flex-1 min-h-0 overflow-y-auto pb-6 portal-scrollbar ${activeTab === 'revenue' ? '' : 'hidden'}`}><RevenueCollectionsView view="revenue" actorEmail={null} embedded active={activeTab === 'revenue'} /></motion.div>}
       {(financeViewsReady || activeTab === 'books') && <motion.div initial={false} animate={{ opacity: activeTab === 'books' ? 1 : 0, filter: activeTab === 'books' || reduceMotion ? 'blur(0px)' : 'blur(10px)' }} transition={{ duration: reduceMotion ? 0 : 0.22 }} className={`flex-1 min-h-0 overflow-y-auto pb-6 portal-scrollbar ${activeTab === 'books' ? '' : 'hidden'}`}><BooksRecordsPage embedded active={activeTab === 'books'} /></motion.div>}
-      <div className={`min-h-0 flex-1 overflow-hidden ${activeTab === 'revenue' || activeTab === 'books' ? 'hidden' : ''}`}>
+      <div className={`min-h-0 flex-1 ${financesTableActive ? `flex flex-col max-lg:overflow-visible lg:overflow-hidden ${PORTAL_TABLE_LIST_BLEED_CLASS}` : 'overflow-hidden'} ${activeTab === 'revenue' || activeTab === 'books' ? 'hidden' : ''}`}>
       {activeTab === 'expenses' && <ExpenseManagement view="dashboard" embedded onOpenBill={setPanelBillId} selectedRange={overviewRange} />}
-      {(activeTab === 'expense-recurring' || activeTab === 'bill-providers') && <ExpenseManagement view="recurring" embedded onOpenBill={setPanelBillId} onBrowseCompanies={() => setCompaniesOpen(true)} />}
-      {activeTab === 'expense-business' && <ExpenseManagement view="business" embedded onOpenBill={setPanelBillId} />}
+      {(activeTab === 'expense-recurring' || activeTab === 'bill-providers') && <div className="flex min-h-0 flex-1 flex-col max-lg:overflow-visible lg:overflow-hidden"><ExpenseManagement view="recurring" embedded onOpenBill={setPanelBillId} /></div>}
+      {activeTab === 'expense-business' && <div className="flex min-h-0 flex-1 flex-col max-lg:overflow-visible lg:overflow-hidden"><ExpenseManagement view="business" embedded onOpenBill={setPanelBillId} /></div>}
       {activeTab === 'expense-events' && <ExpenseManagement view="events" embedded onOpenBill={setPanelBillId} />}
       {activeTab === 'expense-receipts' && <ExpenseManagement view="receipts" embedded onOpenBill={setPanelBillId} />}
       {activeTab === 'expense-detail' && <ExpenseManagement view="detail" expenseId={routeSearchParams.get('expense') || undefined} embedded onOpenBill={setPanelBillId} />}
-      {activeTab === 'bill-review' && <OperationsPageContent embeddedBills />}
+      {activeTab === 'bill-review' && <div className="flex min-h-0 flex-1 flex-col max-lg:overflow-visible lg:overflow-hidden"><OperationsPageContent embeddedBills /></div>}
       {/* DASHBOARD TAB */}
       {activeTab === 'dashboard' && (loading || (!error && testClassificationVerified)) && (
         <FinancialOverview
@@ -642,41 +664,35 @@ type LuxorBookingExpense = {
         {/* INVOICES TAB */}
         {activeTab === 'invoices' && (
           <PortalTableCard
+            mobilePageScroll
+            mobilePageScrollUntil="lg"
+            footerClassName="max-lg:hidden"
+            className={`${PORTAL_TABLE_LIST_CARD_CLASS} ${PORTAL_TABLE_LIST_EDGE_CLASS}`}
             controls={
-              <div className="flex flex-col items-center justify-between gap-4 md:flex-row">
-                <div className="relative w-full md:w-96 group">
-                  <MagnifyingGlass size={16} weight="regular" className="absolute left-3 top-1/2 -translate-y-1/2 text-[color:var(--portal-muted)]" />
-                  <input
-                    type="text"
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    placeholder="Search invoices by client..."
-                    className="w-full bg-[color:var(--portal-soft)] border border-[color:var(--portal-border)] rounded-lg pl-10 pr-4 py-2 text-xs text-[color:var(--portal-text)] outline-none focus:border-[#caa24c]/50 transition-all"
-                  />
-                </div>
-              </div>
+              <PortalFilterBar
+                searchValue={searchTerm}
+                onSearchChange={setSearchTerm}
+                searchPlaceholder="Search invoices by client..."
+                resultLabel={loading ? 'Loading invoices' : `${filteredInvoices.length.toLocaleString()} ${filteredInvoices.length === 1 ? 'invoice' : 'invoices'}`}
+              />
             }
             footer={
-              <div className="text-[10px] uppercase font-bold text-[color:var(--portal-muted)] tracking-widest tabular-nums min-h-[16px] flex items-center">
-                {loading ? (
-                  <PortalSkeleton className="h-3 w-28 rounded inline-block" />
-                ) : (
-                  `${filteredInvoices.length} matching invoices`
-                )}
-              </div>
+              <PortalTableResultFooter
+                label={loading ? <PortalSkeleton className="h-3 w-36 rounded" /> : <span><span className="tabular-nums text-[color:var(--portal-text)]">{filteredInvoices.length}</span> matching {filteredInvoices.length === 1 ? 'invoice' : 'invoices'}</span>}
+              />
             }
           >
-            <div className="overflow-x-auto">
+            <div className={`overflow-x-auto ${PORTAL_TABLE_LIST_SCROLL_PAD_CLASS}`}>
               <PortalStickyTable minWidth="980px">
                 <caption className="sr-only">{loading ? 'Loading invoices' : 'Invoices'}</caption>
                 <PortalStickyThead>
-                  <tr className="text-[10px] uppercase font-bold text-[color:var(--portal-muted)] tracking-[0.16em] border-b border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/80">
-                    <th className="px-8 py-5">Invoice ID</th>
-                    <th className="px-6 py-5">Client Portfolio</th>
-                    <th className="px-6 py-5">Value (USD)</th>
-                    <th className="px-6 py-5">Due Date</th>
-                    <th className="px-6 py-5">Lifecycle Status</th>
-                    <th className="px-8 py-5 text-right">Actions</th>
+                  <tr className={`${PORTAL_DATA_TABLE_HEAD_CLASS} whitespace-nowrap`}>
+                    <th scope="col" className="px-4 text-left sm:px-6">Invoice ID</th>
+                    <th scope="col" className="px-4 text-left sm:px-6">Client Portfolio</th>
+                    <th scope="col" className="px-4 text-left sm:px-6">Value (USD)</th>
+                    <th scope="col" className="px-4 text-left sm:px-6">Due Date</th>
+                    <th scope="col" className="px-4 text-left sm:px-6">Lifecycle Status</th>
+                    <th scope="col" className="px-4 text-right sm:px-6">Actions</th>
                   </tr>
                 </PortalStickyThead>
                 <AnimatePresence mode="wait">
@@ -692,12 +708,12 @@ type LuxorBookingExpense = {
                   {loading ? (
                     Array.from({ length: 5 }, (_, row) => (
                       <tr key={row} aria-hidden="true">
-                        <td className="px-8 py-5"><PortalSkeleton className="h-3 w-16 rounded" /></td>
-                        <td className="px-6 py-5"><div className="space-y-1"><PortalSkeleton className="h-3 w-28 rounded" /><PortalSkeleton className="h-2.5 w-20 rounded" /></div></td>
-                        <td className="px-6 py-5"><PortalSkeleton className="h-4 w-20 rounded" /></td>
-                        <td className="px-6 py-5"><PortalSkeleton className="h-3 w-20 rounded" /></td>
-                        <td className="px-6 py-5"><PortalSkeleton className="h-5 w-16 rounded-md" /></td>
-                        <td className="px-8 py-5"><PortalSkeleton className="ml-auto h-3 w-32 rounded" /></td>
+                        <td className="px-4 py-3 sm:px-6"><PortalSkeleton className="h-3 w-16 rounded" /></td>
+                        <td className="px-4 py-3 sm:px-6"><div className="space-y-1"><PortalSkeleton className="h-3 w-28 rounded" /><PortalSkeleton className="h-2.5 w-20 rounded" /></div></td>
+                        <td className="px-4 py-3 sm:px-6"><PortalSkeleton className="h-4 w-20 rounded" /></td>
+                        <td className="px-4 py-3 sm:px-6"><PortalSkeleton className="h-3 w-20 rounded" /></td>
+                        <td className="px-4 py-3 sm:px-6"><PortalSkeleton className="h-5 w-16 rounded-md" /></td>
+                        <td className="px-4 py-3 sm:px-6"><PortalSkeleton className="ml-auto h-3 w-32 rounded" /></td>
                       </tr>
                     ))
                   ) : filteredInvoices.length === 0 ? (
@@ -707,8 +723,8 @@ type LuxorBookingExpense = {
                   ) : (
                     filteredInvoices.map((inv) => (
                       <tr key={inv.id} className="hover:bg-[color:var(--portal-soft)]/50 transition-colors">
-                        <td className="px-8 py-5 tabular-nums font-bold text-xs text-[color:var(--portal-muted)]">#{inv.id.slice(0, 8)}</td>
-                        <td className="px-6 py-5">
+                        <td className="px-4 py-3 tabular-nums text-xs font-bold text-[color:var(--portal-muted)] sm:px-6">#{inv.id.slice(0, 8)}</td>
+                        <td className="px-4 py-3 sm:px-6">
                           {inv.inquiry_id ? (
                             <Link
                               href={`/portal/leads/${inv.inquiry_id}?from=/portal/finances`}
@@ -721,12 +737,12 @@ type LuxorBookingExpense = {
                           )}
                           <p className="text-[10px] text-[color:var(--portal-muted)] mt-1">{inv.event_type || 'Event not specified'}</p>
                         </td>
-                        <td className="px-6 py-5 tabular-nums font-bold text-[color:var(--portal-text)]">${Number(inv.total).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
-                        <td className="px-6 py-5 tabular-nums text-xs text-[color:var(--portal-muted)]">{inv.due_date || 'TBD'}</td>
-                        <td className="px-6 py-5">
+                        <td className="px-4 py-3 tabular-nums text-sm font-bold text-[color:var(--portal-text)] sm:px-6">${Number(inv.total).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                        <td className="px-4 py-3 tabular-nums text-xs text-[color:var(--portal-muted)] sm:px-6">{inv.due_date || 'TBD'}</td>
+                        <td className="px-4 py-3 sm:px-6">
                           <PortalStatusBadge status={inv.status} borderless />
                         </td>
-                        <td className="px-8 py-5 text-right">
+                        <td className="px-4 py-3 text-right sm:px-6">
                           <span className="text-[10px] font-medium text-[color:var(--portal-muted)]">Use send and payment workflows</span>
                         </td>
                       </tr>
@@ -747,27 +763,34 @@ type LuxorBookingExpense = {
         )}
         {activeTab === 'payments' && (
           <PortalTableCard
+            mobilePageScroll
+            mobilePageScrollUntil="lg"
+            footerClassName="max-lg:hidden"
+            className={`${PORTAL_TABLE_LIST_CARD_CLASS} ${PORTAL_TABLE_LIST_EDGE_CLASS}`}
             controls={
-              <h3 className="text-xs font-extrabold uppercase tracking-[0.16em] text-[color:var(--portal-text)] tabular-nums flex items-center gap-1.5">
-                <span>Payment and Refund Transactions</span>
-                {loading ? (
-                  <PortalSkeleton className="inline-block h-3.5 w-8 rounded align-middle" />
-                ) : (
-                  <span>({allLedgerTransactions.length})</span>
-                )}
-              </h3>
+              <PortalFilterBar
+                searchValue={searchTerm}
+                onSearchChange={setSearchTerm}
+                searchPlaceholder="Search payments by client or reference..."
+                resultLabel={loading ? 'Loading transactions' : `${filteredLedgerTransactions.length.toLocaleString()} ${filteredLedgerTransactions.length === 1 ? 'transaction' : 'transactions'}`}
+              />
+            }
+            footer={
+              <PortalTableResultFooter
+                label={loading ? <PortalSkeleton className="h-3 w-40 rounded" /> : <span><span className="tabular-nums text-[color:var(--portal-text)]">{filteredLedgerTransactions.length}</span> {filteredLedgerTransactions.length === 1 ? 'transaction' : 'transactions'}</span>}
+              />
             }
           >
-            <div className="overflow-x-auto">
+            <div className={`overflow-x-auto ${PORTAL_TABLE_LIST_SCROLL_PAD_CLASS}`}>
               <PortalStickyTable minWidth="900px">
                 <caption className="sr-only">{loading ? 'Loading payment records' : 'Payment and Refund Transactions'}</caption>
                 <PortalStickyThead>
-                  <tr className="text-[10px] uppercase font-bold text-[color:var(--portal-muted)] tracking-[0.16em] border-b border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/80">
-                    <th className="px-8 py-5">Transaction Ref</th>
-                    <th className="px-6 py-5">Client & Event</th>
-                    <th className="px-6 py-5">Payment Method</th>
-                    <th className="px-6 py-5">Received / Completed Date</th>
-                    <th className="px-8 py-5 text-right">Amount</th>
+                  <tr className={`${PORTAL_DATA_TABLE_HEAD_CLASS} whitespace-nowrap`}>
+                    <th scope="col" className="px-4 text-left sm:px-6">Transaction Ref</th>
+                    <th scope="col" className="px-4 text-left sm:px-6">Client & Event</th>
+                    <th scope="col" className="px-4 text-left sm:px-6">Payment Method</th>
+                    <th scope="col" className="px-4 text-left sm:px-6">Received / Completed Date</th>
+                    <th scope="col" className="px-4 text-right sm:px-6">Amount</th>
                   </tr>
                 </PortalStickyThead>
                 <tbody className="divide-y divide-[color:var(--portal-border)]/50">
@@ -786,12 +809,12 @@ type LuxorBookingExpense = {
                         <td className="px-8 py-5 text-right"><PortalSkeleton className="ml-auto h-4 w-20 rounded" /></td>
                       </tr>
                     ))
-                  ) : allLedgerTransactions.length === 0 ? (
+                  ) : filteredLedgerTransactions.length === 0 ? (
                     <tr>
                       <td colSpan={5} className="px-8 py-12 text-center text-xs text-[color:var(--portal-muted)]">No payment transaction records found.</td>
                     </tr>
                   ) : (
-                    allLedgerTransactions.map((transaction, idx) => {
+                    filteredLedgerTransactions.map((transaction, idx) => {
                       const isRefund = transaction.kind === 'refund'
                       const id = isRefund ? transaction.refund.id : transaction.payment.id
                       const status = isRefund ? transaction.refund.status : transaction.payment.status
@@ -814,8 +837,8 @@ type LuxorBookingExpense = {
                       const inquiryId = booking?.inquiry_id || (invoiceId ? invoices.find((invoice) => invoice.id === invoiceId)?.inquiry_id : null) || (isRefund ? transaction.refund.inquiry_id : transaction.payment.inquiry_id)
 
                       return <tr key={`${transaction.kind}-${id || idx}`} onClick={hasSchedule ? () => setPaymentScheduleBookingId(bookingId!) : undefined} className={hasSchedule ? 'cursor-pointer transition-colors hover:bg-[color:var(--portal-soft)] focus-visible:bg-[color:var(--portal-soft)] focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[#caa24c]' : ''}>
-                        <td className="px-8 py-5 tabular-nums font-bold text-xs text-[color:var(--portal-muted)]">#{id?.slice(0, 10) || `TX-00${idx}`}</td>
-                        <td className="px-6 py-5">
+                        <td className="px-4 py-3 tabular-nums text-xs font-bold text-[color:var(--portal-muted)] sm:px-6">#{id?.slice(0, 10) || `TX-00${idx}`}</td>
+                        <td className="px-4 py-3 sm:px-6">
                           {inquiryId && clientName ? (
                             <Link href={`/portal/leads/${encodeURIComponent(inquiryId)}?from=${encodeURIComponent('/portal/finances?view=payments')}`} onClick={(event) => event.stopPropagation()} className="group inline-flex min-h-10 max-w-full items-start gap-3 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/50" aria-label={`Open ${clientName} contact`}>
                               <span className="shrink-0 transition-transform duration-200 group-hover:scale-105 group-focus-visible:scale-105 motion-reduce:transition-none motion-reduce:group-hover:scale-100 motion-reduce:group-focus-visible:scale-100"><PortalContactAvatar name={clientName} size="sm" className="h-8 w-8 text-[10px]" /></span>
@@ -824,12 +847,12 @@ type LuxorBookingExpense = {
                           ) : <div className="flex items-start gap-3">{clientName && <PortalContactAvatar name={clientName} size="sm" className="h-8 w-8 shrink-0 text-[10px]" />}<div className="min-w-0"><p className="text-xs font-bold leading-none text-[color:var(--portal-text)]">{clientName || refundDisplay?.transactionTitle || (transaction.kind === 'payment' ? transaction.payment.notes || 'Event Booking Retainer' : 'Refund')}</p>{eventType && <p className="mt-0.5 text-[11px] text-[color:var(--portal-muted)]">{eventType}</p>}</div></div>}
                           {hasSchedule && <button type="button" onClick={(event) => { event.stopPropagation(); setPaymentScheduleBookingId(bookingId!) }} className="sr-only focus:not-sr-only focus:mt-2 focus:inline-flex focus:min-h-10 focus:items-center focus:rounded focus:px-2 focus:text-xs focus:text-[#a8792f] focus:outline-none focus:ring-2 focus:ring-[#caa24c]/50">View {clientName || 'client'} payment schedule</button>}
                         </td>
-                        <td className="px-6 py-5">
-                          <p className="text-xs text-[color:var(--portal-muted)] font-medium">{isRefund ? transaction.refund.processor || 'Not recorded' : transaction.payment.payment_method || 'Not recorded'}</p>
+                        <td className="px-4 py-3 sm:px-6">
+                          <p className="text-xs font-medium text-[color:var(--portal-muted)]">{isRefund ? transaction.refund.processor || 'Not recorded' : transaction.payment.payment_method || 'Not recorded'}</p>
                           <p className={`text-[9px] font-bold uppercase tracking-widest mt-1 ${isRefund || status === 'refunded' ? 'text-rose-600 dark:text-rose-400' : 'text-[#caa24c]'}`}>{label}</p>
                         </td>
-                        <td className="px-6 py-5 tabular-nums text-xs text-[color:var(--portal-muted)]">{formatLuxorDate(at) || 'N/A'}</td>
-                        <td className="px-8 py-5 text-right tabular-nums font-bold text-[color:var(--portal-text)]">{isRefund && status === 'succeeded' ? '-' : !isRefund && status === 'paid' ? '+' : ''}${amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}{historyRow && <button type="button" onClick={(event) => { event.stopPropagation(); setSelectedPaymentRecord(historyRow) }} onKeyDown={(event) => event.stopPropagation()} className="ml-3 inline-flex min-h-10 items-center rounded-lg px-2 text-xs font-semibold text-[#9a712e] hover:bg-[color:var(--portal-soft)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/50 dark:text-[#e6c77f]">Details</button>}</td>
+                        <td className="px-4 py-3 tabular-nums text-xs text-[color:var(--portal-muted)] sm:px-6">{formatLuxorDate(at) || 'N/A'}</td>
+                        <td className="px-4 py-3 text-right tabular-nums text-sm font-bold text-[color:var(--portal-text)] sm:px-6">{isRefund && status === 'succeeded' ? '-' : !isRefund && status === 'paid' ? '+' : ''}${amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}{historyRow && <button type="button" onClick={(event) => { event.stopPropagation(); setSelectedPaymentRecord(historyRow) }} onKeyDown={(event) => event.stopPropagation()} className="ml-3 inline-flex min-h-10 items-center rounded-lg px-2 text-xs font-semibold text-[#9a712e] hover:bg-[color:var(--portal-soft)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/50 dark:text-[#e6c77f]">Details</button>}</td>
                       </tr>
                     })
                   )}
@@ -843,9 +866,6 @@ type LuxorBookingExpense = {
 
       </div>
       </PortalTabTransition>
-      <PortalModal isOpen={companiesOpen} onClose={() => setCompaniesOpen(false)} title="Company details" description="Contact information, websites, documents, and related bills." sidePanel animateClose maxWidth="max-w-[600px]">
-        {companiesOpen ? <ProvidersWorkspace /> : null}
-      </PortalModal>
       {panelBillId ? <BillDetailsPanel billId={panelBillId} refreshKey={billRefreshKey} onClose={() => setPanelBillId(null)} onOpenExpense={setPanelExpenseId} onCreateExpense={setImportBillId} /> : null}
       {importBillId ? <ExpenseManagement key={importBillId} view="business" embedded panelOnly initialBillId={importBillId} onBack={() => { setImportBillId(null); setBillRefreshKey(value => value + 1) }} /> : null}
       <PortalModal isOpen={Boolean(panelExpenseId)} onClose={() => { setPanelExpenseId(null); setBillRefreshKey(value => value + 1) }} title="Expense & payments" sidePanel headerBack animateClose maxWidth="max-w-[600px]">

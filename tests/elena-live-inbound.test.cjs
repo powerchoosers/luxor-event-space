@@ -56,7 +56,7 @@ const integrations = {
   './luxorPhoneRoutingServer': { getLuxorPhoneRoutingSettings: async () => ({ ring_to_number: state.target }) },
   './luxorElenaInboundSettingsServer': { getElenaInboundSettings: async () => ({ voice: 'brise', ariannaAvailable: state.available }) },
   './luxorElenaInboundNotificationServer': { notifyElenaInboundAnswered: async (input) => { state.notices.push(input) } },
-  './luxorElenaInboundRecordingServer': { prepareElenaRecording: async () => ({ nonce: '77777777-7777-4777-8777-777777777777', expiresAt: new Date(Date.now() + 120_000).toISOString(), question: 'May I record and transcribe?' }), confirmElenaRecording: async (_call, _session, _nonce, consented) => { state.recordings.push(consented); return { consented } }, stopElenaRecording: async () => ({ stopped: true }) },
+  './luxorElenaInboundRecordingServer': { prepareElenaRecording: async () => ({ nonce: '77777777-7777-4777-8777-777777777777', expiresAt: new Date(Date.now() + 120_000).toISOString(), question: 'May I record and transcribe?' }), confirmElenaRecording: async (_call, _session, _nonce, consented) => { state.recordings.push(consented); return { consented } }, startAutomaticElenaRecording: async (call, session) => { state.automaticStarts.push({ call, session }); return { automatic: true, recordingStarted: true } }, stopElenaRecording: async () => ({ stopped: true }) },
   './luxorElenaInboundLeadServer': { ElenaLeadUpdateError: class extends Error {}, prepareElenaLeadUpdate: async () => ({ nonce: '66666666-6666-4666-8666-666666666666', expiresAt: new Date(Date.now() + 120_000).toISOString(), question: 'May I save this?' }), confirmElenaLeadUpdate: async () => { state.leadUpdates.push(true); return { saved: true } } },
   './luxorElenaCallEmailServer': { prepareElenaCallEmail: async () => ({ nonce: '55555555-5555-4555-8555-555555555555', expires_at: new Date(Date.now() + 120_000).toISOString(), question: 'May I send this email?' }), confirmElenaCallEmail: async () => { state.emails.push(true); return { queued: true } }, getElenaCallEmailStatus: async () => ({ status: 'pending' }) },
   './luxorElenaInboundToursServer': { ElenaInboundTourBookingError: class extends Error {},
@@ -73,12 +73,13 @@ const service = compile('src/lib/luxorElenaInboundServer.ts', integrations)
 const status = compile('src/app/api/elena-inbound/status/route.ts', {
   '@/lib/supabaseRestServer': integrations['./supabaseRestServer'],
   '@/lib/luxorElenaInboundNotificationServer': integrations['./luxorElenaInboundNotificationServer'],
+  '@/lib/luxorElenaInboundRecordingServer': integrations['./luxorElenaInboundRecordingServer'],
   '@/lib/luxorTwilioServer': { ...integrations['./luxorTwilioServer'], normalizeTwilioCallStatus: (value) => value === 'answered' ? 'in-progress' : value, parseTwilioInteger: (value) => /^\d+$/.test(value || '') ? Number(value) : null },
 })
 test.beforeEach(() => {
   Object.assign(process.env, { LUXOR_ELENA_LIVE_INBOUND_ENABLED: 'true', LUXOR_ELENA_LIVE_NUMBER: number, LUXOR_ELENA_LIVE_NUMBER_SID: numberSid,
     OPENAI_PROJECT_ID: 'proj_synthetic', OPENAI_VOICE_WEBHOOK_SECRET: secret, OPENAI_API_KEY: 'synthetic-do-not-call', LUXOR_TWILIO_ACCOUNT_SID: accountSid, LUXOR_TWILIO_AUTH_TOKEN: 'synthetic' })
-  state = { available: true, target, owned: [], operations: [], captures: [], transfers: [], bookings: [], recordings: [], leadUpdates: [], emails: [], notices: [], signed: true,
+  state = { available: true, target, owned: [], operations: [], captures: [], transfers: [], bookings: [], recordings: [], automaticStarts: [], leadUpdates: [], emails: [], notices: [], signed: true,
     row: { id: 'call', twilio_call_sid: callSid, direction: 'inbound', to_number: number, status: 'in-progress', updated_at: '2026-11-11T12:00:00.000Z', metadata: { scope: 'elena_live_inbound', ingress_mode: 'programmable_sip', accepted: true, rehearsal_only: false, openai_session_id: 'live_synthetic', transfer_state: 'none' } } }
   global.fetch = async (url) => { assert.match(String(url), /^https:\/\/api\.openai\.com\/v1\/live\/sessions\/live_synthetic\/accept$/); if (state.onAccept) state.onAccept(); return Response.json({}) }
 })
@@ -90,6 +91,13 @@ async function tool(name, args = {}) {
   return { error: result.isError === true, output: result.isError ? result.content[0].text : JSON.parse(result.content[0].text) }
 }
 const contact = { full_name: 'Synthetic Caller', phone: '(555) 123-4567', purpose: 'transfer' }
+test('new live sessions do not offer recording permission tools', () => {
+  const names = service.ELENA_LIVE_TOOLS.map((entry) => entry.name)
+  assert.equal(names.includes('prepare_recording'), false)
+  assert.equal(names.includes('confirm_recording'), false)
+  assert.equal(names.includes('recording_status'), true)
+  assert.equal(names.includes('stop_recording'), true)
+})
 test('recording, lead changes and emails require their own explicit caller decisions', async () => {
   const recording = (await tool('prepare_recording')).output.token
   const update = (await tool('prepare_lead_update', { notes: 'Interested in a tour' })).output.token
@@ -161,6 +169,7 @@ function callback(body, query = '') { return new Request(`https://luxor.invalid/
 test('signed SIP progress binds distinct child and proves answered before owner notice', async () => {
   const response = await status.POST(callback({}, `?parentCallSid=${callSid}&leg=elena`))
   assert.equal(response.status, 200); assert.equal(state.row.metadata.sip_answered, true)
+  assert.deepEqual(state.automaticStarts, [{ call: callSid, session: 'live_synthetic' }])
   assert.equal(state.row.metadata.sip_child_call_sid, childSid); assert.equal(state.notices.length, 1)
   assert.equal(state.row.status, 'in-progress')
 })

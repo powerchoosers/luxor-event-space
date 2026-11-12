@@ -27,6 +27,19 @@ type StatusUpdate = {
   metadata?: Record<string, unknown>
 }
 
+// Automatic recording is a separate live Elena state, not evidence that the
+// caller consented. Other call flows still require their existing consent.
+export function canProcessLuxorRecording(call: LuxorCall) {
+  return call.recording_consent_status === 'consented'
+    || (call.recording_consent_status === 'automatic' && call.metadata?.scope === 'elena_live_inbound')
+}
+
+function recordingStateFilter(call: LuxorCall) {
+  return call.recording_consent_status === 'automatic'
+    ? '&recording_consent_status=eq.automatic&metadata->>scope=eq.elena_live_inbound'
+    : '&recording_consent_status=eq.consented'
+}
+
 export function normalizePhoneNumber(value: string | null | undefined) {
   const raw = String(value || '').trim()
   if (!raw) return null
@@ -260,8 +273,8 @@ export async function setLuxorTranscriptionStart(callSid: string, status: 'start
 
 export async function setLuxorTranscriptionStatus(callSid: string, status: 'failed') {
   const current = await getLuxorCallBySid(callSid)
-  if (!current || current.recording_consent_status !== 'consented') return null
-  const [updated] = await supabaseRest<LuxorCall[]>(`luxor_calls?select=*&id=eq.${encodeURIComponent(current.id)}&recording_consent_status=eq.consented&transcription_status=in.(pending,processing)`, {
+  if (!current || !canProcessLuxorRecording(current)) return null
+  const [updated] = await supabaseRest<LuxorCall[]>(`luxor_calls?select=*&id=eq.${encodeURIComponent(current.id)}${recordingStateFilter(current)}&transcription_status=in.(pending,processing)`, {
     method: 'PATCH', headers: { Prefer: 'return=representation' },
     body: JSON.stringify({ transcription_status: status, updated_at: new Date().toISOString() }),
   })
@@ -301,7 +314,7 @@ export async function saveLuxorTranscriptEvent(input: {
   callSid: string; event: string; sequenceId: number; transcriptionSid: string; transcriptionData?: string; transcriptionProviderData?: string; track?: string; timestamp?: string; final?: string
 }) {
   let call = await getLuxorCallBySid(input.callSid)
-  if (!call || call.recording_consent_status !== 'consented') return null
+  if (!call || !canProcessLuxorRecording(call)) return null
   const metadata = input.transcriptionData ? JSON.parse(input.transcriptionData) as Record<string, unknown> : {}
   const alternatives = Array.isArray(metadata.alternatives) ? metadata.alternatives as Array<Record<string, unknown>> : []
   const text = String(metadata.transcript || metadata.text || alternatives[0]?.transcript || '').trim().slice(0, 4000)
@@ -332,7 +345,7 @@ export async function saveLuxorTranscriptEvent(input: {
   let stateApplied = false
   for (let attempt = 0; attempt < 5; attempt += 1) {
     const current = attempt === 0 ? call : await getLuxorCallBySid(input.callSid)
-    if (!current || current.recording_consent_status !== 'consented') return current
+    if (!current || !canProcessLuxorRecording(current)) return current
     const currentStatus = current.transcription_status || 'pending'
     let nextStatus = currentStatus
     if (input.event === 'transcription-stopped' && currentStatus !== 'failed') nextStatus = 'completed'
@@ -345,7 +358,7 @@ export async function saveLuxorTranscriptEvent(input: {
       stateApplied = true
       break
     }
-    const [updated] = await supabaseRest<LuxorCall[]>(`luxor_calls?select=*&id=eq.${encodeURIComponent(current.id)}&recording_consent_status=eq.consented&transcription_status=eq.${encodeURIComponent(currentStatus)}&updated_at=eq.${encodeURIComponent(current.updated_at)}`, {
+    const [updated] = await supabaseRest<LuxorCall[]>(`luxor_calls?select=*&id=eq.${encodeURIComponent(current.id)}${recordingStateFilter(current)}&transcription_status=eq.${encodeURIComponent(currentStatus)}&updated_at=eq.${encodeURIComponent(current.updated_at)}`, {
       method: 'PATCH', headers: { Prefer: 'return=representation' },
       body: JSON.stringify({ transcription_status: nextStatus, updated_at: new Date().toISOString() }),
     })
@@ -363,7 +376,7 @@ export async function saveLuxorTranscriptEvent(input: {
 export async function saveLuxorRecordingCopy(input: { callSid: string; recordingSid: string; durationSeconds: number | null; recordingUrl: string; recordingStartedAt?: string | null; voicemail?: boolean }) {
   const call = await getLuxorCallBySid(input.callSid)
   const isVoicemail = input.voicemail === true || call?.is_voicemail === true
-  if (!call || (!isVoicemail && call.recording_consent_status !== 'consented')) return null
+  if (!call || (!isVoicemail && !canProcessLuxorRecording(call))) return null
   if (call.recording_sid === input.recordingSid && call.recording_storage_path) return call
   const configUrl = process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
@@ -391,7 +404,7 @@ export async function saveLuxorRecordingCopy(input: { callSid: string; recording
   const recordingStartedAt = input.recordingStartedAt && Number.isFinite(Date.parse(input.recordingStartedAt)) ? new Date(input.recordingStartedAt).toISOString() : null
   for (let attempt = 0; attempt < 4; attempt += 1) {
     const current = await getLuxorCallBySid(input.callSid)
-    if (!current || (!isVoicemail && current.recording_consent_status !== 'consented')) return null
+    if (!current || (!isVoicemail && !canProcessLuxorRecording(current))) return null
     const updatedAt = new Date(Math.max(Date.now(), Date.parse(current.updated_at) + 1)).toISOString()
     const [updated] = await supabaseRest<LuxorCall[]>(`luxor_calls?select=*&id=eq.${encodeURIComponent(current.id)}&updated_at=eq.${encodeURIComponent(current.updated_at)}`, {
       method: 'PATCH', headers: { Prefer: 'return=representation' },
