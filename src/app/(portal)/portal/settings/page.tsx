@@ -349,6 +349,17 @@ function SettingsPageContent() {
         title="Browse settings"
         description="Choose what you want to manage."
         fullScreenOnMobile
+        footer={
+          <form action="/api/auth/logout" method="post" className="w-full">
+            <button
+              type="submit"
+              className="flex min-h-11 w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-semibold text-red-600 transition-colors hover:bg-red-500/10 dark:text-red-300"
+            >
+              <LogOut size={17} />
+              Log out of Luxor Portal
+            </button>
+          </form>
+        }
       >
         <nav aria-label="Settings categories" className="space-y-5">
           {settingsNavigation.map((group) => (
@@ -392,15 +403,6 @@ function SettingsPageContent() {
             </section>
           ))}
         </nav>
-        <form action="/api/auth/logout" method="post" className="mt-5 border-t border-[color:var(--portal-border)] pt-3">
-          <button
-            type="submit"
-            className="flex min-h-11 w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-semibold text-red-600 transition-colors hover:bg-red-500/10 dark:text-red-300"
-          >
-            <LogOut size={17} />
-            Log out of Luxor Portal
-          </button>
-        </form>
       </PortalModal>
     </PortalPageFrame>
   )

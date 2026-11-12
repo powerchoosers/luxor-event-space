@@ -32,9 +32,11 @@ import {
   PortalSelect,
   PortalDatePicker,
   PortalSkeleton,
+  PortalSkeletonTransition,
   PortalContactAvatar,
   PortalModal,
 } from '@/components/portal/PortalUI'
+import { useFinanceLedgerRealtime } from '@/hooks/useFinanceLedgerRealtime'
 import FinancialOverview from '@/components/portal/FinancialOverview'
 import ExpenseManagement from '@/components/portal/expenses/ExpenseManagement'
 import ProvidersWorkspace from '@/components/portal/ProvidersWorkspace'
@@ -230,17 +232,9 @@ type LuxorBookingExpense = {
     fetchFinanceData()
   }, [])
 
-  useEffect(() => {
-    const refreshIfVisible = () => {
-      if (document.visibilityState === 'visible') void fetchFinanceData(true)
-    }
-    document.addEventListener('visibilitychange', refreshIfVisible)
-    window.addEventListener('focus', refreshIfVisible)
-    return () => {
-      document.removeEventListener('visibilitychange', refreshIfVisible)
-      window.removeEventListener('focus', refreshIfVisible)
-    }
-  }, [])
+  const fetchFinanceDataRef = useRef(fetchFinanceData)
+  fetchFinanceDataRef.current = fetchFinanceData
+  useFinanceLedgerRealtime(true, () => { void fetchFinanceDataRef.current(true) })
 
   useEffect(() => {
     const syncViewFromUrl = () => {
@@ -458,9 +452,22 @@ type LuxorBookingExpense = {
   </div>
 
   const isPayables = ['expenses', 'bill-review', 'bill-providers', 'expense-recurring', 'expense-business', 'expense-events', 'expense-receipts', 'expense-detail'].includes(activeTab)
-  const workspaceSwitcher = <div className="flex h-10 w-fit rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-1" role="group" aria-label="Finance workspace">
-        {([{ label: 'Receivables', tab: 'dashboard' }, { label: 'Payables', tab: 'expenses' }] as const).map(({ label, tab }) => <button key={tab} type="button" aria-pressed={tab === 'expenses' ? isPayables : !isPayables} onClick={() => selectLegacyView(tab)} className={`h-full rounded-lg px-3 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/50 ${(tab === 'expenses' ? isPayables : !isPayables) ? 'bg-[color:var(--portal-card)] text-[color:var(--portal-text)] shadow-sm' : 'text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]'}`}>{label}</button>)}
-      </div>
+  const financeWorkspaceTab = isPayables ? 'expenses' : 'dashboard'
+  const financeWorkspaceKey = isPayables ? 'payables' : 'receivables'
+  const workspaceSwitcher = (
+    <PortalAnimatedTabs<'dashboard' | 'expenses'>
+      variant="slider"
+      ariaLabel="Finance workspace"
+      className="!w-fit"
+      buttonClassName="!min-h-8"
+      tabs={[
+        { id: 'dashboard', label: 'Receivables' },
+        { id: 'expenses', label: 'Payables' },
+      ]}
+      activeTab={financeWorkspaceTab}
+      onTabChange={(tab) => selectLegacyView(tab)}
+    />
+  )
 
   return (
     <PortalPageFrame className="h-full min-h-0 overflow-hidden flex flex-col gap-6 max-md:pt-4">
@@ -471,7 +478,6 @@ type LuxorBookingExpense = {
         mobileActionsInline
         actions={
           <div className="flex flex-wrap items-center justify-end gap-2.5">
-            <div className="md:hidden">{workspaceSwitcher}</div>
             {/* iPad/Tablet Browse Views button (positioned immediately to the left of action buttons) */}
             <button
               type="button"
@@ -490,7 +496,7 @@ type LuxorBookingExpense = {
               </span>
               <ChevronDown size={15} className="shrink-0 text-[color:var(--portal-muted)]" aria-hidden="true" />
             </button>
-            <div className="hidden md:block">{workspaceSwitcher}</div>
+            {workspaceSwitcher}
           </div>
         }
       />
@@ -554,9 +560,10 @@ type LuxorBookingExpense = {
           </motion.div>
         </AnimatePresence>
       </div>
+      <PortalTabTransition activeKey={financeWorkspaceKey} className="flex min-h-0 flex-1 flex-col overflow-hidden">
       {(financeViewsReady || activeTab === 'revenue') && <motion.div initial={false} animate={{ opacity: activeTab === 'revenue' ? 1 : 0, filter: activeTab === 'revenue' || reduceMotion ? 'blur(0px)' : 'blur(10px)' }} transition={{ duration: reduceMotion ? 0 : 0.22 }} className={`flex-1 min-h-0 overflow-y-auto pb-6 portal-scrollbar ${activeTab === 'revenue' ? '' : 'hidden'}`}><RevenueCollectionsView view="revenue" actorEmail={null} embedded active={activeTab === 'revenue'} /></motion.div>}
       {(financeViewsReady || activeTab === 'books') && <motion.div initial={false} animate={{ opacity: activeTab === 'books' ? 1 : 0, filter: activeTab === 'books' || reduceMotion ? 'blur(0px)' : 'blur(10px)' }} transition={{ duration: reduceMotion ? 0 : 0.22 }} className={`flex-1 min-h-0 overflow-y-auto pb-6 portal-scrollbar ${activeTab === 'books' ? '' : 'hidden'}`}><BooksRecordsPage embedded active={activeTab === 'books'} /></motion.div>}
-      <PortalTabTransition activeKey={activeTab} className={`flex-1 min-h-0 overflow-hidden ${activeTab === 'revenue' || activeTab === 'books' ? 'hidden' : ''}`}>
+      <div className={`min-h-0 flex-1 overflow-hidden ${activeTab === 'revenue' || activeTab === 'books' ? 'hidden' : ''}`}>
       {activeTab === 'expenses' && <ExpenseManagement view="dashboard" embedded onOpenBill={setPanelBillId} selectedRange={overviewRange} />}
       {(activeTab === 'expense-recurring' || activeTab === 'bill-providers') && <ExpenseManagement view="recurring" embedded onOpenBill={setPanelBillId} onBrowseCompanies={() => setCompaniesOpen(true)} />}
       {activeTab === 'expense-business' && <ExpenseManagement view="business" embedded onOpenBill={setPanelBillId} />}
@@ -594,7 +601,41 @@ type LuxorBookingExpense = {
 
         {activeTab === 'receivables' && (
           <div className="h-full overflow-y-auto pb-6 portal-scrollbar">
-            {loading && !receivablesModel ? <p role="status" className="p-4 text-sm text-[color:var(--portal-muted)]">Loading receivables…</p> : receivablesModel ? <ReceivablesView model={receivablesModel} onOpenSchedule={setPaymentScheduleBookingId} /> : <p role="alert" className="p-4 text-sm text-[color:var(--portal-muted)]">Receivables are unavailable until financial records are verified.</p>}
+            <PortalSkeletonTransition
+              loading={loading && !receivablesModel}
+              overlap
+              skeleton={
+                <div className="space-y-4 p-4" aria-hidden="true">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    {Array.from({ length: 3 }).map((_, i) => (
+                      <div key={i} className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-4 space-y-2">
+                        <PortalSkeleton className="h-3.5 w-24 rounded" />
+                        <PortalSkeleton className="h-7 w-32 rounded" />
+                      </div>
+                    ))}
+                  </div>
+                  <div className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-4 space-y-3">
+                    <PortalSkeleton className="h-4 w-36 rounded" />
+                    <div className="space-y-2">
+                      {Array.from({ length: 5 }).map((_, i) => (
+                        <div key={i} className="flex items-center justify-between py-2 border-b border-[color:var(--portal-border)]/50">
+                          <PortalSkeleton className="h-3.5 w-40 rounded" />
+                          <PortalSkeleton className="h-3.5 w-20 rounded" />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              }
+            >
+              {receivablesModel ? (
+                <ReceivablesView model={receivablesModel} onOpenSchedule={setPaymentScheduleBookingId} />
+              ) : !loading ? (
+                <p role="alert" className="p-4 text-sm text-[color:var(--portal-muted)]">
+                  Receivables are unavailable until financial records are verified.
+                </p>
+              ) : null}
+            </PortalSkeletonTransition>
           </div>
         )}
 
@@ -800,6 +841,7 @@ type LuxorBookingExpense = {
 
         <PaymentHistoryDetails row={selectedPaymentRecord} onClose={() => setSelectedPaymentRecord(null)} />
 
+      </div>
       </PortalTabTransition>
       <PortalModal isOpen={companiesOpen} onClose={() => setCompaniesOpen(false)} title="Company details" description="Contact information, websites, documents, and related bills." sidePanel animateClose maxWidth="max-w-[600px]">
         {companiesOpen ? <ProvidersWorkspace /> : null}

@@ -599,13 +599,13 @@ export function PortalAnimatedTabs<T extends string>({
             aria-pressed={isActive}
             onClick={() => onTabChange(tab.id)}
             className={`${isSlider
-              ? `relative isolate inline-flex min-h-9 shrink-0 items-center gap-2 rounded-lg px-3.5 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 ${isActive ? 'text-[color:var(--portal-text)]' : 'text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]'}`
+              ? `relative isolate inline-flex min-h-9 shrink-0 items-center gap-2 rounded-lg px-3.5 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 ${isActive ? 'text-[#9a712e] dark:text-[#e6c77f]' : 'text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]'}`
               : `relative inline-flex shrink-0 items-center gap-2 whitespace-nowrap px-0 py-1.5 text-xs font-semibold transition-colors ${isActive ? 'text-[#a8792f]' : 'text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]'}`} ${buttonClassName}`}
           >
             {isSlider && isActive ? (
               <motion.span
                 layoutId={sliderLayoutId}
-                className="absolute inset-0 rounded-lg border border-[color:var(--portal-border)]/50 bg-[color:var(--portal-card)] shadow-2xs"
+                className="absolute inset-0 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] shadow-sm dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.05),0_6px_16px_rgba(0,0,0,0.28)]"
                 transition={reduceMotion ? { duration: 0 } : { type: 'spring', stiffness: 420, damping: 34 }}
                 aria-hidden="true"
               />
@@ -614,13 +614,7 @@ export function PortalAnimatedTabs<T extends string>({
               {tab.icon}
               {tab.label}
               {typeof tab.count === 'number' ? (
-                <span
-                  className={`rounded-full px-1.5 py-0.5 tabular-nums font-semibold text-[10px] ${
-                    isActive ? 'bg-[#caa24c]/15 text-[#9a6d26] dark:text-[#f1d27a]' : 'bg-black/5 text-[color:var(--portal-muted)] dark:bg-white/10'
-                  }`}
-                >
-                  {tab.count}
-                </span>
+                <PortalCountBadge count={tab.count} variant={isActive ? 'active' : 'neutral'} />
               ) : null}
             </span>
           </button>
@@ -1160,6 +1154,28 @@ function formatStatusText(s: string) {
     .join(' ')
 }
 
+export function PortalCountBadge({
+  count,
+  variant = 'neutral',
+  className = '',
+}: {
+  count: number
+  variant?: 'active' | 'neutral'
+  className?: string
+}) {
+  return (
+    <span
+      className={`inline-flex min-w-[1.25rem] items-center justify-center rounded-full px-1.5 py-0.5 tabular-nums font-semibold text-[10px] ${
+        variant === 'active'
+          ? 'bg-[#caa24c]/15 text-[#9a6d26] dark:text-[#f1d27a]'
+          : 'bg-black/5 text-[color:var(--portal-muted)] dark:bg-white/10'
+      } ${className}`}
+    >
+      {count}
+    </span>
+  )
+}
+
 export const PortalStatusBadge = React.memo(function PortalStatusBadge({ status, tone, warning = false, borderless = false }: { status: string; tone?: PortalStatusTone; warning?: boolean; borderless?: boolean }) {
   const normalized = status.toLowerCase().replace(/\s+/g, '_')
   const badgeStyle = STATUS_TONE_STYLES[tone ?? STATUS_TONES[normalized] ?? 'neutral']
@@ -1565,7 +1581,9 @@ export function PortalModal({
                   {children}
                 </div>
                 {footer ? (
-                  <div className="shrink-0 border-t border-[color:var(--portal-border)] bg-[color:var(--portal-bg)] p-4 sm:px-6 sm:py-4">
+                  <div
+                    className={`shrink-0 border-t border-[color:var(--portal-border)] bg-[color:var(--portal-bg)] p-4 sm:px-6 sm:py-4 ${fullScreenOnCompact ? 'max-lg:pb-[calc(1rem+env(safe-area-inset-bottom))]' : ''} ${fullScreenOnMobile ? 'max-md:pb-[calc(1rem+env(safe-area-inset-bottom))]' : ''}`}
+                  >
                     {footer}
                   </div>
                 ) : null}
@@ -2071,6 +2089,7 @@ export function PortalSkeletonTransition({
   className = '',
   overlap = false,
   animateInitialSkeleton = false,
+  minHeight,
 }: {
   loading: boolean
   skeleton: React.ReactNode
@@ -2078,54 +2097,174 @@ export function PortalSkeletonTransition({
   className?: string
   overlap?: boolean
   animateInitialSkeleton?: boolean
+  minHeight?: string | number
 }) {
   const reduceMotion = useReducedMotion()
+  const style = minHeight ? { minHeight } : undefined
 
   if (overlap) {
-    return <div className={`grid min-w-0 ${className}`} aria-busy={loading}>
-      <AnimatePresence initial={animateInitialSkeleton}>
-        {loading && <motion.div key="skeleton" className="col-start-1 row-start-1 z-10 pointer-events-none" initial={animateInitialSkeleton && !reduceMotion ? { opacity: 0.65, filter: 'blur(12px)' } : false} animate={{ opacity: 1, filter: 'blur(0px)' }} exit={reduceMotion ? { opacity: 0 } : { opacity: 0, filter: 'blur(12px)' }} transition={{ duration: reduceMotion ? 0 : 0.28, ease: LUXOR_PORTAL_EASE }}>{skeleton}</motion.div>}
-      </AnimatePresence>
-      {!loading && <motion.div className="col-start-1 row-start-1 min-w-0" initial={reduceMotion ? false : { opacity: 0.65, filter: 'blur(12px)' }} animate={{ opacity: 1, filter: 'blur(0px)' }} transition={{ duration: reduceMotion ? 0 : 0.32, ease: LUXOR_PORTAL_EASE }}>{children}</motion.div>}
-    </div>
+    return (
+      <div className={`grid min-w-0 ${className}`} style={style} aria-busy={loading}>
+        <AnimatePresence initial={animateInitialSkeleton}>
+          {loading && (
+            <motion.div
+              key="skeleton"
+              className="col-start-1 row-start-1 z-10 pointer-events-none"
+              initial={animateInitialSkeleton && !reduceMotion ? { opacity: 0.65, filter: 'blur(12px)' } : false}
+              animate={{ opacity: 1, filter: 'blur(0px)' }}
+              exit={reduceMotion ? { opacity: 0 } : { opacity: 0, filter: 'blur(12px)' }}
+              transition={{ duration: reduceMotion ? 0 : 0.28, ease: LUXOR_PORTAL_EASE }}
+            >
+              {skeleton}
+            </motion.div>
+          )}
+        </AnimatePresence>
+        {!loading && (
+          <motion.div
+            className="col-start-1 row-start-1 min-w-0"
+            initial={reduceMotion ? false : { opacity: 0.65, filter: 'blur(12px)' }}
+            animate={{ opacity: 1, filter: 'blur(0px)' }}
+            transition={{ duration: reduceMotion ? 0 : 0.32, ease: LUXOR_PORTAL_EASE }}
+            onAnimationComplete={(definition) => {
+              if (definition === 'animate' && typeof document !== 'undefined') {
+                const elements = document.querySelectorAll('[data-portal-blur-cleanup="true"]')
+                elements.forEach((el) => {
+                  ;(el as HTMLElement).style.filter = 'none'
+                  ;(el as HTMLElement).style.transform = 'none'
+                })
+              }
+            }}
+            data-portal-blur-cleanup="true"
+          >
+            {children}
+          </motion.div>
+        )}
+      </div>
+    )
   }
 
   return (
-    <AnimatePresence mode="wait" initial={false}>
-      {loading ? (
-        <motion.div
-          key="portal-skeleton-state"
-          initial={reduceMotion ? { opacity: 0 } : { opacity: 0.75, filter: 'blur(0px)' }}
-          animate={reduceMotion ? { opacity: 1 } : { opacity: 1, filter: 'blur(0px)' }}
-          exit={reduceMotion ? { opacity: 0 } : { opacity: 0, filter: 'blur(12px)' }}
-          transition={{ duration: reduceMotion ? 0.05 : 0.28, ease: LUXOR_PORTAL_EASE }}
-          className={className}
+    <div style={style} className="min-w-0">
+      <AnimatePresence mode="wait" initial={false}>
+        {loading ? (
+          <motion.div
+            key="portal-skeleton-state"
+            initial={reduceMotion ? { opacity: 0 } : { opacity: 0.75, filter: 'blur(0px)' }}
+            animate={reduceMotion ? { opacity: 1 } : { opacity: 1, filter: 'blur(0px)' }}
+            exit={reduceMotion ? { opacity: 0 } : { opacity: 0, filter: 'blur(12px)' }}
+            transition={{ duration: reduceMotion ? 0.05 : 0.28, ease: LUXOR_PORTAL_EASE }}
+            className={className}
+          >
+            {skeleton}
+          </motion.div>
+        ) : (
+          <motion.div
+            key="portal-content-state"
+            initial={reduceMotion ? { opacity: 0 } : { opacity: 0.65, filter: 'blur(12px)' }}
+            animate={reduceMotion ? { opacity: 1 } : { opacity: 1, filter: 'blur(0px)' }}
+            exit={reduceMotion ? { opacity: 0 } : { opacity: 0, filter: 'blur(12px)' }}
+            transition={{ duration: reduceMotion ? 0.05 : 0.32, ease: LUXOR_PORTAL_EASE }}
+            onAnimationComplete={(definition) => {
+              if (definition === 'animate' && typeof document !== 'undefined') {
+                const elements = document.querySelectorAll('[data-portal-blur-cleanup="true"]')
+                elements.forEach((el) => {
+                  ;(el as HTMLElement).style.filter = 'none'
+                  ;(el as HTMLElement).style.transform = 'none'
+                })
+              }
+            }}
+            data-portal-blur-cleanup="true"
+            className={className}
+          >
+            {children}
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  )
+}
+
+/**
+ * Common block table skeleton matching containerized table placeholders
+ */
+export function PortalTableBlockSkeleton({
+  rows = 5,
+  columns = 5,
+  className = '',
+}: {
+  rows?: number
+  columns?: number
+  className?: string
+}) {
+  return (
+    <div className={`w-full overflow-hidden divide-y divide-[color:var(--portal-border)]/50 ${className}`}>
+      {Array.from({ length: rows }, (_, r) => (
+        <div key={r} className="flex items-center gap-4 px-6 py-4" aria-hidden="true">
+          {Array.from({ length: columns }, (_, c) => (
+            <div key={c} className="flex-1">
+              <PortalSkeleton className={`h-4 ${c === 0 ? 'w-24' : c === columns - 1 ? 'w-16 ml-auto' : 'w-3/4'} rounded`} />
+            </div>
+          ))}
+        </div>
+      ))}
+    </div>
+  )
+}
+
+/**
+ * Common card grid skeleton matching standard portal dashboard/overview cards
+ */
+export function PortalCardGridSkeleton({
+  count = 3,
+  columns = 'grid-cols-1 sm:grid-cols-3',
+  className = '',
+}: {
+  count?: number
+  columns?: string
+  className?: string
+}) {
+  return (
+    <div className={`grid ${columns} gap-3 ${className}`}>
+      {Array.from({ length: count }, (_, i) => (
+        <div
+          key={i}
+          className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-4 sm:p-5 space-y-3"
+          aria-hidden="true"
         >
-          {skeleton}
-        </motion.div>
-      ) : (
-        <motion.div
-          key="portal-content-state"
-          initial={reduceMotion ? { opacity: 0 } : { opacity: 0.65, filter: 'blur(12px)' }}
-          animate={reduceMotion ? { opacity: 1 } : { opacity: 1, filter: 'blur(0px)' }}
-          exit={reduceMotion ? { opacity: 0 } : { opacity: 0, filter: 'blur(12px)' }}
-          transition={{ duration: reduceMotion ? 0.05 : 0.32, ease: LUXOR_PORTAL_EASE }}
-          onAnimationComplete={(definition) => {
-            if (definition === 'animate' && typeof document !== 'undefined') {
-              const elements = document.querySelectorAll('[data-portal-blur-cleanup="true"]')
-              elements.forEach((el) => {
-                ;(el as HTMLElement).style.filter = 'none'
-                ;(el as HTMLElement).style.transform = 'none'
-              })
-            }
-          }}
-          data-portal-blur-cleanup="true"
-          className={className}
-        >
-          {children}
-        </motion.div>
-      )}
-    </AnimatePresence>
+          <div className="flex items-center justify-between">
+            <PortalSkeleton className="h-4 w-28 rounded" />
+            <PortalSkeleton className="h-6 w-6 rounded-md" />
+          </div>
+          <PortalSkeleton className="h-8 w-24 rounded" />
+          <PortalSkeleton className="h-3 w-36 rounded" />
+        </div>
+      ))}
+    </div>
+  )
+}
+
+/**
+ * Common detail panel skeleton matching contact, call, or lead profile drawers
+ */
+export function PortalDetailPanelSkeleton({ className = '' }: { className?: string }) {
+  return (
+    <div className={`space-y-4 p-4 ${className}`} aria-hidden="true">
+      <div className="flex items-center gap-3">
+        <PortalSkeleton className="h-10 w-10 shrink-0 rounded-full" />
+        <div className="flex-1 space-y-1.5">
+          <PortalSkeleton className="h-4 w-36 rounded" />
+          <PortalSkeleton className="h-3 w-28 rounded" />
+        </div>
+      </div>
+      <div className="space-y-2 pt-2 border-t border-[color:var(--portal-border)]">
+        <PortalSkeleton className="h-3 w-20 rounded" />
+        <PortalSkeleton className="h-9 w-full rounded-xl" />
+      </div>
+      <div className="space-y-2">
+        <PortalSkeleton className="h-3 w-24 rounded" />
+        <PortalSkeleton className="h-20 w-full rounded-xl" />
+      </div>
+    </div>
   )
 }
 

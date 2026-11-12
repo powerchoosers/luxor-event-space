@@ -8,6 +8,7 @@ import { RevenueCollectionsShell } from '@/components/portal/RevenueCollectionsS
 import { BorderBeam } from '@/components/ui/border-beam'
 import { FinanceEmptyState, FinanceReviewNotice, formatFinanceCurrency, MonthlyCollectionsBars } from '@/components/portal/RevenueCollectionsPrimitives'
 import { LogInstallmentPaymentDialog } from '@/components/portal/LogInstallmentPaymentDialog'
+import { useFinanceLedgerRealtime } from '@/hooks/useFinanceLedgerRealtime'
 import { useRevenueCollectionsModel } from '@/components/portal/useRevenueCollectionsModel'
 import {
   filterLuxorRevenueHistory,
@@ -100,7 +101,7 @@ function shiftCalendarDate(value: string, days: number) {
 }
 
 function Status({ value, warning = false }: { value: string; warning?: boolean }) {
-  return <PortalStatusBadge status={statusLabel(value)} tone={toneForStatus(value)} warning={warning} />
+  return <PortalStatusBadge borderless status={statusLabel(value)} tone={toneForStatus(value)} warning={warning} />
 }
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
@@ -210,9 +211,9 @@ function ProfitabilitySummary({ data, error }: { data: ProfitSnapshot | null; er
   </section>
 }
 
-function RevenueDashboard({ model, onPeriodChange, profit, profitError, onRefresh, refreshing }: { model: NonNullable<ReturnType<typeof useRevenueCollectionsModel>['model']>; onPeriodChange: React.ReactNode; profit: ProfitSnapshot | null; profitError: boolean; onRefresh: () => void; refreshing: boolean }) {
+function RevenueDashboard({ model, onPeriodChange, profit, profitError }: { model: NonNullable<ReturnType<typeof useRevenueCollectionsModel>['model']>; onPeriodChange: React.ReactNode; profit: ProfitSnapshot | null; profitError: boolean }) {
   return <div className="space-y-5">
-    <div className="flex flex-wrap items-end justify-between gap-4"><div><h2 className="text-xl font-bold tracking-tight text-[color:var(--portal-text)]">Revenue &amp; collections</h2><p className="mt-1 text-sm text-[color:var(--portal-muted)]">See what has come in, what is due, and how events are performing.</p></div><PortalButton onClick={onRefresh} disabled={refreshing}>Refresh</PortalButton></div>
+    <div><h2 className="text-xl font-bold tracking-tight text-[color:var(--portal-text)]">Revenue &amp; collections</h2><p className="mt-1 text-sm text-[color:var(--portal-muted)]">See what has come in, what is due, and how events are performing.</p></div>
     {onPeriodChange}
     {!model.period.valid ? <p role="alert" className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-3 text-sm text-[color:var(--portal-text)]">Choose a valid start and end date to view this period.</p> : null}
     <FinanceReviewNotice issues={model.issues} />
@@ -564,6 +565,7 @@ export function RevenueCollectionsView({ view, actorEmail, embedded = false, act
   const [endDate, setEndDate] = useState('')
   const options = { preset, startDate, endDate }
   const { model, loading, error, refresh, scheduleRows } = useRevenueCollectionsModel(options)
+  useFinanceLedgerRealtime(active, () => { void refresh(); setProfitRevision((value) => value + 1) })
   const wasActive = useRef(active)
   useEffect(() => {
     const shouldRefresh = active && !wasActive.current && model && !loading
@@ -584,12 +586,12 @@ export function RevenueCollectionsView({ view, actorEmail, embedded = false, act
   const content = <main className={embedded ? "space-y-5" : "space-y-5 p-4 sm:p-6"} aria-busy={loading}>
       <LoadState loading={loading} error={error} hasModel={Boolean(model)} />
       {!error && model ? <>
-        {view === 'revenue' ? <RevenueDashboard model={model} onPeriodChange={periodFilter} profit={profit} profitError={profitError} onRefresh={() => { void refresh(); setProfitRevision((value) => value + 1) }} refreshing={loading} /> : null}
+        {view === 'revenue' ? <RevenueDashboard model={model} onPeriodChange={periodFilter} profit={profit} profitError={profitError} /> : null}
         {view === 'schedules' ? <ScheduleView model={model} scheduleRows={scheduleRows} actorEmail={actorEmail} onRefresh={() => { void refresh() }} /> : null}
         {view === 'monthly' ? <MonthlyView model={model} /> : null}
         {view === 'receivables' ? <ReceivablesView model={model} /> : null}
         {view === 'history' ? <PaymentHistoryView model={model} /> : null}
       </> : null}
     </main>
-  return embedded ? content : <RevenueCollectionsShell view={view} onRefresh={() => { void refresh() }} refreshing={loading}>{content}</RevenueCollectionsShell>
+  return embedded ? content : <RevenueCollectionsShell view={view}>{content}</RevenueCollectionsShell>
 }

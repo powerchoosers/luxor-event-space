@@ -2,11 +2,11 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
-import { ArrowClockwise, CreditCard } from '@phosphor-icons/react'
+import { CreditCard } from '@phosphor-icons/react'
 import { ChevronDown, Menu } from '@/lib/icons/phosphor-compat'
 import { FinanceMainTabs } from '@/components/portal/FinanceMainTabs'
 import { FinanceBrowseViews, type FinanceBrowseView } from '@/components/portal/FinanceBrowseViews'
-import { PortalButton, PortalPageFrame, PortalPageHeader } from '@/components/portal/PortalUI'
+import { PortalPageFrame, PortalPageHeader } from '@/components/portal/PortalUI'
 
 export const REVENUE_COLLECTION_VIEWS: Record<Extract<FinanceBrowseView, 'revenue' | 'schedules' | 'monthly' | 'receivables' | 'history'>, { title: string; description: string }> = {
   revenue: { title: 'Revenue', description: 'Collected payments, remaining obligations, and upcoming collections.' },
@@ -23,13 +23,9 @@ const revenueCollectionLinks: Array<{ view: keyof typeof REVENUE_COLLECTION_VIEW
 
 export function RevenueCollectionsShell({
   view,
-  onRefresh,
-  refreshing = false,
   children,
 }: {
   view: Extract<FinanceBrowseView, 'revenue' | 'schedules' | 'monthly' | 'receivables' | 'history'>
-  onRefresh?: () => void
-  refreshing?: boolean
   children: React.ReactNode
 }) {
   const [browseOpen, setBrowseOpen] = useState(false)
@@ -60,11 +56,6 @@ export function RevenueCollectionsShell({
               </span>
               <ChevronDown size={15} className="shrink-0 text-[color:var(--portal-muted)]" aria-hidden="true" />
             </button>
-            {onRefresh ? (
-              <PortalButton onClick={onRefresh} disabled={refreshing} aria-label="Refresh revenue and collections">
-                <ArrowClockwise size={15} weight="regular" className={refreshing ? 'animate-spin' : ''} /> Refresh Ledger
-              </PortalButton>
-            ) : null}
           </div>
         )}
       />

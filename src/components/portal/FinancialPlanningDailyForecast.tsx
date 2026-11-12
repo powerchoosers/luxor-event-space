@@ -10,9 +10,8 @@ import type { StoredPlanningItem } from '@/lib/luxorFinancialPlanningApi'
 type ForecastSources = { today: string; flows: ForecastFlow[]; inflowAvailable: boolean; outflowAvailable: boolean; sourceComplete: boolean; issues: string[] }
 const money = (value: number | null) => value === null ? 'Unavailable' : new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(value)
 export function FinancialPlanningDailyForecast({ today, items, principalScope, sourceRevision = 0 }: { today: string; items: StoredPlanningItem[]; principalScope: string; sourceRevision?: number }) {
-  const [refresh, setRefresh] = useState(0)
   const [result, setResult] = useState<{ key: string; sources: ForecastSources | null; error: string | null } | null>(null)
-  const key = JSON.stringify([principalScope, today, sourceRevision, refresh])
+  const key = JSON.stringify([principalScope, today, sourceRevision])
   const sources = result?.key === key ? result.sources : null
   const error = result?.key === key ? result.error : null
   const [horizon, setHorizon] = useState<ForecastHorizon>('30d')
@@ -38,7 +37,7 @@ export function FinancialPlanningDailyForecast({ today, items, principalScope, s
     if (sources?.today === today) forecast = buildForecastDraft({ today, horizon, grouping, openingBalance: opening?.availability === 'known' ? opening.value : null, minimumReserve: scenario?.minimumReserve ?? null, sourceComplete: sources.sourceComplete, inflowAvailable: sources.inflowAvailable, outflowAvailable: sources.outflowAvailable, flows: sources.flows })
   } catch { /* malformed source data stays unavailable */ }
   return <section className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-4 text-[color:var(--portal-text)] sm:p-5">
-    <div className="flex flex-wrap items-center justify-between gap-2"><h2 className="text-base font-bold sm:text-lg">Dated cash outlook</h2><PortalButton onClick={() => setRefresh((value) => value + 1)}>Refresh outlook</PortalButton></div>
+    <h2 className="text-base font-bold sm:text-lg">Dated cash outlook</h2>
     <p className="mt-1 text-sm leading-6 text-[color:var(--portal-muted)]">Known scheduled collections and unpaid expenses are grouped by their recorded dates. Coverage is partial: overdue items, ungenerated recurring expenses and other cash movements may be missing. A manual opening amount is not a connected bank balance.</p>
     <div className="mt-4 flex flex-wrap gap-2" aria-label="Forecast period">{([['30d', '30 days'], ['60d', '60 days'], ['90d', '90 days'], ['6m', '6 months'], ['12m', '12 months']] as const).map(([value, label]) => <PortalButton key={value} variant={horizon === value ? 'primary' : 'secondary'} className={horizon === value ? '!text-white' : ''} aria-pressed={horizon === value} onClick={() => setHorizon(value)}>{label}</PortalButton>)}</div>
     <div className="mt-3 grid gap-3 sm:grid-cols-2"><div><span className="mb-1 block text-sm">Group by</span><PortalSelect aria-label="Forecast grouping" value={grouping} onChange={(value) => setGrouping(value as ForecastGrouping)} options={[{ value: 'weekly', label: 'Week' }, { value: 'monthly', label: 'Month' }]} /></div>{scenarios.length ? <div><span className="mb-1 block text-sm">Opening scenario</span><PortalSelect aria-label="Manual opening scenario" value={scenarioId} onChange={setScenarioId} placeholder="Choose a manual scenario" options={scenarios.map((item) => ({ value: item.payload.id, label: item.payload.label }))} /></div> : null}</div>

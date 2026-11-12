@@ -2,8 +2,9 @@
 
 import React, { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
-import { ArrowClockwise, CaretDown, CaretUp, List } from '@phosphor-icons/react'
-import { PortalButton, PortalPageHeader } from '@/components/portal/PortalUI'
+import { CaretDown, CaretUp, List } from '@phosphor-icons/react'
+import { PortalPageHeader, PortalSkeleton, PortalSkeletonTransition } from '@/components/portal/PortalUI'
+import { useFinanceLedgerRealtime } from '@/hooks/useFinanceLedgerRealtime'
 import { FinanceMainTabs } from '@/components/portal/FinanceMainTabs'
 import { FinanceBrowseViews } from '@/components/portal/FinanceBrowseViews'
 import { AccountantSourceExports } from '@/components/portal/AccountantSourceExports'
@@ -88,6 +89,7 @@ export function BooksRecordsPage({ embedded = false, active = true }: { embedded
       return () => window.clearTimeout(timer)
     }
   }, [active, data])
+  useFinanceLedgerRealtime(active, () => setRevision((value) => value + 1))
   useEffect(() => {
     const controller = new AbortController()
     fetch('/api/portal/books-health', { cache: 'no-store', signal: controller.signal })
@@ -125,20 +127,48 @@ export function BooksRecordsPage({ embedded = false, active = true }: { embedded
         <FinanceBrowseViews open={browseOpen} close={() => setBrowseOpen(false)} currentView="books" />
         <FinanceMainTabs activeTab="books" />
       </>}
-      <div className="flex flex-wrap items-center gap-3">
-        {!embedded && <Link href="/portal/finances" className="text-sm font-semibold text-[#9a712e] underline-offset-4 hover:underline dark:text-[#e6c77f]">Financial Center</Link>}
-        <PortalButton type="button" onClick={() => { setRefreshing(true); setRevision((value) => value + 1) }}><ArrowClockwise size={15} weight="regular" /> Refresh</PortalButton>
-        {data && refreshing && <span role="status" className="text-xs text-[color:var(--portal-muted)]">Refreshing records…</span>}
-      </div>
+      {!embedded ? <Link href="/portal/finances" className="text-sm font-semibold text-[#9a712e] underline-offset-4 hover:underline dark:text-[#e6c77f]">Financial Center</Link> : null}
+      {data && refreshing ? <p role="status" className="text-xs text-[color:var(--portal-muted)]">Updating records…</p> : null}
       {error ? (
         <p role="alert" className="text-sm text-[color:var(--portal-text)]">{error} <button type="button" className="underline" onClick={() => setRevision((value) => value + 1)}>Try again</button></p>
-      ) : !data ? (
-        <p role="status" className="text-sm text-[color:var(--portal-muted)]">Loading…</p>
       ) : (
-        <>
-          <p role="status" className="text-sm leading-6 text-[color:var(--portal-text)]">{data.statusSentence}</p>
-          <p className="text-xs leading-5 text-[color:var(--portal-muted)]">{data.cashBasisNote}</p>
-          <div id="books-kpis" className="grid gap-3 sm:grid-cols-3">
+        <PortalSkeletonTransition
+          loading={!data}
+          overlap
+          skeleton={
+            <div className="space-y-4" aria-hidden="true">
+              <div className="space-y-2">
+                <PortalSkeleton className="h-4 w-3/4 rounded" />
+                <PortalSkeleton className="h-3 w-1/2 rounded" />
+              </div>
+              <div className="grid gap-3 sm:grid-cols-3">
+                {Array.from({ length: 3 }).map((_, i) => (
+                  <div key={i} className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-4 space-y-2">
+                    <PortalSkeleton className="h-3.5 w-24 rounded" />
+                    <PortalSkeleton className="h-7 w-28 rounded" />
+                    <PortalSkeleton className="h-3 w-32 rounded" />
+                  </div>
+                ))}
+              </div>
+              <div className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 space-y-3">
+                <PortalSkeleton className="h-4 w-28 rounded" />
+                <div className="space-y-2">
+                  {Array.from({ length: 3 }).map((_, i) => (
+                    <div key={i} className="flex items-center justify-between py-2 border-b border-[color:var(--portal-border)]/50">
+                      <PortalSkeleton className="h-4 w-40 rounded" />
+                      <PortalSkeleton className="h-4 w-16 rounded" />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          }
+        >
+          {data ? (
+            <>
+              <p role="status" className="text-sm leading-6 text-[color:var(--portal-text)]">{data.statusSentence}</p>
+              <p className="text-xs leading-5 text-[color:var(--portal-muted)]">{data.cashBasisNote}</p>
+              <div id="books-kpis" className="grid gap-3 sm:grid-cols-3">
             <div className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-4">
               <p className="text-xs font-semibold uppercase tracking-wide text-[color:var(--portal-muted)]">Client balances</p>
               <p className="mt-2 text-2xl font-bold tabular-nums text-[color:var(--portal-text)]">{money(data.kpis.outstandingReceivable)}</p>
@@ -226,7 +256,9 @@ export function BooksRecordsPage({ embedded = false, active = true }: { embedded
             <p className="mt-2">Confirm opening balances and classifications with your accountant before filing taxes.</p>
           </section>
         </>
-      )}
-    </div>
+      ) : null}
+    </PortalSkeletonTransition>
+  )}
+</div>
   )
 }

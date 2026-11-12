@@ -21,6 +21,7 @@ import {
   PortalButton,
   PortalCloseButton,
   PortalContactAvatar,
+  PortalCountBadge,
   PortalModal,
   PortalSelect,
   PortalSkeleton,
@@ -39,7 +40,7 @@ import {
 } from '@/lib/luxorFinanceReporting'
 import type { LuxorBill, LuxorPayment, LuxorPaymentInstallment } from '@/lib/luxorInquiryTypes'
 import { chicagoCalendarDate, installmentDisplayState, invoiceEventObligation, isBookingPaymentMilestone, isFinalPaymentMilestone } from '@/lib/luxorPaymentDashboardModel'
-import { expenseCategoryColors } from '@/lib/luxorExpenseChartColors'
+import { expenseCategoryColors, expenseCategoryConicStops } from '@/lib/luxorExpenseChartColors'
 
 type Overview = ReturnType<typeof getLuxorFinanceOverview>
 type Expenses = ReturnType<typeof getLuxorPaidExpenseBreakdown>
@@ -420,12 +421,15 @@ function CategoryChart({ values, label, tone = 'revenue' }: { values: Array<{ ca
   const colors = ['#a87827', '#c49650', '#dbb47b', '#e8cba2', '#b9a380', '#83725e', '#cfb18b', '#e5d7c2', '#8d7f6c', '#d0c0a8']
   const expenseColors = expenseCategoryColors(data.rows.map((row) => row.category))
   const colorFor = (category: string, index: number) => tone === 'expense' ? expenseColors.get(category)! : colors[index % colors.length]
-  const stops = data.rows
-    .map((row, index) => {
-      const start = data.rows.slice(0, index).reduce((sum, item) => sum + item.percent, 0)
-      return `${colorFor(row.category, index)} ${start}% ${start + row.percent}%`
-    })
-    .join(', ')
+  const stops =
+    tone === 'expense'
+      ? expenseCategoryConicStops(data.rows.map((row) => ({ name: row.category, amount: row.amount })))
+      : data.rows
+          .map((row, index) => {
+            const start = data.rows.slice(0, index).reduce((sum, item) => sum + item.percent, 0)
+            return `${colorFor(row.category, index)} ${start}% ${start + row.percent}%`
+          })
+          .join(', ')
   if (!data.total) return <EmptyCategoryChart amount={netTotal} message={refunds.length ? `Refunds and reversals: ${currency(netTotal)}.` : `No ${label.toLowerCase()} recorded for this period ($0.00).`} />
   return (
     <div className="mt-4 flex flex-wrap items-center gap-5">
@@ -1008,8 +1012,9 @@ export default function FinancialOverview({
             {/* Pending / Awaiting Contract Signature Schedules */}
             {clientPaymentPlans.pending.length > 0 && (
               <div className="border-t border-[color:var(--portal-border)] pt-3">
-                <h4 className="text-xs font-semibold uppercase tracking-wider text-[color:var(--portal-muted)]">
-                  Drafted Schedules Awaiting Contract Signature ({clientPaymentPlans.pending.length})
+                <h4 className="flex flex-wrap items-center gap-2 text-xs font-semibold uppercase tracking-wider text-[color:var(--portal-muted)]">
+                  Awaiting contract signature
+                  <PortalCountBadge count={clientPaymentPlans.pending.length} />
                 </h4>
                 <div className="mt-2.5 grid gap-3 lg:grid-cols-2">
                   {clientPaymentPlans.pending.map((item) => (
