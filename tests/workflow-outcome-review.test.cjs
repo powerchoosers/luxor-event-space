@@ -42,6 +42,7 @@ for (const scenario of [
     '@/components/portal/WorkflowBadge':{WorkflowBadge:'workflow-badge'},
     '@/lib/luxorNextFollowUpDisplay':{selectNextFollowUpDisplay:()=>({summary:null,notice:null})},
     '@/lib/luxorCallStopIntent':{recordCallWithoutWorkflowAdvance},
+    '@/lib/luxorCallResolutionClient':{},
     '@/lib/luxorFollowUpHelpers':{luxorToday:()=> '2026-11-08',luxorDate:()=> 'December 1, 2026',luxorTimeInput:()=> '10:00',localLuxorIso:()=> '2026-12-01T16:00:00.000Z',manualFollowUpDescription:()=>''},
   }
   const modal=loadTs('src/components/portal/LogCallOutcomeModal.tsx',stubs)
@@ -101,6 +102,7 @@ for (const scenario of [
     '@/components/portal/WorkflowBadge':{WorkflowBadge:'workflow-badge'},
     '@/lib/luxorNextFollowUpDisplay':{selectNextFollowUpDisplay:()=>({summary:null,notice:null})},
     '@/lib/luxorCallStopIntent':{recordCallWithoutWorkflowAdvance},
+    '@/lib/luxorCallResolutionClient':{},
     '@/lib/luxorFollowUpHelpers':{luxorToday:()=> '2026-11-08',luxorDate:()=> 'December 1, 2026',luxorTimeInput:()=> '10:00',localLuxorIso:()=> '2026-12-01T16:00:00.000Z',manualFollowUpDescription:()=>''},
   }
   const modal=loadTs('src/components/portal/LogCallOutcomeModal.tsx',stubs)

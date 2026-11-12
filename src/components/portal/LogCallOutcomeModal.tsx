@@ -10,6 +10,8 @@ import { useToast } from '@/components/portal/ToastProvider'
 import { WorkflowBadge } from '@/components/portal/WorkflowBadge'
 import { selectNextFollowUpDisplay, type ScheduledFollowUpSummary, type WorkflowPreviewResponse } from '@/lib/luxorNextFollowUpDisplay'
 import { recordCallWithoutWorkflowAdvance } from '@/lib/luxorCallStopIntent'
+import { pendingCallResolution, submitCallResolution } from '@/lib/luxorCallResolutionClient'
+import type { CallNextStep, CallOutcome } from '@/lib/luxorCallResolution'
 import {
   localLuxorIso,
   luxorDate,
@@ -75,6 +77,10 @@ export function LogCallOutcomeModal({
   const [stopIntentAttempted, setStopIntentAttempted] = useState(false)
   const savingRef = useRef(false)
   const continueRequestId = useRef<string | null>(null)
+  const resolutionEnabled = process.env.NEXT_PUBLIC_LUXOR_CALL_RESOLUTION_ENABLED === 'true'
+  const [nurtureWorkflowId, setNurtureWorkflowId] = useState('')
+  const [nurtureWorkflows, setNurtureWorkflows] = useState<Array<{ id: string; name: string }>>([])
+  const [nurtureNotice, setNurtureNotice] = useState('')
 
   // Next scheduled task state & inline editing
   const [nextScheduledTask, setNextScheduledTask] = useState<ScheduledFollowUpSummary | null>(null)
@@ -99,6 +105,7 @@ export function LogCallOutcomeModal({
       setPreviewNotice(null)
       setStopIntentAttempted(false)
       continueRequestId.current = null
+      setNurtureWorkflowId('')
       return
     }
 
@@ -108,7 +115,10 @@ export function LogCallOutcomeModal({
 
     const taskRequest = fetch(`/api/tasks?inquiryId=${encodeURIComponent(lead.id)}`, { cache: 'no-store' })
       .then((res) => { if (!res.ok) throw new Error('Tasks unavailable'); return res.json() as Promise<LuxorTask[]> })
-    const previewRequest = task
+    // This resolver targets the current materialized task model, not the
+    // separate ordered/adoption rollout. Show its actual saved task dates;
+    // do not query an uninstalled draft ledger for a tentative forecast.
+    const previewRequest = task && !resolutionEnabled
       ? fetch(`/api/workflow-next-preview?inquiryId=${encodeURIComponent(lead.id)}&taskId=${encodeURIComponent(task.id)}`, { cache: 'no-store' })
         .then((res) => { if (!res.ok) throw new Error('Preview unavailable'); return res.json() as Promise<WorkflowPreviewResponse> })
       : Promise.resolve<WorkflowPreviewResponse>({ mode: 'legacy' })
@@ -129,7 +139,89 @@ export function LogCallOutcomeModal({
     return () => {
       active = false
     }
-  }, [isOpen, lead, task])
+  }, [isOpen, lead, task, resolutionEnabled])
+
+  useEffect(() => {
+    if (!resolutionEnabled || !isOpen || !lead) return
+    try {
+      const pending = pendingCallResolution(lead.id, task?.id || null)
+      if (!pending) return
+      setCallOutcome(pending.outcome)
+      setCallNote(pending.note)
+      setNextStep(pending.nextStep)
+      setNurtureWorkflowId(pending.nurtureWorkflowId || '')
+      if (pending.dueAt) {
+        setNextDate(luxorDate(pending.dueAt))
+        setNextTime(luxorTimeInput(pending.dueAt))
+        setNextChannel(pending.channel || 'phone')
+      }
+      notify({ title: 'Previous save needs confirmation', description: 'The original details are restored. Save again to check the same request without creating a duplicate.', variant: 'error' })
+    } catch {
+      setStopIntentAttempted(true)
+      notify({ title: 'Previous save needs review', description: "Check this lead's timeline before recording another call.", variant: 'error' })
+    }
+  }, [resolutionEnabled, isOpen, lead, task, notify])
+
+  useEffect(() => {
+    if (!resolutionEnabled || !isOpen || nextStep !== 'nurture') return
+    const controller = new AbortController()
+    setNurtureNotice('Loading active workflows…')
+    fetch('/api/marketing/custom-workflows', { cache: 'no-store', signal: controller.signal })
+      .then(async (response) => {
+        const payload = await response.json() as { enabled?: boolean; executionEnabled?: boolean; workflows?: Array<{ id: string; name: string; status: string; trigger_type: string }> }
+        if (!response.ok || !payload.enabled || !payload.executionEnabled || !Array.isArray(payload.workflows)) throw new Error('Active nurture workflows are unavailable. Review Marketing workflows before continuing.')
+        const choices = payload.workflows.filter((workflow) => workflow.status === 'active' && workflow.trigger_type === 'manual')
+        setNurtureWorkflows(choices)
+        setNurtureNotice(choices.length ? 'Choose the saved workflow that should start. Its consent checks still apply.' : 'No active manual workflow is available. Review Marketing workflows before continuing.')
+      })
+      .catch((error: unknown) => {
+        if (!controller.signal.aborted) { setNurtureWorkflows([]); setNurtureNotice(error instanceof Error ? error.message : 'Workflows could not load.') }
+      })
+    return () => controller.abort()
+  }, [resolutionEnabled, isOpen, nextStep])
+
+  async function saveResolvedOutcome() {
+    if (!lead || savingRef.current) return
+    savingRef.current = true
+    setSaving(true)
+    let saved = false
+    try {
+      const chosenStep: CallNextStep = callOutcome === 'not_interested' ? 'stop' : nextStep as CallNextStep
+      const result = await submitCallResolution({
+        inquiryId: lead.id, taskId: task?.id || null, outcome: callOutcome as CallOutcome,
+        nextStep: chosenStep, note: callNote,
+        dueAt: chosenStep === 'later' ? localLuxorIso(nextDate, nextTime) : null,
+        channel: chosenStep === 'later' ? nextChannel : null,
+        nurtureWorkflowId: chosenStep === 'nurture' ? nurtureWorkflowId : null,
+      })
+      saved = true
+      const description = chosenStep === 'later' ? 'The new dated follow-up is saved.'
+        : chosenStep === 'stop' ? 'Outstanding prospect follow-ups are stopped. Already-sent messages remain in history.'
+        : chosenStep === 'nurture' ? 'The lead is enrolled in the selected nurture workflow.'
+        : result.handoff === 'tour' ? 'Choose the tour date and time in the next window.'
+        : result.handoff === 'proposal' ? 'Review and send the proposal in the next screen.'
+        : result.handoff === 'thank_you' ? 'Review and send the thank-you email in the composer.'
+        : 'The call note and task outcome are saved.'
+      notify({ title: 'Call outcome saved', description, variant: 'success' })
+      onClose()
+      // A refresh failure must not turn a committed save into an apparent failure
+      // or prevent the requested tour/proposal/composer handoff.
+      try { await onSaved?.({ outcome: callOutcome, nextStep: chosenStep, lead }) }
+      catch { notify({ title: 'Call saved; refresh needed', description: 'Refresh the lead to see the latest tasks.', variant: 'error' }) }
+      if (result.handoff === 'tour' || result.handoff === 'proposal') {
+        if (onOpenLeadWorkspace) onOpenLeadWorkspace(lead, result.handoff)
+        else window.location.assign(`/portal/leads/${encodeURIComponent(lead.id)}?tab=${result.handoff === 'proposal' ? 'proposals' : 'overview'}&stage=${result.handoff}&callNextStep=${result.handoff}`)
+      } else if (result.handoff === 'thank_you') {
+        if (onComposeEmail) onComposeEmail(lead)
+        else window.dispatchEvent(new CustomEvent('luxor-compose-email', { detail: { lead } }))
+      }
+    } catch (error) {
+      notify({ title: saved ? 'Call saved; open the next step from the lead' : 'Call outcome needs review', description: error instanceof Error ? error.message : 'Review the lead before retrying.', variant: 'error' })
+    } finally {
+      savingRef.current = false
+      setSaving(false)
+    }
+  }
 
   function handleEditScheduledTask(targetTask: LuxorTask) {
     setEditingNextTask(targetTask)
@@ -165,6 +257,7 @@ export function LogCallOutcomeModal({
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (!lead || !callOutcome || savingRef.current || stopIntentAttempted) return
+    if (resolutionEnabled) { await saveResolvedOutcome(); return }
     savingRef.current = true
     setSaving(true)
 
@@ -424,7 +517,7 @@ export function LogCallOutcomeModal({
           <PortalButton
             type="submit"
             form="portal-log-call-outcome-form"
-            disabled={!callOutcome || saving || stopIntentAttempted || Boolean(editingNextTask) || (nextStep === 'later' && !nextDate)}
+            disabled={!callOutcome || saving || stopIntentAttempted || Boolean(editingNextTask) || (nextStep === 'later' && !nextDate) || (resolutionEnabled && nextStep === 'nurture' && !nurtureWorkflowId)}
           >
             <Check size={14} />{' '}
             {nextStep === 'later'
@@ -602,7 +695,12 @@ export function LogCallOutcomeModal({
         </label>
 
         {nextStep === 'nurture' && (
-          <p className="text-xs text-[color:var(--portal-muted)]">
+          resolutionEnabled ? <div className="space-y-2">
+            <label className="block text-sm">Nurture workflow
+              <PortalSelect value={nurtureWorkflowId} onChange={setNurtureWorkflowId} disabled={saving} options={[{ value: '', label: 'Choose a workflow' }, ...nurtureWorkflows.map((workflow) => ({ value: workflow.id, label: workflow.name }))]} className="mt-1 w-full" buttonClassName="h-10" />
+            </label>
+            <p className="text-xs text-[color:var(--portal-muted)]">{nurtureNotice}</p>
+          </div> : <p className="text-xs text-[color:var(--portal-muted)]">
             The call note can be saved here. Moving this lead to nurture requires workflow review.
           </p>
         )}

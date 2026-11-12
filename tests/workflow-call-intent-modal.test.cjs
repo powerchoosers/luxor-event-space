@@ -30,6 +30,7 @@ async function run(mode, intent='stop') {
     '@/components/portal/WorkflowBadge':{WorkflowBadge:'badge'},
     '@/lib/luxorNextFollowUpDisplay':{selectNextFollowUpDisplay:()=>({summary:null,notice:null})},
     '@/lib/luxorCallStopIntent':{recordCallWithoutWorkflowAdvance:async()=>{fallback++;throw new Error('unexpected fallback')}},
+    '@/lib/luxorCallResolutionClient':{},
     '@/lib/luxorFollowUpHelpers':{luxorToday:()=>'',luxorDate:()=>'',luxorTimeInput:()=>'',localLuxorIso:()=>'',manualFollowUpDescription:()=>''},
   }
   const file=path.join(root,'src/components/portal/LogCallOutcomeModal.tsx')

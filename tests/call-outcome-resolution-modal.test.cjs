@@ -1,0 +1,28 @@
+/* eslint-disable @typescript-eslint/no-require-imports */
+const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),Module=require('node:module'),ts=require('typescript');
+const root=path.resolve(__dirname,'..');
+async function run(step,{outcome='interested',reject=false,refreshFails=false}={}){
+ let closed=false,hook=0,legacy=0;const requests=[],notices=[],handoffs=[],refreshes=[];
+ const oldFetch=global.fetch,oldFlag=process.env.NEXT_PUBLIC_LUXOR_CALL_RESOLUTION_ENABLED;
+ process.env.NEXT_PUBLIC_LUXOR_CALL_RESOLUTION_ENABLED='true';
+ global.fetch=async()=>{legacy++;throw Error('Unexpected legacy network request')};
+ const values=[outcome,'Called',step,'2030-01-02','10:00','email',false,false,'nurture-id',[], ''];
+ const node=(type,props)=>({type,props:props||{}});
+ const stubs={react:{useState:init=>[hook<values.length?values[hook++]:init,()=>{}],useRef:init=>({current:init}),useEffect:()=>{}},'react/jsx-runtime':{jsx:node,jsxs:node,Fragment:'fragment'},'@/lib/icons/phosphor-compat':{CalendarClock:'icon',Check:'icon',Phone:'icon'},'@/components/portal/PortalUI':{PortalButton:'button',PortalDatePicker:'date',PortalModal:'modal',PortalSelect:'select'},'@/lib/luxorPhoneClient':{formatPhoneDisplay:v=>v},'@/lib/luxorVoiceClient':{startLuxorBrowserCall:()=>{}},'@/components/portal/ToastProvider':{useToast:()=>({notify:n=>notices.push(n)})},'@/components/portal/WorkflowBadge':{WorkflowBadge:'badge'},'@/lib/luxorNextFollowUpDisplay':{selectNextFollowUpDisplay:()=>({summary:null,notice:null})},'@/lib/luxorCallStopIntent':{recordCallWithoutWorkflowAdvance:async()=>{legacy++;throw Error('Unexpected stop fallback')}},'@/lib/luxorCallResolutionClient':{pendingCallResolution:()=>null,submitCallResolution:async input=>{requests.push(input);if(reject)throw Error('Unconfirmed save');return {handoff:['tour','proposal','thank_you'].includes(input.nextStep)?input.nextStep:null}}},'@/lib/luxorFollowUpHelpers':{luxorToday:()=>'',luxorDate:()=>'',luxorTimeInput:()=>'',localLuxorIso:(d,t)=>`${d}T${t}:00.000Z`,manualFollowUpDescription:()=>''}};
+ const compiled=ts.transpileModule(fs.readFileSync(path.join(root,'src/components/portal/LogCallOutcomeModal.tsx'),'utf8'),{reportDiagnostics:true,compilerOptions:{jsx:ts.JsxEmit.ReactJSX,module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}});
+ const m=new Module(path.join(root,'resolution-modal.synthetic.cjs'),module);m.filename=path.join(root,'resolution-modal.synthetic.cjs');m.paths=module.paths;
+ const original=Module._load;
+ try{
+  assert.deepEqual(compiled.diagnostics.filter(d=>d.category===ts.DiagnosticCategory.Error),[],'Modal must parse without syntax errors');
+  Module._load=function(r,p,i){return Object.hasOwn(stubs,r)?stubs[r]:original.call(this,r,p,i)};
+  try{m._compile(compiled.outputText,m.filename)}finally{Module._load=original}
+  const lead={id:'lead',full_name:'Synthetic'},tree=m.exports.LogCallOutcomeModal({isOpen:true,lead,task:{id:'task'},onClose:()=>{closed=true},onSaved:async r=>{refreshes.push(r);if(refreshFails)throw Error('Refresh failed')},onOpenLeadWorkspace:(l,s)=>handoffs.push({lead:l,stage:s}),onComposeEmail:l=>handoffs.push({lead:l,stage:'thank_you'})});
+  function find(el){if(!el||typeof el!=='object')return null;if(el.type==='form')return el;for(const child of [el.props?.children].flat(Infinity)){const f=find(child);if(f)return f}return null}
+  await find(tree).props.onSubmit({preventDefault(){}});
+ }finally{Module._load=original;global.fetch=oldFetch;if(oldFlag===undefined)delete process.env.NEXT_PUBLIC_LUXOR_CALL_RESOLUTION_ENABLED;else process.env.NEXT_PUBLIC_LUXOR_CALL_RESOLUTION_ENABLED=oldFlag}
+ return {closed,legacy,requests,notices,handoffs,refreshes};
+}
+test('seven steps send exact atomic input and correct handoff without legacy requests',async()=>{for(const step of ['none','tour','proposal','later','thank_you','nurture','stop']){const r=await run(step);assert.equal(r.closed,true);assert.equal(r.legacy,0);assert.deepEqual(r.requests,[{inquiryId:'lead',taskId:'task',outcome:'interested',nextStep:step,note:'Called',dueAt:step==='later'?'2030-01-02T10:00:00.000Z':null,channel:step==='later'?'email':null,nurtureWorkflowId:step==='nurture'?'nurture-id':null}]);assert.deepEqual(r.handoffs.map(h=>h.stage),['tour','proposal','thank_you'].includes(step)?[step]:[]);assert.equal(r.notices[0].variant,'success');assert.equal(r.refreshes[0].nextStep,step)}})
+test('refresh failure keeps successful save and requested handoff',async()=>{for(const step of ['tour','proposal','thank_you']){const r=await run(step,{refreshFails:true});assert.equal(r.closed,true);assert.equal(r.requests.length,1);assert.equal(r.legacy,0);assert.deepEqual(r.handoffs.map(h=>h.stage),[step]);assert.deepEqual(r.notices.map(n=>n.title),['Call outcome saved','Call saved; refresh needed'])}})
+test('rejected save stays open without refresh, handoff or fallback',async()=>{for(const step of ['none','tour','proposal','later','thank_you','nurture','stop']){const r=await run(step,{reject:true});assert.equal(r.closed,false);assert.equal(r.legacy,0);assert.equal(r.refreshes.length,0);assert.equal(r.handoffs.length,0);assert.equal(r.notices[0].title,'Call outcome needs review')}})
+test('not-interested overrides every selected action with stop and removes schedule/nurture values',async()=>{for(const step of ['later','nurture','tour']){const r=await run(step,{outcome:'not_interested'});assert.equal(r.requests[0].nextStep,'stop');assert.equal(r.requests[0].dueAt,null);assert.equal(r.requests[0].channel,null);assert.equal(r.requests[0].nurtureWorkflowId,null);assert.equal(r.handoffs.length,0);assert.equal(r.closed,true)}})

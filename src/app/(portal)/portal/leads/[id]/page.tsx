@@ -4340,6 +4340,7 @@ export default function LeadDetailPage({
     const requestedSection = searchParams?.get('section')
     const requestedStage = searchParams?.get('stage')
     const requestedPlanningTab = searchParams?.get('planningTab')
+    const callNextStep = searchParams?.get('callNextStep')
     let timeoutId: number | null = null
 
     if (requestedTab && ['delivery', 'details', 'overview', 'activity', 'tasks', 'vendors', 'timeline', 'proposals', 'contract', 'payments', 'planning', 'documents', 'messages', 'notes'].includes(requestedTab)) {
@@ -4364,6 +4365,17 @@ export default function LeadDetailPage({
 
     if (requestedPlanningTab && ['details', 'vendors', 'fb', 'decor', 'timeline', 'files'].includes(requestedPlanningTab)) {
       setActiveLeadTab(requestedPlanningTab === 'vendors' ? 'vendors' : requestedPlanningTab === 'timeline' ? 'timeline' : requestedPlanningTab === 'files' ? 'documents' : 'planning')
+    }
+
+    // A Calendar call outcome has no embedded workspace callback. Consume its
+    // handoff once, so cancel/back does not reopen the dialog or repeat a save.
+    if (callNextStep === 'tour' || callNextStep === 'proposal') {
+      if (callNextStep === 'tour') setIsTourScheduleModalOpen(true)
+      else setActiveLeadTab('proposals')
+      const nextParams = new URLSearchParams(searchParams?.toString() || '')
+      nextParams.delete('callNextStep')
+      if (callNextStep === 'proposal') { nextParams.delete('stage'); nextParams.set('tab', 'proposals') }
+      router.replace(`${pathname || `/portal/leads/${id}`}?${nextParams.toString()}`, { scroll: false })
     }
 
     if (requestedSection) {
