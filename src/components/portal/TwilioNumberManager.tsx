@@ -539,12 +539,12 @@ export function TwilioNumberManager() {
             >
               <div>
                 <p className="text-xs font-bold text-[color:var(--portal-text)]">
-                  {canPurchase ? 'Owner purchase access enabled' : 'Number purchasing restricted'}
+                  {canPurchase ? 'Number purchasing enabled' : 'Number purchasing restricted'}
                 </p>
                 <p className="mt-0.5 text-xs leading-relaxed text-[color:var(--portal-muted)]">
                   {canPurchase
                     ? 'Twilio charges monthly fees immediately upon purchase. Confirmation requires typing the full number.'
-                    : 'Only the primary owner account can search for or purchase new Twilio numbers.'}
+                    : 'Only an active owner or admin account can search for or purchase new Twilio numbers.'}
                 </p>
               </div>
             </PortalSkeletonTransition>

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { canPurchaseLuxorPhoneNumbers, getLuxorPortalSession } from '@/lib/luxorPortalAuth'
+import { getLuxorPortalMember, memberCanPurchasePhoneNumbers } from '@/lib/luxorPortalAccess'
+import { getLuxorPortalSession } from '@/lib/luxorPortalAuth'
 import { activateLuxorNumber, listOwnedLuxorNumbers, purchaseLuxorNumber, searchAvailableLuxorNumbers, setPublicLuxorNumber } from '@/lib/luxorPhoneNumbersServer'
 
 export const runtime = 'nodejs'
@@ -9,11 +10,12 @@ export async function GET(request: NextRequest) {
   if (!session) return NextResponse.json({ error: 'Portal login required.' }, { status: 401 })
   try {
     const mode = request.nextUrl.searchParams.get('mode') || 'owned'
+    const canPurchase = await sessionCanPurchasePhoneNumbers(session.email)
     if (mode === 'available') {
-      if (!canPurchaseLuxorPhoneNumbers(session.email)) return NextResponse.json({ error: 'Only Arianna’s approved owner account can search for and purchase numbers.' }, { status: 403 })
+      if (!canPurchase) return NextResponse.json({ error: 'Only an active owner or admin account can search for and purchase numbers.' }, { status: 403 })
       return NextResponse.json(await searchAvailableLuxorNumbers(request.nextUrl.searchParams.get('areaCode') || ''), { headers: { 'Cache-Control': 'no-store' } })
     }
-    return NextResponse.json({ numbers: await listOwnedLuxorNumbers(), canPurchase: canPurchaseLuxorPhoneNumbers(session.email) }, { headers: { 'Cache-Control': 'no-store' } })
+    return NextResponse.json({ numbers: await listOwnedLuxorNumbers(), canPurchase }, { headers: { 'Cache-Control': 'no-store' } })
   } catch (error) {
     return NextResponse.json({ error: twilioErrorMessage(error) }, { status: 500 })
   }
@@ -25,7 +27,7 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json() as { action?: 'purchase' | 'activate' | 'set_public'; phoneNumber?: string; confirmation?: string; sid?: string; monthlyPrice?: number | null; priceUnit?: string | null }
     if (body.action === 'purchase') {
-      if (!canPurchaseLuxorPhoneNumbers(session.email)) return NextResponse.json({ error: 'Only Arianna’s approved owner account can purchase Twilio numbers.' }, { status: 403 })
+      if (!await sessionCanPurchasePhoneNumbers(session.email)) return NextResponse.json({ error: 'Only an active owner or admin account can purchase Twilio numbers.' }, { status: 403 })
       const number = await purchaseLuxorNumber({ phoneNumber: body.phoneNumber || '', confirmation: body.confirmation || '', ownerEmail: session.email, monthlyPrice: body.monthlyPrice, priceUnit: body.priceUnit })
       return NextResponse.json({ number }, { status: 201 })
     }
@@ -41,6 +43,10 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     return NextResponse.json({ error: twilioErrorMessage(error) }, { status: 500 })
   }
+}
+
+async function sessionCanPurchasePhoneNumbers(email: string) {
+  return memberCanPurchasePhoneNumbers(await getLuxorPortalMember(email))
 }
 
 function twilioErrorMessage(error: unknown) {

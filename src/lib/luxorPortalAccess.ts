@@ -45,3 +45,7 @@ export async function getLuxorPortalMember(email: string) {
 export function memberCan(member: Pick<LuxorPortalMember, 'role' | 'permissions'> | null | undefined, permission: PortalPermission) {
   return Boolean(member && (member.role === 'owner' || member.permissions.includes(permission)))
 }
+
+export function memberCanPurchasePhoneNumbers(member: Pick<LuxorPortalMember, 'role' | 'status'> | null | undefined) {
+  return Boolean(member && member.status === 'active' && (member.role === 'owner' || member.role === 'admin'))
+}

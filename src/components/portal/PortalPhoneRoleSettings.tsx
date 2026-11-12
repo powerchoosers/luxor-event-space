@@ -124,7 +124,7 @@ export function PortalPhoneRoleSettings({ mode }: Props) {
                   skeleton={<PortalSkeleton className="h-5 w-16 rounded-md" />}
                 >
                   <PortalStatusBadge
-                    status={canPurchase ? 'Enabled' : 'Owner only'}
+                    status={canPurchase ? 'Enabled' : 'Admins only'}
                     tone={canPurchase ? 'green' : 'neutral'}
                     borderless
                   />
@@ -136,7 +136,7 @@ export function PortalPhoneRoleSettings({ mode }: Props) {
                 skeleton={<PortalSkeleton className="mt-1.5 h-4 w-48 rounded-md" />}
               >
                 <p className="mt-1 text-xs text-[color:var(--portal-muted)]">
-                  {canPurchase ? 'Your owner login can search and add numbers.' : 'Only the owner account can add new numbers.'}
+                  {canPurchase ? 'You can search for and buy numbers.' : 'Only owner and admin accounts can buy numbers.'}
                 </p>
               </PortalSkeletonTransition>
             </div>
