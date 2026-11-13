@@ -10,7 +10,7 @@ test('additive transcript SQL preserves existing source/access and constrains tr
   const db = new PGlite()
   try {
     await db.exec(`create table public.luxor_call_transcript_segments(id integer primary key,segment_text text,created_at timestamptz default now()); alter table public.luxor_call_transcript_segments enable row level security; insert into public.luxor_call_transcript_segments(id,segment_text) values(1,'مرحبا');`)
-    await db.exec(fs.readFileSync(path.resolve(__dirname, '../supabase/migrations/20261113060147_elena_transcript_translation.sql'), 'utf8'))
+    await db.exec(fs.readFileSync(path.resolve(__dirname, '../supabase/migrations/20261113124211_elena_transcript_translation.sql'), 'utf8'))
     const { rows } = await db.query('select segment_text,english_text,spoken_languages,translation_status,translation_attempts from public.luxor_call_transcript_segments')
     assert.deepEqual(rows[0], { segment_text: 'مرحبا', english_text: null, spoken_languages: [], translation_status: 'not_requested', translation_attempts: 0 })
     await db.exec("update public.luxor_call_transcript_segments set english_text='Hello',spoken_languages=array['Arabic'],translation_status='completed' where id=1")

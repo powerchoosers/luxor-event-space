@@ -50,7 +50,7 @@ test('caller language tool and persistence retain confirmation, identity and per
   const source = fs.readFileSync(path.resolve(__dirname, '../src/lib/luxorElenaInboundServer.ts'), 'utf8')
   assert.match(source, /spoken_language: \{ type: 'string'/)
   assert.match(source, /Never infer a lead language from Elena/)
-  const sql = fs.readFileSync(path.resolve(__dirname, '../supabase/migrations/20261113060033_elena_caller_language.sql'), 'utf8')
+  const sql = fs.readFileSync(path.resolve(__dirname, '../supabase/migrations/20261113124158_elena_caller_language.sql'), 'utf8')
   for (const expected of ['security invoker', "capture->'matching_review_needed' is distinct from 'false'", 'i.updated_at is distinct from', "'source','caller_confirmed'", "'callSid',p_call_sid", 'from public,anon,authenticated']) assert.ok(sql.includes(expected), expected)
   assert.match(sql, /when v_spoken_language is null then metadata else coalesce\(metadata,'\{\}'::jsonb\)/)
 })
