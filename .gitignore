@@ -39,6 +39,7 @@ yarn-error.log*
 
 # typescript
 *.tsbuildinfo
+.eslintcache
 next-env.d.ts
 
 # local development tooling and QA artifacts
@@ -47,10 +48,16 @@ next-env.d.ts
 /.codex/
 /.codex-remote-attachments/
 /.playwright-cli/
+/.local-check-records/
 /output/
 /tmp/
 /supabase/.temp/
 *.code-workspace
+
+# Disposable PostgreSQL harness output (see tests/postgres/*-README.md)
+/tests/postgres/call-outcome-resolution-*.log
+/tests/postgres/call-outcome-resolution-*.log.stderr
+/tests/postgres/call-outcome-resolution-instance.txt
 
 # Local Twilio setup notes
 /TWILIO_SETUP.md

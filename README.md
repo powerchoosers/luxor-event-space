@@ -34,7 +34,8 @@ Gmail is how Lewis writes to Arianna about the work. It is not the venue inbox. 
 ```bash
 npm run dev
 npm run typecheck
-npm run lint
+npm run lint       # cached while editing
+npm run lint:ci    # full lint before commit or push
 npm run build
 ```
 

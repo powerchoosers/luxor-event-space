@@ -10,7 +10,7 @@ if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 npm run typecheck
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-npm run lint -- --quiet
+npm run lint:ci -- --quiet
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
 npm run test:workflow-release-gates

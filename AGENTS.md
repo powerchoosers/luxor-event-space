@@ -116,13 +116,16 @@ Lewis has these connections available while working in Cursor. Use them for the 
 ```bash
 npm run dev
 npm run typecheck
-npm run lint
+npm run lint          # cached; day-to-day iteration
+npm run lint:ci       # uncached; before commit, push, or release gates
 npm run build
 ```
 
 The app uses npm and `package-lock.json`. Do not use pnpm. If `pnpm-lock.yaml` or `pnpm-workspace.yaml` appears untracked, delete those generated files before committing. Do not add them to `.gitignore`.
 
 Local development is `http://localhost:3000`. The stack is Next.js 16 App Router, React 19, TypeScript, and Tailwind CSS v4. Keep new packages conservative. Prefer the Next.js, React, Tailwind, Framer Motion, and Lucide patterns already in the repo.
+
+**Lint scripts:** `npm run lint` runs ESLint with a local `.eslintcache` for faster iteration. `npm run lint:ci` runs a full uncached lint so config, dependency, and untouched-file issues are not skipped. Typecheck is always `npm run typecheck` (`tsc --noEmit`, incremental via `tsconfig.json`); it does not share the ESLint cache. After eslint or plugin upgrades, or if lint results look stale, delete `.eslintcache` or run `npm run lint:ci`.
 
 Do not run `npm run build` after every small change. During iteration, prefer `npm run typecheck`, `npm run lint -- --quiet`, and browser checks. Run `npm run build` before a deployment, when Lewis asks for a build, or when a change is likely to affect production compilation.
 
@@ -137,7 +140,7 @@ Only commit or push when Lewis explicitly asks.
 Luxor ships on a single branch: `main`. Do not create `cursor/`, feature, or side branches for routine work. Commit on `main` locally and push `git push origin main` when Lewis authorizes release. Skip Cursor diff-tab **create-branch-and-commit**, draft-PR flows, and branch pushes unless he explicitly asks for a branch or PR. If an agent or tool already created a side branch, merge or cherry-pick onto `main`, push `main`, then delete the extra local and remote branches so only `main` remains.
 
 1. Confirm the branch with `git status -sb`.
-2. Run `npm run typecheck` and `npm run lint -- --quiet`.
+2. Run `npm run typecheck` and `npm run lint:ci -- --quiet`.
 3. Stage only the files in the requested change.
 4. Commit with a concise message about the user-facing result.
 5. Push with `git push origin main` only when he explicitly asks for a direct main-branch push.

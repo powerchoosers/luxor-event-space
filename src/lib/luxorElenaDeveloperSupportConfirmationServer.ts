@@ -76,7 +76,7 @@ function buildCursorContext(
     ticket.attachmentContext ? `${ticket.attachmentContext}\n` : '',
     'Work in the luxor-event-space repository on main. Follow AGENTS.md and docs/luxor-design-skill.md for UI work. Keep changes scoped to the reported issue.',
     'When attachments include signed URLs, download and inspect them for screenshots, PDFs, and context. URLs expire after about seven days.',
-    'Run npm run typecheck and npm run lint -- --quiet before finishing. Do not push unless Lewis explicitly asked in this automation run.',
+    'Run npm run typecheck and npm run lint:ci -- --quiet before finishing. Do not push unless Lewis explicitly asked in this automation run.',
   ].filter((line, index, array) => !(line === '' && index > 0 && array[index - 1] === '')).join('\n')
 }
 
