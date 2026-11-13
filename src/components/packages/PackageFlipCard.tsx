@@ -98,13 +98,9 @@ export function PackageFlipCard({ data, locale = 'en' }: PackageFlipCardProps) {
     if (!scrollEl) return
 
     const onWheel = (event: WheelEvent) => {
-      const maxScroll = scrollEl.scrollHeight - scrollEl.clientHeight
-      if (maxScroll <= 1) return
-      const canScrollUp = scrollEl.scrollTop > 0 && event.deltaY < 0
-      const canScrollDown = scrollEl.scrollTop < maxScroll - 1 && event.deltaY > 0
-      if (!canScrollUp && !canScrollDown) return
       event.preventDefault()
       event.stopPropagation()
+      const maxScroll = Math.max(0, scrollEl.scrollHeight - scrollEl.clientHeight)
       scrollEl.scrollTop = Math.max(0, Math.min(maxScroll, scrollEl.scrollTop + event.deltaY))
     }
 
