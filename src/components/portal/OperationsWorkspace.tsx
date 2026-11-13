@@ -1096,7 +1096,8 @@ export function OperationsPageContent({ embeddedBills = false }: { embeddedBills
                 <PortalFilterBar
                   searchValue={vendorSearchQuery}
                   onSearchChange={setVendorSearchQuery}
-                  searchPlaceholder="Search name, type, email, or phone"
+                  searchPlaceholder="Search vendors"
+                  searchAriaLabel="Search name, type, email, or phone"
                   resultLabel={`${filteredPreferredVendors.length.toLocaleString()} ${filteredPreferredVendors.length === 1 ? 'vendor' : 'vendors'}`}
                   activeFilters={
                     vendorTypeFilter !== 'all'

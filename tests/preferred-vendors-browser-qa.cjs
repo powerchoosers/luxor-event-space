@@ -204,6 +204,15 @@ async function assertStyledPortal(page) {
           document.body.setAttribute('data-portal-theme', value)
         }, theme)
         await page.getByRole('heading', { name: 'Preferred vendors', exact: true }).waitFor({ timeout: 30000 })
+        const searchInput = page.getByLabel('Search name, type, email, or phone')
+        await searchInput.waitFor({ timeout: 10000 })
+        const searchProbe = await searchInput.evaluate((el) => {
+          const placeholder = el.getAttribute('placeholder') || ''
+          const overflows = el.scrollWidth > el.clientWidth + 1 || el.scrollHeight > el.clientHeight + 1
+          return { placeholder, overflows }
+        })
+        assert.equal(searchProbe.placeholder, 'Search vendors')
+        assert.equal(searchProbe.overflows, false, `Search input clipped at ${viewport.tag}-${theme}`)
         await assertStyledPortal(page)
         const browseTriggers = await page.getByRole('button', { name: /Browse views/i }).count()
         if (viewport.tag === 'desktop') {
@@ -220,20 +229,22 @@ async function assertStyledPortal(page) {
 
     await page.setViewportSize({ width: 1440, height: 1000 })
     await page.goto(`${origin}/preferred-vendors-qa?tab=vendors`, { waitUntil: 'load', timeout: 120000 })
-    await page.getByPlaceholder(/search name/i).fill('Copper')
+    await page.getByLabel('Search name, type, email, or phone').fill('Copper')
     await delay(250)
     assert.ok(await page.getByRole('button', { name: /Copper Security Group/i }).isVisible())
     assert.equal(await page.getByRole('button', { name: /Fixture DJ Collective/i }).count(), 0)
 
-    await page.getByPlaceholder(/search name/i).fill('')
+    await page.getByLabel('Search name, type, email, or phone').fill('')
     await page.getByLabel(/filter options/i).click()
     await page.getByRole('button', { name: 'Vendor type' }).click()
     await page.getByRole('option', { name: 'Security Crew' }).click()
     assert.ok(await page.getByRole('button', { name: /Copper Security Group/i }).isVisible())
 
     await page.getByRole('button', { name: /add vendor/i }).first().click()
-    await page.getByRole('dialog', { name: /add preferred vendor/i }).waitFor({ timeout: 10000 })
-  await page.keyboard.press('Escape')
+    const addDialog = page.getByRole('dialog', { name: /add preferred vendor/i })
+    await addDialog.waitFor({ timeout: 10000 })
+    await addDialog.getByRole('button', { name: /close add preferred vendor/i }).click()
+    await addDialog.waitFor({ state: 'hidden', timeout: 10000 })
 
     await page.getByRole('button', { name: /Copper Security Group/i }).click()
     const editDialog = page.getByRole('dialog', { name: /edit preferred vendor/i })
