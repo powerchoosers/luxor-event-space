@@ -1907,7 +1907,7 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
             <span className="relative z-10">More</span>
           </button>
         </nav>
-      <PortalElenaChat isOpen={elenaOpen} onClose={() => setElenaOpen(false)} activePath={pathname} />
+      <PortalElenaChat isOpen={elenaOpen} onClose={() => setElenaOpen(false)} activePath={pathname} portalRole={role} userEmail={session.email} />
       <AnimatePresence>
         {mobileMoreOpen && (
           <motion.div

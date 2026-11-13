@@ -23,8 +23,17 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: true, result }, options)
     }
     if (value.action === 'PREPARE_DEVELOPER_SUPPORT' && Object.keys(value).every(k => ['action', 'ticket'].includes(k))) {
-      const confirmation = await issueElenaDeveloperSupportConfirmation(value.ticket)
-      return NextResponse.json({ confirmation }, options)
+      try {
+        const confirmation = await issueElenaDeveloperSupportConfirmation(value.ticket)
+        return NextResponse.json({ confirmation }, options)
+      } catch (error) {
+        const detail = error instanceof Error ? error.message : 'The support ticket could not be prepared.'
+        console.error('[developer-support] prepare failed:', detail)
+        const safe = detail.length > 0 && detail.length <= 400 && !/token_hash|service_role|authorization/i.test(detail)
+          ? detail
+          : 'The support ticket could not be prepared.'
+        return NextResponse.json({ error: safe }, { ...options, status: 400 })
+      }
     }
     if (value.action === 'CONFIRM_DEVELOPER_SUPPORT' && Object.keys(value).every(k => ['action', 'token'].includes(k))) {
       const result = await consumeElenaDeveloperSupportConfirmation(value.token)

@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto'
 import { cookies } from 'next/headers'
 import { getVerifiedLuxorPortalSession, getLuxorPortalSession, LUXOR_PORTAL_SESSION_COOKIE } from '@/lib/luxorPortalAuth'
 import { getLuxorPortalMember } from '@/lib/luxorPortalAccess'
-import { supabaseRestStrict } from '@/lib/supabaseRestServer'
+import { SupabaseRestError, supabaseRestStrict } from '@/lib/supabaseRestServer'
 import { newElenaConfirmationToken, parseElenaConfirmationToken } from '@/lib/luxorElenaConfirmation'
 import { triggerLuxorCursorAutomation } from '@/lib/luxorCursorAutomationServer'
 import {
@@ -107,21 +107,32 @@ export async function issueElenaDeveloperSupportConfirmation(input: unknown) {
   if (ticket.attachments.length > 0) {
     contextAttachments = await storeDeveloperSupportAttachments(token.id, ticket.attachments)
   }
-  const result = await supabaseRestStrict<{ expires_at: string; reporter_name: string }>('rpc/luxor_elena_issue_developer_support_confirmation', {
-    method: 'POST',
-    body: JSON.stringify({
-      p_id: token.id,
-      p_token_hash: token.tokenHash,
-      p_member_id: auth.member.id,
-      p_session_hash: auth.sessionHash,
-      p_session_issued_at_ms: auth.issuedAt,
-      p_title: ticket.title,
-      p_description: ticket.description,
-      p_priority: ticket.priority,
-      p_page_path: ticket.pagePath,
-      p_context_attachments: contextAttachments,
-    }),
-  })
+  let result: { expires_at: string; reporter_name: string }
+  try {
+    result = await supabaseRestStrict<{ expires_at: string; reporter_name: string }>('rpc/luxor_elena_issue_developer_support_confirmation', {
+      method: 'POST',
+      body: JSON.stringify({
+        p_id: token.id,
+        p_token_hash: token.tokenHash,
+        p_member_id: auth.member.id,
+        p_session_hash: auth.sessionHash,
+        p_session_issued_at_ms: auth.issuedAt,
+        p_title: ticket.title,
+        p_description: ticket.description,
+        p_priority: ticket.priority,
+        p_page_path: ticket.pagePath,
+        p_context_attachments: contextAttachments,
+      }),
+    })
+  } catch (error) {
+    if (error instanceof SupabaseRestError && error.code === '42501') {
+      throw new Error('Only an active owner session can prepare a developer ticket. Sign out and sign back in, then try again.')
+    }
+    if (error instanceof SupabaseRestError && (error.code === '22023' || /confirmation unavailable/i.test(error.message))) {
+      throw new Error('The ticket or a screenshot did not pass the save check. Remove the attachment, or shorten the title (200) and extra details (4000), then try again.')
+    }
+    throw error
+  }
   if (!result || typeof result.expires_at !== 'string' || typeof result.reporter_name !== 'string') throw new Error('Confirmation unavailable.')
   const summary = [
     `Send developer support ticket as ${JSON.stringify(result.reporter_name)}`,

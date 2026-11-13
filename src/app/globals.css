@@ -58,6 +58,17 @@ body[data-portal-theme='dark'] .portal-popover-surface {
   -webkit-backdrop-filter: blur(24px);
 }
 
+/* Elena slash menu: frosted popover (portaled; must not sit inside transformed ancestors) */
+.elena-slash-command-popover {
+  background-color: color-mix(in srgb, #fffdf9 76%, transparent);
+  -webkit-backdrop-filter: blur(28px) saturate(148%);
+  backdrop-filter: blur(28px) saturate(148%);
+}
+
+body[data-portal-theme='dark'] .elena-slash-command-popover {
+  background-color: color-mix(in srgb, #0e0d0b 78%, transparent);
+}
+
 /* Inside elevated surfaces in dark mode, adjust nested card tokens so nested elements aren't see-through */
 body[data-portal-theme='dark'] .portal-overlay-surface,
 body[data-portal-theme='dark'] .portal-sheet,

@@ -9,6 +9,7 @@ export type DeveloperSupportAttachmentInput = {
   dataUrl?: string
   textContent?: string
   storagePath?: string
+  kind?: 'image' | 'pdf' | 'text'
 }
 
 export type DeveloperSupportStoredAttachment = {
@@ -82,7 +83,11 @@ export function parseDeveloperSupportAttachmentInputs(input: unknown): Developer
   for (const item of input) {
     if (!item || typeof item !== 'object' || Array.isArray(item)) throw new Error('Invalid support attachments.')
     const value = item as Record<string, unknown>
-    if (Object.keys(value).some((key) => !['name', 'type', 'dataUrl', 'textContent', 'storagePath'].includes(key))) {
+    if (Object.keys(value).some((key) => !['name', 'type', 'dataUrl', 'textContent', 'storagePath', 'kind'].includes(key))) {
+      throw new Error('Invalid support attachments.')
+    }
+    const hintedKind = value.kind === 'document' ? 'pdf' : value.kind
+    if (hintedKind != null && hintedKind !== 'image' && hintedKind !== 'pdf' && hintedKind !== 'text') {
       throw new Error('Invalid support attachments.')
     }
     if (typeof value.name !== 'string' || !value.name.trim() || value.name.trim().length > 200) throw new Error('Invalid support attachments.')
@@ -94,8 +99,9 @@ export function parseDeveloperSupportAttachmentInputs(input: unknown): Developer
       if (!STORAGE_PATH_PATTERN.test(storagePath) || storagePath.includes('..')) throw new Error('Invalid support attachments.')
       out.push({
         name,
-        type,
+        type: type || (hintedKind === 'pdf' ? 'application/pdf' : hintedKind === 'image' ? 'image/png' : hintedKind === 'text' ? 'text/plain' : type),
         storagePath,
+        ...(hintedKind === 'image' || hintedKind === 'pdf' || hintedKind === 'text' ? { kind: hintedKind } : {}),
         ...(typeof value.textContent === 'string' && value.textContent.length > 0 && value.textContent.length <= MAX_TEXT_CHARS
           ? { textContent: value.textContent }
           : {}),
@@ -135,7 +141,7 @@ export async function stageDeveloperSupportUpload(
     throw new Error(`${safeName} is not a valid PDF.`)
   }
   const objectId = crypto.randomUUID()
-  const storagePath = `developer-support/${stagingId}/${objectId}-${safeName}`
+  const storagePath = `elena-chat/${stagingId}/${objectId}-${safeName}`
   const uploadType = kind === 'pdf' ? 'application/pdf' : (mime.startsWith('image/') ? mime : 'application/octet-stream')
   await uploadObject(storagePath, bytes, uploadType)
   return { storagePath, contentType: uploadType }
@@ -167,8 +173,8 @@ export async function storeDeveloperSupportAttachments(
   for (const attachment of attachments) {
     const fileName = safeFileName(attachment.name)
     const mime = normalizeMime(attachment.type, fileName)
-    const kind = kindFromMime(mime, fileName)
-    if (!kind) throw new Error(`${fileName} is not a supported developer ticket attachment.`)
+    const kind = attachment.kind || kindFromMime(mime, fileName)
+    if (!kind) throw new Error(`${fileName} is not a supported screenshot, PDF, or text file. Remove it and try again.`)
 
     if (attachment.storagePath && STORAGE_PATH_PATTERN.test(attachment.storagePath)) {
       stored.push({

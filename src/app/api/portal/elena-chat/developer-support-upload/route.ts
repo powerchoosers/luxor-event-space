@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { getVerifiedLuxorPortalSession, getLuxorPortalSession } from '@/lib/luxorPortalAuth'
 import { getLuxorPortalMember } from '@/lib/luxorPortalAccess'
 import { stageDeveloperSupportUpload } from '@/lib/luxorDeveloperSupportAttachmentsServer'
+import { supabaseRest } from '@/lib/supabaseRestServer'
 
 const STAGING_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 const NO_STORE = { 'Cache-Control': 'no-store' }
@@ -23,7 +24,7 @@ export async function POST(request: Request) {
   const form = await request.formData().catch(() => null)
   if (!form) return NextResponse.json({ error: 'Invalid upload.' }, { status: 400, headers: NO_STORE })
 
-  const stagingId = String(form.get('stagingId') || '').trim()
+  const stagingId = String(form.get('chatId') || form.get('stagingId') || '').trim()
   const name = String(form.get('name') || '').trim()
   const type = String(form.get('type') || '').trim()
   const file = form.get('file')
@@ -33,6 +34,13 @@ export async function POST(request: Request) {
   }
   if (!(file instanceof File) || file.size <= 0) {
     return NextResponse.json({ error: 'Choose a file to upload.' }, { status: 400, headers: NO_STORE })
+  }
+
+  const chats = await supabaseRest<Array<{ id: string }>>(
+    `luxor_elena_chats?id=eq.${stagingId}&user_email=eq.${encodeURIComponent(verified.email)}&select=id&limit=1`,
+  )
+  if (!chats?.length) {
+    return NextResponse.json({ error: 'This Elena chat could not be saved. Refresh and try the screenshot again.' }, { status: 404, headers: NO_STORE })
   }
 
   try {

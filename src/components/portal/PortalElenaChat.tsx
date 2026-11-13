@@ -59,7 +59,21 @@ import {
   TaskCardPayload,
   DeveloperSupportCardPayload,
   collectDeveloperSupportAttachmentCandidates,
+  type DeveloperSupportSavedAttachment,
 } from './ElenaCRMContainers'
+import { ElenaSlashCommandMenu, ElenaSlashTriggerBadge } from '@/components/portal/ElenaSlashCommandMenu'
+import {
+  ELENA_SYSTEM_SLASH_COMMANDS,
+  applySlashCommandToInput,
+  filterElenaSlashCommands,
+  getElenaSlashQuery,
+  loadPersonalElenaSlashCommands,
+  parseActiveElenaSlashCommand,
+  parseTicketSlashCommand,
+  resolvePersonalSlashExpansion,
+  type ElenaSlashCommand,
+} from '@/lib/luxorElenaSlashCommands'
+import type { PortalRole } from '@/lib/luxorPortalAccess'
 
 type ExecutedQuery = {
   query: string
@@ -377,6 +391,8 @@ interface PortalElenaChatProps {
   isOpen: boolean
   onClose: () => void
   activePath: string
+  portalRole: PortalRole
+  userEmail: string
 }
 
 function getSuggestionsForPath(path: string): SmartSuggestion[] {
@@ -466,11 +482,74 @@ const ELENA_ATTACHMENT_LAYOUT_TRANSITION = {
   scale: { duration: 0.16 },
 }
 
-export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChatProps) {
+const ELENA_COMPOSER_LINE_HEIGHT = 20
+const ELENA_COMPOSER_MAX_LINES = 4
+const ELENA_COMPOSER_PAD = 4
+
+const ElenaGrowingTextarea = React.forwardRef<HTMLTextAreaElement, {
+  value: string
+  reduceMotion: boolean
+  className?: string
+  placeholder?: string
+  disabled?: boolean
+  'aria-label'?: string
+  onChange: (event: React.ChangeEvent<HTMLTextAreaElement>) => void
+  onKeyDown: (event: React.KeyboardEvent<HTMLTextAreaElement>) => void
+  onPaste: (event: React.ClipboardEvent<HTMLTextAreaElement>) => void
+}>(
+  function ElenaGrowingTextarea({ value, reduceMotion, className, ...props }, forwardedRef) {
+    const localRef = useRef<HTMLTextAreaElement>(null)
+    const [height, setHeight] = useState(ELENA_COMPOSER_LINE_HEIGHT + ELENA_COMPOSER_PAD * 2)
+    const [scrollable, setScrollable] = useState(false)
+
+    const setRefs = (node: HTMLTextAreaElement | null) => {
+      localRef.current = node
+      if (typeof forwardedRef === 'function') forwardedRef(node)
+      else if (forwardedRef) forwardedRef.current = node
+    }
+
+    useLayoutEffect(() => {
+      const node = localRef.current
+      if (!node) return
+      const previousHeight = node.style.height
+      node.style.height = '0px'
+      const scrollHeight = node.scrollHeight
+      const maxHeight = ELENA_COMPOSER_LINE_HEIGHT * ELENA_COMPOSER_MAX_LINES + ELENA_COMPOSER_PAD * 2
+      const nextHeight = Math.min(Math.max(scrollHeight, ELENA_COMPOSER_LINE_HEIGHT + ELENA_COMPOSER_PAD * 2), maxHeight)
+      node.style.height = previousHeight
+      setHeight(nextHeight)
+      setScrollable(scrollHeight > maxHeight + 1)
+    }, [value])
+
+    return (
+      <motion.textarea
+        {...props}
+        ref={setRefs}
+        value={value}
+        rows={1}
+        animate={{ height }}
+        transition={reduceMotion ? { duration: 0 } : { type: 'spring', stiffness: 460, damping: 36, mass: 0.7 }}
+        style={{
+          lineHeight: `${ELENA_COMPOSER_LINE_HEIGHT}px`,
+          paddingTop: ELENA_COMPOSER_PAD,
+          paddingBottom: ELENA_COMPOSER_PAD,
+        }}
+        className={`${className || ''} box-border resize-none py-0 leading-5 ${scrollable ? 'overflow-y-auto portal-scrollbar' : 'overflow-hidden'}`}
+      />
+    )
+  },
+)
+
+export function PortalElenaChat({ isOpen, onClose, activePath, portalRole, userEmail }: PortalElenaChatProps) {
   const router = useRouter()
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState('')
-  const [isLoading, setIsLoading] = useState(false)
+  const [personalSlashCommands, setPersonalSlashCommands] = useState<ElenaSlashCommand[]>([])
+  const [slashHighlightIndex, setSlashHighlightIndex] = useState(0)
+  const [slashManageExpanded, setSlashManageExpanded] = useState(false)
+  const [isElenaResponding, setIsElenaResponding] = useState(false)
+  const [isConfirmingAction, setIsConfirmingAction] = useState(false)
+  const [isSessionBootstrapping, setIsSessionBootstrapping] = useState(false)
   const [loadingActivities, setLoadingActivities] = useState<string[]>([])
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
@@ -508,6 +587,10 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
   const documentInputRef = useRef<HTMLInputElement>(null)
   const attachMenuRef = useRef<HTMLDivElement>(null)
   const attachPlusRef = useRef<HTMLButtonElement>(null)
+  const slashDetailsInputRef = useRef<HTMLTextAreaElement>(null)
+  const plainComposerInputRef = useRef<HTMLTextAreaElement>(null)
+  const composerAnchorRef = useRef<HTMLDivElement>(null)
+  const hadActiveSlashRef = useRef(false)
   const attachStripRef = useRef<HTMLDivElement>(null)
   const attachCountRef = useRef(0)
   const elenaChatAbortRef = useRef<AbortController | null>(null)
@@ -546,7 +629,7 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
   }
 
   const startVoice = () => {
-    if (voiceClientRef.current || isLoading || !isOpen) return
+    if (voiceClientRef.current || isElenaResponding || !isOpen) return
     setVoiceError('')
     setVoiceStartIndex(messages.length)
     setVoiceCaption(null)
@@ -899,7 +982,7 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
       setShowSessionsList(false)
       setMessages([])
       setLoadedSessionId(null)
-      setIsLoading(true)
+      setIsSessionBootstrapping(true)
       void loadSessionsList(undefined, true)
     } else {
       sessionRequestRef.current += 1
@@ -907,7 +990,7 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
       setShowSessionsList(false)
       setMessages([])
       setLoadedSessionId(null)
-      setIsLoading(false)
+      setIsSessionBootstrapping(false)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen])
@@ -957,7 +1040,7 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
         if (currentSessionId) setMessages([])
         setCurrentSessionId(null)
         setLoadedSessionId(null)
-        setIsLoading(false)
+        setIsSessionBootstrapping(false)
         return
       }
       if (!response.ok) throw new Error('Failed to load sessions list')
@@ -978,7 +1061,8 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
       }
     } catch (err) {
       console.error(err)
-      if (requestId === sessionRequestRef.current) setIsLoading(false)
+    } finally {
+      if (requestId === sessionRequestRef.current) setIsSessionBootstrapping(false)
     }
   }
 
@@ -986,7 +1070,6 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
     const requestId = ++messageRequestRef.current
     setLoadedSessionId(null)
     setMessages([])
-    setIsLoading(true)
     try {
       const response = await fetch(`/api/portal/elena-chat/sessions?id=${sessionId}`)
       if (!response.ok) throw new Error('Failed to load messages')
@@ -1008,8 +1091,6 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
       setLoadedSessionId(sessionId)
     } catch (err) {
       console.error(err)
-    } finally {
-      if (requestId === messageRequestRef.current) setIsLoading(false)
     }
   }
 
@@ -1021,8 +1102,8 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
     setMessages([])
     setInput('')
     setAttachments([])
-    if (historyUnavailable && !forcePersistent) { setShowSessionsList(false); setIsLoading(false); return }
-    setIsLoading(true)
+    if (historyUnavailable && !forcePersistent) { setShowSessionsList(false); setIsSessionBootstrapping(false); return }
+    setIsSessionBootstrapping(true)
     try {
       const response = await fetch('/api/portal/elena-chat/sessions', {
         method: 'POST'
@@ -1048,7 +1129,7 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
     } catch (err) {
       console.error(err)
     } finally {
-      if (requestId === messageRequestRef.current) setIsLoading(false)
+      if (requestId === messageRequestRef.current) setIsSessionBootstrapping(false)
     }
   }
 
@@ -1105,7 +1186,7 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
     messageRequestRef.current += 1
     elenaChatAbortRef.current?.abort()
     elenaChatAbortRef.current = null
-    setIsLoading(false)
+    setIsElenaResponding(false)
     setLoadingActivities([])
   }, [])
 
@@ -1116,14 +1197,116 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
     }
   }, [isOpen, stopElenaResponse])
 
+  useEffect(() => {
+    if (!isOpen || !userEmail) return
+    setPersonalSlashCommands(loadPersonalElenaSlashCommands(userEmail))
+  }, [isOpen, userEmail])
+
+  const slashCommands = React.useMemo(() => {
+    const system = portalRole === 'owner' ? ELENA_SYSTEM_SLASH_COMMANDS : []
+    return [...system, ...personalSlashCommands]
+  }, [portalRole, personalSlashCommands])
+
+  const activeSlashCommand = parseActiveElenaSlashCommand(input, slashCommands)
+  const slashMenuQuery = getElenaSlashQuery(input)
+  const slashMenuVisible = Boolean(
+    !activeSlashCommand && slashMenuQuery !== null && /^\/[a-z0-9_-]*$/i.test(input.trim()),
+  )
+  const filteredSlashCommands = filterElenaSlashCommands(slashCommands, slashMenuQuery)
+
+  useEffect(() => {
+    setSlashHighlightIndex(0)
+  }, [input, slashMenuVisible])
+
+  useEffect(() => {
+    if (!slashMenuVisible) setSlashManageExpanded(false)
+  }, [slashMenuVisible])
+
+  useEffect(() => {
+    if (activeSlashCommand) {
+      hadActiveSlashRef.current = true
+      return
+    }
+    if (!hadActiveSlashRef.current) return
+    hadActiveSlashRef.current = false
+    requestAnimationFrame(() => {
+      plainComposerInputRef.current?.focus()
+    })
+  }, [activeSlashCommand])
+
+  const persistSessionMessages = useCallback(async (nextMessages: Message[]) => {
+    if (!currentSessionId || historyUnavailable) return
+    try {
+      const response = await fetch('/api/portal/elena-chat/sessions', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: currentSessionId, messages: nextMessages }),
+      })
+      if (!response.ok) throw new Error('The screenshot uploaded, but this chat could not save it.')
+    } catch (error) {
+      console.error('Could not save Elena chat messages:', error)
+      throw error
+    }
+  }, [currentSessionId, historyUnavailable])
+
+  const pickSlashCommand = useCallback((command: ElenaSlashCommand) => {
+    setInput(applySlashCommandToInput(command, input))
+    requestAnimationFrame(() => {
+      slashDetailsInputRef.current?.focus()
+    })
+  }, [input])
+
+  const confirmHighlightedSlashCommand = useCallback(() => {
+    if (!slashMenuVisible || !filteredSlashCommands.length) return false
+    pickSlashCommand(filteredSlashCommands[slashHighlightIndex])
+    return true
+  }, [filteredSlashCommands, pickSlashCommand, slashHighlightIndex, slashMenuVisible])
+
+  const updateActiveSlashRest = (rest: string) => {
+    if (!activeSlashCommand) return
+    const spacer = rest.length > 0 ? ' ' : ''
+    setInput(`/${activeSlashCommand.command.trigger}${spacer}${rest}`)
+  }
+
+  const handleComposerKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (slashManageExpanded) return
+    if (!slashMenuVisible || !filteredSlashCommands.length) return
+    if (event.key === 'ArrowDown') {
+      event.preventDefault()
+      setSlashHighlightIndex((index) => (index + 1) % filteredSlashCommands.length)
+      return
+    }
+    if (event.key === 'ArrowUp') {
+      event.preventDefault()
+      setSlashHighlightIndex((index) => (index - 1 + filteredSlashCommands.length) % filteredSlashCommands.length)
+      return
+    }
+    if (event.key === 'Enter' && !event.shiftKey) {
+      event.preventDefault()
+      pickSlashCommand(filteredSlashCommands[slashHighlightIndex])
+      return
+    }
+    if (event.key === 'Tab') {
+      event.preventDefault()
+      pickSlashCommand(filteredSlashCommands[slashHighlightIndex])
+    }
+  }
+
+  const isSessionHydrating =
+    isSessionBootstrapping || Boolean(currentSessionId && loadedSessionId !== currentSessionId)
+  const isComposerLocked = isElenaResponding || isConfirmingAction || isSessionHydrating
+
   const handleSend = async (textToSend: string, onVoiceReply?: (reply: string) => void): Promise<string | null> => {
-    if ((!textToSend.trim() && attachments.length === 0) || isLoading) return null
+    if ((!textToSend.trim() && attachments.length === 0) || isElenaResponding || isSessionHydrating) return null
     const requestId = ++messageRequestRef.current
     elenaChatAbortRef.current?.abort()
     const abortController = new AbortController()
     elenaChatAbortRef.current = abortController
 
-    const userMessageText = textToSend.trim()
+    const rawMessageText = textToSend.trim()
+    let userMessageText = rawMessageText
+    const personalExpansion = resolvePersonalSlashExpansion(rawMessageText, slashCommands)
+    if (personalExpansion) userMessageText = personalExpansion
     const currentAttachments = [...attachments]
     setInput('')
     setAttachments([])
@@ -1151,9 +1334,48 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
     setMessages(updatedMessages)
     let streamedActivities: string[] = []
     setLoadingActivities([])
-    setIsLoading(true)
+    setIsElenaResponding(true)
+
+    const ticketFromSlash = parseTicketSlashCommand(rawMessageText, activePath)
 
     try {
+      if (ticketFromSlash) {
+        if (portalRole !== 'owner') {
+          const denied: Message[] = [
+            ...updatedMessages,
+            {
+              role: 'assistant',
+              content: 'Developer tickets are owner-only. Ask Arianna or use Elena for help on this page.',
+            },
+          ]
+          setMessages(denied)
+          void persistSessionMessages(denied).catch(() => undefined)
+          setIsElenaResponding(false)
+          return null
+        }
+        const ticketReply =
+          'I opened a developer ticket for Braxton in the cloud. Review the card below, add screenshots if you need to, then tap Review ticket and Send to developer.'
+        const withCard: Message[] = [
+          ...updatedMessages,
+          {
+            role: 'assistant',
+            content: ticketReply,
+            developerSupportCard: {
+              title: ticketFromSlash.title,
+              description: ticketFromSlash.description,
+              priority: ticketFromSlash.priority,
+              pagePath: ticketFromSlash.pagePath,
+            },
+          },
+        ]
+        setMessages(withCard)
+        void persistSessionMessages(withCard).catch(() => undefined)
+        onVoiceReply?.(ticketReply)
+        setIsElenaResponding(false)
+        if (currentSessionId) void refreshSessionsMetadata()
+        return ticketReply
+      }
+
       // Keep cards in saved chat history; the server sends only role and text to the model.
       const apiMessages = updatedMessages.map(({ confirmation: _confirmation, attachments: msgAttachments, ...message }) => ({
         ...message,
@@ -1265,13 +1487,21 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
         if (elenaChatAbortRef.current === abortController) {
           elenaChatAbortRef.current = null
         }
-        setIsLoading(false)
+        setIsElenaResponding(false)
         setLoadingActivities([])
       }
     }
     return null
   }
   voiceSendRef.current = handleSend
+
+  const persistTicketAttachments = (messageIndex: number, saved: DeveloperSupportSavedAttachment[]) => {
+    const updatedMessages = messages.map((message, index) => index === messageIndex && message.developerSupportCard
+      ? { ...message, developerSupportCard: { ...message.developerSupportCard, savedAttachments: saved } }
+      : message)
+    setMessages(updatedMessages)
+    return persistSessionMessages(updatedMessages)
+  }
 
   const handleWorkflowDraftSaved = (msgIndex: number, workflow: { id: string; name: string }) => {
     const updatedMessages = messages.map((message, index) => index === msgIndex && message.workflowDraft
@@ -1297,9 +1527,9 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
     // Old chat history may contain a query and summary. These are never proof
     // of an action authorized by the server and must not be submitted.
     const endpoint = confirmationEndpoint(confirmation)
-    if (!endpoint || !confirmation.token || !confirmation.expiresAt || isLoading) return
+    if (!endpoint || !confirmation.token || !confirmation.expiresAt || isElenaResponding || isConfirmingAction) return
     const requestId = ++messageRequestRef.current
-    setIsLoading(true)
+    setIsConfirmingAction(true)
     setMessages(prev => prev.map((m, idx) => idx === msgIndex ? { ...m, confirmationError: undefined } : m))
 
     try {
@@ -1326,7 +1556,7 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
           : "The result could not be verified. Check the lead's notes before requesting this action again.",
       } : m))
     } finally {
-      if (requestId === messageRequestRef.current) setIsLoading(false)
+      if (requestId === messageRequestRef.current) setIsConfirmingAction(false)
     }
   }
 
@@ -1335,12 +1565,11 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
   }
 
   const pathSuggestions = getSuggestionsForPath(activePath)
-  const isSessionHydrating = Boolean(currentSessionId && loadedSessionId !== currentSessionId)
   const voiceActive = voiceState !== 'ended'
   const latestVoiceReplyIndex = messages.reduce((latestIndex, message, index) => (
     index >= voiceStartIndex && message.role === 'assistant' ? index : latestIndex
   ), -1)
-  const voiceOutputIndex = !isLoading && latestVoiceReplyIndex >= 0 && hasVoiceActionOutput(messages[latestVoiceReplyIndex])
+  const voiceOutputIndex = !isElenaResponding && latestVoiceReplyIndex >= 0 && hasVoiceActionOutput(messages[latestVoiceReplyIndex])
     ? latestVoiceReplyIndex
     : -1
   const voiceHasResults = voiceOutputIndex >= 0
@@ -1374,30 +1603,30 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
             </span>
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-0.5">
           {!voiceActive && !historyUnavailable && <button
             type="button"
             onClick={() => setShowSessionsList(curr => !curr)}
-            className={`inline-flex h-9 w-9 items-center justify-center rounded-lg p-0 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 cursor-pointer ${
+            className={`inline-flex h-8 w-8 items-center justify-center rounded-xl p-0 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 cursor-pointer ${
               showSessionsList 
                 ? 'bg-[#caa24c]/15 text-[#a8792f] dark:text-[#f1d27a]' 
-                : 'text-zinc-500 opacity-80 hover:bg-black/5 dark:hover:bg-white/10 hover:text-zinc-900 dark:hover:text-white hover:opacity-100'
+                : 'text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)]'
             }`}
             title="Chat History Sessions"
             aria-label="Chat History Sessions"
           >
-            <History size={16} />
+            <History size={15} />
           </button>}
           {!voiceActive && <button
             type="button"
             onClick={() => void handleCreateSession()}
-            className="inline-flex h-9 w-9 items-center justify-center rounded-lg p-0 text-zinc-500 opacity-80 transition-colors hover:bg-black/5 dark:hover:bg-white/10 hover:text-zinc-900 dark:hover:text-white hover:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 cursor-pointer"
+            className="inline-flex h-8 w-8 items-center justify-center rounded-xl p-0 text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 cursor-pointer"
             title="Start New Chat Session"
             aria-label="Start New Chat Session"
           >
-            <SquarePen size={16} />
+            <SquarePen size={15} />
           </button>}
-          {!voiceActive && <div className="h-4 w-px bg-[color:var(--portal-border)] shrink-0 mx-0.5" aria-hidden="true" />}
+          {!voiceActive && <div className="mx-1.5 h-5 w-px shrink-0 self-center bg-[color:var(--portal-border)]" aria-hidden="true" />}
           <PortalCloseButton onClick={onClose} aria-label="Close Elena Chat" />
         </div>
       </div>
@@ -1561,7 +1790,7 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
         </AnimatePresence>
 
         {/* Messages Window */}
-        <div className={`portal-scrollbar min-h-0 flex-1 overflow-y-auto p-3 sm:p-4 ${voiceActive && !voiceHasResults && !isLoading ? 'hidden' : ''}`}>
+        <div className={`portal-scrollbar min-h-0 flex-1 overflow-y-auto p-3 sm:p-4 ${voiceActive && !voiceHasResults && !isElenaResponding ? 'hidden' : ''}`}>
           <AnimatePresence mode="wait">
             <motion.div
               key={currentSessionId || 'empty-session'}
@@ -1576,7 +1805,7 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
                   <PortalConstellationLoader size={20} tone="gold" />
                   <p className="text-xs">Opening Elena’s conversation…</p>
                 </div>
-              ) : voiceActive && !voiceHasResults ? isLoading ? (
+              ) : voiceActive && !voiceHasResults ? isElenaResponding ? (
                 <motion.div
                   key="voice-tool-progress"
                   initial={reduceVoiceMotion ? false : { opacity: 0, y: 8, filter: 'blur(5px)' }}
@@ -1841,7 +2070,7 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
                                 {msg.confirmation.token && msg.confirmation.expiresAt && confirmationEndpoint(msg.confirmation) && !msg.confirmationError && (
                                   <button
                                     type="button"
-                                    disabled={isLoading}
+                                    disabled={isComposerLocked}
                                     onClick={() => handleConfirmAction(index, msg.confirmation!)}
                                     className="luxor-gold-raised rounded px-3 py-1.5 text-xs font-bold !text-white transition-colors disabled:cursor-not-allowed disabled:opacity-50"
                                   >
@@ -1850,7 +2079,7 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
                                 )}
                                 <button
                                   type="button"
-                                  disabled={isLoading}
+                                  disabled={isComposerLocked}
                                   onClick={() => handleCancelAction(index)}
                                   className="rounded border border-[color:var(--portal-border)] px-3 py-1.5 text-xs font-bold text-[color:var(--portal-text)] hover:bg-[color:var(--portal-soft)] disabled:cursor-not-allowed disabled:opacity-50"
                                 >
@@ -1959,7 +2188,9 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
                           <div className="w-[96%] mt-2 pl-8">
                             <ElenaDeveloperSupportCard
                               payload={msg.developerSupportCard}
+                              chatId={currentSessionId}
                               attachmentCandidates={collectDeveloperSupportAttachmentCandidates(messages, attachments, currentSessionId)}
+                              onSavedAttachments={(saved) => persistTicketAttachments(index, saved)}
                               onSuccess={(successMsg) => {
                                 setMessages((prev) => [
                                   ...prev,
@@ -1973,7 +2204,7 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
                     ))}
 
                     {/* Typing indicator */}
-                    {isLoading && (
+                    {isElenaResponding && (
                       <motion.div
                         layout
                         key="thinking-indicator"
@@ -2060,7 +2291,10 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
           {(() => {
             const hasComposerAttachments = imageAttachments.length > 0 || documentAttachments.length > 0
             return (
-              <div className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] shadow-xs focus-within:border-[#caa24c]/50">
+              <div
+                ref={composerAnchorRef}
+                className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] shadow-xs focus-within:border-[#caa24c]/50"
+              >
                 <AnimatePresence initial={false}>
                   {hasComposerAttachments && (
                     <motion.div
@@ -2132,10 +2366,23 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
                 <form
                   onSubmit={(e) => {
                     e.preventDefault()
+                    if (confirmHighlightedSlashCommand()) return
                     handleSend(input)
                   }}
                   className="relative flex items-center px-3 py-1.5"
                 >
+            <ElenaSlashCommandMenu
+              anchorRef={composerAnchorRef}
+              open={(slashMenuVisible || slashManageExpanded) && !isElenaResponding}
+              commands={filteredSlashCommands}
+              highlightIndex={slashHighlightIndex}
+              onPick={pickSlashCommand}
+              reduceMotion={Boolean(reduceVoiceMotion)}
+              manageExpanded={slashManageExpanded}
+              onManageExpandedChange={setSlashManageExpanded}
+              userEmail={userEmail}
+              onPersonalShortcutsSaved={() => setPersonalSlashCommands(loadPersonalElenaSlashCommands(userEmail))}
+            />
             <input
               type="file"
               ref={imageInputRef}
@@ -2167,24 +2414,80 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
               </button>
             </div>
 
-            <input 
-              type="text"
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onPaste={handleComposerPaste}
-              placeholder="Type a message or ask Elena anything..."
-              className="portal-input-transparent flex-1 bg-transparent py-1 text-xs text-[color:var(--portal-text)] placeholder:text-[color:var(--portal-muted)] outline-none"
-              disabled={isLoading}
-            />
+            <div className="flex min-w-0 flex-1 items-center gap-2">
+              <AnimatePresence initial={false} mode="popLayout">
+                {activeSlashCommand ? (
+                  <motion.div
+                    key={`slash-badge-${activeSlashCommand.command.id}`}
+                    layout="position"
+                    initial={reduceVoiceMotion ? false : { opacity: 0, scale: 0.82, x: -12, filter: 'blur(4px)' }}
+                    animate={reduceVoiceMotion ? { opacity: 1, scale: 1, x: 0, filter: 'blur(0px)' } : { opacity: 1, scale: 1, x: 0, filter: 'blur(0px)' }}
+                    exit={reduceVoiceMotion ? { opacity: 0 } : { opacity: 0, scale: 0.84, x: -10, filter: 'blur(3px)' }}
+                    transition={reduceVoiceMotion ? { duration: 0 } : { type: 'spring', stiffness: 520, damping: 28, mass: 0.65 }}
+                    className="shrink-0 origin-left"
+                  >
+                    <ElenaSlashTriggerBadge command={activeSlashCommand.command} />
+                  </motion.div>
+                ) : null}
+              </AnimatePresence>
+              <AnimatePresence mode="wait" initial={false}>
+                {activeSlashCommand ? (
+                  <ElenaGrowingTextarea
+                    key="slash-details-input"
+                    reduceMotion={Boolean(reduceVoiceMotion)}
+                    ref={slashDetailsInputRef}
+                    value={activeSlashCommand.rest}
+                    onChange={(event) => updateActiveSlashRest(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter' && !event.shiftKey) {
+                        event.preventDefault()
+                        void handleSend(input)
+                        return
+                      }
+                      if (event.key === 'Backspace' && !activeSlashCommand.rest) {
+                        event.preventDefault()
+                        setInput('')
+                      }
+                    }}
+                    onPaste={handleComposerPaste}
+                    placeholder="Add details (optional)…"
+                    className="portal-input-transparent min-w-0 flex-1 bg-transparent text-xs text-[color:var(--portal-text)] placeholder:text-[color:var(--portal-muted)] outline-none"
+                    disabled={isComposerLocked}
+                    aria-label={`${activeSlashCommand.command.label} details`}
+                  />
+                ) : (
+                  <ElenaGrowingTextarea
+                    key="plain-composer-input"
+                    reduceMotion={Boolean(reduceVoiceMotion)}
+                    ref={plainComposerInputRef}
+                    value={input}
+                    onChange={(e) => setInput(e.target.value)}
+                    onKeyDown={(event) => {
+                      handleComposerKeyDown(event)
+                      if (event.defaultPrevented) return
+                      if (event.key === 'Enter' && !event.shiftKey) {
+                        event.preventDefault()
+                        if (confirmHighlightedSlashCommand()) return
+                        void handleSend(input)
+                      }
+                    }}
+                    onPaste={handleComposerPaste}
+                    placeholder="Message Elena… type / for shortcuts"
+                    className="portal-input-transparent min-w-0 flex-1 bg-transparent text-xs text-[color:var(--portal-text)] placeholder:text-[color:var(--portal-muted)] outline-none"
+                    disabled={isComposerLocked}
+                  />
+                )}
+              </AnimatePresence>
+            </div>
 
             {(() => {
               const composerCanSend = Boolean(input.trim() || attachments.length > 0)
               return (
             <button
               ref={voiceStartButtonRef}
-              type={isLoading ? 'button' : composerCanSend ? 'submit' : 'button'}
+              type={isElenaResponding ? 'button' : composerCanSend ? 'submit' : 'button'}
               onClick={
-                isLoading
+                isElenaResponding
                   ? (event) => {
                       event.preventDefault()
                       stopElenaResponse()
@@ -2197,29 +2500,41 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
               onMouseLeave={() => setVoiceButtonHovered(false)}
               onFocus={() => setVoiceButtonHovered(true)}
               onBlur={() => setVoiceButtonHovered(false)}
-              disabled={!isLoading && !composerCanSend && voiceState !== 'ended'}
+              disabled={!isElenaResponding && !composerCanSend && voiceState !== 'ended'}
               aria-label={
-                isLoading
+                isElenaResponding
                   ? 'Stop response'
-                  : composerCanSend
-                    ? 'Send message'
-                    : 'Start voice conversation with Elena'
+                  : slashMenuVisible && filteredSlashCommands.length
+                    ? 'Confirm slash command'
+                    : composerCanSend
+                      ? 'Send message'
+                      : 'Start voice conversation with Elena'
               }
-              title={isLoading ? 'Stop response' : composerCanSend ? 'Send message' : 'Start voice conversation'}
-              className={`portal-inline-action ml-1 inline-flex !min-h-0 !min-w-0 h-8 w-8 shrink-0 items-center justify-center rounded-full border transition-all disabled:cursor-not-allowed disabled:opacity-35 ${
-                isLoading
-                  ? 'border-[color:var(--portal-border)] bg-[color:var(--portal-card)] text-[color:var(--portal-muted)] hover:border-rose-400/35 hover:bg-rose-500/10 hover:text-rose-500'
-                  : 'border-[#caa24c]/35 bg-[#caa24c]/10 text-[#a8792f] hover:bg-[#caa24c]/20'
+              title={
+                isElenaResponding
+                  ? 'Stop response'
+                  : slashMenuVisible && filteredSlashCommands.length
+                    ? 'Confirm slash command'
+                    : composerCanSend
+                      ? 'Send message'
+                      : 'Start voice conversation'
+              }
+              className={`portal-inline-action ml-1 inline-flex !min-h-0 !min-w-0 h-8 w-8 shrink-0 items-center justify-center rounded-full transition-all disabled:cursor-not-allowed disabled:opacity-35 ${
+                isElenaResponding
+                  ? 'border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] text-[color:var(--portal-muted)] hover:border-rose-400/35 hover:bg-rose-500/10 hover:text-rose-500'
+                  : composerCanSend
+                    ? 'luxor-gold-raised border-0 !text-white shadow-xs active:scale-95'
+                    : 'border border-[#caa24c]/35 bg-[#caa24c]/10 text-[#a8792f] hover:bg-[#caa24c]/20'
               }`}
             >
               <AnimatePresence mode="wait" initial={false}>
-                {isLoading ? (
+                {isElenaResponding ? (
                   <motion.span key="stop" initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.7 }} transition={{ duration: 0.15 }}>
                     <X size={16} strokeWidth={2.4} aria-hidden="true" />
                   </motion.span>
                 ) : composerCanSend ? (
-                  <motion.span key="send" initial={{ opacity: 0, y: 4, scale: 0.8 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -4, scale: 0.8 }} transition={{ duration: 0.15 }}>
-                    <ArrowUp size={17} strokeWidth={2.4} />
+                  <motion.span key="send" initial={{ opacity: 0, y: 4, scale: 0.8 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -4, scale: 0.8 }} transition={{ duration: 0.15 }} className="text-white">
+                    <ArrowUp size={17} strokeWidth={2.4} className="text-white" aria-hidden="true" />
                   </motion.span>
                 ) : (
                   <motion.span key="voice" initial={{ opacity: 0, scale: 0.7 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.7 }} transition={{ duration: 0.15 }}>

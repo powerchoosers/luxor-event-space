@@ -631,12 +631,21 @@ export function ElenaTaskCard({ payload, onSuccess }: { payload: TaskCardPayload
   )
 }
 
+export type DeveloperSupportSavedAttachment = {
+  name: string
+  type: string
+  kind: 'image' | 'document' | 'text'
+  storagePath?: string
+  textContent?: string
+}
+
 export interface DeveloperSupportCardPayload {
   title: string
   description?: string
   priority?: 'low' | 'medium' | 'high' | 'urgent'
   pagePath?: string
   reporterName?: string
+  savedAttachments?: DeveloperSupportSavedAttachment[]
 }
 
 export type DeveloperSupportAttachmentCandidate = {
@@ -751,13 +760,21 @@ function DeveloperSupportAttachmentList({
 type DeveloperSupportTicketAttachmentPayload = {
   name: string
   type: string
+  kind?: 'image' | 'pdf' | 'text'
   storagePath?: string
   dataUrl?: string
   textContent?: string
 }
 
+function ticketAttachmentKind(item: DeveloperSupportAttachmentCandidate): 'image' | 'pdf' | 'text' | undefined {
+  if (item.kind === 'image') return 'image'
+  if (item.kind === 'text') return 'text'
+  if (item.kind === 'document') return 'pdf'
+  return undefined
+}
+
 async function resolveDeveloperSupportAttachmentsForPrepare(
-  stagingId: string,
+  chatId: string | null,
   items: DeveloperSupportAttachmentCandidate[],
 ): Promise<DeveloperSupportTicketAttachmentPayload[]> {
   const resolved: DeveloperSupportTicketAttachmentPayload[] = []
@@ -766,6 +783,7 @@ async function resolveDeveloperSupportAttachmentsForPrepare(
       resolved.push({
         name: item.name,
         type: item.type,
+        ...(ticketAttachmentKind(item) ? { kind: ticketAttachmentKind(item) } : {}),
         storagePath: item.storagePath,
         ...(item.textContent ? { textContent: item.textContent } : {}),
       })
@@ -776,9 +794,10 @@ async function resolveDeveloperSupportAttachmentsForPrepare(
       continue
     }
     if (item.dataUrl) {
+      if (!chatId) throw new Error('This Elena chat is not saved yet. Refresh the chat, then add the screenshot again.')
       const blob = await fetch(item.dataUrl).then((response) => response.blob())
       const form = new FormData()
-      form.append('stagingId', stagingId)
+      form.append('chatId', chatId)
       form.append('name', item.name)
       form.append('type', item.type)
       form.append('file', blob, item.name)
@@ -824,13 +843,58 @@ export function collectDeveloperSupportAttachmentCandidates(
   return Array.from(map.values()).slice(-5)
 }
 
+function savedTicketAttachments(items: DeveloperSupportAttachmentCandidate[]): DeveloperSupportSavedAttachment[] {
+  const saved: DeveloperSupportSavedAttachment[] = []
+  for (const item of items) {
+    if (saved.length >= 5) break
+    if (item.storagePath) {
+      saved.push({
+        name: item.name,
+        type: item.type,
+        kind: item.kind,
+        storagePath: item.storagePath,
+        ...(item.textContent ? { textContent: item.textContent.slice(0, 12_000) } : {}),
+      })
+      continue
+    }
+    if (item.textContent) {
+      saved.push({
+        name: item.name,
+        type: item.type,
+        kind: 'text',
+        textContent: item.textContent.slice(0, 12_000),
+      })
+    }
+  }
+  return saved
+}
+
+function candidatesFromSavedAttachments(
+  saved: DeveloperSupportSavedAttachment[] | undefined,
+  chatId?: string | null,
+): DeveloperSupportAttachmentCandidate[] {
+  return (saved || []).map((item) => ({
+    key: `saved::${item.storagePath || item.name}`,
+    name: item.name,
+    type: item.type,
+    kind: item.kind,
+    ...(item.storagePath ? { storagePath: item.storagePath } : {}),
+    ...(item.textContent ? { textContent: item.textContent } : {}),
+    ...(chatId ? { chatId } : {}),
+  }))
+}
+
 export function ElenaDeveloperSupportCard({
   payload,
   attachmentCandidates = [],
+  chatId = null,
+  onSavedAttachments,
   onSuccess,
 }: {
   payload: DeveloperSupportCardPayload
   attachmentCandidates?: DeveloperSupportAttachmentCandidate[]
+  chatId?: string | null
+  onSavedAttachments?: (items: DeveloperSupportSavedAttachment[]) => void | Promise<void>
   onSuccess?: (msg: string) => void
 }) {
   const [title, setTitle] = useState(payload.title || '')
@@ -841,12 +905,14 @@ export function ElenaDeveloperSupportCard({
   const [isSent, setIsSent] = useState(false)
   const [uncertain, setUncertain] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [localAttachments, setLocalAttachments] = useState<DeveloperSupportAttachmentCandidate[]>([])
+  const [localAttachments, setLocalAttachments] = useState<DeveloperSupportAttachmentCandidate[]>(() => candidatesFromSavedAttachments(payload.savedAttachments, chatId))
   const [attachmentNotice, setAttachmentNotice] = useState('')
-  const [selectedAttachmentKeys, setSelectedAttachmentKeys] = useState<Set<string>>(() => new Set(attachmentCandidates.map((item) => item.key)))
+  const [selectedAttachmentKeys, setSelectedAttachmentKeys] = useState<Set<string>>(() => new Set([
+    ...attachmentCandidates.map((item) => item.key),
+    ...candidatesFromSavedAttachments(payload.savedAttachments, chatId).map((item) => item.key),
+  ]))
   const fileInputRef = useRef<HTMLInputElement>(null)
   const seenChatKeysRef = useRef<Set<string>>(new Set())
-  const stagingIdRef = useRef(crypto.randomUUID())
 
   const attachmentOptions = useMemo(() => {
     const map = new Map<string, DeveloperSupportAttachmentCandidate>()
@@ -927,29 +993,53 @@ export function ElenaDeveloperSupportCard({
       try {
         const type = isPdf ? 'application/pdf' : file.type || 'text/plain'
         const kind: DeveloperSupportAttachmentCandidate['kind'] = isText ? 'text' : isImage ? 'image' : 'document'
-        const dataUrl = isImage || isPdf ? await readDataUrl(file) : undefined
         const textContent = isText ? await readText(file) : undefined
-        const key = `local::${file.name}::${type}::${crypto.randomUUID()}`
+        let storagePath: string | undefined
+        let dataUrl: string | undefined
+        if (!isText) {
+          if (!chatId) throw new Error('This Elena chat is not saved yet. Refresh the chat, then add the file again.')
+          const form = new FormData()
+          form.append('chatId', chatId)
+          form.append('name', file.name)
+          form.append('type', type)
+          form.append('file', file, file.name)
+          const uploadResponse = await fetch('/api/portal/elena-chat/developer-support-upload', { method: 'POST', body: form })
+          const uploadData = await readPortalActionResponse(uploadResponse)
+          if (!uploadResponse.ok || typeof uploadData.storagePath !== 'string') {
+            throw new Error(typeof uploadData.error === 'string' ? uploadData.error : 'upload failed')
+          }
+          storagePath = uploadData.storagePath
+          dataUrl = await readDataUrl(file)
+        }
+        const key = `saved::${storagePath || file.name}::${crypto.randomUUID()}`
         next.push({
           key,
           name: file.name,
           type,
           kind,
+          ...(chatId ? { chatId } : {}),
           ...(dataUrl ? { dataUrl } : {}),
+          ...(storagePath ? { storagePath } : {}),
           ...(textContent ? { textContent } : {}),
         })
-      } catch {
-        rejected.push(file.name)
+      } catch (error) {
+        rejected.push(error instanceof Error && error.message !== 'read failed' ? `${file.name} (${error.message})` : file.name)
       }
     }
 
     if (next.length > 0) {
-      setLocalAttachments((prev) => [...prev, ...next].slice(0, 5))
+      const persisted = [...localAttachments, ...next].slice(0, 5)
+      setLocalAttachments(persisted)
       setSelectedAttachmentKeys((prev) => {
         const selected = new Set(prev)
         for (const item of next) selected.add(item.key)
         return selected
       })
+      try {
+        await onSavedAttachments?.(savedTicketAttachments(persisted))
+      } catch (error) {
+        setAttachmentNotice(error instanceof Error ? error.message : 'The file uploaded, but the chat could not remember it. Add it again after refreshing.')
+      }
     }
     if (rejected.length > 0) {
       setAttachmentNotice(
@@ -970,7 +1060,7 @@ export function ElenaDeveloperSupportCard({
     setIsSaving(true)
     setError(null)
     try {
-      const attachments = await resolveDeveloperSupportAttachmentsForPrepare(stagingIdRef.current, selectedAttachments)
+      const attachments = await resolveDeveloperSupportAttachmentsForPrepare(chatId, selectedAttachments)
       const response = await fetch('/api/portal/elena-chat/actions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1021,11 +1111,11 @@ export function ElenaDeveloperSupportCard({
       if (!response.ok || data.success !== true) throw new Error(typeof data.error === 'string' ? data.error : 'Unverified result')
       setConfirmation(null)
       setIsSent(true)
-      onSuccess?.('Support ticket sent to Lewis. He will pick it up in Cursor.')
+      onSuccess?.('Support ticket sent to Braxton. The cloud worker will pick it up.')
     } catch (err) {
       setConfirmation(null)
       setUncertain(true)
-      setError(err instanceof Error ? err.message : 'The ticket may or may not have been sent. Ask Lewis before sending another copy.')
+      setError(err instanceof Error ? err.message : 'The ticket may or may not have been sent. Ask before sending another copy.')
     } finally {
       setIsSaving(false)
     }
@@ -1037,7 +1127,7 @@ export function ElenaDeveloperSupportCard({
         <Wrench size={16} className="text-[#a8792f] dark:text-[#f1d27a]" aria-hidden="true" />
         <div>
           <h4 className="font-sans text-sm font-bold text-[color:var(--portal-text)]">Developer support</h4>
-          <p className="text-[10px] text-[color:var(--portal-muted)]">Sends a fix request to Lewis in Cursor</p>
+          <p className="text-[10px] text-[color:var(--portal-muted)]">Sends a fix to Braxton in the cloud</p>
         </div>
       </div>
       <div className="space-y-3 p-4">
@@ -1105,7 +1195,7 @@ export function ElenaDeveloperSupportCard({
                 />
               ) : (
                 <p className="text-[10px] leading-snug text-[color:var(--portal-muted)]">
-                  Add a screenshot or PDF so Lewis can see the issue.
+                  Add a screenshot or PDF so Braxton can see the issue.
                 </p>
               )}
               {attachmentNotice ? <p role="status" className="text-[10px] leading-snug text-[color:var(--portal-muted)]">{attachmentNotice}</p> : null}
