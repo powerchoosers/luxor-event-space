@@ -76,11 +76,22 @@ export function PackageFlipCard({ data, locale = 'en' }: PackageFlipCardProps) {
     })
   }, [])
 
+  const shellClass =
+    'overflow-hidden rounded-md border border-[#caa24c]/22 bg-[#0a0807] shadow-[0_34px_90px_-62px_rgba(0,0,0,1)]'
+  const faceClass = 'overflow-hidden rounded-md bg-[#0a0807]'
+  const imageShellClass = 'relative min-h-52 overflow-hidden rounded-t-md'
+
   const renderFront = (options?: { hidden?: boolean }) => (
-    <div className="flex h-full flex-col" hidden={options?.hidden}>
-      <div className="relative min-h-52 overflow-hidden">
-        <Image src={data.image} alt={data.imageAlt} fill sizes="(min-width: 1024px) 30vw, 100vw" className="object-cover" />
-        <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(0,0,0,0.02),rgba(0,0,0,0.52))]" />
+    <div className={`flex h-full flex-col ${faceClass}`} hidden={options?.hidden}>
+      <div className={imageShellClass}>
+        <Image
+          src={data.image}
+          alt={data.imageAlt}
+          fill
+          sizes="(min-width: 1024px) 30vw, 100vw"
+          className="rounded-t-md object-cover"
+        />
+        <div className="absolute inset-0 rounded-t-md bg-[linear-gradient(180deg,rgba(0,0,0,0.02),rgba(0,0,0,0.52))]" />
         {data.mostPopular ? (
           <p className="absolute right-3 top-3 rounded-md border border-[#caa24c]/30 bg-black/70 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.12em] text-[#f1d27a]">
             {data.mostPopular.replace(/⭐\s*/, '')}
@@ -126,7 +137,7 @@ export function PackageFlipCard({ data, locale = 'en' }: PackageFlipCardProps) {
       role="region"
       aria-labelledby={`${faceId}-back-heading`}
       tabIndex={-1}
-      className={`flex h-full max-h-full min-h-0 flex-col ${options?.scrollBody ? 'overflow-hidden' : ''}`}
+      className={`flex h-full max-h-full min-h-0 flex-col ${faceClass}`}
       hidden={options?.hidden}
     >
       <div
@@ -151,7 +162,7 @@ export function PackageFlipCard({ data, locale = 'en' }: PackageFlipCardProps) {
           ))}
         </ul>
       </div>
-      <div className="shrink-0 border-t border-[#caa24c]/16 bg-[#0a0807] p-6 sm:p-7 sm:pt-5">
+      <div className="shrink-0 overflow-hidden rounded-b-md border-t border-[#caa24c]/16 bg-[#0a0807] p-6 sm:p-7 sm:pt-5">
         <button
           ref={backControlRef}
           type="button"
@@ -164,19 +175,17 @@ export function PackageFlipCard({ data, locale = 'en' }: PackageFlipCardProps) {
     </div>
   )
 
-  const shellClass = 'rounded-md border border-[#caa24c]/22 bg-[#0a0807] shadow-[0_34px_90px_-62px_rgba(0,0,0,1)]'
-
   if (showSwapLayout) {
     const showFront = activeFace === 'front'
     const showBack = activeFace === 'back'
     return (
-      <article className={`${shellClass} relative flex h-full min-h-[560px] flex-col overflow-hidden`} aria-labelledby={`${faceId}-title`}>
+      <article className={`${shellClass} relative flex h-full min-h-[560px] flex-col`} aria-labelledby={`${faceId}-title`}>
         <span id={`${faceId}-title`} className="sr-only">
           {data.displayName} package {activeFace}
         </span>
-        <div className="relative h-full min-h-0 w-full flex-1 overflow-hidden">
+        <div className={`relative h-full min-h-0 w-full flex-1 overflow-hidden ${faceClass}`}>
           <motion.div
-            className={`relative flex h-full w-full min-h-0 flex-col ${
+            className={`relative flex h-full w-full min-h-0 flex-col ${faceClass} ${
               showBack ? 'invisible pointer-events-none' : 'pointer-events-auto'
             }`}
             aria-hidden={showBack}
@@ -188,7 +197,7 @@ export function PackageFlipCard({ data, locale = 'en' }: PackageFlipCardProps) {
             {renderFront()}
           </motion.div>
           <motion.div
-            className={`absolute inset-0 flex h-full max-h-full min-h-0 flex-col overflow-hidden ${
+            className={`absolute inset-0 flex h-full max-h-full min-h-0 flex-col ${faceClass} ${
               showFront ? 'pointer-events-none invisible' : 'pointer-events-auto z-[2]'
             }`}
             aria-hidden={showFront}
@@ -205,17 +214,17 @@ export function PackageFlipCard({ data, locale = 'en' }: PackageFlipCardProps) {
   }
 
   return (
-    <article className={`group relative flex h-full min-h-[560px] flex-col overflow-hidden [perspective:1200px] ${shellClass}`} aria-labelledby={`${faceId}-title`}>
+    <article className={`group relative flex h-full min-h-[560px] flex-col [perspective:1200px] ${shellClass}`} aria-labelledby={`${faceId}-title`}>
       <span id={`${faceId}-title`} className="sr-only">
         {data.displayName} package
       </span>
       <div
-        className={`relative h-full min-h-0 w-full flex-1 overflow-hidden transition-transform duration-500 ease-in-out [transform-style:preserve-3d] ${
+        className={`relative h-full min-h-0 w-full flex-1 overflow-hidden rounded-md transition-transform duration-500 ease-in-out [transform-style:preserve-3d] ${
           flipped ? '[transform:rotateY(180deg)]' : ''
         }`}
       >
         <div
-          className={`relative flex h-full w-full min-h-0 flex-col [backface-visibility:hidden] ${
+          className={`relative flex h-full w-full min-h-0 flex-col ${faceClass} [backface-visibility:hidden] ${
             flipped ? 'pointer-events-none' : 'pointer-events-auto z-[2]'
           }`}
           aria-hidden={flipped}
@@ -224,7 +233,7 @@ export function PackageFlipCard({ data, locale = 'en' }: PackageFlipCardProps) {
           {renderFront()}
         </div>
         <div
-          className={`absolute inset-0 flex h-full max-h-full min-h-0 flex-col overflow-hidden [backface-visibility:hidden] [transform:rotateY(180deg)] ${
+          className={`absolute inset-0 flex h-full max-h-full min-h-0 flex-col ${faceClass} [backface-visibility:hidden] [transform:rotateY(180deg)] ${
             flipped ? 'pointer-events-auto z-[2]' : 'pointer-events-none'
           }`}
           aria-hidden={!flipped}
