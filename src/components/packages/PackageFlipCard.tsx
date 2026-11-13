@@ -231,7 +231,7 @@ export function PackageFlipCard({ data, locale = 'en' }: PackageFlipCardProps) {
         aria-hidden
         inert
       >
-        <div className={faceClipClass}>{renderFront()}</div>
+        <div className={faceClipClass}>{renderFront({ hidden: true })}</div>
       </div>
       <div className="relative col-start-1 row-start-1 min-h-0 min-w-0 [perspective:1200px]">
         <div
