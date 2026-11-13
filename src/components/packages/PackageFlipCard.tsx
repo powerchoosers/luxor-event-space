@@ -85,12 +85,12 @@ export function PackageFlipCard({ data, locale = 'en' }: PackageFlipCardProps) {
   }, [])
 
   const shellClass =
-    'rounded-md border border-[#caa24c]/22 bg-[#0a0807] shadow-[0_34px_90px_-62px_rgba(0,0,0,1)]'
+    'rounded-2xl border border-[#caa24c]/22 bg-[#0a0807] shadow-[0_34px_90px_-62px_rgba(0,0,0,1)]'
   const shellClipClass = 'overflow-hidden'
-  const sizerShellClass = 'overflow-hidden rounded-md bg-[#0a0807]'
-  const faceClipClass = 'flex h-full min-h-0 flex-col overflow-hidden rounded-md bg-[#0a0807]'
+  const sizerShellClass = 'overflow-hidden rounded-2xl bg-[#0a0807]'
+  const faceClipClass = 'flex h-full min-h-0 flex-col overflow-hidden rounded-2xl bg-[#0a0807]'
   const backfaceClass = '[backface-visibility:hidden] [-webkit-backface-visibility:hidden]'
-  const imageShellClass = 'relative min-h-52 overflow-hidden rounded-t-md'
+  const imageShellClass = 'relative min-h-52 overflow-hidden rounded-t-2xl'
 
   useEffect(() => {
     if (showSwapLayout || !flipped || !allow3dFlip) return
@@ -120,9 +120,9 @@ export function PackageFlipCard({ data, locale = 'en' }: PackageFlipCardProps) {
           alt={data.imageAlt}
           fill
           sizes="(min-width: 1024px) 30vw, 100vw"
-          className="rounded-t-md object-cover"
+          className="rounded-t-2xl object-cover"
         />
-        <div className="absolute inset-0 rounded-t-md bg-[linear-gradient(180deg,rgba(0,0,0,0.02),rgba(0,0,0,0.52))]" />
+        <div className="absolute inset-0 rounded-t-2xl bg-[linear-gradient(180deg,rgba(0,0,0,0.02),rgba(0,0,0,0.52))]" />
         {data.mostPopular ? (
           <p className="absolute right-3 top-3 rounded-md border border-[#caa24c]/30 bg-black/70 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.12em] text-[#f1d27a]">
             {data.mostPopular.replace(/⭐\s*/, '')}
@@ -213,7 +213,7 @@ export function PackageFlipCard({ data, locale = 'en' }: PackageFlipCardProps) {
           </>
         ) : null}
       </div>
-      <div className="shrink-0 rounded-b-md border-t border-[#caa24c]/16 bg-[#0a0807] p-6 sm:p-7 sm:pt-5">
+      <div className="shrink-0 rounded-b-2xl border-t border-[#caa24c]/16 bg-[#0a0807] p-6 sm:p-7 sm:pt-5">
         <button
           ref={backControlRef}
           type="button"
