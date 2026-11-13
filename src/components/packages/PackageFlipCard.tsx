@@ -3,7 +3,7 @@
 import Image from 'next/image'
 import { useCallback, useEffect, useId, useRef, useState } from 'react'
 import { ArrowRight, Check } from '@/lib/icons/phosphor-compat'
-import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
+import { motion, useReducedMotion } from 'framer-motion'
 import type { PublicPackageCardData } from '@/lib/luxorPublicPackages'
 
 type PackageFlipCardProps = {
@@ -150,7 +150,7 @@ export function PackageFlipCard({ data, locale = 'en' }: PackageFlipCardProps) {
           ))}
         </ul>
       </div>
-      <div className="border-t border-[#caa24c]/16 bg-[#0a0807] p-6 sm:p-7 sm:pt-5">
+      <div className="shrink-0 border-t border-[#caa24c]/16 bg-[#0a0807] p-6 sm:p-7 sm:pt-5">
         <button
           ref={backControlRef}
           type="button"
@@ -166,40 +166,56 @@ export function PackageFlipCard({ data, locale = 'en' }: PackageFlipCardProps) {
   const shellClass = 'rounded-md border border-[#caa24c]/22 bg-[#0a0807] shadow-[0_34px_90px_-62px_rgba(0,0,0,1)]'
 
   if (showSwapLayout) {
+    const showFront = activeFace === 'front'
+    const showBack = activeFace === 'back'
     return (
-      <article className={`${shellClass} flex h-full min-h-[560px] flex-col`} aria-labelledby={`${faceId}-title`}>
+      <article className={`${shellClass} relative flex h-full min-h-[560px] flex-col`} aria-labelledby={`${faceId}-title`}>
         <span id={`${faceId}-title`} className="sr-only">
           {data.displayName} package {activeFace}
         </span>
-        <AnimatePresence mode="wait" initial={false}>
+        <div className="relative min-h-0 w-full flex-1">
           <motion.div
-            key={activeFace}
-            className="flex min-h-0 flex-1 flex-col"
-            initial={reduceMotion ? false : { opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={reduceMotion ? undefined : { opacity: 0 }}
+            className={`relative flex h-full w-full min-h-0 flex-col ${
+              showBack ? 'invisible pointer-events-none' : 'pointer-events-auto'
+            }`}
+            aria-hidden={showBack}
+            {...(showBack ? { inert: true } : {})}
+            initial={false}
+            animate={{ opacity: showFront ? 1 : 0 }}
             transition={{ duration: reduceMotion ? 0 : 0.15 }}
           >
-            {activeFace === 'front' ? renderFront() : renderBack({ scrollBody: true })}
+            {renderFront()}
           </motion.div>
-        </AnimatePresence>
+          <motion.div
+            className={`absolute inset-0 flex min-h-0 flex-col ${
+              showFront ? 'pointer-events-none invisible' : 'pointer-events-auto z-[2]'
+            }`}
+            aria-hidden={showFront}
+            {...(showFront ? { inert: true } : {})}
+            initial={false}
+            animate={{ opacity: showBack ? 1 : 0 }}
+            transition={{ duration: reduceMotion ? 0 : 0.15 }}
+          >
+            {renderBack({ scrollBody: true })}
+          </motion.div>
+        </div>
       </article>
     )
   }
 
   return (
-    <article className={`group flex h-full min-h-[560px] flex-col [perspective:1200px] ${shellClass}`} aria-labelledby={`${faceId}-title`}>
+    <article className={`group relative flex h-full min-h-[560px] flex-col [perspective:1200px] ${shellClass}`} aria-labelledby={`${faceId}-title`}>
       <span id={`${faceId}-title`} className="sr-only">
         {data.displayName} package
       </span>
       <div
-        className={`grid h-full min-h-0 flex-1 [grid-template-areas:'card-face'] transition-transform duration-500 ease-in-out [transform-style:preserve-3d] ${
+        className={`relative h-full min-h-0 w-full flex-1 transition-transform duration-500 ease-in-out [transform-style:preserve-3d] ${
           flipped ? '[transform:rotateY(180deg)]' : ''
         }`}
       >
         <div
-          className={`[grid-area:card-face] flex h-full min-h-0 flex-col [backface-visibility:hidden] ${
-            flipped ? 'pointer-events-none z-0' : 'pointer-events-auto z-[2]'
+          className={`relative flex h-full w-full min-h-0 flex-col [backface-visibility:hidden] ${
+            flipped ? 'pointer-events-none' : 'pointer-events-auto z-[2]'
           }`}
           aria-hidden={flipped}
           {...(flipped ? { inert: true } : {})}
@@ -207,8 +223,8 @@ export function PackageFlipCard({ data, locale = 'en' }: PackageFlipCardProps) {
           {renderFront()}
         </div>
         <div
-          className={`[grid-area:card-face] flex h-full min-h-0 flex-col overflow-hidden [backface-visibility:hidden] [transform:rotateY(180deg)] ${
-            flipped ? 'pointer-events-auto z-[2]' : 'pointer-events-none z-0'
+          className={`absolute inset-0 flex min-h-0 flex-col overflow-hidden [backface-visibility:hidden] [transform:rotateY(180deg)] ${
+            flipped ? 'pointer-events-auto z-[2]' : 'pointer-events-none'
           }`}
           aria-hidden={!flipped}
           {...(!flipped ? { inert: true } : {})}
