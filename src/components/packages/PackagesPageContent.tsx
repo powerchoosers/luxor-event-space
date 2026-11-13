@@ -7,12 +7,9 @@ import { Reveal } from '@/components/Reveal'
 import { StaggerCard, StaggerCards } from '@/components/StaggerCards'
 import { PackageFlipCard } from '@/components/packages/PackageFlipCard'
 import type { PublicPackageCardData } from '@/lib/luxorPublicPackages'
-import { PUBLIC_PACKAGES_STARTING_PRICE_FOOTNOTE } from '@/lib/luxorPublicPackageStartingPrices'
-
 type PackagesPageContentProps = {
   locale?: 'en' | 'es'
   cards: PublicPackageCardData[]
-  showCardPrices: boolean
 }
 
 const content = {
@@ -62,9 +59,8 @@ const content = {
   },
 } as const
 
-export function PackagesPageContent({ locale = 'en', cards, showCardPrices }: PackagesPageContentProps) {
+export function PackagesPageContent({ locale = 'en', cards }: PackagesPageContentProps) {
   const t = content[locale]
-  const footnote = PUBLIC_PACKAGES_STARTING_PRICE_FOOTNOTE[locale]
 
   return (
     <main className="overflow-x-hidden bg-[#050505] text-[#f7efe3]">
@@ -129,9 +125,6 @@ export function PackagesPageContent({ locale = 'en', cards, showCardPrices }: Pa
               </StaggerCard>
             ))}
           </StaggerCards>
-          {showCardPrices ? (
-            <p className="mt-8 max-w-3xl text-sm leading-6 text-[#d7c29a]/68">{footnote}</p>
-          ) : null}
         </div>
       </section>
 

@@ -21,14 +21,14 @@ function formatPrice(value: number) {
 
 const copy = {
   en: {
-    startingAt: 'Starting at',
+    weekendFromPrice: (price: string) => `Fri–Sun from ${price}`,
     viewPackage: (name: string) => `View ${name} package`,
     back: 'Back',
     included: 'What’s included',
     details: 'Details and limitations',
   },
   es: {
-    startingAt: 'Desde',
+    weekendFromPrice: (price: string) => `Vie–Dom desde ${price}`,
     viewPackage: (name: string) => `Ver paquete ${name}`,
     back: 'Atrás',
     included: 'Qué incluye',
@@ -91,10 +91,9 @@ export function PackageFlipCard({ data, locale = 'en' }: PackageFlipCardProps) {
         <h3 className="font-serif text-4xl leading-none text-[#f7efe3]">{data.displayName}</h3>
         <p className="mt-4 text-sm leading-6 text-[#d7c29a]/72 sm:text-base">{data.shortDescription}</p>
         {data.showStartingPrice && data.startingPrice !== null ? (
-          <div className="mt-5">
-            <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-[#caa24c]">{t.startingAt}</p>
-            <p className="mt-1 font-serif text-4xl leading-none text-[#f1d27a]">{formatPrice(data.startingPrice)}</p>
-          </div>
+          <p className="mt-5 font-mono text-[10px] uppercase tracking-[0.18em] text-[#caa24c]">
+            {t.weekendFromPrice(formatPrice(data.startingPrice))}
+          </p>
         ) : null}
         <ul className={`grid gap-3 ${data.showStartingPrice ? 'mt-6' : 'mt-5'}`}>
           {data.previewInclusions.map((item) => (
