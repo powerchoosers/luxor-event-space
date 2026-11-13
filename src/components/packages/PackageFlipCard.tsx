@@ -125,10 +125,12 @@ export function PackageFlipCard({ data, locale = 'en' }: PackageFlipCardProps) {
       role="region"
       aria-labelledby={`${faceId}-back-heading`}
       tabIndex={-1}
-      className="flex h-full flex-col"
+      className={`flex h-full flex-col ${options?.scrollBody ? 'min-h-0' : ''}`}
       hidden={options?.hidden}
     >
-      <div className={`flex flex-col px-6 pt-6 sm:px-7 sm:pt-7 ${options?.scrollBody ? 'min-h-0 flex-1 overflow-y-auto overscroll-contain' : ''}`}>
+      <div
+        className={`flex flex-col px-6 pt-6 sm:px-7 sm:pt-7 ${options?.scrollBody ? 'min-h-0 flex-1 touch-pan-y overflow-y-auto overscroll-contain [-webkit-overflow-scrolling:touch]' : ''}`}
+      >
         <p className="font-mono text-[10px] uppercase tracking-[0.28em] text-[#caa24c]">{data.displayName}</p>
         <h3 id={`${faceId}-back-heading`} className="mt-3 font-serif text-3xl leading-none text-[#f7efe3]">
           {t.included}
@@ -178,7 +180,7 @@ export function PackageFlipCard({ data, locale = 'en' }: PackageFlipCardProps) {
             exit={reduceMotion ? undefined : { opacity: 0 }}
             transition={{ duration: reduceMotion ? 0 : 0.15 }}
           >
-            {activeFace === 'front' ? renderFront() : renderBack()}
+            {activeFace === 'front' ? renderFront() : renderBack({ scrollBody: true })}
           </motion.div>
         </AnimatePresence>
       </article>
@@ -191,19 +193,23 @@ export function PackageFlipCard({ data, locale = 'en' }: PackageFlipCardProps) {
         {data.displayName} package
       </span>
       <div
-        className={`grid min-h-[560px] h-full flex-1 [grid-template-areas:'card-face'] transition-transform duration-500 ease-in-out [transform-style:preserve-3d] ${
+        className={`grid h-full min-h-0 flex-1 [grid-template-areas:'card-face'] transition-transform duration-500 ease-in-out [transform-style:preserve-3d] ${
           flipped ? '[transform:rotateY(180deg)]' : ''
         }`}
       >
         <div
-          className="[grid-area:card-face] flex h-full min-h-[560px] flex-col [backface-visibility:hidden]"
+          className={`[grid-area:card-face] flex h-full min-h-0 flex-col [backface-visibility:hidden] ${
+            flipped ? 'pointer-events-none z-0' : 'pointer-events-auto z-[2]'
+          }`}
           aria-hidden={flipped}
           {...(flipped ? { inert: true } : {})}
         >
           {renderFront()}
         </div>
         <div
-          className="[grid-area:card-face] flex h-full min-h-[560px] flex-col overflow-hidden [backface-visibility:hidden] [transform:rotateY(180deg)]"
+          className={`[grid-area:card-face] flex h-full min-h-0 flex-col overflow-hidden [backface-visibility:hidden] [transform:rotateY(180deg)] ${
+            flipped ? 'pointer-events-auto z-[2]' : 'pointer-events-none z-0'
+          }`}
           aria-hidden={!flipped}
           {...(!flipped ? { inert: true } : {})}
         >
