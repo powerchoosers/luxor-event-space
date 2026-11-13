@@ -1,17 +1,17 @@
 'use client'
 
 import { Suspense } from 'react'
+import { ToastProvider } from '@/components/portal/ToastProvider'
 import { OperationsPageContent } from '@/components/portal/OperationsWorkspace'
 
 export default function PreferredVendorsBrowserFixture() {
   return (
-    <div
-      data-portal-theme="light"
-      className="min-h-screen bg-[color:var(--portal-bg)] p-4 text-[color:var(--portal-text)] [--portal-bg:var(--background)]"
-    >
-      <Suspense fallback={<p className="p-6 text-sm text-[color:var(--portal-muted)]">Loading operations…</p>}>
-        <OperationsPageContent />
-      </Suspense>
-    </div>
+    <ToastProvider>
+      <main className="mx-auto flex h-full min-h-0 w-full max-w-[1440px] flex-col gap-4 overflow-hidden p-4 sm:p-6">
+        <Suspense fallback={<p className="text-sm text-[color:var(--portal-muted)]">Loading operations…</p>}>
+          <OperationsPageContent />
+        </Suspense>
+      </main>
+    </ToastProvider>
   )
 }

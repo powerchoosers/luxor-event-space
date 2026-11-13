@@ -1138,39 +1138,43 @@ export function OperationsPageContent({ embeddedBills = false }: { embeddedBills
                 <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
                   {filteredPreferredVendors.map((vendor, idx) => (
                     <li key={vendor.id}>
-                      <button
-                        type="button"
-                        onClick={() => setEditingItem({ type: 'vendor', data: vendor })}
-                        className={`flex h-full w-full flex-col gap-3 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-4 text-left shadow-sm transition-colors hover:border-[#caa24c]/45 hover:bg-[color:var(--portal-soft)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/40 motion-reduce:transition-none ${
+                      <div
+                        className={`flex h-full gap-3 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-4 shadow-sm transition-colors hover:border-[#caa24c]/45 hover:bg-[color:var(--portal-soft)] motion-reduce:transition-none ${
                           bulkSelection.isSelected(vendor.id) ? 'border-[#caa24c]/50 bg-[#caa24c]/5' : ''
                         }`}
                       >
-                        <div className="flex items-start gap-3">
-                          <PortalBulkRowSelector
-                            checked={bulkSelection.isSelected(vendor.id)}
-                            index={idx + 1}
-                            onChange={() => bulkSelection.toggle(vendor.id)}
-                            label={vendor.name}
-                          />
-                          <span className="min-w-0 flex-1">
-                            <span className="block text-xs font-semibold text-[color:var(--portal-muted)]">{vendor.vendor_type}</span>
-                            <span className="mt-1 block text-sm font-bold leading-snug text-[color:var(--portal-text)]">{vendor.name}</span>
-                          </span>
-                          <span className="shrink-0 text-xs tabular-nums text-[color:var(--portal-muted)]">{vendor.rating?.trim() || 'Unrated'}</span>
-                        </div>
-                        <div className="space-y-1 text-xs text-[color:var(--portal-muted)]">
-                          <p className="break-all">Email: {vendor.email?.trim() || 'Not on file'}</p>
-                          <p className="break-words">Phone: {vendor.phone?.trim() || 'Not on file'}</p>
-                        </div>
-                        <div className="mt-auto flex items-center justify-between gap-2 border-t border-[color:var(--portal-border)] pt-3">
-                          <PortalStatusBadge
-                            status={vendor.coi_active ? 'COI verified' : 'COI pending'}
-                            tone={vendor.coi_active ? 'green' : 'gold'}
-                            borderless
-                          />
-                          <span className="text-xs font-semibold text-[#9a712e] dark:text-[#e6c77f]">Edit</span>
-                        </div>
-                      </button>
+                        <PortalBulkRowSelector
+                          checked={bulkSelection.isSelected(vendor.id)}
+                          index={idx + 1}
+                          onChange={() => bulkSelection.toggle(vendor.id)}
+                          label={vendor.name}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setEditingItem({ type: 'vendor', data: vendor })}
+                          className="flex min-w-0 flex-1 flex-col gap-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/40 rounded-lg"
+                        >
+                          <div className="flex items-start gap-3">
+                            <span className="min-w-0 flex-1">
+                              <span className="block text-xs font-semibold text-[color:var(--portal-muted)]">{vendor.vendor_type}</span>
+                              <span className="mt-1 block text-sm font-bold leading-snug text-[color:var(--portal-text)]">{vendor.name}</span>
+                            </span>
+                            <span className="shrink-0 text-xs tabular-nums text-[color:var(--portal-muted)]">{vendor.rating?.trim() || 'Unrated'}</span>
+                          </div>
+                          <div className="space-y-1 text-xs text-[color:var(--portal-muted)]">
+                            <p className="break-all">Email: {vendor.email?.trim() || 'Not on file'}</p>
+                            <p className="break-words">Phone: {vendor.phone?.trim() || 'Not on file'}</p>
+                          </div>
+                          <div className="mt-auto flex items-center justify-between gap-2 border-t border-[color:var(--portal-border)] pt-3">
+                            <PortalStatusBadge
+                              status={vendor.coi_active ? 'COI verified' : 'COI pending'}
+                              tone={vendor.coi_active ? 'green' : 'gold'}
+                              borderless
+                            />
+                            <span className="text-xs font-semibold text-[#9a712e] dark:text-[#e6c77f]">Edit</span>
+                          </div>
+                        </button>
+                      </div>
                     </li>
                   ))}
                 </ul>
