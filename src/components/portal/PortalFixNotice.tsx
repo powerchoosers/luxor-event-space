@@ -14,14 +14,33 @@ import {
 
 const FIX_NOTICE_DISMISS_EVENT = 'luxor-portal-fix-notice-dismiss'
 
-function subscribeToPortalFixNoticeDismiss(onStore: () => void) {
-  const onChange = () => onStore()
-  window.addEventListener(FIX_NOTICE_DISMISS_EVENT, onChange)
-  window.addEventListener('storage', onChange)
-  return () => {
-    window.removeEventListener(FIX_NOTICE_DISMISS_EVENT, onChange)
-    window.removeEventListener('storage', onChange)
-  }
+type PortalFixNoticeDismissSnapshot = { ready: boolean; dismissed: boolean }
+
+const pendingDismissSnapshot: PortalFixNoticeDismissSnapshot = { ready: false, dismissed: false }
+const dismissSnapshotByNoticeId = new Map<string, PortalFixNoticeDismissSnapshot>()
+const dismissSnapshotListeners = new Set<() => void>()
+
+function getPortalFixNoticeDismissSnapshot(noticeId: string | null): PortalFixNoticeDismissSnapshot {
+  if (!noticeId) return { ready: true, dismissed: false }
+  return dismissSnapshotByNoticeId.get(noticeId) ?? pendingDismissSnapshot
+}
+
+function publishPortalFixNoticeDismissSnapshot(noticeId: string, dismissed: boolean) {
+  dismissSnapshotByNoticeId.set(noticeId, { ready: true, dismissed })
+  dismissSnapshotListeners.forEach((listener) => listener())
+}
+
+function subscribePortalFixNoticeDismissSnapshot(onStore: () => void) {
+  dismissSnapshotListeners.add(onStore)
+  return () => dismissSnapshotListeners.delete(onStore)
+}
+
+function readPortalFixNoticeDismissedAfterMount(noticeId: string) {
+  publishPortalFixNoticeDismissSnapshot(noticeId, isPortalFixNoticeDismissed(noticeId))
+}
+
+function getPortalFixNoticeDismissServerSnapshot(noticeId: string | null): PortalFixNoticeDismissSnapshot {
+  return noticeId ? pendingDismissSnapshot : { ready: true, dismissed: false }
 }
 
 export function PortalFixNotice({ notice }: { notice: PortalFixNoticeData | null }) {
@@ -32,11 +51,24 @@ export function PortalFixNotice({ notice }: { notice: PortalFixNoticeData | null
     () => true,
     () => false,
   )
-  const dismissed = useSyncExternalStore(
-    subscribeToPortalFixNoticeDismiss,
-    () => (notice ? isPortalFixNoticeDismissed(notice.id) : false),
-    () => false,
+  const noticeId = notice?.id ?? null
+  const dismissSnapshot = useSyncExternalStore(
+    subscribePortalFixNoticeDismissSnapshot,
+    () => getPortalFixNoticeDismissSnapshot(noticeId),
+    () => getPortalFixNoticeDismissServerSnapshot(noticeId),
   )
+
+  useEffect(() => {
+    if (!noticeId) return undefined
+    readPortalFixNoticeDismissedAfterMount(noticeId)
+    const onChange = () => readPortalFixNoticeDismissedAfterMount(noticeId)
+    window.addEventListener(FIX_NOTICE_DISMISS_EVENT, onChange)
+    window.addEventListener('storage', onChange)
+    return () => {
+      window.removeEventListener(FIX_NOTICE_DISMISS_EVENT, onChange)
+      window.removeEventListener('storage', onChange)
+    }
+  }, [noticeId])
   const titleId = useId()
   const closeRef = useRef<HTMLButtonElement>(null)
   const bannerRef = useRef<HTMLButtonElement>(null)
@@ -66,6 +98,7 @@ export function PortalFixNotice({ notice }: { notice: PortalFixNoticeData | null
     if (!notice) return
     dismissedPersistRef.current = true
     dismissPortalFixNotice(notice.id)
+    publishPortalFixNoticeDismissSnapshot(notice.id, true)
     window.dispatchEvent(new Event(FIX_NOTICE_DISMISS_EVENT))
     setOpen(false)
     restoreFocusAfterModal()
@@ -89,7 +122,7 @@ export function PortalFixNotice({ notice }: { notice: PortalFixNoticeData | null
     }
   }, [open, closeModal, restoreFocusAfterModal])
 
-  if (!notice || dismissed) return null
+  if (!notice || !dismissSnapshot.ready || dismissSnapshot.dismissed) return null
 
   return (
     <>
@@ -100,19 +133,19 @@ export function PortalFixNotice({ notice }: { notice: PortalFixNoticeData | null
         initial={reduceMotion ? false : { opacity: 0, y: -18 }}
         animate={{ opacity: 1, y: 0 }}
         transition={reduceMotion ? { duration: 0 } : { type: 'spring', stiffness: 420, damping: 34 }}
-        className="relative mb-4 flex w-full items-center gap-3 overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-4 py-3 text-left shadow-[0_10px_30px_-18px_rgba(0,0,0,0.45)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/50"
+        className="relative mb-4 flex w-full min-w-0 items-center gap-3 overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-4 py-3 text-left shadow-[0_10px_30px_-18px_rgba(0,0,0,0.45)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/50"
       >
         {!reduceMotion ? <BorderBeam size={70} duration={8} colorFrom="#f1d27a" colorTo="#caa24c" /> : null}
         <span className="luxor-gold-raised flex h-8 w-8 shrink-0 items-center justify-center rounded-full">
           <Check size={15} aria-hidden="true" />
         </span>
-        <span className="min-w-0 flex-1">
+        <span className="min-w-0 flex-1 overflow-hidden">
           <span className="block truncate text-xs font-semibold text-[color:var(--portal-text)] sm:text-sm">{notice.bannerLabel}</span>
           <span className="mt-0.5 block truncate text-sm font-bold text-[color:var(--portal-text)]">{notice.title}</span>
         </span>
-        <span className="hidden shrink-0 items-center gap-1 text-xs font-semibold text-[color:var(--portal-text)] sm:inline-flex">
+        <span className="inline-flex shrink-0 items-center gap-1 text-xs font-semibold text-[color:var(--portal-text)]">
           Read note
-          <ArrowRight size={14} aria-hidden="true" />
+          <ArrowRight size={14} aria-hidden="true" className="shrink-0" />
         </span>
       </motion.button>
 
