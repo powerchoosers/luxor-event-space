@@ -132,8 +132,8 @@ function ToastItem({
       >
         <X size={15} />
       </button>
-      <div className="flex gap-3">
-        <span className={`mt-0.5 shrink-0 ${style.labelClassName}`}>
+      <div className="flex items-center gap-3">
+        <span className={`shrink-0 ${toast.icon !== undefined ? '' : `mt-0.5 ${style.labelClassName}`}`}>
           {toast.icon !== undefined ? toast.icon : style.icon}
         </span>
         <div className="min-w-0 flex-1">

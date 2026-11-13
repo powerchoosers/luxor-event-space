@@ -132,7 +132,7 @@ test('carrier-confirmed live answer creates a durable unread notice and private 
     const [type, payload, options] = state.pushes[0]
     assert.equal(type, 'call')
     assert.equal(payload.title, 'Elena answered a call')
-    assert.equal(payload.body, 'Open the call to review caller details and the next step.')
+    assert.equal(payload.body, 'Open the call to review caller details')
     assert.equal(payload.url, '/portal/calls')
     assert.deepEqual(options, { userEmail: 'a.patterson@luxoratlaspalmas.com' })
     assert.ok(!JSON.stringify(payload).includes(state.row.from_number))

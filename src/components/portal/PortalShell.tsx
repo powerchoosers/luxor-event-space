@@ -51,6 +51,7 @@ import { PortalGlobalTooltip } from '@/components/portal/PortalGlobalTooltip'
 import { PortalViewportDiagnostics } from '@/components/portal/PortalViewportDiagnostics'
 import { MobileActiveCallStrip, PortalPhoneButton, PortalVoiceProvider } from '@/components/portal/PortalVoiceProvider'
 import { usePortalNotifications } from '@/hooks/usePortalNotifications'
+import { ELENA_ANSWERED_NOTIFICATION_TITLE } from '@/lib/luxorElenaInboundNotification'
 import type { EmailComposeDraft } from '@/components/portal/EmailComposeDrawer'
 import type { Tab as SettingsTabType } from '@/components/portal/PortalSettingsManager'
 import { getRecentLeads, getRecentLeadsServerSnapshot, subscribeRecentLeads, saveRecentLead, clearRecentLeads, type RecentLeadItem } from '@/lib/luxorRecentLeads'
@@ -553,24 +554,18 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
         email_delivery_issue: 'warning',
         layout_feedback: 'info',
       }
+      const elenaAnsweredCall = item.title === ELENA_ANSWERED_NOTIFICATION_TITLE
       notify({
         title: item.title,
         description: item.subtitle,
         variant: variantMap[item.type] ?? 'info',
         durationMs: 8000,
         onClick: () => router.push(item.targetUrl),
-        action: (
-          <button
-            type="button"
-            onClick={(event) => {
-              event.stopPropagation()
-              router.push(item.targetUrl)
-            }}
-            className="mt-1 text-xs font-semibold underline underline-offset-2 opacity-80 hover:opacity-100 cursor-pointer"
-          >
-            View →
-          </button>
-        ),
+        icon: elenaAnsweredCall ? (
+          <span className="relative block h-11 w-11 overflow-hidden rounded-full border border-[#caa24c]/35 ring-1 ring-[#caa24c]/15">
+            <Image src="/luxor-concierge.png" alt="" fill sizes="44px" className="object-cover" aria-hidden />
+          </span>
+        ) : undefined,
       })
     })
   }, [registerToastCallback, notify, router])

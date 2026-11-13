@@ -5,7 +5,7 @@ type CallNotificationFacts = {
 }
 
 export const ELENA_ANSWERED_NOTIFICATION_TITLE = 'Elena answered a call'
-export const ELENA_ANSWERED_NOTIFICATION_BODY = 'Open the call to review caller details and the next step.'
+export const ELENA_ANSWERED_NOTIFICATION_BODY = 'Open the call to review caller details'
 
 /** Acceptance alone is insufficient: signed carrier answer proof must also be persisted. */
 export function isElenaLiveAnsweredCall(call: CallNotificationFacts): boolean {
