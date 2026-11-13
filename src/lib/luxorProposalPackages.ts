@@ -248,6 +248,7 @@ export function packageLimitationsForPublicDisplay(
   packageId: LuxorPublicPackageTierId,
   settings: LuxorProposalPackageSettings = DEFAULT_LUXOR_PROPOSAL_PACKAGE_SETTINGS,
   rentalHours = 8,
+  showCardPricing = true,
 ): string[] {
   const option = settings.options[packageId]
   const luxorItems = packageInclusionsForDisplay(settings.options.luxor, rentalHours)
@@ -259,10 +260,14 @@ export function packageLimitationsForPublicDisplay(
     limits.push(...notIncluded.map((item) => `Not included: ${item}`))
   }
   if (option.price_tiers.length) {
-    const tierCopy = option.price_tiers
-      .map((tier) => `${tier.min_guests}–${tier.max_guests} guests: $${tier.amount.toLocaleString('en-US')}`)
-      .join('; ')
-    limits.push(`Package fee varies by guest count (${tierCopy}). Venue rental, cleaning, security, and taxes are priced separately in the proposal builder.`)
+    if (showCardPricing) {
+      const tierCopy = option.price_tiers
+        .map((tier) => `${tier.min_guests}–${tier.max_guests} guests: $${tier.amount.toLocaleString('en-US')}`)
+        .join('; ')
+      limits.push(`Package fee varies by guest count (${tierCopy}). Venue rental, cleaning, security, and taxes are priced separately in the proposal builder.`)
+    } else {
+      limits.push('Package fee varies by guest count. Venue rental, cleaning, security, and taxes are priced separately in the proposal builder.')
+    }
   } else {
     limits.push('Venue rental, cleaning, security, and taxes are priced separately in the proposal builder.')
   }

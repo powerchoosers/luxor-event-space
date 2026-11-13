@@ -6,6 +6,9 @@ import {
   packageLimitationsForPublicDisplay,
   type LuxorPublicPackageTierId,
 } from '@/lib/luxorProposalPackages'
+
+/** Set to `true` after Arianna confirms public package pricing on the website. */
+export const LUXOR_PUBLIC_PACKAGES_SHOW_CARD_PRICES = false
 export type PublicPackageCardData = {
   id: LuxorPublicPackageTierId
   displayName: string
@@ -55,7 +58,7 @@ export function buildPublicPackageCards(locale: 'en' | 'es' = 'en'): PublicPacka
       startingPrice: getLuxorPackageCatalogStartingPrice(option),
       previewInclusions: fullInclusions.slice(0, PREVIEW_INCLUSION_COUNT),
       fullInclusions,
-      limitations: packageLimitationsForPublicDisplay(id, settings, DEFAULT_RENTAL_HOURS),
+      limitations: packageLimitationsForPublicDisplay(id, settings, DEFAULT_RENTAL_HOURS, LUXOR_PUBLIC_PACKAGES_SHOW_CARD_PRICES),
       image: PACKAGE_IMAGES[id].src,
       imageAlt: PACKAGE_IMAGES[id].alt,
       mostPopular: option.most_popular_label,

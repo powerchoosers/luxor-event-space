@@ -4,7 +4,7 @@ import Image from 'next/image'
 import { useCallback, useEffect, useId, useRef, useState } from 'react'
 import { ArrowRight, Check } from '@/lib/icons/phosphor-compat'
 import { useReducedMotion } from 'framer-motion'
-import type { PublicPackageCardData } from '@/lib/luxorPublicPackages'
+import { LUXOR_PUBLIC_PACKAGES_SHOW_CARD_PRICES, type PublicPackageCardData } from '@/lib/luxorPublicPackages'
 
 type PackageFlipCardProps = {
   data: PublicPackageCardData
@@ -90,11 +90,13 @@ export function PackageFlipCard({ data, locale = 'en' }: PackageFlipCardProps) {
       <div className="flex flex-1 flex-col p-6 sm:p-7">
         <h3 className="font-serif text-4xl leading-none text-[#f7efe3]">{data.displayName}</h3>
         <p className="mt-4 text-sm leading-6 text-[#d7c29a]/72 sm:text-base">{data.shortDescription}</p>
-        <div className="mt-5">
-          <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-[#caa24c]">{t.startingAt}</p>
-          <p className="mt-1 font-serif text-4xl leading-none text-[#f1d27a]">{formatPrice(data.startingPrice)}</p>
-        </div>
-        <ul className="mt-6 grid gap-3">
+        {LUXOR_PUBLIC_PACKAGES_SHOW_CARD_PRICES ? (
+          <div className="mt-5">
+            <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-[#caa24c]">{t.startingAt}</p>
+            <p className="mt-1 font-serif text-4xl leading-none text-[#f1d27a]">{formatPrice(data.startingPrice)}</p>
+          </div>
+        ) : null}
+        <ul className={`grid gap-3 ${LUXOR_PUBLIC_PACKAGES_SHOW_CARD_PRICES ? 'mt-6' : 'mt-5'}`}>
           {data.previewInclusions.map((item) => (
             <li key={item} className="flex items-start gap-3 text-sm text-[#d7c29a]/78">
               <Check className="mt-0.5 h-4 w-4 shrink-0 text-[#caa24c]" aria-hidden />
