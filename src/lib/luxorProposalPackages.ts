@@ -235,6 +235,40 @@ export function validateLuxorProposalPackageSettings(value: unknown): string[] {
   return [...new Set(errors)]
 }
 
+/** Lowest catalog package fee across guest tiers; zero when the tier list is empty (Essentials). */
+export function getLuxorPackageCatalogStartingPrice(option: LuxorProposalPackageOption): number {
+  if (!option.price_tiers.length) return 0
+  return Math.min(...option.price_tiers.map((tier) => tier.amount))
+}
+
+export const LUXOR_PUBLIC_PACKAGE_TIER_IDS = ['essentials', 'signature', 'luxor'] as const
+export type LuxorPublicPackageTierId = typeof LUXOR_PUBLIC_PACKAGE_TIER_IDS[number]
+
+export function packageLimitationsForPublicDisplay(
+  packageId: LuxorPublicPackageTierId,
+  settings: LuxorProposalPackageSettings = DEFAULT_LUXOR_PROPOSAL_PACKAGE_SETTINGS,
+  rentalHours = 8,
+): string[] {
+  const option = settings.options[packageId]
+  const luxorItems = packageInclusionsForDisplay(settings.options.luxor, rentalHours)
+  const currentItems = new Set(packageInclusionsForDisplay(option, rentalHours).map((item) => item.trim().toLowerCase()))
+  const limits: string[] = []
+  if (option.positioning) limits.push(`${option.summary_title}: ${option.positioning}.`)
+  const notIncluded = luxorItems.filter((item) => !currentItems.has(item.trim().toLowerCase()))
+  if (packageId !== 'luxor' && notIncluded.length) {
+    limits.push(...notIncluded.map((item) => `Not included: ${item}`))
+  }
+  if (option.price_tiers.length) {
+    const tierCopy = option.price_tiers
+      .map((tier) => `${tier.min_guests}–${tier.max_guests} guests: $${tier.amount.toLocaleString('en-US')}`)
+      .join('; ')
+    limits.push(`Package fee varies by guest count (${tierCopy}). Venue rental, cleaning, security, and taxes are priced separately in the proposal builder.`)
+  } else {
+    limits.push('Venue rental, cleaning, security, and taxes are priced separately in the proposal builder.')
+  }
+  return limits
+}
+
 export function calculateLuxorProposalPackageFee(
   packageId: LuxorProposalPackageTierId,
   guestCount: number,

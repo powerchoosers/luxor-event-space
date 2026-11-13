@@ -10,6 +10,7 @@ import { PublicPhoneLink } from '@/components/PublicPhoneLink'
 
 const navLinks = [
   { label: 'Events', labelEs: 'Eventos', href: '/events' },
+  { label: 'Packages', labelEs: 'Paquetes', href: '/packages' },
   { label: 'Gallery', labelEs: 'Galería', href: '/gallery' },
   { label: 'Visit', labelEs: 'Visita', href: '/visit' },
   { label: 'Contact', labelEs: 'Contacto', href: '/contact' },
