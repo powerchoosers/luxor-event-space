@@ -77,12 +77,14 @@ export function PackageFlipCard({ data, locale = 'en' }: PackageFlipCardProps) {
   }, [])
 
   const shellClass =
-    'overflow-hidden rounded-md border border-[#caa24c]/22 bg-[#0a0807] shadow-[0_34px_90px_-62px_rgba(0,0,0,1)]'
-  const faceClass = 'overflow-hidden rounded-md bg-[#0a0807]'
+    'rounded-md border border-[#caa24c]/22 bg-[#0a0807] shadow-[0_34px_90px_-62px_rgba(0,0,0,1)]'
+  const shellClipClass = 'overflow-hidden'
+  const faceClipClass = 'h-full min-h-0 overflow-hidden rounded-md bg-[#0a0807]'
+  const backfaceClass = '[backface-visibility:hidden] [-webkit-backface-visibility:hidden]'
   const imageShellClass = 'relative min-h-52 overflow-hidden rounded-t-md'
 
   const renderFront = (options?: { hidden?: boolean }) => (
-    <div className={`flex h-full flex-col ${faceClass}`} hidden={options?.hidden}>
+    <div className="flex h-full flex-col" hidden={options?.hidden}>
       <div className={imageShellClass}>
         <Image
           src={data.image}
@@ -137,7 +139,7 @@ export function PackageFlipCard({ data, locale = 'en' }: PackageFlipCardProps) {
       role="region"
       aria-labelledby={`${faceId}-back-heading`}
       tabIndex={-1}
-      className={`flex h-full max-h-full min-h-0 flex-col ${faceClass}`}
+      className="flex h-full max-h-full min-h-0 flex-col"
       hidden={options?.hidden}
     >
       <div
@@ -162,7 +164,7 @@ export function PackageFlipCard({ data, locale = 'en' }: PackageFlipCardProps) {
           ))}
         </ul>
       </div>
-      <div className="shrink-0 overflow-hidden rounded-b-md border-t border-[#caa24c]/16 bg-[#0a0807] p-6 sm:p-7 sm:pt-5">
+      <div className="shrink-0 rounded-b-md border-t border-[#caa24c]/16 bg-[#0a0807] p-6 sm:p-7 sm:pt-5">
         <button
           ref={backControlRef}
           type="button"
@@ -179,13 +181,16 @@ export function PackageFlipCard({ data, locale = 'en' }: PackageFlipCardProps) {
     const showFront = activeFace === 'front'
     const showBack = activeFace === 'back'
     return (
-      <article className={`${shellClass} relative flex h-full min-h-[560px] flex-col`} aria-labelledby={`${faceId}-title`}>
+      <article
+        className={`${shellClass} ${shellClipClass} relative flex h-full min-h-[560px] flex-col`}
+        aria-labelledby={`${faceId}-title`}
+      >
         <span id={`${faceId}-title`} className="sr-only">
           {data.displayName} package {activeFace}
         </span>
-        <div className={`relative h-full min-h-0 w-full flex-1 overflow-hidden ${faceClass}`}>
+        <div className="relative h-full min-h-0 w-full flex-1">
           <motion.div
-            className={`relative flex h-full w-full min-h-0 flex-col ${faceClass} ${
+            className={`relative flex h-full w-full min-h-0 flex-col ${
               showBack ? 'invisible pointer-events-none' : 'pointer-events-auto'
             }`}
             aria-hidden={showBack}
@@ -194,10 +199,10 @@ export function PackageFlipCard({ data, locale = 'en' }: PackageFlipCardProps) {
             animate={{ opacity: showFront ? 1 : 0 }}
             transition={{ duration: reduceMotion ? 0 : 0.15 }}
           >
-            {renderFront()}
+            <div className={faceClipClass}>{renderFront()}</div>
           </motion.div>
           <motion.div
-            className={`absolute inset-0 flex h-full max-h-full min-h-0 flex-col ${faceClass} ${
+            className={`absolute inset-0 flex h-full max-h-full min-h-0 flex-col ${
               showFront ? 'pointer-events-none invisible' : 'pointer-events-auto z-[2]'
             }`}
             aria-hidden={showFront}
@@ -206,7 +211,7 @@ export function PackageFlipCard({ data, locale = 'en' }: PackageFlipCardProps) {
             animate={{ opacity: showBack ? 1 : 0 }}
             transition={{ duration: reduceMotion ? 0 : 0.15 }}
           >
-            {renderBack({ scrollBody: true })}
+            <div className={faceClipClass}>{renderBack({ scrollBody: true })}</div>
           </motion.div>
         </div>
       </article>
@@ -214,32 +219,35 @@ export function PackageFlipCard({ data, locale = 'en' }: PackageFlipCardProps) {
   }
 
   return (
-    <article className={`group relative flex h-full min-h-[560px] flex-col [perspective:1200px] ${shellClass}`} aria-labelledby={`${faceId}-title`}>
+    <article
+      className={`group relative flex h-full min-h-[560px] flex-col [perspective:1200px] ${shellClass}`}
+      aria-labelledby={`${faceId}-title`}
+    >
       <span id={`${faceId}-title`} className="sr-only">
         {data.displayName} package
       </span>
       <div
-        className={`relative h-full min-h-0 w-full flex-1 overflow-hidden rounded-md transition-transform duration-500 ease-in-out [transform-style:preserve-3d] ${
+        className={`relative h-full min-h-0 w-full flex-1 transition-transform duration-500 ease-in-out [transform-style:preserve-3d] ${
           flipped ? '[transform:rotateY(180deg)]' : ''
         }`}
       >
         <div
-          className={`relative flex h-full w-full min-h-0 flex-col ${faceClass} [backface-visibility:hidden] ${
+          className={`relative flex h-full w-full min-h-0 flex-col ${backfaceClass} ${
             flipped ? 'pointer-events-none' : 'pointer-events-auto z-[2]'
           }`}
           aria-hidden={flipped}
           {...(flipped ? { inert: true } : {})}
         >
-          {renderFront()}
+          <div className={faceClipClass}>{renderFront()}</div>
         </div>
         <div
-          className={`absolute inset-0 flex h-full max-h-full min-h-0 flex-col ${faceClass} [backface-visibility:hidden] [transform:rotateY(180deg)] ${
+          className={`absolute inset-0 flex h-full max-h-full min-h-0 flex-col ${backfaceClass} [transform:rotateY(180deg)] ${
             flipped ? 'pointer-events-auto z-[2]' : 'pointer-events-none'
           }`}
           aria-hidden={!flipped}
           {...(!flipped ? { inert: true } : {})}
         >
-          {renderBack({ scrollBody: true })}
+          <div className={faceClipClass}>{renderBack({ scrollBody: true })}</div>
         </div>
       </div>
     </article>
