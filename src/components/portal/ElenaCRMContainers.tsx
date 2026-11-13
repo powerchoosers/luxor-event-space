@@ -3,6 +3,7 @@ import { PortalConstellationLoader } from '@/components/portal/PortalConstellati
 import { LUXOR_MAX_GUESTS } from '@/lib/luxorInquiryTypes'
 
 import React, { useEffect, useMemo, useRef, useState } from 'react'
+import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import {
   UserCheck,
   FileSignature,
@@ -19,9 +20,21 @@ import {
   Wrench,
   FileText,
   Plus,
+  ChevronDown,
+  ChevronLeft,
+  Globe,
+  LayoutDashboard,
 } from '@/lib/icons/phosphor-compat'
-import { PortalDatePicker, PortalSelect } from './PortalUI'
+import { PortalDatePicker, PortalSelect, PORTAL_MODAL_EASE } from './PortalUI'
 import { readPortalActionResponse } from '@/lib/portalActionFetch'
+import {
+  developerSupportPagesForArea,
+  developerSupportRouteChip,
+  getDeveloperSupportPageArea,
+  labelDeveloperSupportPagePath,
+  normalizeDeveloperSupportPagePath,
+  type DeveloperSupportPageArea,
+} from '@/lib/luxorDeveloperSupportPagePaths'
 
 // --- 1. Lead Update Container ---
 export interface LeadUpdatePayload {
@@ -708,6 +721,343 @@ function DeveloperSupportAttachmentThumb({ item }: { item: DeveloperSupportAttac
   )
 }
 
+const DEVELOPER_SUPPORT_PRIORITY_LABEL: Record<'low' | 'medium' | 'high' | 'urgent', string> = {
+  low: 'Low',
+  medium: 'Medium',
+  high: 'High',
+  urgent: 'Urgent',
+}
+
+const DEVELOPER_SUPPORT_PRIORITY_CLASS: Record<'low' | 'medium' | 'high' | 'urgent', string> = {
+  low: 'border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] text-[color:var(--portal-muted)]',
+  medium: 'border-sky-500/25 bg-sky-500/10 text-sky-700 dark:text-sky-300',
+  high: 'border-[#caa24c]/35 bg-[#caa24c]/12 text-[#8c6529] dark:text-[#f1d27a]',
+  urgent: 'border-red-500/30 bg-red-500/10 text-red-700 dark:text-red-300',
+}
+
+function DeveloperSupportPagePicker({
+  value,
+  defaultPath,
+  onChange,
+  disabled = false,
+}: {
+  value: string
+  defaultPath: string
+  onChange: (path: string) => void
+  disabled?: boolean
+}) {
+  const [open, setOpen] = useState(false)
+  const [step, setStep] = useState<'area' | 'routes'>('area')
+  const [draftArea, setDraftArea] = useState<DeveloperSupportPageArea>(() => getDeveloperSupportPageArea(value))
+  const [pendingPath, setPendingPath] = useState<string | null>(null)
+  const rootRef = useRef<HTMLDivElement>(null)
+  const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const reduceMotion = useReducedMotion()
+  const area = getDeveloperSupportPageArea(value)
+  const pageLabel = labelDeveloperSupportPagePath(value)
+  const valueRouteChip = developerSupportRouteChip(value)
+
+  const resetPickerStep = () => setStep('area')
+
+  const closePopover = (immediate = false) => {
+    if (closeTimerRef.current) {
+      clearTimeout(closeTimerRef.current)
+      closeTimerRef.current = null
+    }
+    if (immediate || reduceMotion) {
+      setOpen(false)
+      resetPickerStep()
+      return
+    }
+    setOpen(false)
+  }
+
+  const selectRoute = (path: string) => {
+    setPendingPath(path)
+    onChange(path)
+    if (reduceMotion) {
+      closePopover(true)
+      setPendingPath(null)
+      return
+    }
+    closeTimerRef.current = setTimeout(() => {
+      closeTimerRef.current = null
+      closePopover()
+    }, 150)
+  }
+
+  useEffect(() => {
+    return () => {
+      if (closeTimerRef.current) clearTimeout(closeTimerRef.current)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!open) return
+    const onPointerDown = (event: PointerEvent) => {
+      if (!rootRef.current?.contains(event.target as Node)) {
+        closePopover()
+      }
+    }
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') closePopover()
+    }
+    document.addEventListener('pointerdown', onPointerDown)
+    document.addEventListener('keydown', onKeyDown)
+    return () => {
+      document.removeEventListener('pointerdown', onPointerDown)
+      document.removeEventListener('keydown', onKeyDown)
+    }
+  }, [open, reduceMotion])
+
+  const routeOptions = developerSupportPagesForArea(draftArea, defaultPath)
+  const layoutTransition = reduceMotion
+    ? { duration: 0 }
+    : { duration: 0.34, ease: PORTAL_MODAL_EASE }
+  const stepBlurTransition = reduceMotion
+    ? { duration: 0 }
+    : { duration: 0.26, ease: PORTAL_MODAL_EASE }
+  const popoverExitTransition = reduceMotion
+    ? { duration: 0 }
+    : { duration: 0.3, ease: PORTAL_MODAL_EASE }
+
+  const pickArea = (nextArea: DeveloperSupportPageArea) => {
+    setDraftArea(nextArea)
+    setStep('routes')
+  }
+
+  return (
+    <div ref={rootRef} className="relative">
+      <button
+        type="button"
+        disabled={disabled}
+        aria-expanded={open}
+        aria-haspopup="dialog"
+        onClick={() => {
+          if (disabled) return
+          if (open) {
+            closePopover()
+            return
+          }
+          setDraftArea(getDeveloperSupportPageArea(value))
+          setStep('area')
+          setOpen(true)
+        }}
+        className="flex w-full items-center justify-between gap-3 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/50 px-3 py-2.5 text-left transition-colors hover:border-[#caa24c]/35 hover:bg-[color:var(--portal-soft)] disabled:opacity-50"
+      >
+        <span className="min-w-0 flex-1">
+          <span className="block text-[10px] font-bold uppercase tracking-[0.14em] text-[color:var(--portal-muted)]">
+            Applies to · {area === 'portal' ? 'Portal' : 'Public site'}
+          </span>
+          <span className="mt-0.5 flex min-w-0 items-baseline gap-2">
+            <span className="min-w-0 truncate text-xs font-semibold text-[color:var(--portal-text)]">{pageLabel}</span>
+            {valueRouteChip ? (
+              <span className="shrink-0 font-mono text-[10px] text-[color:var(--portal-muted)]">{valueRouteChip}</span>
+            ) : null}
+          </span>
+        </span>
+        <ChevronDown size={16} className={`shrink-0 text-[color:var(--portal-muted)] transition-transform duration-200 ${open ? 'rotate-180' : ''}`} aria-hidden="true" />
+      </button>
+      <AnimatePresence
+        initial={false}
+        onExitComplete={() => {
+          if (!open) {
+            setPendingPath(null)
+            resetPickerStep()
+          }
+        }}
+      >
+        {open ? (
+          <motion.div
+            layout
+            role="dialog"
+            aria-label="Choose page for this ticket"
+            initial={{ opacity: 0, y: reduceMotion ? 0 : -6, scale: reduceMotion ? 1 : 0.98, filter: reduceMotion ? 'blur(0px)' : 'blur(6px)' }}
+            animate={{ opacity: 1, y: 0, scale: 1, filter: 'blur(0px)' }}
+            exit={{ opacity: 0, y: reduceMotion ? 0 : 10, scale: reduceMotion ? 1 : 0.97, filter: reduceMotion ? 'blur(0px)' : 'blur(10px)' }}
+            transition={{
+              opacity: popoverExitTransition,
+              y: popoverExitTransition,
+              scale: popoverExitTransition,
+              filter: popoverExitTransition,
+              layout: layoutTransition,
+            }}
+            className="absolute left-0 right-0 top-[calc(100%+0.35rem)] z-50 overflow-hidden rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)]/95 shadow-2xl backdrop-blur-2xl"
+          >
+            <motion.div layout="position" className="flex h-9 shrink-0 items-center border-b border-[color:var(--portal-border)] px-3">
+              <AnimatePresence mode="wait" initial={false}>
+                {step === 'routes' ? (
+                  <motion.button
+                    key="routes-header"
+                    type="button"
+                    initial={{ opacity: 0, filter: reduceMotion ? 'blur(0px)' : 'blur(4px)' }}
+                    animate={{ opacity: 1, filter: 'blur(0px)' }}
+                    exit={{ opacity: 0, filter: reduceMotion ? 'blur(0px)' : 'blur(4px)' }}
+                    transition={stepBlurTransition}
+                    onClick={() => setStep('area')}
+                    className="inline-flex h-7 items-center gap-1 rounded-md px-1 text-[11px] font-semibold leading-none text-[color:var(--portal-text)] hover:bg-[color:var(--portal-soft)]"
+                  >
+                    <ChevronLeft size={14} aria-hidden="true" />
+                    Back
+                  </motion.button>
+                ) : (
+                  <motion.p
+                    key="area-header"
+                    initial={{ opacity: 0, filter: reduceMotion ? 'blur(0px)' : 'blur(4px)' }}
+                    animate={{ opacity: 1, filter: 'blur(0px)' }}
+                    exit={{ opacity: 0, filter: reduceMotion ? 'blur(0px)' : 'blur(4px)' }}
+                    transition={stepBlurTransition}
+                    className="text-[11px] font-semibold leading-none text-[color:var(--portal-text)]"
+                  >
+                    Choose area
+                  </motion.p>
+                )}
+              </AnimatePresence>
+            </motion.div>
+            <motion.div
+              layout
+              transition={{ layout: layoutTransition }}
+              className={`overflow-hidden p-2 ${step === 'routes' ? 'max-h-56 overflow-y-auto overscroll-contain portal-scrollbar' : ''}`}
+            >
+              <AnimatePresence mode="popLayout" initial={false}>
+                {step === 'area' ? (
+                  <motion.div
+                    key="area-step"
+                    layout
+                    initial={{ opacity: 0, filter: reduceMotion ? 'blur(0px)' : 'blur(10px)' }}
+                    animate={{ opacity: 1, filter: 'blur(0px)' }}
+                    exit={{ opacity: 0, filter: reduceMotion ? 'blur(0px)' : 'blur(8px)' }}
+                    transition={{ ...stepBlurTransition, layout: layoutTransition }}
+                    className="space-y-2"
+                  >
+                    <button
+                      type="button"
+                      onClick={() => pickArea('portal')}
+                      className="flex w-full items-start gap-3 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-bg)]/60 p-3 text-left transition-[border-color,background-color,box-shadow] duration-200 hover:border-[#caa24c]/35 hover:bg-[#caa24c]/8 active:scale-[0.99]"
+                    >
+                      <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-[#caa24c]/25 bg-[#caa24c]/10 text-[#a8792f] dark:text-[#f1d27a]">
+                        <LayoutDashboard size={16} aria-hidden="true" />
+                      </span>
+                      <span>
+                        <span className="block text-xs font-semibold text-[color:var(--portal-text)]">Owner portal</span>
+                        <span className="mt-0.5 block text-[10px] leading-snug text-[color:var(--portal-muted)]">CRM, calendar, and settings</span>
+                      </span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => pickArea('public')}
+                      className="flex w-full items-start gap-3 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-bg)]/60 p-3 text-left transition-[border-color,background-color,box-shadow] duration-200 hover:border-[#caa24c]/35 hover:bg-[#caa24c]/8 active:scale-[0.99]"
+                    >
+                      <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-sky-500/25 bg-sky-500/10 text-sky-700 dark:text-sky-300">
+                        <Globe size={16} aria-hidden="true" />
+                      </span>
+                      <span>
+                        <span className="block text-xs font-semibold text-[color:var(--portal-text)]">Public website</span>
+                        <span className="mt-0.5 block text-[10px] leading-snug text-[color:var(--portal-muted)]">Guest marketing pages</span>
+                      </span>
+                    </button>
+                  </motion.div>
+                ) : (
+                  <motion.ul
+                    key={`routes-${draftArea}`}
+                    layout
+                    initial={{ opacity: 0, filter: reduceMotion ? 'blur(0px)' : 'blur(10px)' }}
+                    animate={{ opacity: 1, filter: 'blur(0px)' }}
+                    exit={{ opacity: 0, filter: reduceMotion ? 'blur(0px)' : 'blur(8px)' }}
+                    transition={{ ...stepBlurTransition, layout: layoutTransition }}
+                    className="space-y-1"
+                  >
+                    {routeOptions.map((option) => {
+                      const selected = value === option.path || pendingPath === option.path
+                      const routeChip = developerSupportRouteChip(option.path)
+                      return (
+                        <li key={option.path}>
+                          <button
+                            type="button"
+                            onClick={() => selectRoute(option.path)}
+                            className={`flex w-full flex-col items-stretch rounded-lg border px-3 py-2 text-left transition-colors ${selected ? 'border-[#caa24c]/50 bg-[#caa24c]/10' : 'border-transparent hover:border-[color:var(--portal-border)] hover:bg-[color:var(--portal-soft)]'}`}
+                          >
+                            <span className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                              <span className="text-xs font-semibold text-[color:var(--portal-text)]">{option.label}</span>
+                              {routeChip ? (
+                                <span className="font-mono text-[10px] text-[color:var(--portal-muted)]">{routeChip}</span>
+                              ) : null}
+                            </span>
+                            {option.description ? <span className="mt-0.5 text-[10px] text-[color:var(--portal-muted)]">{option.description}</span> : null}
+                          </button>
+                        </li>
+                      )
+                    })}
+                  </motion.ul>
+                )}
+              </AnimatePresence>
+            </motion.div>
+          </motion.div>
+        ) : null}
+      </AnimatePresence>
+    </div>
+  )
+}
+
+function DeveloperSupportTicketReview({
+  reporterName,
+  title,
+  description,
+  priority,
+  pagePath,
+  summaryForScreenReaders,
+}: {
+  reporterName: string
+  title: string
+  description: string
+  priority: 'low' | 'medium' | 'high' | 'urgent'
+  pagePath: string | null
+  summaryForScreenReaders: string
+}) {
+  return (
+    <div className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/40 p-3.5">
+      <p className="sr-only">{summaryForScreenReaders}</p>
+      <dl className="space-y-3 text-xs">
+        <div>
+          <dt className="text-[10px] font-bold uppercase tracking-[0.14em] text-[color:var(--portal-muted)]">Sending as</dt>
+          <dd className="mt-1 font-semibold text-[color:var(--portal-text)]">{reporterName}</dd>
+        </div>
+        <div>
+          <dt className="text-[10px] font-bold uppercase tracking-[0.14em] text-[color:var(--portal-muted)]">Title</dt>
+          <dd className="mt-1 font-semibold leading-snug text-[color:var(--portal-text)]">{title}</dd>
+        </div>
+        <div className="flex flex-wrap items-start gap-4">
+          <div>
+            <dt className="text-[10px] font-bold uppercase tracking-[0.14em] text-[color:var(--portal-muted)]">Priority</dt>
+            <dd className="mt-1.5">
+              <span className={`inline-flex rounded-md border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${DEVELOPER_SUPPORT_PRIORITY_CLASS[priority]}`}>
+                {DEVELOPER_SUPPORT_PRIORITY_LABEL[priority]}
+              </span>
+            </dd>
+          </div>
+          <div className="min-w-0 flex-1">
+            <dt className="text-[10px] font-bold uppercase tracking-[0.14em] text-[color:var(--portal-muted)]">Page</dt>
+            <dd className="mt-1">
+              <span className="text-[10px] font-semibold text-[color:var(--portal-muted)]">{getDeveloperSupportPageArea(pagePath) === 'portal' ? 'Portal' : 'Public site'} · </span>
+              <span className="font-semibold text-[color:var(--portal-text)]">{labelDeveloperSupportPagePath(pagePath || '/portal')}</span>
+              <span className="mt-0.5 block break-all font-mono text-[10px] text-[color:var(--portal-muted)]">{pagePath || '/portal'}</span>
+            </dd>
+          </div>
+        </div>
+        <div>
+          <dt className="text-[10px] font-bold uppercase tracking-[0.14em] text-[color:var(--portal-muted)]">Details</dt>
+          <dd className="mt-1.5 max-h-44 overflow-y-auto overscroll-contain rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-2.5 text-[11px] leading-relaxed text-[color:var(--portal-text)] whitespace-pre-wrap break-words portal-scrollbar">
+            {description.trim() || 'No extra details provided.'}
+          </dd>
+        </div>
+      </dl>
+      <p className="mt-3 border-t border-[color:var(--portal-border)]/70 pt-3 text-[10px] leading-snug text-[color:var(--portal-muted)]">
+        Lewis gets a Cursor automation to investigate and fix the portal.
+      </p>
+    </div>
+  )
+}
+
 function DeveloperSupportAttachmentList({
   items,
   selectedKeys,
@@ -899,8 +1249,9 @@ export function ElenaDeveloperSupportCard({
 }) {
   const [title, setTitle] = useState(payload.title || '')
   const [description, setDescription] = useState(payload.description || '')
+  const [ticketPagePath, setTicketPagePath] = useState(() => normalizeDeveloperSupportPagePath(payload.pagePath))
   const [priority, setPriority] = useState<'low' | 'medium' | 'high' | 'urgent'>(payload.priority || 'medium')
-  const [confirmation, setConfirmation] = useState<{ token: string; expiresAt: string; summary: string } | null>(null)
+  const [confirmation, setConfirmation] = useState<{ token: string; expiresAt: string; summary: string; reporterName: string } | null>(null)
   const [isSaving, setIsSaving] = useState(false)
   const [isSent, setIsSent] = useState(false)
   const [uncertain, setUncertain] = useState(false)
@@ -912,7 +1263,9 @@ export function ElenaDeveloperSupportCard({
     ...candidatesFromSavedAttachments(payload.savedAttachments, chatId).map((item) => item.key),
   ]))
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const detailsRef = useRef<HTMLTextAreaElement>(null)
   const seenChatKeysRef = useRef<Set<string>>(new Set())
+  const [, bumpDetailsLayout] = useState(0)
 
   const attachmentOptions = useMemo(() => {
     const map = new Map<string, DeveloperSupportAttachmentCandidate>()
@@ -1055,41 +1408,76 @@ export function ElenaDeveloperSupportCard({
 
   const selectedAttachments = attachmentOptions.filter((item) => selectedAttachmentKeys.has(item.key))
 
+  const reduceMotion = useReducedMotion()
+  const layoutEase = PORTAL_MODAL_EASE
+  const layoutDuration = reduceMotion ? 0 : 0.38
+  const contentDuration = reduceMotion ? 0 : 0.3
+  const supportCardPhase = isSent ? 'sent' : uncertain ? 'uncertain' : confirmation ? 'review' : 'compose'
+
+  useEffect(() => {
+    const el = detailsRef.current
+    if (!el || supportCardPhase !== 'compose') return
+    const observer = new ResizeObserver(() => bumpDetailsLayout((value) => value + 1))
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [supportCardPhase])
+
+  const issuePrepareRequest = async (): Promise<boolean> => {
+    const attachments = await resolveDeveloperSupportAttachmentsForPrepare(chatId, selectedAttachments)
+    const trimmedDescription = description.trim()
+    const response = await fetch('/api/portal/elena-chat/actions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'PREPARE_DEVELOPER_SUPPORT',
+        ticket: {
+          title: title.trim(),
+          description: trimmedDescription || null,
+          priority,
+          pagePath: ticketPagePath || null,
+          attachments,
+        },
+      }),
+    })
+    const data = await readPortalActionResponse(response)
+    const nextConfirmation = data.confirmation as Record<string, unknown> | undefined
+    if (
+      !response.ok
+      || typeof nextConfirmation?.token !== 'string'
+      || typeof nextConfirmation?.expiresAt !== 'string'
+      || typeof nextConfirmation?.summary !== 'string'
+    ) {
+      throw new Error(typeof data.error === 'string' ? data.error : 'The support ticket could not be prepared. Please try again.')
+    }
+    const reporterName = typeof nextConfirmation.reporterName === 'string'
+      ? nextConfirmation.reporterName
+      : (nextConfirmation.summary.match(/^Send developer support ticket as (.+)$/m)?.[1]?.replace(/^"|"$/g, '') || 'Luxor owner')
+    setConfirmation({
+      token: nextConfirmation.token,
+      expiresAt: nextConfirmation.expiresAt,
+      summary: nextConfirmation.summary,
+      reporterName,
+    })
+    return true
+  }
+
+  const refreshConfirmationAfterExpiry = async (): Promise<boolean> => {
+    setConfirmation(null)
+    try {
+      await issuePrepareRequest()
+      return true
+    } catch (refreshError) {
+      setError(refreshError instanceof Error ? refreshError.message : 'The review could not be refreshed. Tap Review ticket to try again.')
+      return false
+    }
+  }
+
   const prepareTicket = async () => {
     if (!title.trim() || isSaving || isSent || uncertain) return
     setIsSaving(true)
     setError(null)
     try {
-      const attachments = await resolveDeveloperSupportAttachmentsForPrepare(chatId, selectedAttachments)
-      const response = await fetch('/api/portal/elena-chat/actions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'PREPARE_DEVELOPER_SUPPORT',
-          ticket: {
-            title: title.trim(),
-            description: description.trim(),
-            priority,
-            pagePath: payload.pagePath || null,
-            attachments,
-          },
-        }),
-      })
-      const data = await readPortalActionResponse(response)
-      const confirmation = data.confirmation as Record<string, unknown> | undefined
-      if (
-        !response.ok
-        || typeof confirmation?.token !== 'string'
-        || typeof confirmation?.expiresAt !== 'string'
-        || typeof confirmation?.summary !== 'string'
-      ) {
-        throw new Error(typeof data.error === 'string' ? data.error : 'The support ticket could not be prepared. Please try again.')
-      }
-      setConfirmation({
-        token: confirmation.token,
-        expiresAt: confirmation.expiresAt,
-        summary: confirmation.summary,
-      })
+      await issuePrepareRequest()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'The support ticket could not be prepared. Please try again.')
     } finally {
@@ -1108,102 +1496,180 @@ export function ElenaDeveloperSupportCard({
         body: JSON.stringify({ action: 'CONFIRM_DEVELOPER_SUPPORT', token: confirmation.token }),
       })
       const data = await readPortalActionResponse(response)
-      if (!response.ok || data.success !== true) throw new Error(typeof data.error === 'string' ? data.error : 'Unverified result')
+      const expired = response.status === 410 || data.code === 'confirmation_expired'
+      if (!response.ok || data.success !== true) {
+        if (expired) {
+          const refreshed = await refreshConfirmationAfterExpiry()
+          if (refreshed) {
+            setError(null)
+            return
+          }
+        }
+        throw new Error(typeof data.error === 'string' ? data.error : 'Unverified result')
+      }
       setConfirmation(null)
       setIsSent(true)
       onSuccess?.('Support ticket sent to Braxton. The cloud worker will pick it up.')
     } catch (err) {
+      const message = err instanceof Error ? err.message : 'The ticket may or may not have been sent. Ask before sending another copy.'
+      const expired = /expired|confirmation unavailable/i.test(message)
+      if (expired) {
+        const refreshed = await refreshConfirmationAfterExpiry()
+        if (refreshed) {
+          setError(null)
+          return
+        }
+        setUncertain(false)
+        setError('This confirmation expired. We could not refresh it automatically. Tap Review ticket to try again.')
+        return
+      }
       setConfirmation(null)
       setUncertain(true)
-      setError(err instanceof Error ? err.message : 'The ticket may or may not have been sent. Ask before sending another copy.')
+      setError(message)
     } finally {
       setIsSaving(false)
     }
   }
 
   return (
-    <div className="mt-3 w-full overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)]">
-      <div className="flex items-center gap-2 border-b border-[color:var(--portal-border)] px-4 py-3">
+    <motion.div
+      layout
+      transition={{ layout: { duration: layoutDuration, ease: layoutEase } }}
+      className="mt-3 w-full overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)]"
+    >
+      <motion.div layout="position" className="flex items-center gap-2 border-b border-[color:var(--portal-border)] px-4 py-3">
         <Wrench size={16} className="text-[#a8792f] dark:text-[#f1d27a]" aria-hidden="true" />
         <div>
           <h4 className="font-sans text-sm font-bold text-[color:var(--portal-text)]">Developer support</h4>
           <p className="text-[10px] text-[color:var(--portal-muted)]">Sends a fix to Braxton in the cloud</p>
         </div>
-      </div>
-      <div className="space-y-3 p-4">
-        {confirmation ? (
-          <div aria-live="polite" className="space-y-3">
-            <p className="text-xs font-semibold text-[color:var(--portal-text)]">Review before sending</p>
-            <p className="whitespace-pre-wrap break-words text-xs leading-relaxed text-[color:var(--portal-text)]">{confirmation.summary}</p>
-            {selectedAttachments.length > 0 ? (
-              <DeveloperSupportAttachmentList items={selectedAttachments} reviewOnly />
-            ) : (
-              <p className="text-[10px] leading-snug text-[color:var(--portal-muted)]">No files are attached to this ticket.</p>
-            )}
-            <p className="text-xs text-[color:var(--portal-muted)]">This confirmation expires shortly.</p>
-          </div>
-        ) : !isSent && !uncertain ? (
-          <>
-            {payload.pagePath ? (
-              <p className="text-xs text-[color:var(--portal-muted)]">
-                From page: <span className="font-mono text-[color:var(--portal-text)]">{payload.pagePath}</span>
-              </p>
-            ) : null}
-            <label className="block text-xs font-semibold text-[color:var(--portal-text)]">
-              What needs fixing?
-              <input
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                disabled={isSaving}
-                className="mt-1 w-full rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-bg)] px-3 py-2 text-xs text-[color:var(--portal-text)] outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/50 disabled:opacity-60"
-              />
-            </label>
-            <div>
-              <span className="mb-1 block text-xs font-semibold text-[color:var(--portal-text)]">Priority</span>
-              <PortalSelect
-                value={priority}
-                onChange={(value) => setPriority(value as 'low' | 'medium' | 'high' | 'urgent')}
-                disabled={isSaving}
-                className="w-full"
-                buttonClassName="!h-9 !rounded-lg !text-left !text-xs"
-                options={[
-                  { value: 'low', label: 'Low' },
-                  { value: 'medium', label: 'Medium' },
-                  { value: 'high', label: 'High' },
-                  { value: 'urgent', label: 'Urgent' },
-                ]}
-              />
-            </div>
-            <label className="block text-xs font-semibold text-[color:var(--portal-text)]">
-              Extra details
-              <textarea
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                rows={3}
-                disabled={isSaving}
-                placeholder="What happened? What did you expect?"
-                className="mt-1 w-full resize-y rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-bg)] p-2.5 text-xs text-[color:var(--portal-text)] outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/50 disabled:opacity-60"
-              />
-            </label>
-            <div className="space-y-2">
-              {attachmentOptions.length > 0 ? (
-                <DeveloperSupportAttachmentList
-                  items={attachmentOptions}
-                  selectedKeys={selectedAttachmentKeys}
-                  disabled={isSaving}
-                  onToggle={toggleAttachment}
-                />
+      </motion.div>
+      <motion.div layout className="space-y-3 p-4">
+        <AnimatePresence mode="popLayout" initial={false}>
+          {(supportCardPhase === 'review' || supportCardPhase === 'compose') ? (
+            <motion.div
+              key={supportCardPhase}
+              layout
+              aria-live="polite"
+              initial={{ opacity: 0, y: reduceMotion ? 0 : 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: reduceMotion ? 0 : -8 }}
+              transition={{ duration: contentDuration, ease: layoutEase, layout: { duration: layoutDuration, ease: layoutEase } }}
+              className="space-y-3"
+            >
+              {supportCardPhase === 'review' && confirmation ? (
+                <>
+                  <motion.div layout="position" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: contentDuration, delay: reduceMotion ? 0 : 0.04 }}>
+                    <p className="text-xs font-semibold text-[color:var(--portal-text)]">Review before sending</p>
+                    <p className="mt-0.5 text-[10px] leading-snug text-[color:var(--portal-muted)]">Confirm the summary below, then send to the developer.</p>
+                  </motion.div>
+                  <motion.div layout transition={{ layout: { duration: layoutDuration, ease: layoutEase } }}>
+                    <DeveloperSupportTicketReview
+                      reporterName={confirmation.reporterName}
+                      title={title.trim()}
+                      description={description}
+                      priority={priority}
+                      pagePath={ticketPagePath || null}
+                      summaryForScreenReaders={confirmation.summary}
+                    />
+                  </motion.div>
+                  <motion.div layout transition={{ layout: { duration: layoutDuration, ease: layoutEase } }}>
+                    {selectedAttachments.length > 0 ? (
+                      <DeveloperSupportAttachmentList items={selectedAttachments} reviewOnly />
+                    ) : (
+                      <p className="text-[10px] leading-snug text-[color:var(--portal-muted)]">No files are attached to this ticket.</p>
+                    )}
+                  </motion.div>
+                  <p className="text-[10px] text-[color:var(--portal-muted)]">This confirmation expires shortly.</p>
+                </>
               ) : (
-                <p className="text-[10px] leading-snug text-[color:var(--portal-muted)]">
-                  Add a screenshot or PDF so Braxton can see the issue.
-                </p>
+                <>
+                  <motion.div layout transition={{ layout: { duration: layoutDuration, ease: layoutEase } }}>
+                    <DeveloperSupportPagePicker
+                      value={ticketPagePath}
+                      defaultPath={normalizeDeveloperSupportPagePath(payload.pagePath)}
+                      onChange={setTicketPagePath}
+                      disabled={isSaving}
+                    />
+                  </motion.div>
+                  <label className="block text-xs font-semibold text-[color:var(--portal-text)]">
+                    What needs fixing?
+                    <input
+                      value={title}
+                      onChange={(e) => setTitle(e.target.value)}
+                      disabled={isSaving}
+                      className="mt-1 min-h-11 w-full rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-bg)] px-3.5 py-2 text-xs text-[color:var(--portal-text)] outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/50 disabled:opacity-60 sm:min-h-9"
+                    />
+                  </label>
+                  <div>
+                    <span className="mb-1 block text-xs font-semibold text-[color:var(--portal-text)]">Priority</span>
+                    <PortalSelect
+                      value={priority}
+                      onChange={(value) => setPriority(value as 'low' | 'medium' | 'high' | 'urgent')}
+                      disabled={isSaving}
+                      className="w-full"
+                      buttonClassName="!h-9 !rounded-lg !text-left !text-xs"
+                      options={[
+                        { value: 'low', label: 'Low' },
+                        { value: 'medium', label: 'Medium' },
+                        { value: 'high', label: 'High' },
+                        { value: 'urgent', label: 'Urgent' },
+                      ]}
+                    />
+                  </div>
+                  <motion.label
+                    layout
+                    transition={{ layout: { duration: layoutDuration, ease: layoutEase } }}
+                    className="block text-xs font-semibold text-[color:var(--portal-text)]"
+                  >
+                    Extra details
+                    <textarea
+                      ref={detailsRef}
+                      value={description}
+                      onChange={(e) => setDescription(e.target.value)}
+                      rows={3}
+                      disabled={isSaving}
+                      placeholder="What happened? What did you expect?"
+                      className="mt-1 w-full resize-y rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-bg)] p-2.5 text-xs text-[color:var(--portal-text)] outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/50 disabled:opacity-60"
+                    />
+                  </motion.label>
+                  <motion.div layout transition={{ layout: { duration: layoutDuration, ease: layoutEase } }} className="space-y-2">
+                    {attachmentOptions.length > 0 ? (
+                      <DeveloperSupportAttachmentList
+                        items={attachmentOptions}
+                        selectedKeys={selectedAttachmentKeys}
+                        disabled={isSaving}
+                        onToggle={toggleAttachment}
+                      />
+                    ) : (
+                      <p className="text-[10px] leading-snug text-[color:var(--portal-muted)]">
+                        Add a screenshot or PDF so Braxton can see the issue.
+                      </p>
+                    )}
+                    {attachmentNotice ? <p role="status" className="text-[10px] leading-snug text-[color:var(--portal-muted)]">{attachmentNotice}</p> : null}
+                  </motion.div>
+                </>
               )}
-              {attachmentNotice ? <p role="status" className="text-[10px] leading-snug text-[color:var(--portal-muted)]">{attachmentNotice}</p> : null}
-            </div>
-          </>
-        ) : null}
-        {error && <p role="alert" className="text-xs text-red-600 dark:text-red-400">{error}</p>}
-        <div className="flex items-stretch justify-end gap-2">
+            </motion.div>
+          ) : null}
+        </AnimatePresence>
+        <AnimatePresence initial={false}>
+          {error ? (
+            <motion.p
+              key="dev-support-error"
+              role="alert"
+              layout
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              exit={{ opacity: 0, height: 0 }}
+              transition={{ duration: reduceMotion ? 0 : 0.22, ease: layoutEase, layout: { duration: layoutDuration, ease: layoutEase } }}
+              className="overflow-hidden text-xs text-red-600 dark:text-red-400"
+            >
+              {error}
+            </motion.p>
+          ) : null}
+        </AnimatePresence>
+        <motion.div layout="position" transition={{ layout: { duration: layoutDuration, ease: layoutEase } }} className="flex items-stretch justify-end gap-2">
           <input
             ref={fileInputRef}
             type="file"
@@ -1216,40 +1682,79 @@ export function ElenaDeveloperSupportCard({
               event.target.value = ''
             }}
           />
-          {confirmation && !uncertain ? (
-            <button type="button" onClick={() => setConfirmation(null)} disabled={isSaving} className="rounded-lg border border-[color:var(--portal-border)] px-3 py-2 text-xs font-semibold text-[color:var(--portal-text)] disabled:opacity-50">
-              Edit
-            </button>
-          ) : null}
-          {!confirmation && !isSent && !uncertain ? (
-            <button
-              type="button"
-              disabled={isSaving || attachmentOptions.length >= 5}
-              onClick={() => fileInputRef.current?.click()}
-              className="inline-flex min-h-10 items-center gap-2 self-stretch rounded-lg border-0 bg-[color:var(--portal-soft)] px-4 text-xs font-semibold text-[color:var(--portal-text)] hover:bg-[color:var(--portal-border)]/40 disabled:opacity-50"
-            >
-              <Plus size={14} aria-hidden="true" />
-              Add screenshot or PDF
-            </button>
-          ) : null}
-          {!isSent && !uncertain ? (
-            <button
-              type="button"
-              onClick={confirmation ? confirmTicket : prepareTicket}
-              disabled={isSaving || !title.trim()}
-              className="luxor-gold-raised inline-flex min-h-10 items-center gap-2 rounded-lg px-4 py-2 text-xs font-bold !text-white disabled:opacity-50"
-            >
-              {isSaving && <PortalConstellationLoader size={13} tone="white" />}
-              {confirmation ? 'Send to developer' : 'Review ticket'}
-            </button>
-          ) : null}
-          {isSent ? (
-            <span className="inline-flex items-center gap-1 text-xs font-semibold text-green-700 dark:text-green-400">
-              <Check size={13} /> Ticket sent
-            </span>
-          ) : null}
-        </div>
-      </div>
-    </div>
+          <AnimatePresence mode="popLayout" initial={false}>
+            {confirmation && !uncertain ? (
+              <motion.button
+                key="edit-ticket"
+                type="button"
+                layout
+                initial={{ opacity: 0, scale: reduceMotion ? 1 : 0.96 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: reduceMotion ? 1 : 0.96 }}
+                transition={{ duration: reduceMotion ? 0 : 0.2, ease: layoutEase, layout: { duration: layoutDuration, ease: layoutEase } }}
+                onClick={() => setConfirmation(null)}
+                disabled={isSaving}
+                className="rounded-lg border border-[color:var(--portal-border)] px-3 py-2 text-xs font-semibold text-[color:var(--portal-text)] disabled:opacity-50"
+              >
+                Edit
+              </motion.button>
+            ) : null}
+            {!confirmation && !isSent && !uncertain ? (
+              <motion.button
+                key="add-attachment"
+                type="button"
+                layout
+                initial={{ opacity: 0, scale: reduceMotion ? 1 : 0.96 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: reduceMotion ? 1 : 0.96 }}
+                transition={{ duration: reduceMotion ? 0 : 0.2, ease: layoutEase, layout: { duration: layoutDuration, ease: layoutEase } }}
+                disabled={isSaving || attachmentOptions.length >= 5}
+                onClick={() => fileInputRef.current?.click()}
+                className="inline-flex min-h-10 items-center gap-2 self-stretch rounded-lg border-0 bg-[color:var(--portal-soft)] px-4 text-xs font-semibold text-[color:var(--portal-text)] hover:bg-[color:var(--portal-border)]/40 disabled:opacity-50"
+              >
+                <Plus size={14} aria-hidden="true" />
+                Add screenshot or PDF
+              </motion.button>
+            ) : null}
+            {!isSent && !uncertain ? (
+              <motion.button
+                key={confirmation ? 'send-ticket' : 'review-ticket'}
+                type="button"
+                layout
+                initial={{ opacity: 0, y: reduceMotion ? 0 : 4 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: reduceMotion ? 0 : -4 }}
+                transition={{ duration: reduceMotion ? 0 : 0.24, ease: layoutEase, layout: { duration: layoutDuration, ease: layoutEase } }}
+                onClick={confirmation ? confirmTicket : prepareTicket}
+                disabled={isSaving || !title.trim()}
+                className="luxor-gold-raised inline-flex min-h-10 items-center gap-2 rounded-lg px-4 py-2 text-xs font-bold !text-white disabled:opacity-50"
+              >
+                {isSaving && <PortalConstellationLoader size={13} tone="white" />}
+                <motion.span
+                  key={confirmation ? 'send-label' : 'review-label'}
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  transition={{ duration: reduceMotion ? 0 : 0.18 }}
+                >
+                  {confirmation ? 'Send to developer' : 'Review ticket'}
+                </motion.span>
+              </motion.button>
+            ) : null}
+            {isSent ? (
+              <motion.span
+                key="sent"
+                layout
+                initial={{ opacity: 0, scale: reduceMotion ? 1 : 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ duration: reduceMotion ? 0 : 0.28, ease: layoutEase, layout: { duration: layoutDuration, ease: layoutEase } }}
+                className="inline-flex items-center gap-1 text-xs font-semibold text-green-700 dark:text-green-400"
+              >
+                <Check size={13} /> Ticket sent
+              </motion.span>
+            ) : null}
+          </AnimatePresence>
+        </motion.div>
+      </motion.div>
+    </motion.div>
   )
 }

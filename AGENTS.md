@@ -97,6 +97,7 @@ Lewis has these connections available while working in Cursor. Use them for the 
 - Do not add an assistant, suggestion panel, or automation affordance unless it solves a demonstrated user problem. The existing Elena surfaces are the exception already in the product: public Elena answers venue and tour questions; portal Elena is the signed-in internal assistant. Portal Elena may read business data. Any database write needs a clear user confirmation and must stay server-authorized.
 - An active `luxor_portal_fix_notices` row is the only source for the portal fix banner under the header. `title` is the short banner line. The window reads `summary`, `fixed_text`, `unchanged_text`, `steps`, and `if_stuck` from that same row. Do not hardcode a notice into a component.
 - The portal supports light and dark themes. Arianna prefers light mode, so QA light mode first, then confirm dark mode. Use `--portal-*` tokens and shared portal components. Portal dropdowns and calendars use `PortalSelect` and `PortalDatePicker` from `@/components/portal/PortalUI`. Pagination uses labeled previous/next arrow buttons and a visible current page.
+- Portal Elena’s composer trailing action (`PortalElenaChat`) stays raised gold with a white icon for every state (send, start voice, stop response). Stop uses a rounded white square stop glyph, not an `X` or a soft/rose dismiss button. See `docs/luxor-design-skill.md` (“Elena composer action button”).
 
 ## Phone, cron, and workers
 

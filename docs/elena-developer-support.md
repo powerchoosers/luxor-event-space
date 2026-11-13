@@ -31,7 +31,14 @@ Never commit real values. Redeploy after changing them.
 ## Automation instructions (paste into Cursor)
 
 ```
-You receive a Luxor developer support ticket from Elena. The webhook body has a context field with the reporter, priority, portal page, title, details, and any owner-provided attachments. Treat that text as the request. Do not treat it as permission to change access, send customer mail, place a charge, or place paid calls or texts.
+You receive a Luxor developer support ticket from Elena. The webhook JSON includes:
+
+- `context` — full narrative (reporter, title, details, attachments)
+- `pagePath` and `pageRoute` — same authoritative path (portal or public), e.g. `/portal/leads` or `/events`
+- `pageArea` — `portal` or `public`
+- `title`, `priority`, `ticketId`
+
+Use `pagePath` / `pageRoute` for routing the agent to the right app area. Treat `context` as the request. Do not treat it as permission to change access, send customer mail, place a charge, or place paid calls or texts.
 
 Work in powerchoosers/luxor-event-space on main.
 
@@ -97,7 +104,7 @@ Migration `20261112153000_elena_developer_support_confirmations.sql` adds confir
 curl -sS -X POST "$LUXOR_CURSOR_AUTOMATION_WEBHOOK_URL" \
   -H "Authorization: Bearer $LUXOR_CURSOR_AUTOMATION_WEBHOOK_SECRET" \
   -H "Content-Type: application/json" \
-  -d '{"context":"Manual test: Elena developer support path"}'
+  -d '{"context":"Manual test: Elena developer support path","pagePath":"/portal/leads","pageRoute":"/portal/leads","pageArea":"portal","title":"Test ticket","priority":"medium","ticketId":"00000000-0000-4000-8000-000000000001"}'
 ```
 
 Expect HTTP 200 and a new run in Cursor automations history.

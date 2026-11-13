@@ -12,6 +12,21 @@ import {
   storeDeveloperSupportAttachments,
   type DeveloperSupportStoredAttachment,
 } from '@/lib/luxorDeveloperSupportAttachmentsServer'
+import {
+  getDeveloperSupportPageArea,
+  isValidDeveloperSupportPagePath,
+  normalizeDeveloperSupportPagePath,
+} from '@/lib/luxorDeveloperSupportPagePaths'
+import type { LuxorDeveloperSupportWebhookPayload } from '@/lib/luxorCursorAutomationServer'
+
+export class DeveloperSupportConfirmationExpiredError extends Error {
+  readonly code = 'confirmation_expired' as const
+
+  constructor() {
+    super('This confirmation expired. Review the ticket again, then send.')
+    this.name = 'DeveloperSupportConfirmationExpiredError'
+  }
+}
 
 export type DeveloperSupportTicket = {
   title: string
@@ -21,19 +36,44 @@ export type DeveloperSupportTicket = {
 }
 
 export function parseDeveloperSupportTicket(input: unknown): DeveloperSupportTicket & { attachments: ReturnType<typeof parseDeveloperSupportAttachmentInputs> } {
-  if (!input || typeof input !== 'object' || Array.isArray(input)) throw new Error('Invalid support ticket.')
+  if (!input || typeof input !== 'object' || Array.isArray(input)) {
+    throw new Error('The ticket form was incomplete. Add a title and try again.')
+  }
   const value = input as Record<string, unknown>
-  if (Object.keys(value).some((key) => !['title', 'description', 'priority', 'pagePath', 'attachments'].includes(key))) throw new Error('Invalid support ticket.')
-  if (typeof value.title !== 'string' || !value.title.trim() || value.title.trim().length > 200) throw new Error('Invalid support ticket.')
-  if (value.description != null && (typeof value.description !== 'string' || value.description.trim().length > 4000)) throw new Error('Invalid support ticket.')
+  if (Object.keys(value).some((key) => !['title', 'description', 'priority', 'pagePath', 'attachments'].includes(key))) {
+    throw new Error('The ticket could not be read. Refresh Elena and open the developer support card again.')
+  }
+  if (typeof value.title !== 'string' || !value.title.trim()) {
+    throw new Error('Add a short title describing what needs fixing.')
+  }
+  if (value.title.trim().length > 200) {
+    throw new Error('Shorten the title to 200 characters or less.')
+  }
+  if (value.description != null && (typeof value.description !== 'string' || value.description.trim().length > 4000)) {
+    throw new Error('Shorten the extra details to 4000 characters or less.')
+  }
   const priority = value.priority == null ? 'medium' : value.priority
-  if (priority !== 'low' && priority !== 'medium' && priority !== 'high' && priority !== 'urgent') throw new Error('Invalid support ticket.')
+  if (priority !== 'low' && priority !== 'medium' && priority !== 'high' && priority !== 'urgent') {
+    throw new Error('Choose a priority: low, medium, high, or urgent.')
+  }
   let pagePath: string | null = null
   if (value.pagePath != null && value.pagePath !== '') {
-    if (typeof value.pagePath !== 'string' || value.pagePath.length > 2048 || !value.pagePath.startsWith('/portal')) throw new Error('Invalid support ticket.')
-    pagePath = value.pagePath.trim()
+    if (typeof value.pagePath !== 'string' || !isValidDeveloperSupportPagePath(value.pagePath)) {
+      throw new Error('Choose a page from Applies to, or switch to Portal overview.')
+    }
+    pagePath = normalizeDeveloperSupportPagePath(value.pagePath)
   }
-  const attachments = parseDeveloperSupportAttachmentInputs(value.attachments)
+  let attachments: ReturnType<typeof parseDeveloperSupportAttachmentInputs>
+  try {
+    attachments = parseDeveloperSupportAttachmentInputs(value.attachments)
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : 'Invalid support attachments.'
+    throw new Error(
+      detail.includes('Invalid support attachments')
+        ? 'One or more attachments could not be included. Re-add the screenshot or PDF and try again.'
+        : detail,
+    )
+  }
   return {
     title: value.title.trim(),
     description: typeof value.description === 'string' ? value.description.trim() || null : null,
@@ -61,12 +101,15 @@ function buildCursorContext(
     attachmentContext: string | null
   },
 ) {
+  const pagePath = normalizeDeveloperSupportPagePath(ticket.pagePath)
+  const pageArea = getDeveloperSupportPageArea(pagePath)
   return [
     'Luxor portal developer support ticket from Elena.',
     '',
     `Reporter: ${ticket.reporterName} (${ticket.reporterEmail})`,
     `Priority: ${ticket.priority}`,
-    `Portal page: ${ticket.pagePath || '/portal'}`,
+    `Target page path (authoritative route): ${pagePath}`,
+    `Page area: ${pageArea}`,
     `Ticket id: ${ticket.confirmationId}`,
     '',
     `Title: ${ticket.title}`,
@@ -78,6 +121,38 @@ function buildCursorContext(
     'When attachments include signed URLs, download and inspect them for screenshots, PDFs, and context. URLs expire after about seven days.',
     'Run npm run typecheck and npm run lint:ci -- --quiet before finishing. Do not push unless Lewis explicitly asked in this automation run.',
   ].filter((line, index, array) => !(line === '' && index > 0 && array[index - 1] === '')).join('\n')
+}
+
+export function buildDeveloperSupportWebhookPayload(input: {
+  confirmationId: string
+  title: string
+  description: string | null
+  priority: DeveloperSupportTicket['priority']
+  pagePath: string | null
+  reporterEmail: string
+  reporterName: string
+  attachmentContext: string | null
+}): LuxorDeveloperSupportWebhookPayload {
+  const pagePath = normalizeDeveloperSupportPagePath(input.pagePath)
+  const pageArea = getDeveloperSupportPageArea(pagePath)
+  const context = buildCursorContext({
+    title: input.title,
+    description: input.description,
+    priority: input.priority,
+    pagePath,
+    confirmationId: input.confirmationId,
+    reporterEmail: input.reporterEmail,
+    reporterName: input.reporterName,
+    attachmentContext: input.attachmentContext,
+  })
+  return {
+    context,
+    pagePath,
+    pageArea,
+    title: input.title,
+    priority: input.priority,
+    ticketId: input.confirmationId,
+  }
 }
 
 async function buildAttachmentContext(attachments: DeveloperSupportStoredAttachment[]) {
@@ -159,7 +234,7 @@ export async function issueElenaDeveloperSupportConfirmation(input: unknown) {
 export async function consumeElenaDeveloperSupportConfirmation(input: unknown) {
   const token = parseElenaConfirmationToken(input)
   const auth = await ownerIdentity()
-  const consumed = await supabaseRestStrict<{
+  let consumed: {
     confirmation_id: string
     title: string
     description: string | null
@@ -168,16 +243,24 @@ export async function consumeElenaDeveloperSupportConfirmation(input: unknown) {
     context_attachments: DeveloperSupportStoredAttachment[] | null
     reporter_email: string
     reporter_name: string
-  }>('rpc/luxor_elena_consume_developer_support_confirmation', {
-    method: 'POST',
-    body: JSON.stringify({
-      p_id: token.id,
-      p_token_hash: token.tokenHash,
-      p_member_id: auth.member.id,
-      p_session_hash: auth.sessionHash,
-      p_session_issued_at_ms: auth.issuedAt,
-    }),
-  })
+  }
+  try {
+    consumed = await supabaseRestStrict<typeof consumed>('rpc/luxor_elena_consume_developer_support_confirmation', {
+      method: 'POST',
+      body: JSON.stringify({
+        p_id: token.id,
+        p_token_hash: token.tokenHash,
+        p_member_id: auth.member.id,
+        p_session_hash: auth.sessionHash,
+        p_session_issued_at_ms: auth.issuedAt,
+      }),
+    })
+  } catch (error) {
+    if (error instanceof SupabaseRestError && /confirmation unavailable/i.test(error.message)) {
+      throw new DeveloperSupportConfirmationExpiredError()
+    }
+    throw error
+  }
   if (
     !consumed
     || typeof consumed.confirmation_id !== 'string'
@@ -189,13 +272,14 @@ export async function consumeElenaDeveloperSupportConfirmation(input: unknown) {
 
   const storedAttachments = Array.isArray(consumed.context_attachments) ? consumed.context_attachments : []
   const attachmentContext = await buildAttachmentContext(storedAttachments)
-  const context = buildCursorContext({
+  const priority = (consumed.priority === 'low' || consumed.priority === 'medium' || consumed.priority === 'high' || consumed.priority === 'urgent')
+    ? consumed.priority
+    : 'medium'
+  const webhookPayload = buildDeveloperSupportWebhookPayload({
     confirmationId: consumed.confirmation_id,
     title: consumed.title,
     description: typeof consumed.description === 'string' ? consumed.description : null,
-    priority: (consumed.priority === 'low' || consumed.priority === 'medium' || consumed.priority === 'high' || consumed.priority === 'urgent')
-      ? consumed.priority
-      : 'medium',
+    priority,
     pagePath: typeof consumed.page_path === 'string' ? consumed.page_path : null,
     reporterEmail: consumed.reporter_email,
     reporterName: typeof consumed.reporter_name === 'string' ? consumed.reporter_name : consumed.reporter_email,
@@ -203,7 +287,7 @@ export async function consumeElenaDeveloperSupportConfirmation(input: unknown) {
   })
 
   try {
-    const dispatch = await triggerLuxorCursorAutomation(context)
+    const dispatch = await triggerLuxorCursorAutomation(webhookPayload)
     if (dispatch.runUuid || dispatch.backgroundComposerId) {
       await supabaseRestStrict('rpc/luxor_elena_record_developer_support_dispatch', {
         method: 'POST',

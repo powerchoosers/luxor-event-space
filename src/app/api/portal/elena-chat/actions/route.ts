@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { issueElenaTaskConfirmation, consumeElenaTaskConfirmation } from '@/lib/luxorElenaTaskConfirmationServer'
 import {
+  DeveloperSupportConfirmationExpiredError,
   issueElenaDeveloperSupportConfirmation,
   consumeElenaDeveloperSupportConfirmation,
 } from '@/lib/luxorElenaDeveloperSupportConfirmationServer'
@@ -36,8 +37,20 @@ export async function POST(request: Request) {
       }
     }
     if (value.action === 'CONFIRM_DEVELOPER_SUPPORT' && Object.keys(value).every(k => ['action', 'token'].includes(k))) {
-      const result = await consumeElenaDeveloperSupportConfirmation(value.token)
-      return NextResponse.json({ success: true, result }, options)
+      try {
+        const result = await consumeElenaDeveloperSupportConfirmation(value.token)
+        return NextResponse.json({ success: true, result }, options)
+      } catch (error) {
+        if (error instanceof DeveloperSupportConfirmationExpiredError) {
+          return NextResponse.json({ error: error.message, code: error.code }, { ...options, status: 410 })
+        }
+        const detail = error instanceof Error ? error.message : 'The support ticket could not be sent.'
+        console.error('[developer-support] confirm failed:', detail)
+        const safe = detail.length > 0 && detail.length <= 400 && !/token_hash|service_role|authorization/i.test(detail)
+          ? detail
+          : 'The support ticket could not be sent. Try reviewing the ticket again.'
+        return NextResponse.json({ error: safe, code: 'confirmation_failed' }, { ...options, status: 400 })
+      }
     }
     return NextResponse.json({ error: 'This Elena action is unavailable. Use the appropriate portal workflow.' }, { ...options, status: 403 })
   } catch {

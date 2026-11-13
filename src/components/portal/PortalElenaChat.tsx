@@ -36,6 +36,9 @@ import {
   ExternalLink,
 } from '@/lib/icons/phosphor-compat'
 import { submitLuxorIdempotentForm } from '@/lib/luxorSubmissionIdempotency'
+import { ELENA_CHAT_CONTACT_PATTERN, isEmailToken, stripOwnerFacingIds } from '@/lib/luxorElenaChatMessageFormat'
+import { formatPhoneDisplay, normalizePhoneNumber } from '@/lib/luxorPhoneClient'
+import { startLuxorBrowserCall } from '@/lib/luxorVoiceClient'
 import { LuxorEventTypeCombobox } from '@/components/LuxorEventTypeCombobox'
 import Image from 'next/image'
 import Link from 'next/link'
@@ -2519,25 +2522,33 @@ export function PortalElenaChat({ isOpen, onClose, activePath, portalRole, userE
                       ? 'Send message'
                       : 'Start voice conversation'
               }
-              className={`portal-inline-action ml-1 inline-flex !min-h-0 !min-w-0 h-8 w-8 shrink-0 items-center justify-center rounded-full transition-all disabled:cursor-not-allowed disabled:opacity-35 ${
-                isElenaResponding
-                  ? 'border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] text-[color:var(--portal-muted)] hover:border-rose-400/35 hover:bg-rose-500/10 hover:text-rose-500'
-                  : composerCanSend
-                    ? 'luxor-gold-raised border-0 !text-white shadow-xs active:scale-95'
-                    : 'border border-[#caa24c]/35 bg-[#caa24c]/10 text-[#a8792f] hover:bg-[#caa24c]/20'
-              }`}
+              className="portal-inline-action ml-1 inline-flex !min-h-0 !min-w-0 h-8 w-8 shrink-0 items-center justify-center rounded-full transition-all disabled:cursor-not-allowed disabled:opacity-35 luxor-gold-raised border-0 !text-white shadow-xs active:scale-95"
             >
               <AnimatePresence mode="wait" initial={false}>
                 {isElenaResponding ? (
-                  <motion.span key="stop" initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.7 }} transition={{ duration: 0.15 }}>
-                    <X size={16} strokeWidth={2.4} aria-hidden="true" />
+                  <motion.span
+                    key="stop"
+                    initial={{ opacity: 0, scale: 0.8 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.7 }}
+                    transition={{ duration: 0.15 }}
+                    className="text-white"
+                  >
+                    <ElenaComposerStopGlyph />
                   </motion.span>
                 ) : composerCanSend ? (
                   <motion.span key="send" initial={{ opacity: 0, y: 4, scale: 0.8 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -4, scale: 0.8 }} transition={{ duration: 0.15 }} className="text-white">
                     <ArrowUp size={17} strokeWidth={2.4} className="text-white" aria-hidden="true" />
                   </motion.span>
                 ) : (
-                  <motion.span key="voice" initial={{ opacity: 0, scale: 0.7 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.7 }} transition={{ duration: 0.15 }}>
+                  <motion.span
+                    key="voice"
+                    initial={{ opacity: 0, scale: 0.7 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.7 }}
+                    transition={{ duration: 0.15 }}
+                    className="text-white"
+                  >
                     <ElenaVoiceWave active={voiceButtonHovered && !composerCanSend} />
                   </motion.span>
                 )}
@@ -2549,10 +2560,6 @@ export function PortalElenaChat({ isOpen, onClose, activePath, portalRole, userE
               </div>
             )
           })()}
-          <p className="mt-1.5 text-[9px] text-center text-[color:var(--portal-muted)] flex items-center justify-center gap-1">
-            <Info size={9} />
-            Queries run securely on the server with owner authorization.
-          </p>
         </div>}
       </div>
       {typeof document !== 'undefined' && isOpen
@@ -2650,6 +2657,15 @@ function ElenaVoiceAtmosphere({ level, reducedMotion }: { level: number; reduced
         }}
       />
     </div>
+  )
+}
+
+function ElenaComposerStopGlyph() {
+  return (
+    <span
+      aria-hidden="true"
+      className="inline-block h-3.5 w-3.5 shrink-0 rounded-[3px] bg-white shadow-[inset_0_0_0_1px_rgba(255,255,255,0.15)]"
+    />
   )
 }
 
@@ -3017,7 +3033,7 @@ function ElenaChatStoredImageThumb({
 
 function ElenaChatMessageBody({ message, chatId }: { message: Message; chatId: string | null }) {
   const attachments = messageAttachmentsForDisplay(message)
-  const content = messageTextForDisplay(message)
+  const content = stripOwnerFacingIds(messageTextForDisplay(message))
   const [preview, setPreview] = useState<ElenaMessageAttachmentPreview | null>(null)
 
   const openAttachment = async (attachment: MessageAttachment) => {
@@ -3174,7 +3190,7 @@ function renderTable(rows: string[][], keyIndex: number) {
           {bodyRows.map((row, rIdx) => (
             <tr key={rIdx} className="hover:bg-[#caa24c]/5 text-[color:var(--portal-text)]">
               {row.map((col, cIdx) => (
-                <td key={cIdx} className="px-3 py-2 whitespace-nowrap">{col}</td>
+                <td key={cIdx} className="px-3 py-2 whitespace-nowrap">{renderBoldAndLinks(col)}</td>
               ))}
             </tr>
           ))}
@@ -3184,8 +3200,64 @@ function renderTable(rows: string[][], keyIndex: number) {
   )
 }
 
+const ELENA_CONTACT_LINK_CLASS =
+  'portal-inline-action font-semibold text-[#a8792f] no-underline hover:text-[#caa24c] dark:text-[#e3bc65] dark:hover:text-[#f1d27a] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45'
+
+function linkifyPlainText(text: string, keyBase: string) {
+  if (!text) return null
+  const pattern = new RegExp(ELENA_CHAT_CONTACT_PATTERN.source, 'gi')
+  const nodes: React.ReactNode[] = []
+  let lastIndex = 0
+  let matchIndex = 0
+  for (const match of text.matchAll(pattern)) {
+    const token = match[0]
+    const start = match.index ?? 0
+    if (start > lastIndex) {
+      nodes.push(text.slice(lastIndex, start))
+    }
+    const key = `${keyBase}-${matchIndex}`
+    if (isEmailToken(token)) {
+      nodes.push(
+        <a
+          key={key}
+          href={`mailto:${token}`}
+          className={ELENA_CONTACT_LINK_CLASS}
+          title={`Email ${token}`}
+        >
+          {token}
+        </a>,
+      )
+    } else {
+      const normalized = normalizePhoneNumber(token)
+      const dialNumber = normalized || token.replace(/[^\d+]/g, '')
+      const label = formatPhoneDisplay(dialNumber || token) || token
+      nodes.push(
+        <button
+          key={key}
+          type="button"
+          className={ELENA_CONTACT_LINK_CLASS}
+          title="Call from Luxor browser phone"
+          aria-label={`Call ${label}`}
+          onClick={() => {
+            if (dialNumber) startLuxorBrowserCall({ phoneNumber: dialNumber })
+          }}
+        >
+          {label}
+        </button>,
+      )
+    }
+    lastIndex = start + token.length
+    matchIndex += 1
+  }
+  if (lastIndex < text.length) {
+    nodes.push(text.slice(lastIndex))
+  }
+  return nodes.length === 1 ? nodes[0] : nodes
+}
+
 function renderBoldAndLinks(text: string) {
-  const parts = text.split(/(\*\*[^*]+\*\*|\*[^*]+\*|`[^`]+`)/g)
+  const cleaned = stripOwnerFacingIds(text)
+  const parts = cleaned.split(/(\*\*[^*]+\*\*|\*[^*]+\*|`[^`]+`)/g)
   return parts.map((part, idx) => {
     if (part.startsWith('**') && part.endsWith('**')) {
       return <strong key={idx} className="font-semibold text-[#a8792f] dark:text-[#e3bc65]">{part.slice(2, -2)}</strong>
@@ -3196,6 +3268,7 @@ function renderBoldAndLinks(text: string) {
     if (part.startsWith('`') && part.endsWith('`') && part.length > 2) {
       return <code key={idx} className="rounded bg-[color:var(--portal-soft)] px-1 py-0.5 font-mono text-xs">{part.slice(1, -1)}</code>
     }
-    return part
+    if (!part) return null
+    return <React.Fragment key={idx}>{linkifyPlainText(part, String(idx))}</React.Fragment>
   })
 }

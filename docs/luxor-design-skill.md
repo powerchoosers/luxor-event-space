@@ -30,6 +30,7 @@ Use for every frontend change in `luxor-event-space`, including styling, compone
   - Portal dropdowns and calendars must be React elements, not native browser dropdowns or calendars.
   - Match shared input surfaces, focus, disabled and error states; do not use `portal-input-transparent` unless transparency is intentional.
 - **Primary Gold Actions:** Portal primary gold actions use `luxor-gold-raised` with white text and icons (`!text-white` with white SVG strokes/fills). Match close buttons to the shared close control (`PortalCloseButton`). Status badges should be borderless by default while remaining legible and meaningfully distinct.
+- **Elena composer action button:** The trailing circular control in `PortalElenaChat` (`h-8 w-8 rounded-full luxor-gold-raised … !text-white shadow-xs active:scale-95`) is the single hardware pattern for send, voice, and stop. Do not swap stop to a rose ghost button or an `X`. **Send** uses white `ArrowUp`; **voice idle** uses white animated wave bars; **stop response** uses a filled white rounded square (media stop glyph), not close/dismiss iconography.
 - **Animated View Selectors (Tabs):**
   - Desktop sub-navigation uses `PortalAnimatedTabs` with `variant="slider"` (the white/card floating selector with smooth spring animation and border outline).
   - Wrap tab content panels in `<PortalTabTransition activeKey={activeTab}>` for smooth fade/slide handoffs.

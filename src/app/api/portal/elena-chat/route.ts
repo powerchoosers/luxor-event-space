@@ -465,7 +465,8 @@ Use permitted live CRM context and structured read tools. Never use SQL. Do not 
 - Direct database SQL and legacy confirmation actions are unavailable. Notes and new cleaning-log entries can be prepared for explicit confirmation. Use the relevant portal workflow for other database changes and sending texts; do not claim actions were performed before confirmation succeeds.
 - Always double check spelling (e.g. use Quinceañera or Quinceañeras with the Spanish "ñ" if searching text fields, but keep query structures precise).
 - If your query returns no results, check if you matched the casing or exact spelling.
-- Present answers in a clean, readable layout (use markdown tables or bulleted lists for query results).
+- Present answers in a clean, readable layout (use markdown tables or bulleted lists for query results). Never include UUIDs, inquiryId, bookingId, task ids, or other database identifiers in owner-facing chat text. Resolve tools with lookup_luxor_lead or the tool-only lead reference block when needed.
+- Format US phone numbers for the owner as +1 (AAA) BBB-CCCC in chat. List emails and phone numbers as plain values so the portal can link them; do not wrap them in markdown links.
 - Limit output results when necessary (e.g. "LIMIT 10" or "LIMIT 5") to avoid blowing up context, unless requested.
 - When the owner asks you to create or draft a text campaign, call "create_text_campaign_draft". This prepares the Text Campaigns builder but never sends anything. Include "Luxor Event Space" and end the body with "Reply STOP to opt out." Never invent balances, dates, availability, or payment status.
 - When the owner asks you to create, build, or design a custom automation workflow, call "prepare_custom_workflow_draft". Include the full request: existing HTML template name, element copy and placement changes, chosen operator/Elena sender and approved delivery address, and whether each client needs a freshly generated message from a prompt. Workflow emails support both lightly styled personal notes and editable HTML designs. A per-client AI prompt is generated anew when each client reaches the step; it is separate from writing one fixed template. Return its reviewable workflow card in Elena Chat and keep it unsaved until the owner clicks Save draft. Explain that Save draft only stores an inactive draft; it does not activate the workflow, enroll leads, or send messages. Never say or imply that saving a draft activates it. Activation remains a separate owner action in the workflow library.
@@ -1157,7 +1158,7 @@ async function buildRecentClientEmailContext(): Promise<string> {
     const outTime = String(out?.occurred_at || '')
     const needsReply = !outTime || incTime > outTime
     const leadInfo = entry.lead
-      ? `CRM Lead: ${entry.lead.full_name} (inquiryId: ${entry.lead.id}, event: ${entry.lead.event_type || 'N/A'}, target_date: ${entry.lead.target_date || 'N/A'}, status: ${entry.lead.status}, stage: ${entry.lead.pipeline_stage || 'N/A'}, budget: ${entry.lead.budget || 'Not specified'})`
+      ? `CRM Lead: ${entry.lead.full_name} (event: ${entry.lead.event_type || 'N/A'}, target_date: ${entry.lead.target_date || 'N/A'}, status: ${entry.lead.status}, stage: ${entry.lead.pipeline_stage || 'N/A'}, budget: ${entry.lead.budget || 'Not specified'})`
       : 'Not matched to an active luxor_inquiries row'
     const freshClientReply = extractFreshEmailReply(inc.text_body, 650)
     const priorLuxorOut = entry.messages.find((m) => m.direction === 'outgoing' && String(m.occurred_at || '') < incTime)
@@ -1182,8 +1183,12 @@ async function buildRecentClientEmailContext(): Promise<string> {
     const email = String(lead.email || '').trim().toLowerCase()
     const thread = email ? clientThreads.get(email) : undefined
     const hasEmailedUs = Boolean(thread?.latestIncoming)
-    return `- ${lead.full_name} (inquiryId: ${lead.id}) | Email: ${lead.email || 'none'} | Phone: ${lead.phone || 'none'} | Event: ${lead.event_type || 'N/A'} | Target Date: ${lead.target_date || 'N/A'} | Status: ${lead.status} | Created: ${lead.created_at} | Form Note: ${contextText(lead.message, 'None', 160)} | Has sent incoming email: ${hasEmailedUs ? `YES (${thread?.latestIncoming?.occurred_at})` : 'NO (website inquiry form only)'}`
+    return `- ${lead.full_name} | Email: ${lead.email || 'none'} | Phone: ${lead.phone || 'none'} | Event: ${lead.event_type || 'N/A'} | Target Date: ${lead.target_date || 'N/A'} | Status: ${lead.status} | Created: ${lead.created_at} | Form Note: ${contextText(lead.message, 'None', 160)} | Has sent incoming email: ${hasEmailedUs ? `YES (${thread?.latestIncoming?.occurred_at})` : 'NO (website inquiry form only)'}`
   })
+
+  const leadToolRefs = nonRsvpLeads
+    .map((lead) => `${lead.full_name} | email:${lead.email || ''} | phone:${lead.phone || ''} => inquiry_id ${lead.id}`)
+    .join('\n')
 
   return `LIVE INBOX & LEAD FOLLOW-UP INTELLIGENCE (PRE-FETCHED FROM public.luxor_mail_messages + public.luxor_inquiries):
 RECENT INCOMING CLIENT EMAILS (sorted newest first):
@@ -1198,7 +1203,10 @@ CRITICAL DISTINCTION FOR ELENA:
    - First: Any lead who sent a recent incoming email in RECENT INCOMING CLIENT EMAILS (especially regarding pricing, proposals, dates, or ready to pay deposit), plus any unread/unanswered client email.
    - Second: The newest active website leads from NEWEST ACTIVE WEBSITE LEADS who haven't received a personal follow-up yet.
    - Never suggest old July 2026 Grand Opening RSVPs unless the user specifically asks about Grand Opening RSVPs.
-3. When calling prepare_email_draft or navigate_to_lead for any lead listed above, pass their exact inquiryId UUID shown in parentheses.`
+3. When calling prepare_email_draft or navigate_to_lead, use LEAD_TOOL_REFERENCES below or lookup_luxor_lead. Never print those inquiry_id values in chat.
+
+LEAD_TOOL_REFERENCES (tools only — never quote in owner-facing replies):
+${leadToolRefs || 'No active leads.'}`
 }
 
 function formatVendorBillContext(bill: Record<string, unknown>, detailed = false) {

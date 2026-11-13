@@ -6,6 +6,15 @@ export type LuxorCursorAutomationDispatch = {
   backgroundComposerId: string | null
 }
 
+export type LuxorDeveloperSupportWebhookPayload = {
+  context: string
+  pagePath: string
+  pageArea: 'portal' | 'public'
+  title: string
+  priority: string
+  ticketId: string
+}
+
 function parseDispatchBody(value: unknown): LuxorCursorAutomationDispatch {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     return { success: false, runUuid: null, backgroundComposerId: null }
@@ -20,7 +29,9 @@ function parseDispatchBody(value: unknown): LuxorCursorAutomationDispatch {
   }
 }
 
-export async function triggerLuxorCursorAutomation(context: string): Promise<LuxorCursorAutomationDispatch> {
+export async function triggerLuxorCursorAutomation(
+  payload: LuxorDeveloperSupportWebhookPayload,
+): Promise<LuxorCursorAutomationDispatch> {
   const url = process.env.LUXOR_CURSOR_AUTOMATION_WEBHOOK_URL?.trim()
   const secret = process.env.LUXOR_CURSOR_AUTOMATION_WEBHOOK_SECRET?.trim()
   if (!url || !secret) throw new Error('Developer support automation is not configured yet.')
@@ -31,7 +42,15 @@ export async function triggerLuxorCursorAutomation(context: string): Promise<Lux
       Authorization: `Bearer ${secret}`,
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({ context: context.slice(0, 24_000) }),
+    body: JSON.stringify({
+      context: payload.context.slice(0, 24_000),
+      pagePath: payload.pagePath,
+      pageRoute: payload.pagePath,
+      pageArea: payload.pageArea,
+      title: payload.title.slice(0, 200),
+      priority: payload.priority,
+      ticketId: payload.ticketId,
+    }),
     cache: 'no-store',
   })
 
