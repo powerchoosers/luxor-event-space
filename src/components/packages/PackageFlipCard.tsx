@@ -87,7 +87,7 @@ export function PackageFlipCard({ data, locale = 'en' }: PackageFlipCardProps) {
           </p>
         ) : null}
       </div>
-      <div className="flex flex-1 flex-col p-6 sm:p-7">
+      <div className="flex min-h-0 flex-1 flex-col p-6 sm:p-7">
         <h3 className="font-serif text-4xl leading-none text-[#f7efe3]">{data.displayName}</h3>
         <p className="mt-4 text-sm leading-6 text-[#d7c29a]/72 sm:text-base">{data.shortDescription}</p>
         {data.showStartingPrice && data.startingPrice !== null ? (
@@ -96,7 +96,7 @@ export function PackageFlipCard({ data, locale = 'en' }: PackageFlipCardProps) {
             <p className="mt-1 font-serif text-4xl leading-none text-[#f1d27a]">{formatPrice(data.startingPrice)}</p>
           </div>
         ) : null}
-        <ul className={`grid gap-3 ${data.showStartingPrice ? 'mt-6' : 'mt-5'}`}>
+        <ul className={`grid shrink-0 gap-3 ${data.showStartingPrice ? 'mt-6' : 'mt-5'}`}>
           {data.previewInclusions.map((item) => (
             <li key={item} className="flex items-start gap-3 text-sm text-[#d7c29a]/78">
               <Check className="mt-0.5 h-4 w-4 shrink-0 text-[#caa24c]" aria-hidden />
@@ -104,13 +104,14 @@ export function PackageFlipCard({ data, locale = 'en' }: PackageFlipCardProps) {
             </li>
           ))}
         </ul>
+        <div className="mt-auto min-h-6 w-full shrink-0" aria-hidden />
         <button
           ref={frontControlRef}
           type="button"
           onClick={flipToBack}
           aria-expanded={flipped}
           aria-controls={`${faceId}-back`}
-          className="luxor-gold-raised mt-6 mt-auto inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-md px-4 py-3 text-[11px] uppercase tracking-[0.14em]"
+          className="luxor-gold-raised shrink-0 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-md px-4 py-3 text-[11px] uppercase tracking-[0.14em]"
         >
           {t.viewPackage(data.displayName)} <ArrowRight className="h-4 w-4" aria-hidden />
         </button>
@@ -125,11 +126,11 @@ export function PackageFlipCard({ data, locale = 'en' }: PackageFlipCardProps) {
       role="region"
       aria-labelledby={`${faceId}-back-heading`}
       tabIndex={-1}
-      className={`flex h-full flex-col ${options?.scrollBody ? 'min-h-0' : ''}`}
+      className={`flex h-full max-h-full min-h-0 flex-col ${options?.scrollBody ? 'overflow-hidden' : ''}`}
       hidden={options?.hidden}
     >
       <div
-        className={`flex flex-col px-6 pt-6 sm:px-7 sm:pt-7 ${options?.scrollBody ? 'min-h-0 flex-1 touch-pan-y overflow-y-auto overscroll-contain [-webkit-overflow-scrolling:touch]' : ''}`}
+        className={`flex min-h-0 flex-col px-6 pt-6 sm:px-7 sm:pt-7 ${options?.scrollBody ? 'min-h-0 flex-1 touch-pan-y overflow-y-auto overscroll-contain [-webkit-overflow-scrolling:touch]' : ''}`}
       >
         <p className="font-mono text-[10px] uppercase tracking-[0.28em] text-[#caa24c]">{data.displayName}</p>
         <h3 id={`${faceId}-back-heading`} className="mt-3 font-serif text-3xl leading-none text-[#f7efe3]">
@@ -169,11 +170,11 @@ export function PackageFlipCard({ data, locale = 'en' }: PackageFlipCardProps) {
     const showFront = activeFace === 'front'
     const showBack = activeFace === 'back'
     return (
-      <article className={`${shellClass} relative flex h-full min-h-[560px] flex-col`} aria-labelledby={`${faceId}-title`}>
+      <article className={`${shellClass} relative flex h-full min-h-[560px] flex-col overflow-hidden`} aria-labelledby={`${faceId}-title`}>
         <span id={`${faceId}-title`} className="sr-only">
           {data.displayName} package {activeFace}
         </span>
-        <div className="relative min-h-0 w-full flex-1">
+        <div className="relative h-full min-h-0 w-full flex-1 overflow-hidden">
           <motion.div
             className={`relative flex h-full w-full min-h-0 flex-col ${
               showBack ? 'invisible pointer-events-none' : 'pointer-events-auto'
@@ -187,7 +188,7 @@ export function PackageFlipCard({ data, locale = 'en' }: PackageFlipCardProps) {
             {renderFront()}
           </motion.div>
           <motion.div
-            className={`absolute inset-0 flex min-h-0 flex-col ${
+            className={`absolute inset-0 flex h-full max-h-full min-h-0 flex-col overflow-hidden ${
               showFront ? 'pointer-events-none invisible' : 'pointer-events-auto z-[2]'
             }`}
             aria-hidden={showFront}
@@ -204,12 +205,12 @@ export function PackageFlipCard({ data, locale = 'en' }: PackageFlipCardProps) {
   }
 
   return (
-    <article className={`group relative flex h-full min-h-[560px] flex-col [perspective:1200px] ${shellClass}`} aria-labelledby={`${faceId}-title`}>
+    <article className={`group relative flex h-full min-h-[560px] flex-col overflow-hidden [perspective:1200px] ${shellClass}`} aria-labelledby={`${faceId}-title`}>
       <span id={`${faceId}-title`} className="sr-only">
         {data.displayName} package
       </span>
       <div
-        className={`relative h-full min-h-0 w-full flex-1 transition-transform duration-500 ease-in-out [transform-style:preserve-3d] ${
+        className={`relative h-full min-h-0 w-full flex-1 overflow-hidden transition-transform duration-500 ease-in-out [transform-style:preserve-3d] ${
           flipped ? '[transform:rotateY(180deg)]' : ''
         }`}
       >
@@ -223,7 +224,7 @@ export function PackageFlipCard({ data, locale = 'en' }: PackageFlipCardProps) {
           {renderFront()}
         </div>
         <div
-          className={`absolute inset-0 flex min-h-0 flex-col overflow-hidden [backface-visibility:hidden] [transform:rotateY(180deg)] ${
+          className={`absolute inset-0 flex h-full max-h-full min-h-0 flex-col overflow-hidden [backface-visibility:hidden] [transform:rotateY(180deg)] ${
             flipped ? 'pointer-events-auto z-[2]' : 'pointer-events-none'
           }`}
           aria-hidden={!flipped}
