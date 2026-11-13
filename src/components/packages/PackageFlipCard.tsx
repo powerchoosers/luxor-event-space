@@ -2,7 +2,7 @@
 
 import Image from 'next/image'
 import { useCallback, useEffect, useId, useRef, useState } from 'react'
-import { ArrowRight, Check } from '@/lib/icons/phosphor-compat'
+import { ArrowRight, Check, X } from '@/lib/icons/phosphor-compat'
 import { motion, useReducedMotion } from 'framer-motion'
 import type { PublicPackageCardData } from '@/lib/luxorPublicPackages'
 
@@ -26,6 +26,7 @@ const copy = {
     back: 'Back',
     included: 'What’s included',
     details: 'Details and limitations',
+    notIncluded: 'Not included',
   },
   es: {
     weekendFromLabel: 'Vie–Dom desde',
@@ -33,6 +34,7 @@ const copy = {
     back: 'Atrás',
     included: 'Qué incluye',
     details: 'Detalles y limitaciones',
+    notIncluded: 'No incluido',
   },
 } as const
 
@@ -61,6 +63,11 @@ export function PackageFlipCard({ data, locale = 'en' }: PackageFlipCardProps) {
     }
   }, [reduceMotion])
 
+  const notIncludedPattern = /^\s*(not included|no incluido)\s*:\s*/i
+  const limitNotes = data.limitations.filter((item) => !notIncludedPattern.test(item))
+  const limitExcluded = data.limitations
+    .filter((item) => notIncludedPattern.test(item))
+    .map((item) => item.replace(notIncludedPattern, ''))
   const showSwapLayout = !allow3dFlip
 
   const flipToBack = useCallback(() => {
@@ -185,11 +192,26 @@ export function PackageFlipCard({ data, locale = 'en' }: PackageFlipCardProps) {
           ))}
         </ul>
         <h3 className="mt-5 font-serif text-2xl leading-none text-[#f7efe3]">{t.details}</h3>
-        <ul className="mt-3 space-y-2 pb-2 text-sm leading-6 text-[#d7c29a]/72">
-          {data.limitations.map((item) => (
-            <li key={item}>{item}</li>
-          ))}
-        </ul>
+        {limitNotes.length > 0 ? (
+          <div className="mt-3 space-y-1 rounded-md border border-[#caa24c]/25 bg-[#caa24c]/8 px-3 py-2 text-sm leading-6 text-[#d7c29a]/85">
+            {limitNotes.map((item) => (
+              <p key={item}>{item}</p>
+            ))}
+          </div>
+        ) : null}
+        {limitExcluded.length > 0 ? (
+          <>
+            <p className="mt-4 font-mono text-[10px] uppercase tracking-[0.22em] text-[#caa24c]">{t.notIncluded}</p>
+            <ul className="mt-2 space-y-2 pb-2 text-sm leading-6 text-[#d7c29a]/72">
+              {limitExcluded.map((item) => (
+                <li key={item} className="flex items-start gap-2">
+                  <X className="mt-1 h-3.5 w-3.5 shrink-0 text-[#e8928f]" aria-hidden />
+                  <span>{item}</span>
+                </li>
+              ))}
+            </ul>
+          </>
+        ) : null}
       </div>
       <div className="shrink-0 rounded-b-md border-t border-[#caa24c]/16 bg-[#0a0807] p-6 sm:p-7 sm:pt-5">
         <button
@@ -261,7 +283,9 @@ export function PackageFlipCard({ data, locale = 'en' }: PackageFlipCardProps) {
         >
           <div
             className={`absolute inset-0 flex min-h-0 w-full flex-col ${backfaceClass} ${
-              flipped ? 'pointer-events-none invisible' : 'pointer-events-auto z-[2]'
+              flipped
+                ? 'pointer-events-none invisible transition-[visibility] delay-500 duration-0'
+                : 'pointer-events-auto visible z-[2] transition-[visibility] delay-0 duration-0'
             }`}
             aria-hidden={flipped}
             {...(flipped ? { inert: true } : {})}
@@ -270,7 +294,9 @@ export function PackageFlipCard({ data, locale = 'en' }: PackageFlipCardProps) {
           </div>
           <div
             className={`absolute inset-0 flex min-h-0 w-full flex-col ${backfaceClass} [transform:rotateY(180deg)] ${
-              flipped ? 'pointer-events-auto z-[3]' : 'pointer-events-none invisible'
+              flipped
+                ? 'pointer-events-auto visible z-[3] transition-[visibility] delay-0 duration-0'
+                : 'pointer-events-none invisible transition-[visibility] delay-500 duration-0'
             }`}
             aria-hidden={!flipped}
             {...(!flipped ? { inert: true } : {})}
