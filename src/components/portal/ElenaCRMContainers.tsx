@@ -21,6 +21,7 @@ import {
   Plus,
 } from '@/lib/icons/phosphor-compat'
 import { PortalDatePicker, PortalSelect } from './PortalUI'
+import { readPortalActionResponse } from '@/lib/portalActionFetch'
 
 // --- 1. Lead Update Container ---
 export interface LeadUpdatePayload {
@@ -747,6 +748,52 @@ function DeveloperSupportAttachmentList({
   )
 }
 
+type DeveloperSupportTicketAttachmentPayload = {
+  name: string
+  type: string
+  storagePath?: string
+  dataUrl?: string
+  textContent?: string
+}
+
+async function resolveDeveloperSupportAttachmentsForPrepare(
+  stagingId: string,
+  items: DeveloperSupportAttachmentCandidate[],
+): Promise<DeveloperSupportTicketAttachmentPayload[]> {
+  const resolved: DeveloperSupportTicketAttachmentPayload[] = []
+  for (const item of items) {
+    if (item.storagePath) {
+      resolved.push({
+        name: item.name,
+        type: item.type,
+        storagePath: item.storagePath,
+        ...(item.textContent ? { textContent: item.textContent } : {}),
+      })
+      continue
+    }
+    if (item.textContent) {
+      resolved.push({ name: item.name, type: item.type, textContent: item.textContent })
+      continue
+    }
+    if (item.dataUrl) {
+      const blob = await fetch(item.dataUrl).then((response) => response.blob())
+      const form = new FormData()
+      form.append('stagingId', stagingId)
+      form.append('name', item.name)
+      form.append('type', item.type)
+      form.append('file', blob, item.name)
+      const uploadResponse = await fetch('/api/portal/elena-chat/developer-support-upload', { method: 'POST', body: form })
+      const uploadData = await readPortalActionResponse(uploadResponse)
+      if (!uploadResponse.ok || typeof uploadData.storagePath !== 'string') {
+        throw new Error(typeof uploadData.error === 'string' ? uploadData.error : `Could not upload ${item.name}.`)
+      }
+      resolved.push({ name: item.name, type: item.type, storagePath: uploadData.storagePath })
+      continue
+    }
+  }
+  return resolved
+}
+
 export function collectDeveloperSupportAttachmentCandidates(
   messages: Array<{ role: string; attachments?: DeveloperSupportMessageAttachment[] }>,
   composer: DeveloperSupportComposerAttachment[],
@@ -799,6 +846,7 @@ export function ElenaDeveloperSupportCard({
   const [selectedAttachmentKeys, setSelectedAttachmentKeys] = useState<Set<string>>(() => new Set(attachmentCandidates.map((item) => item.key)))
   const fileInputRef = useRef<HTMLInputElement>(null)
   const seenChatKeysRef = useRef<Set<string>>(new Set())
+  const stagingIdRef = useRef(crypto.randomUUID())
 
   const attachmentOptions = useMemo(() => {
     const map = new Map<string, DeveloperSupportAttachmentCandidate>()
@@ -922,6 +970,7 @@ export function ElenaDeveloperSupportCard({
     setIsSaving(true)
     setError(null)
     try {
+      const attachments = await resolveDeveloperSupportAttachmentsForPrepare(stagingIdRef.current, selectedAttachments)
       const response = await fetch('/api/portal/elena-chat/actions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -932,21 +981,25 @@ export function ElenaDeveloperSupportCard({
             description: description.trim(),
             priority,
             pagePath: payload.pagePath || null,
-            attachments: selectedAttachments.map((item) => ({
-              name: item.name,
-              type: item.type,
-              ...(item.storagePath ? { storagePath: item.storagePath } : {}),
-              ...(item.storagePath ? {} : item.dataUrl ? { dataUrl: item.dataUrl } : {}),
-              ...(item.textContent ? { textContent: item.textContent } : {}),
-            })),
+            attachments,
           },
         }),
       })
-      const data = await response.json()
-      if (!response.ok || typeof data.confirmation?.token !== 'string' || typeof data.confirmation?.expiresAt !== 'string' || typeof data.confirmation?.summary !== 'string') {
+      const data = await readPortalActionResponse(response)
+      const confirmation = data.confirmation as Record<string, unknown> | undefined
+      if (
+        !response.ok
+        || typeof confirmation?.token !== 'string'
+        || typeof confirmation?.expiresAt !== 'string'
+        || typeof confirmation?.summary !== 'string'
+      ) {
         throw new Error(typeof data.error === 'string' ? data.error : 'The support ticket could not be prepared. Please try again.')
       }
-      setConfirmation(data.confirmation)
+      setConfirmation({
+        token: confirmation.token,
+        expiresAt: confirmation.expiresAt,
+        summary: confirmation.summary,
+      })
     } catch (err) {
       setError(err instanceof Error ? err.message : 'The support ticket could not be prepared. Please try again.')
     } finally {
@@ -964,7 +1017,7 @@ export function ElenaDeveloperSupportCard({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'CONFIRM_DEVELOPER_SUPPORT', token: confirmation.token }),
       })
-      const data = await response.json()
+      const data = await readPortalActionResponse(response)
       if (!response.ok || data.success !== true) throw new Error(typeof data.error === 'string' ? data.error : 'Unverified result')
       setConfirmation(null)
       setIsSent(true)

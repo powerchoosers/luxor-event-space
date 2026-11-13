@@ -116,6 +116,31 @@ export function parseDeveloperSupportAttachmentInputs(input: unknown): Developer
   return out
 }
 
+export async function stageDeveloperSupportUpload(
+  stagingId: string,
+  fileName: string,
+  type: string,
+  bytes: Uint8Array,
+): Promise<{ storagePath: string; contentType: string }> {
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(stagingId)) {
+    throw new Error('Invalid upload.')
+  }
+  const safeName = safeFileName(fileName)
+  const mime = normalizeMime(type, safeName)
+  const kind = kindFromMime(mime, safeName)
+  if (!kind || kind === 'text') throw new Error(`${safeName} is not a supported developer ticket attachment.`)
+  if (kind === 'pdf' && bytes.byteLength > MAX_PDF_BYTES) throw new Error(`${safeName} exceeds the 8 MB PDF limit.`)
+  if (kind === 'image' && bytes.byteLength > MAX_IMAGE_BYTES) throw new Error(`${safeName} exceeds the 5 MB photo limit.`)
+  if (kind === 'pdf' && bytes.byteLength >= 5 && new TextDecoder().decode(bytes.slice(0, 5)) !== '%PDF-') {
+    throw new Error(`${safeName} is not a valid PDF.`)
+  }
+  const objectId = crypto.randomUUID()
+  const storagePath = `developer-support/${stagingId}/${objectId}-${safeName}`
+  const uploadType = kind === 'pdf' ? 'application/pdf' : (mime.startsWith('image/') ? mime : 'application/octet-stream')
+  await uploadObject(storagePath, bytes, uploadType)
+  return { storagePath, contentType: uploadType }
+}
+
 async function uploadObject(path: string, bytes: Uint8Array, contentType: string) {
   const { url, key } = await getLuxorExpenseStorageConfig()
   const encodedPath = path.split('/').map(encodeURIComponent).join('/')
