@@ -1,12 +1,28 @@
 'use client'
 
-import { useEffect, useId, useRef, useState, useSyncExternalStore } from 'react'
+import { useCallback, useEffect, useId, useRef, useState, useSyncExternalStore } from 'react'
 import { createPortal } from 'react-dom'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import { ArrowRight, Check } from '@/lib/icons/phosphor-compat'
 import { BorderBeam } from '@/components/ui/border-beam'
-import { PortalCloseButton } from '@/components/portal/PortalUI'
-import type { PortalFixNotice as PortalFixNoticeData } from '@/lib/luxorPortalFixNotice'
+import { PortalButton, PortalCloseButton } from '@/components/portal/PortalUI'
+import {
+  dismissPortalFixNotice,
+  isPortalFixNoticeDismissed,
+  type PortalFixNotice as PortalFixNoticeData,
+} from '@/lib/luxorPortalFixNotice'
+
+const FIX_NOTICE_DISMISS_EVENT = 'luxor-portal-fix-notice-dismiss'
+
+function subscribeToPortalFixNoticeDismiss(onStore: () => void) {
+  const onChange = () => onStore()
+  window.addEventListener(FIX_NOTICE_DISMISS_EVENT, onChange)
+  window.addEventListener('storage', onChange)
+  return () => {
+    window.removeEventListener(FIX_NOTICE_DISMISS_EVENT, onChange)
+    window.removeEventListener('storage', onChange)
+  }
+}
 
 export function PortalFixNotice({ notice }: { notice: PortalFixNoticeData | null }) {
   const reduceMotion = useReducedMotion()
@@ -16,28 +32,69 @@ export function PortalFixNotice({ notice }: { notice: PortalFixNoticeData | null
     () => true,
     () => false,
   )
+  const dismissed = useSyncExternalStore(
+    subscribeToPortalFixNoticeDismiss,
+    () => (notice ? isPortalFixNoticeDismissed(notice.id) : false),
+    () => false,
+  )
   const titleId = useId()
   const closeRef = useRef<HTMLButtonElement>(null)
+  const bannerRef = useRef<HTMLButtonElement>(null)
+  const focusBeforeOpenRef = useRef<HTMLElement | null>(null)
+  const dismissedPersistRef = useRef(false)
+
+  const closeModal = useCallback(() => {
+    setOpen(false)
+  }, [])
+
+  const restoreFocusAfterModal = useCallback(() => {
+    const restore = focusBeforeOpenRef.current
+    requestAnimationFrame(() => {
+      if (restore?.isConnected) {
+        restore.focus()
+        return
+      }
+      const main = document.querySelector('main')
+      if (main instanceof HTMLElement) {
+        if (!main.hasAttribute('tabindex')) main.setAttribute('tabindex', '-1')
+        main.focus({ preventScroll: true })
+      }
+    })
+  }, [])
+
+  const handleDismissNotice = useCallback(() => {
+    if (!notice) return
+    dismissedPersistRef.current = true
+    dismissPortalFixNotice(notice.id)
+    window.dispatchEvent(new Event(FIX_NOTICE_DISMISS_EVENT))
+    setOpen(false)
+    restoreFocusAfterModal()
+  }, [notice, restoreFocusAfterModal])
 
   useEffect(() => {
     if (!open) return
-    const previous = document.activeElement as HTMLElement | null
+    focusBeforeOpenRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : bannerRef.current
     closeRef.current?.focus()
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setOpen(false)
+      if (event.key === 'Escape') closeModal()
     }
     document.addEventListener('keydown', onKey)
     return () => {
       document.removeEventListener('keydown', onKey)
-      previous?.focus()
+      if (dismissedPersistRef.current) {
+        dismissedPersistRef.current = false
+        return
+      }
+      restoreFocusAfterModal()
     }
-  }, [open])
+  }, [open, closeModal, restoreFocusAfterModal])
 
-  if (!notice) return null
+  if (!notice || dismissed) return null
 
   return (
     <>
       <motion.button
+        ref={bannerRef}
         type="button"
         onClick={() => setOpen(true)}
         initial={reduceMotion ? false : { opacity: 0, y: -18 }}
@@ -50,11 +107,11 @@ export function PortalFixNotice({ notice }: { notice: PortalFixNoticeData | null
           <Check size={15} aria-hidden="true" />
         </span>
         <span className="min-w-0 flex-1">
-          <span className="block text-[11px] font-semibold tracking-wide text-[color:var(--portal-muted)]">{notice.bannerLabel}</span>
+          <span className="block truncate text-xs font-semibold text-[color:var(--portal-text)] sm:text-sm">{notice.bannerLabel}</span>
           <span className="mt-0.5 block truncate text-sm font-bold text-[color:var(--portal-text)]">{notice.title}</span>
         </span>
         <span className="hidden shrink-0 items-center gap-1 text-xs font-semibold text-[color:var(--portal-text)] sm:inline-flex">
-          See what changed
+          Read note
           <ArrowRight size={14} aria-hidden="true" />
         </span>
       </motion.button>
@@ -68,7 +125,7 @@ export function PortalFixNotice({ notice }: { notice: PortalFixNoticeData | null
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               transition={{ duration: reduceMotion ? 0 : 0.18 }}
-              onClick={() => setOpen(false)}
+              onClick={closeModal}
             >
               <motion.div
                 role="dialog"
@@ -87,13 +144,12 @@ export function PortalFixNotice({ notice }: { notice: PortalFixNoticeData | null
                     <span className="h-3 w-3 rounded-full bg-[#febc2e]" />
                     <span className="h-3 w-3 rounded-full bg-[#28c840]" />
                   </div>
-                  <p className="min-w-0 flex-1 truncate text-center text-[13px] font-semibold text-[color:var(--portal-text)]">Luxor fix</p>
-                  <PortalCloseButton ref={closeRef} onClick={() => setOpen(false)} />
+                  <p className="min-w-0 flex-1 truncate text-center text-[13px] font-semibold text-[color:var(--portal-text)]">{notice.bannerLabel}</p>
+                  <PortalCloseButton ref={closeRef} onClick={closeModal} />
                 </div>
 
                 <div className="portal-scrollbar min-h-0 flex-1 overflow-y-auto px-4 py-5 sm:px-8 sm:py-7">
-                  <p className="text-[12px] font-semibold text-[color:var(--portal-muted)]">Ready for you</p>
-                  <h2 id={titleId} className="mt-1 font-sans text-2xl font-bold tracking-tight text-[color:var(--portal-text)]">{notice.title}</h2>
+                  <h2 id={titleId} className="font-sans text-2xl font-bold tracking-tight text-[color:var(--portal-text)]">{notice.title}</h2>
                   <div className="mt-3 max-w-xl space-y-3 text-[15px] leading-6 text-[color:var(--portal-text)]">
                     {notice.summary.map((paragraph) => (
                       <p key={paragraph}>{paragraph}</p>
@@ -102,17 +158,14 @@ export function PortalFixNotice({ notice }: { notice: PortalFixNoticeData | null
 
                   <div className="mt-6 grid gap-3 sm:grid-cols-2">
                     <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-4 py-3">
-                      <p className="text-[11px] font-semibold uppercase tracking-wide text-[color:var(--portal-muted)]">Fixed</p>
-                      <p className="mt-1 text-sm leading-5 text-[color:var(--portal-text)]">{notice.fixedText}</p>
+                      <p className="text-sm leading-5 text-[color:var(--portal-text)]">{notice.fixedText}</p>
                     </section>
                     <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-4 py-3">
-                      <p className="text-[11px] font-semibold uppercase tracking-wide text-[color:var(--portal-muted)]">Unchanged</p>
-                      <p className="mt-1 text-sm leading-5 text-[color:var(--portal-text)]">{notice.unchangedText}</p>
+                      <p className="text-sm leading-5 text-[color:var(--portal-text)]">{notice.unchangedText}</p>
                     </section>
                   </div>
 
-                  <h3 className="mt-8 text-sm font-bold text-[color:var(--portal-text)]">How to check it</h3>
-                  <ol className="mt-3 space-y-2">
+                  <ol className="mt-8 space-y-2">
                     {notice.steps.map((step, index) => (
                       <li key={`${step.title}-${index}`} className="flex gap-3 rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-4 py-3">
                         <span className="luxor-gold-raised flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[13px] font-bold tabular-nums leading-none">
@@ -127,9 +180,14 @@ export function PortalFixNotice({ notice }: { notice: PortalFixNoticeData | null
                   </ol>
 
                   <section className="mt-6 rounded-2xl bg-[color:var(--portal-soft)] px-4 py-3">
-                    <p className="text-sm font-bold text-[color:var(--portal-text)]">If it still looks wrong</p>
-                    <p className="mt-1 text-sm leading-5 text-[color:var(--portal-muted)]">{notice.ifStuck}</p>
+                    <p className="text-sm leading-5 text-[color:var(--portal-muted)]">{notice.ifStuck}</p>
                   </section>
+                </div>
+
+                <div className="flex shrink-0 items-center justify-end gap-2 border-t border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-4 py-3 sm:px-6">
+                  <PortalButton type="button" variant="secondary" size="md" onClick={handleDismissNotice}>
+                    Dismiss
+                  </PortalButton>
                 </div>
               </motion.div>
             </motion.div>

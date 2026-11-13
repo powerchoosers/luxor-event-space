@@ -1,3 +1,27 @@
+export const PORTAL_FIX_NOTICE_DISMISS_PREFIX = 'luxor_portal_fix_notice_dismissed:'
+
+export function portalFixNoticeDismissStorageKey(noticeId: string): string {
+  return `${PORTAL_FIX_NOTICE_DISMISS_PREFIX}${noticeId}`
+}
+
+export function isPortalFixNoticeDismissed(noticeId: string): boolean {
+  if (typeof window === 'undefined') return false
+  try {
+    return window.localStorage.getItem(portalFixNoticeDismissStorageKey(noticeId)) === '1'
+  } catch {
+    return false
+  }
+}
+
+export function dismissPortalFixNotice(noticeId: string): void {
+  if (typeof window === 'undefined') return
+  try {
+    window.localStorage.setItem(portalFixNoticeDismissStorageKey(noticeId), '1')
+  } catch {
+    /* Keep the modal usable when storage is unavailable. */
+  }
+}
+
 export type PortalFixStep = { title: string; text: string }
 
 export type PortalFixNotice = {
