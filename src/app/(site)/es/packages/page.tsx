@@ -14,5 +14,5 @@ export const metadata: Metadata = {
 export default async function SpanishPackagesPage() {
   const pricing = await loadPublicPackagesPricingSnapshot()
   const cards = buildPublicPackageCards('es', pricing)
-  return <PackagesPageContent locale="es" cards={cards} showCardPrices={pricing.showCardPrices} />
+  return <PackagesPageContent locale="es" cards={cards} />
 }
