@@ -42,6 +42,8 @@ export function LuxorCrmRecordCard({
   interactionLabel,
   className = '',
   selected = false,
+  listFlush = false,
+  listFlushEnd = false,
 }: {
   lead: LuxorInquiry
   avatar?: ReactNode
@@ -60,6 +62,8 @@ export function LuxorCrmRecordCard({
   interactionLabel?: string
   className?: string
   selected?: boolean
+  listFlush?: boolean
+  listFlushEnd?: boolean
 }) {
   const cardAvatar = avatar ?? <PortalContactAvatar
     name={lead.full_name}
@@ -69,7 +73,7 @@ export function LuxorCrmRecordCard({
   />
   return (
     <article
-      className={`portal-card-surface group relative rounded-xl border p-4 shadow-sm transition-[border-color,box-shadow,background-color] duration-200 ease-[cubic-bezier(0.23,1,0.32,1)] ${onOpen ? 'cursor-pointer sm:hover:-translate-y-0.5 hover:border-[#caa24c]/70 hover:bg-[#caa24c]/[0.035] dark:hover:bg-[#caa24c]/[0.06] hover:shadow-md sm:active:translate-y-0' : ''} ${selected || expanded ? 'border-[#caa24c]/55 bg-[#caa24c]/[0.025] dark:bg-[#caa24c]/[0.05]' : ''} ${className}`}
+      className={`portal-card-surface group relative border p-4 transition-[border-color,box-shadow,background-color] duration-200 ease-[cubic-bezier(0.23,1,0.32,1)] ${listFlush ? `max-md:rounded-none max-md:border-x-0 max-md:border-t-0 max-md:shadow-none${listFlushEnd ? ' max-md:rounded-b-2xl max-md:border-b-0' : ''}` : 'rounded-xl shadow-sm'} ${onOpen ? `cursor-pointer ${listFlush ? 'md:hover:-translate-y-0.5 hover:border-[#caa24c]/70 hover:bg-[#caa24c]/[0.035] dark:hover:bg-[#caa24c]/[0.06] md:hover:shadow-md md:active:translate-y-0' : 'sm:hover:-translate-y-0.5 hover:border-[#caa24c]/70 hover:bg-[#caa24c]/[0.035] dark:hover:bg-[#caa24c]/[0.06] hover:shadow-md sm:active:translate-y-0'}` : ''} ${selected || expanded ? 'border-[#caa24c]/55 bg-[#caa24c]/[0.025] dark:bg-[#caa24c]/[0.05]' : ''} ${className}`}
       onClick={(event) => {
         const target = event.target as HTMLElement
         if (target.closest('a,button,input,select,textarea,[role="menuitem"]')) return
@@ -82,7 +86,7 @@ export function LuxorCrmRecordCard({
         aria-expanded={expanded}
         aria-controls={expandedContentId}
         onClick={(event) => { event.stopPropagation(); onOpen() }}
-        className="absolute inset-0 z-0 rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#a8792f]"
+        className={`absolute inset-0 z-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#a8792f] ${listFlush ? `max-md:rounded-none md:rounded-xl${listFlushEnd ? ' max-md:rounded-b-2xl' : ''}` : 'rounded-xl'}`}
       /> : null}
       {responsiveContentColumn ? <div className="relative z-10 grid min-w-0 grid-cols-[2.5rem_minmax(0,1fr)] items-start gap-x-3">
         <div className="row-start-1 col-start-1">{headerHref ? <Link href={headerHref} aria-label={`Open ${lead.full_name}`} className="block rounded-full outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/60">{cardAvatar}</Link> : cardAvatar}</div>

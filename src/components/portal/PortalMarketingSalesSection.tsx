@@ -160,7 +160,9 @@ export function PortalMarketingSalesSection({
   }
 
   const visitPageCount = metrics.visitPageViews ?? metrics.tourPageVisits ?? 0
-  const visitsScheduledCount = metrics.visitSubmissions ?? metrics.toursBooked ?? 0
+  const visitsScheduledCount = metrics.tourAnalyticsAvailable
+    ? metrics.toursBooked
+    : (metrics.visitSubmissions ?? metrics.toursBooked ?? 0)
   const maxTraffic = Math.max(1, metrics.websiteVisitors ?? 1)
 
   const visitConversionNum =
@@ -535,8 +537,8 @@ export function PortalMarketingSalesSection({
                       <div className="relative group/tip cursor-help">
                         <Info size={13} className="text-[#caa24c] hover:text-[#dfbd68] transition-colors" />
                         <div className="absolute right-0 top-5 z-50 hidden w-60 rounded-xl border border-[#caa24c]/30 bg-[color:var(--portal-card)] p-3 text-[11px] font-normal leading-relaxed text-[color:var(--portal-text)] shadow-2xl backdrop-blur-xl group-hover/tip:block">
-                          <p className="font-bold text-[#caa24c] mb-1">Visits Scheduled (Appointments)</p>
-                          People who successfully completed the scheduling process and created a visit appointment.
+                          <p className="font-bold text-[#caa24c] mb-1">Visits Scheduled</p>
+                          Verified tour bookings in this period — same count as Leads funnel (scheduling receipt date, not tour day on the lead).
                         </div>
                       </div>
                     </div>

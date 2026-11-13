@@ -1,10 +1,11 @@
 'use client'
 
-import React, { useEffect, useMemo, useRef, useState } from 'react'
-import { PortalButton, PortalModal } from '@/components/portal/PortalUI'
-import { FUNNEL_GOAL_CADENCES, FUNNEL_GOAL_METRICS, getFunnelGoal, parseFunnelGoals, funnelGoalProgress, type FunnelGoals, type FunnelGoalMetric } from '@/lib/luxorFunnelGoals'
+import React, { useEffect, useMemo, useState } from 'react'
+import Link from 'next/link'
+import { FUNNEL_GOAL_METRICS, getFunnelGoal, parseFunnelGoals, funnelGoalProgress, type FunnelGoals, type FunnelGoalMetric } from '@/lib/luxorFunnelGoals'
 import { getFunnelPeriodFromRange, type FunnelPeriod } from '@/lib/luxorFunnelPeriods'
 import type { PortalDateRange } from '@/components/portal/PortalDateRangeControl'
+import { MagicCard } from '@/components/ui/magic-card'
 
 type Metric = FunnelGoalMetric | 'depositsReceived' | 'conversionRate'
 export type FunnelAnalytics = { period: FunnelPeriod; metrics: Record<Metric, number | null>; dailyLeads: Array<{ date: string; count: number | null }>; issues: string[]; definitions: Record<string, string> }
@@ -18,7 +19,50 @@ const KPIS = [
   ['proposalsSent', 'Proposals sent', 'proposals'], ['depositsReceived', 'Deposits received', 'clients'], ['conversionRate', 'Conversion rate', 'clients'],
 ] as const
 const panel = 'rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)]'
-const field = 'w-full rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-bg)] px-2 py-2 text-sm text-[color:var(--portal-text)] focus:outline-none focus:ring-2 focus:ring-[#caa24c]/60'
+const KPI_TONE: Record<(typeof KPIS)[number][0], 'blue' | 'gold' | 'green'> = {
+  newInquiries: 'gold',
+  toursScheduled: 'blue',
+  toursCompleted: 'green',
+  proposalsSent: 'gold',
+  depositsReceived: 'green',
+  conversionRate: 'blue',
+}
+const KPI_TONE_CLASS = {
+  blue: 'text-sky-600 dark:text-sky-400 border-sky-500/20 bg-sky-500/10',
+  gold: 'text-[#a37d2c] dark:text-[#f1d27a] border-[#caa24c]/25 bg-[#caa24c]/10',
+  green: 'text-emerald-600 dark:text-emerald-400 border-emerald-500/20 bg-emerald-500/10',
+} as const
+
+function FunnelKpiCard({
+  label,
+  value,
+  tone,
+  definition,
+  onClick,
+}: {
+  label: string
+  value: string
+  tone: 'blue' | 'gold' | 'green'
+  definition?: string
+  onClick?: () => void
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title={definition}
+      className="w-full rounded-xl text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/60"
+    >
+      <MagicCard className="h-full rounded-xl px-4 py-3.5">
+        <div className="flex flex-col gap-2">
+          <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--portal-muted)]">{label}</p>
+          <p className="text-2xl font-extrabold tabular-nums tracking-tight text-[color:var(--portal-text)]">{value}</p>
+          <span className={`self-start rounded-md border px-2 py-0.5 text-[8px] font-bold uppercase tracking-[0.14em] ${KPI_TONE_CLASS[tone]}`}>Period</span>
+        </div>
+      </MagicCard>
+    </button>
+  )
+}
 function record(v: unknown): v is Record<string, unknown> { return Boolean(v && typeof v === 'object' && !Array.isArray(v)) }
 export function parseGoalSnapshot(value: unknown): GoalSnapshot | null {
   if (!record(value) || value.available !== true || !Number.isSafeInteger(value.revision) || (value.revision as number) < 0 || typeof value.canEdit !== 'boolean') return null
@@ -100,19 +144,14 @@ export function LeadsFunnelDashboard({ range, onSelectTab, onPeriodChange }: { r
   const [reload, setReload] = useState(0)
   const [snapshot, setSnapshot] = useState<GoalSnapshot | null>(null)
   const [goalNotice, setGoalNotice] = useState('')
-  const [editorOpen, setEditorOpen] = useState(false)
-  const [draft, setDraft] = useState<FunnelGoals | null>(null)
-  const [saveNotice, setSaveNotice] = useState('')
-  const [saving, setSaving] = useState(false)
-  const [pending, setPending] = useState(false)
-  const [month, setMonth] = useState(() => range.start.slice(0, 7))
-  const [quarter, setQuarter] = useState(() => `${range.start.slice(0, 4)}-Q${Math.floor((+range.start.slice(5, 7) - 1) / 3) + 1}`)
-  const savingRef = useRef(false)
-  const mounted = useRef(true)
-  useEffect(() => { mounted.current = true; return () => { mounted.current = false } }, [])
   useEffect(() => {
     const controller = new AbortController(); let active = true
-    setLoading(true); setAnalytics(null); setDataError('')
+    queueMicrotask(() => {
+      if (!active) return
+      setLoading(true)
+      setAnalytics(null)
+      setDataError('')
+    })
     fetch(`/api/portal/funnel-analytics?start=${encodeURIComponent(range.start)}&end=${encodeURIComponent(range.end)}`, { cache: 'no-store', signal: controller.signal }).then(async response => {
       const parsed = parseFunnelAnalytics(await response.json(), period)
       if (!response.ok || !parsed) throw new Error('Period data is unavailable. No estimates are shown.')
@@ -130,46 +169,22 @@ export function LeadsFunnelDashboard({ range, onSelectTab, onPeriodChange }: { r
     return () => { active = false; controller.abort() }
   }, [reload])
   const visible = analytics?.period.startDate === period.startDate && analytics.period.endDate === period.endDate ? analytics : null
-  function openEditor() {
-    if (!snapshot?.canEdit) return
-    try { const old = readPendingFunnelGoals(); setDraft(old?.goals || structuredClone(snapshot.goals)); setPending(Boolean(old)); setSaveNotice(old ? 'An earlier save is unconfirmed. Retry it unchanged to check the result.' : ''); setEditorOpen(true) }
-    catch (error) { setGoalNotice(error instanceof Error ? error.message : 'Previous save needs review.') }
-  }
-  async function save(event: React.FormEvent) {
-    event.preventDefault(); if (!draft || !snapshot || savingRef.current) return
-    savingRef.current = true; setSaving(true); setSaveNotice('')
-    try {
-      const saved = await saveFunnelGoals(draft, snapshot.revision)
-      if (mounted.current) { setSnapshot(saved); setPending(false); setEditorOpen(false); setGoalNotice('Goals saved.'); setReload(n => n + 1) }
-    } catch (error) {
-      if (mounted.current) { setSaveNotice(error instanceof Error ? error.message : 'Save could not be confirmed.'); try { setPending(Boolean(readPendingFunnelGoals())) } catch { setPending(true) } }
-    } finally { savingRef.current = false; if (mounted.current) setSaving(false) }
-  }
-  function change(metric: FunnelGoalMetric, cadence: typeof FUNNEL_GOAL_CADENCES[number], raw: string) {
-    if (draft) setDraft({ ...draft, [metric]: { ...draft[metric], [cadence]: raw === '' ? null : Number(raw) } })
-  }
-  function changeOverride(metric: FunnelGoalMetric, type: 'monthlyOverrides' | 'quarterlyOverrides', key: string, raw: string) {
-    if (!draft) return
-    const overrides = { ...draft[metric][type] }; if (raw === '') delete overrides[key]; else overrides[key] = Number(raw)
-    setDraft({ ...draft, [metric]: { ...draft[metric], [type]: overrides } })
-  }
-  const monthValid = /^\d{4}-(0[1-9]|1[0-2])$/.test(month)
-  const quarterValid = /^\d{4}-Q[1-4]$/.test(quarter)
   return <section className="space-y-5" aria-label="Funnel performance dashboard">
-    <div className="flex justify-end">
-      <PortalButton onClick={openEditor} disabled={!snapshot?.canEdit} title={snapshot && !snapshot.canEdit ? 'Settings permission is required.' : goalNotice || 'Edit saved goals'}>Edit Goals</PortalButton>
+    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6" aria-busy={loading}>
+      {KPIS.map(([key, label, tab]) => (
+        <FunnelKpiCard
+          key={key}
+          label={label}
+          value={funnelNumber(visible?.metrics[key], key)}
+          tone={KPI_TONE[key]}
+          definition={visible?.definitions[key]}
+          onClick={() => onSelectTab?.(tab)}
+        />
+      ))}
     </div>
-    <div className="grid grid-cols-2 gap-y-4 rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/45 px-3 py-5 sm:grid-cols-3 xl:grid-cols-6" aria-busy={loading}>{KPIS.map(([key, label, tab]) => <button key={key} type="button" onClick={() => onSelectTab?.(tab)} title={visible?.definitions[key]} className="rounded-lg px-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c] xl:border-r xl:border-[color:var(--portal-border)] xl:last:border-0"><span className="text-xs font-semibold">{label}</span><span className="mt-3 block text-center text-3xl font-bold tabular-nums">{funnelNumber(visible?.metrics[key], key)}</span></button>)}</div>
-    {(loading || dataError || goalNotice || visible?.issues.length) ? <div className="text-xs text-[color:var(--portal-muted)]" aria-live="polite">{loading ? <p>Loading selected period…</p> : null}{dataError ? <p>{dataError} <button type="button" className="underline" onClick={() => setReload(n => n + 1)}>Retry</button></p> : null}{goalNotice ? <p>{goalNotice} <button type="button" className="underline" onClick={() => setReload(n => n + 1)}>Reload</button></p> : null}{visible?.issues.length ? <details><summary>Data note: some metrics are unavailable ({visible.issues.length})</summary><ul className="mt-2 list-disc pl-4">{visible.issues.map(issue => <li key={issue}>{issue}</li>)}</ul></details> : null}</div> : null}
-    <div className="grid grid-cols-1 gap-4 xl:grid-cols-3"><section className={`${panel} p-5`} aria-label="Sales Funnel Analysis"><h3 className="text-lg font-bold">Sales Funnel Analysis</h3><p className="text-xs text-[color:var(--portal-muted)]">Period activity against saved goals</p><ol className="mt-5 space-y-4">{FUNNEL_GOAL_METRICS.map(metric => { const actual = visible?.metrics[metric] ?? null; const goal = snapshot ? getFunnelGoal(snapshot.goals[metric], period) : null; const progress = funnelGoalProgress(actual, goal); return <li key={metric}><div className="flex flex-wrap justify-between gap-1 text-xs"><span className="font-semibold">{LABELS[metric]}</span><span className="tabular-nums">{funnelNumber(actual, metric)} / {funnelNumber(goal, metric)}{progress.percent === null ? '' : ` (${Math.round(progress.percent)}%)`}</span></div><div className="mt-2 h-2 overflow-hidden rounded-full bg-[color:var(--portal-border)]" role="progressbar" aria-label={`${LABELS[metric]} goal progress`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={progress.percent === null ? undefined : progress.barPercent} aria-valuetext={progress.percent === null ? 'Actual or goal unavailable' : `${Math.round(progress.percent)} percent of goal`}><div className="h-full rounded-full bg-[#caa24c]" style={{ width: `${progress.barPercent}%` }} /></div></li> })}</ol><p className="mt-4 border-t border-[color:var(--portal-border)] pt-3 text-[11px] text-[color:var(--portal-muted)]">Activity counts are not a single-lead cohort. A dash means data or a goal is unavailable.</p></section>
+    {(loading || dataError || goalNotice || visible?.issues.length) ? <div className="text-xs text-[color:var(--portal-muted)]" aria-live="polite">{loading ? <p>Loading selected period…</p> : null}{dataError ? <p>{dataError} <button type="button" className="underline" onClick={() => setReload(n => n + 1)}>Retry</button></p> : null}{goalNotice ? <p>{goalNotice} <button type="button" className="underline" onClick={() => setReload(n => n + 1)}>Reload</button></p> : null}{visible?.issues.length ? <details><summary>About these numbers ({visible.issues.length})</summary><ul className="mt-2 list-disc pl-4">{visible.issues.map(issue => <li key={issue}>{issue}</li>)}</ul></details> : null}</div> : null}
+    <div className="grid grid-cols-1 gap-4 xl:grid-cols-3"><section className={`${panel} p-5`} aria-label="Sales Funnel Analysis"><div className="flex flex-wrap items-start justify-between gap-2"><div><h3 className="text-lg font-bold">Sales Funnel Analysis</h3><p className="mt-0.5 text-xs text-[color:var(--portal-muted)]">Period activity against saved goals</p></div>{snapshot?.canEdit ? <Link href="/portal/settings?tab=funnelGoals" className="rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/60 px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.12em] text-[#9a712e] transition-colors hover:border-[#caa24c]/40 hover:bg-[#caa24c]/10 dark:text-[#f1d27a]">Manage goals</Link> : null}</div><ol className="mt-5 space-y-3">{FUNNEL_GOAL_METRICS.map(metric => { const actual = visible?.metrics[metric] ?? null; const goal = snapshot ? getFunnelGoal(snapshot.goals[metric], period) : null; const progress = funnelGoalProgress(actual, goal); return <li key={metric} className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/30 px-3.5 py-3"><div className="flex flex-wrap items-baseline justify-between gap-2"><span className="text-[10px] font-bold uppercase tracking-[0.14em] text-[color:var(--portal-muted)]">{LABELS[metric]}</span><span className="text-sm font-semibold tabular-nums text-[color:var(--portal-text)]">{funnelNumber(actual, metric)}<span className="font-medium text-[color:var(--portal-muted)]"> / {funnelNumber(goal, metric)}</span>{progress.percent === null ? null : <span className="ml-1 text-xs font-bold text-[#a37d2c] dark:text-[#f1d27a]">{Math.round(progress.percent)}%</span>}</span></div><div className="mt-2.5 h-2 overflow-hidden rounded-full bg-[color:var(--portal-border)]/80" role="progressbar" aria-label={`${LABELS[metric]} goal progress`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={progress.percent === null ? undefined : progress.barPercent} aria-valuetext={progress.percent === null ? 'Actual or goal unavailable' : `${Math.round(progress.percent)} percent of goal`}><div className="h-full rounded-full bg-gradient-to-r from-[#caa24c] to-[#dfbd68]" style={{ width: `${progress.barPercent}%` }} /></div></li> })}</ol><p className="mt-4 border-t border-[color:var(--portal-border)] pt-3 text-[11px] text-[color:var(--portal-muted)]">Activity counts are not a single-lead cohort. A dash means data or a goal is unavailable.</p></section>
       <FunnelDailyChart period={period} days={visible?.dailyLeads || period.days.map(date => ({ date, count: null }))} dailyGoal={snapshot?.goals.newInquiries.daily ?? null} total={visible?.metrics.newInquiries ?? null} periodGoal={snapshot ? getFunnelGoal(snapshot.goals.newInquiries, period) : null} />
     </div>
-    <p className="text-[11px] text-[color:var(--portal-muted)]">Conversion: leads created in this period that booked by period end, divided by leads created in this period.</p>
-    <PortalModal isOpen={editorOpen} onClose={() => { if (!saving) setEditorOpen(false) }} title="Edit Goals" description="Shared goals save across devices. Leave a value blank to use its calendar-based calculation." maxWidth="max-w-5xl">
-      <form onSubmit={save} className="space-y-5"><fieldset disabled={saving || pending} className="space-y-5"><legend className="sr-only">Shared performance goals</legend><div className="overflow-x-auto"><table className="w-full min-w-[640px] text-left text-xs"><caption className="mb-3 text-left text-[color:var(--portal-muted)]">Defaults: daily goals calculate calendar totals. Explicit weekly, monthly, quarterly or annual values override those totals.</caption><thead><tr><th className="p-2">Metric</th>{FUNNEL_GOAL_CADENCES.map(c => <th key={c} className="p-2 capitalize">{c}</th>)}</tr></thead><tbody>{draft ? FUNNEL_GOAL_METRICS.map(metric => <tr key={metric}><th className="p-2 font-semibold">{LABELS[metric]}</th>{FUNNEL_GOAL_CADENCES.map(c => <td key={c} className="p-2"><input className={field} type="number" min="0" max="1000000000000" step={metric === 'revenue' ? '0.01' : '1'} aria-label={`${LABELS[metric]} ${c} goal`} value={draft[metric][c] ?? ''} placeholder="Unset" onChange={e => change(metric, c, e.target.value)} /></td>)}</tr>) : null}</tbody></table></div>
-        <div className="grid gap-5 md:grid-cols-2">{(['monthlyOverrides', 'quarterlyOverrides'] as const).map(type => { const monthly = type === 'monthlyOverrides'; const key = monthly ? month : quarter; const valid = monthly ? monthValid : quarterValid; return <div key={type}><label className="mb-3 block text-xs font-semibold">{monthly ? 'Month override (YYYY-MM)' : 'Quarter override (YYYY-Q1 to Q4)'}<input type="text" className={`${field} mt-2`} value={key} onChange={e => monthly ? setMonth(e.target.value) : setQuarter(e.target.value)} aria-invalid={!valid} /></label>{!valid ? <p className="text-xs text-red-600">Enter a valid calendar {monthly ? 'month' : 'quarter'}.</p> : null}{draft ? FUNNEL_GOAL_METRICS.map(metric => <label key={metric} className="mb-2 grid grid-cols-2 items-center gap-3 text-xs">{LABELS[metric]}<input className={field} type="number" min="0" max="1000000000000" step={metric === 'revenue' ? '0.01' : '1'} aria-label={`${LABELS[metric]} ${monthly ? 'month' : 'quarter'} override`} disabled={!valid} value={valid ? draft[metric][type][key] ?? '' : ''} placeholder="Use default" onChange={e => changeOverride(metric, type, key, e.target.value)} /></label>) : null}</div> })}</div><p className="text-xs text-[color:var(--portal-muted)]">An exact month or quarter override wins over its default. Without a quarterly total, the three month goals are added. The chart line always uses the daily inquiry goal. Revenue is optional.</p></fieldset>
-        {saveNotice ? <p role="alert" className="text-sm text-[color:var(--portal-muted)]">{saveNotice}</p> : null}<div className="flex flex-wrap justify-end gap-2"><PortalButton disabled={saving} onClick={() => setEditorOpen(false)}>Cancel</PortalButton>{!pending ? <PortalButton disabled={saving} onClick={() => { setEditorOpen(false); setReload(n => n + 1) }}>Reload saved goals</PortalButton> : null}<PortalButton type="submit" variant="primary" disabled={saving || !draft}>{saving ? 'Saving…' : pending ? 'Retry original save' : 'Save goals'}</PortalButton></div>
-      </form>
-    </PortalModal>
   </section>
 }

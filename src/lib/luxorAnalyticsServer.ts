@@ -5,7 +5,10 @@ import { supabaseRest } from './supabaseRestServer'
 import { listAllLuxorInquiries } from './luxorInquiriesServer'
 import { listLuxorBookingsWithPayments } from './luxorBookingsServer'
 import { isLuxorNonRevenuePublicEvent, isLuxorNonRevenueTestInquiry } from './luxorInquiryTypes'
-import { getLuxorTourAnalytics, getLuxorTourDateRange } from './luxorTourMetrics'
+import { getLuxorTourDateRange } from './luxorTourMetrics'
+import { getFunnelPeriodFromRange } from './luxorFunnelPeriods'
+import { computeVerifiedCrmActivityMetrics, sliceFunnelAnalyticsData } from './luxorFunnelAnalytics'
+import { loadFunnelAnalyticsData } from './luxorFunnelAnalyticsServer'
 
 export type AnalyticsDatePreset = '7d' | '30d' | '90d' | 'this_month' | 'previous_month' | 'custom'
 
@@ -337,21 +340,27 @@ export async function fetchMarketingAndSalesMetrics(range: DateRange): Promise<M
     return t >= prevStartTimeMs && t <= prevEndTimeMs
   })
 
-  // Tour conversion metrics share the scheduled-tour-date cohort for each period.
-  const tourAnalytics = getLuxorTourAnalytics(businessInquiries, range.tourDateRange.startDate, range.tourDateRange.endDate)
-  const previousTourAnalytics = getLuxorTourAnalytics(businessInquiries, range.tourDateRange.previousStartDate, range.tourDateRange.previousEndDate)
-  const toursBooked = tourAnalytics.totalScheduled
-  const prevToursBooked = previousTourAnalytics.totalScheduled
+  const funnelData = await loadFunnelAnalyticsData().catch(() => null)
+  const currentTourPeriod = getFunnelPeriodFromRange(range.tourDateRange.startDate, range.tourDateRange.endDate)
+  const previousTourPeriod = getFunnelPeriodFromRange(range.tourDateRange.previousStartDate, range.tourDateRange.previousEndDate)
+  const verifiedCurrent = funnelData ? computeVerifiedCrmActivityMetrics(currentTourPeriod, funnelData) : null
+  const verifiedPrevious = funnelData ? computeVerifiedCrmActivityMetrics(previousTourPeriod, funnelData) : null
+  tourAnalyticsAvailable = Boolean(funnelData)
 
-  const toursCompleted = tourAnalytics.completed
-  const prevToursCompleted = previousTourAnalytics.completed
+  const toursBooked = verifiedCurrent?.toursScheduled ?? 0
+  const prevToursBooked = verifiedPrevious?.toursScheduled ?? 0
+  const toursCompleted = verifiedCurrent?.toursCompleted ?? 0
+  const prevToursCompleted = verifiedPrevious?.toursCompleted ?? 0
+  const proposalsSent = verifiedCurrent?.proposalsSent ?? 0
+  const prevProposalsSent = verifiedPrevious?.proposalsSent ?? 0
 
-  // Proposals Sent
-  const isProposalSent = (inq: (typeof inquiries)[0]) =>
-    inq.status === 'proposal_sent' || inq.pipeline_stage === 'proposal' || inq.status === 'booked'
-
-  const proposalsSent = currentInquiries.filter(isProposalSent).length
-  const prevProposalsSent = prevInquiries.filter(isProposalSent).length
+  const tourAnalytics = {
+    totalScheduled: toursBooked,
+    completed: toursCompleted,
+    noShows: verifiedCurrent?.toursNoShows ?? 0,
+    completionRate: toursBooked > 0 ? Math.round((toursCompleted / toursBooked) * 1000) / 10 : 0,
+    noShowRate: toursBooked > 0 ? Math.round(((verifiedCurrent?.toursNoShows ?? 0) / toursBooked) * 1000) / 10 : 0,
+  }
 
   // 3. Bookings & Revenue
   const currentBookings = bookingsWithPayments.filter((b) => {
@@ -480,22 +489,22 @@ export async function fetchMarketingAndSalesMetrics(range: DateRange): Promise<M
       description: 'Intent to schedule a visit CTA',
     },
     {
-      stage: 'Tours Booked',
+      stage: 'Tours Scheduled',
       count: toursBooked,
       conversionRateFromPrevious: tourClicks !== null ? calcRate(toursBooked, tourClicks) : null,
-      description: 'Scheduled appointments created',
+      description: 'Verified visit bookings by scheduling receipt date (same as Leads funnel)',
     },
     {
       stage: 'Tours Completed',
       count: toursCompleted,
       conversionRateFromPrevious: calcRate(toursCompleted, toursBooked),
-      description: 'Walked through venue in person',
+      description: 'Verified attended visits by tour date (same as Leads funnel)',
     },
     {
       stage: 'Proposals Sent',
       count: proposalsSent,
       conversionRateFromPrevious: calcRate(proposalsSent, toursCompleted),
-      description: 'Pricing & package quotes delivered',
+      description: 'Verified proposal emails sent in period (same as Leads funnel)',
     },
     {
       stage: 'Bookings',
@@ -543,11 +552,10 @@ export async function fetchMarketingAndSalesMetrics(range: DateRange): Promise<M
       : null
 
     // Filter CRM inquiries matching this category
-    const catToursBooked = getLuxorTourAnalytics(
-      businessInquiries.filter((inq) => normalizeChannel(inq.source, inq.metadata) === category),
-      range.tourDateRange.startDate,
-      range.tourDateRange.endDate,
-    ).totalScheduled
+    const catInquiryIds = new Set(businessInquiries.filter((inq) => normalizeChannel(inq.source, inq.metadata) === category).map((inq) => inq.id))
+    const catToursBooked = funnelData
+      ? computeVerifiedCrmActivityMetrics(currentTourPeriod, sliceFunnelAnalyticsData(funnelData, catInquiryIds)).toursScheduled
+      : 0
 
     // Filter Bookings matching this category (via linked inquiry or booking source)
     const catBookings = currentBookings.filter((b) => {

@@ -34,8 +34,21 @@ export async function loadFunnelRows(table: string): Promise<FunnelRow[]> {
   if (rows.length !== expected || await supabaseRestCount(path) !== expected) throw new Error('Source changed while loading')
   return rows
 }
+const FUNNEL_SOURCES = {
+  inquiries: 'luxor_inquiries',
+  visits: 'luxor_tour_visits',
+  receipts: 'luxor_tour_schedule_receipts',
+  proposals: 'luxor_proposal_send_attempts',
+  payments: 'luxor_payments',
+  invoices: 'luxor_invoices',
+  bookings: 'luxor_bookings',
+} as const
+
+export async function loadFunnelAnalyticsData(): Promise<FunnelAnalyticsData> {
+  const pairs = await Promise.all(Object.entries(FUNNEL_SOURCES).map(async ([key, table]) => [key, await loadFunnelRows(table)]))
+  return Object.fromEntries(pairs) as FunnelAnalyticsData
+}
+
 export async function getFunnelAnalytics(period: FunnelPeriod) {
-  const sources = { inquiries: 'luxor_inquiries', visits: 'luxor_tour_visits', receipts: 'luxor_tour_schedule_receipts', proposals: 'luxor_proposal_send_attempts', payments: 'luxor_payments', invoices: 'luxor_invoices', bookings: 'luxor_bookings' }
-  const pairs = await Promise.all(Object.entries(sources).map(async ([key, table]) => [key, await loadFunnelRows(table)]))
-  return buildFunnelAnalytics(period, Object.fromEntries(pairs) as FunnelAnalyticsData)
+  return buildFunnelAnalytics(period, await loadFunnelAnalyticsData())
 }

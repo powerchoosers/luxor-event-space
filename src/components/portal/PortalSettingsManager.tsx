@@ -27,6 +27,7 @@ import {
   ChevronRight,
   Tag,
   BadgeDollarSign,
+  TrendingUp,
 } from '@/lib/icons/phosphor-compat'
 import {
   PortalButton,
@@ -55,6 +56,7 @@ import { TeamAccessManager } from '@/components/portal/TeamAccessManager'
 import { ElenaSettingsManager } from '@/components/portal/ElenaSettingsManager'
 import { ProposalPricingManager } from '@/components/portal/ProposalPricingManager'
 import { BrochureSettings } from '@/components/portal/BrochureSettings'
+import { FunnelGoalsSettingsPanel } from '@/components/portal/FunnelGoalsSettingsPanel'
 
 export type Tab =
   | 'business'
@@ -67,6 +69,7 @@ export type Tab =
   | 'pricing'
   | 'content'
   | 'elena'
+  | 'funnelGoals'
 
 export type SettingsNavItem = {
   id: Tab
@@ -96,6 +99,7 @@ export const SETTINGS_NAVIGATION: Array<{ label: string; items: SettingsNavItem[
     label: 'Venue & growth',
     items: [
       { id: 'pricing', label: 'Pricing & line items', description: 'Rates used across Luxor', icon: <BadgeDollarSign size={16} /> },
+      { id: 'funnelGoals', label: 'Funnel goals', description: 'Leads dashboard targets', icon: <TrendingUp size={16} /> },
       { id: 'promotions', label: 'Promotions', description: 'Offers on the website', icon: <Tag size={16} /> },
     ],
   },
@@ -116,6 +120,7 @@ export const SETTINGS_TAB_COPY: Record<Tab, { title: string; description: string
   integrations: { title: 'Email & connections', description: 'Manage phone numbers, email delivery, and calendar responses.' },
   promotions: { title: 'Promotions', description: 'Create and manage special offers shown on the Luxor website.' },
   pricing: { title: 'Pricing & line items', description: 'Manage the approved rates used across proposals and Elena.' },
+  funnelGoals: { title: 'Funnel goals', description: 'Set shared targets for the Leads funnel dashboard and goal progress bars.' },
   branding: { title: 'Branding', description: 'Set your workspace appearance, venue brochure, and brand images.' },
   content: { title: 'Site content', description: 'Edit saved content records for public Luxor pages.' },
   elena: { title: 'Elena AI', description: 'Manage Elena’s knowledge, flows, behavior, and website preview.' },
@@ -1095,6 +1100,8 @@ export function PortalSettingsManager({
             </section>
           </div>
         )}
+
+        {activeTab === 'funnelGoals' && !isAgent && <FunnelGoalsSettingsPanel />}
 
         {/* PROMOTIONS */}
         {activeTab === 'promotions' && <PromotionManager />}

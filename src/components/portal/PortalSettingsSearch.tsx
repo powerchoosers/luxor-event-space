@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
-import { BadgeDollarSign, Bell, Bot, Building, Clock, Cpu, Image, Lock, Search, Tag, X } from '@/lib/icons/phosphor-compat'
+import { BadgeDollarSign, Bell, Bot, Building, Clock, Cpu, Image, Lock, Search, Tag, TrendingUp, X } from '@/lib/icons/phosphor-compat'
 import { PORTAL_MODAL_EASE } from '@/components/portal/PortalUI'
 
 export type SettingsTab =
@@ -16,6 +16,7 @@ export type SettingsTab =
   | 'pricing'
   | 'content'
   | 'elena'
+  | 'funnelGoals'
 
 export type SettingsSearchItem = {
   tab: SettingsTab
@@ -48,6 +49,7 @@ export const SETTINGS_SEARCH_ITEMS: SettingsSearchItem[] = [
   { tab: 'pricing', section: 'Pricing & line items', title: 'Venue rental rates', description: 'Update weekday, Friday, and weekend venue rates.', keywords: 'price pricing rates rental monday tuesday wednesday thursday friday saturday sunday' },
   { tab: 'pricing', section: 'Pricing & line items', title: 'Proposal packages', description: 'Edit package pricing, inclusions, and add-on line items.', keywords: 'proposal packages inclusions line items decor catering dj bar security cleaning' },
   { tab: 'pricing', section: 'Pricing & line items', title: 'Sales tax & deposits', description: 'Set tax rate, deposits, fees, and catalog visibility.', keywords: 'sales tax deposit fee public catalog rate' },
+  { tab: 'funnelGoals', section: 'Funnel goals', title: 'Leads funnel goals', description: 'Set weekly and monthly targets for the Leads funnel dashboard.', keywords: 'funnel goals leads dashboard targets inquiries tours proposals revenue conversion' },
   { tab: 'promotions', section: 'Promotions', title: 'Promotions', description: 'Manage active offers shown on the Luxor website.', keywords: 'discount offer campaign special banner marketing promo' },
   { tab: 'branding', section: 'Branding', title: 'Theme & sidebar layout', description: 'Switch light or dark mode and expanded or compact sidebar.', keywords: 'appearance color theme dark light sidebar compact expanded navigation layout' },
   { tab: 'branding', section: 'Branding', title: 'Venue brochure', description: 'Upload or update the downloadable venue brochure PDF.', keywords: 'brochure pdf packet upload document flyer' },
@@ -66,6 +68,7 @@ export const SETTINGS_TAB_ICONS: Record<SettingsTab, typeof Bell> = {
   pricing: BadgeDollarSign,
   content: Building,
   elena: Bot,
+  funnelGoals: TrendingUp,
 }
 
 const TAB_ICONS = SETTINGS_TAB_ICONS

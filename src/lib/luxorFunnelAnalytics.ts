@@ -20,6 +20,68 @@ export function funnelPaymentDate(payment: FunnelRow): string | null {
 }
 const receiptLead = (r: FunnelRow): unknown => r.request_payload && typeof r.request_payload === 'object' && !Array.isArray(r.request_payload) ? (r.request_payload as Record<string, unknown>).inquiry_id : undefined
 const validTime = (v: unknown) => typeof v === 'string' && Number.isFinite(Date.parse(v))
+export type VerifiedCrmActivityMetrics = {
+  toursScheduled: number
+  toursCompleted: number
+  toursNoShows: number
+  proposalsSent: number
+  issues: string[]
+}
+function eligibleTourProposals(data: FunnelAnalyticsData) {
+  const live = unique(data.inquiries).filter(isFunnelInquiryEligible)
+  const leads = new Map(live.map(r => [r.id, r]))
+  const eligible = (r: FunnelRow) => leads.has(str(r.inquiry_id)) && !isFunnelRecordDeleted(r) && !hasFunnelTestMetadata(r)
+  return { live, eligible }
+}
+export function sliceFunnelAnalyticsData(data: FunnelAnalyticsData, inquiryIds: Set<string>): FunnelAnalyticsData {
+  const inquiries = data.inquiries.filter(r => inquiryIds.has(r.id))
+  const visits = data.visits.filter(r => inquiryIds.has(str(r.inquiry_id)))
+  const visitIds = new Set(visits.map(r => r.id))
+  return {
+    inquiries,
+    visits,
+    receipts: data.receipts.filter(r => visitIds.has(str(r.visit_id)) || inquiryIds.has(str(r.inquiry_id))),
+    proposals: data.proposals.filter(r => inquiryIds.has(str(r.inquiry_id))),
+    payments: data.payments.filter(r => inquiryIds.has(str(r.inquiry_id))),
+    invoices: data.invoices.filter(r => inquiryIds.has(str(r.inquiry_id))),
+    bookings: data.bookings.filter(r => inquiryIds.has(str(r.inquiry_id))),
+  }
+}
+export function computeVerifiedCrmActivityMetrics(period: FunnelPeriod, data: FunnelAnalyticsData): VerifiedCrmActivityMetrics {
+  const issues: string[] = []
+  const inside = (v: unknown) => validTime(v) && Date.parse(str(v)) >= Date.parse(period.startAt) && Date.parse(str(v)) < Date.parse(period.endAt)
+  const { live, eligible } = eligibleTourProposals(data)
+  let toursScheduled = 0, toursCompleted = 0, toursNoShows = 0, unverifiedVisits = 0, unverifiedAttendance = 0
+  for (const visit of unique(data.visits).filter(eligible)) {
+    const linkedReceipts = data.receipts.filter(r => r.visit_id === visit.id && r.visit_intent === 'new_visit')
+    const badReceipt = linkedReceipts.some(r => (receiptLead(r) != null && receiptLead(r) !== visit.inquiry_id) || (r.inquiry_id != null && r.inquiry_id !== visit.inquiry_id))
+    const receipts = linkedReceipts.filter(r => (receiptLead(r) == null || receiptLead(r) === visit.inquiry_id) && (r.inquiry_id == null || r.inquiry_id === visit.inquiry_id)).sort((a, b) => str(a.created_at).localeCompare(str(b.created_at)))
+    if (badReceipt || !receipts.length || !validTime(receipts[0].created_at)) { unverifiedVisits++; continue }
+    if (inside(receipts[0].created_at)) toursScheduled++
+    const date = str(visit.tour_date)
+    if (visit.attendance_status === 'attended') {
+      if (!isFunnelDateKey(date)) { unverifiedAttendance++; continue }
+      if (date >= period.startDate && date <= period.endDate) toursCompleted++
+    }
+    if (visit.attendance_status === 'no_show' && isFunnelDateKey(date) && date >= period.startDate && date <= period.endDate) toursNoShows++
+  }
+  if (unverifiedVisits > 0) issues.push(`${unverifiedVisits} visit${unverifiedVisits === 1 ? '' : 's'} could not be verified for scheduling totals and were excluded from this period count.`)
+  if (unverifiedAttendance > 0) issues.push(`${unverifiedAttendance} attended visit${unverifiedAttendance === 1 ? '' : 's'} lack a valid occurrence date and were excluded from completion totals.`)
+  const legacyTourInquiries = live.filter(r => !r.current_tour_visit_id && (r.preferred_tour_date || r.tour_attendance_status === 'attended'))
+  if (legacyTourInquiries.length > 0) {
+    issues.push(`Older tour records (${legacyTourInquiries.length}) predate visit tracking. Period tour counts include only visits with verified scheduling receipts and attendance dates.`)
+  }
+  const proposals = unique(data.proposals).filter(r => eligible(r) && r.channel === 'email' && ['sent', 'delivered'].includes(str(r.state)))
+  const verifiedProposals = proposals.filter(r => validTime(r.sent_at) && r.proposal_family_id)
+  const unverifiedProposals = proposals.length - verifiedProposals.length
+  if (unverifiedProposals > 0) issues.push(`${unverifiedProposals} proposal send${unverifiedProposals === 1 ? '' : 's'} lack a timestamp or family identity and were excluded from this period count.`)
+  const proposalsSent = new Set(verifiedProposals.filter(r => inside(r.sent_at)).map(r => r.proposal_family_id)).size
+  const legacyProposalInvoices = data.invoices.filter(r => eligible(r) && (r.proposal_sent_at || r.proposal_first_sent_at) && !proposals.some(p => p.invoice_id === r.id || (r.proposal_family_id && p.proposal_family_id === r.proposal_family_id)))
+  if (legacyProposalInvoices.length > 0) {
+    issues.push(`Older proposal sends (${legacyProposalInvoices.length}) predate email send tracking. Period proposal counts include only verified send attempts.`)
+  }
+  return { toursScheduled, toursCompleted, toursNoShows, proposalsSent, issues }
+}
 export function buildFunnelAnalytics(period: FunnelPeriod, data: FunnelAnalyticsData) {
   const issues: string[] = []
   const inside = (v: unknown) => validTime(v) && Date.parse(str(v)) >= Date.parse(period.startAt) && Date.parse(str(v)) < Date.parse(period.endAt)
@@ -31,26 +93,11 @@ export function buildFunnelAnalytics(period: FunnelPeriod, data: FunnelAnalytics
   const metrics: Record<FunnelMetric, number | null> = { newInquiries: cohort.length, toursScheduled: 0, toursCompleted: 0, proposalsSent: 0, depositsReceived: 0, bookedEvents: 0, revenue: 0, conversionRate: null }
   const unavailable = (metric: FunnelMetric, message: string) => { metrics[metric] = null; if (!issues.includes(message)) issues.push(message) }
   if (live.some(r => !validTime(r.created_at))) { unavailable('newInquiries', 'Some leads have no valid original creation date.'); dailyLeads.forEach(d => { d.count = null }) }
-  for (const visit of unique(data.visits).filter(eligible)) {
-    const linkedReceipts = data.receipts.filter(r => r.visit_id === visit.id && r.visit_intent === 'new_visit')
-    const badReceipt = linkedReceipts.some(r => (receiptLead(r) != null && receiptLead(r) !== visit.inquiry_id) || (r.inquiry_id != null && r.inquiry_id !== visit.inquiry_id))
-    const receipts = linkedReceipts.filter(r => (receiptLead(r) == null || receiptLead(r) === visit.inquiry_id) && (r.inquiry_id == null || r.inquiry_id === visit.inquiry_id)).sort((a, b) => str(a.created_at).localeCompare(str(b.created_at)))
-    if (badReceipt || !receipts.length || !validTime(receipts[0].created_at)) unavailable('toursScheduled', 'Some visits lack original scheduling receipts; full scheduling totals cannot be verified.')
-    else if (inside(receipts[0].created_at) && metrics.toursScheduled !== null) metrics.toursScheduled++
-    if (visit.attendance_status === 'attended') {
-      const date = str(visit.tour_date)
-      if (!isFunnelDateKey(date)) unavailable('toursCompleted', 'An attended visit has no valid occurrence date.')
-      else if (date >= period.startDate && date <= period.endDate && metrics.toursCompleted !== null) metrics.toursCompleted++
-    }
-  }
-  if (live.some(r => !r.current_tour_visit_id && (r.preferred_tour_date || r.tour_attendance_status === 'attended'))) {
-    unavailable('toursScheduled', 'Legacy tours without stable visit identity prevent complete scheduling totals.')
-    unavailable('toursCompleted', 'Legacy tours without stable visit identity prevent complete attendance totals.')
-  }
-  const proposals = unique(data.proposals).filter(r => eligible(r) && r.channel === 'email' && ['sent', 'delivered'].includes(str(r.state)))
-  if (proposals.some(r => !validTime(r.sent_at) || !r.proposal_family_id)) unavailable('proposalsSent', 'A successful proposal send lacks its timestamp or family identity.')
-  else metrics.proposalsSent = new Set(proposals.filter(r => inside(r.sent_at)).map(r => r.proposal_family_id)).size
-  if (data.invoices.some(r => eligible(r) && (r.proposal_sent_at || r.proposal_first_sent_at) && !proposals.some(p => p.invoice_id === r.id || (r.proposal_family_id && p.proposal_family_id === r.proposal_family_id)))) unavailable('proposalsSent', 'Legacy proposals lack verified successful send history; full totals cannot be verified.')
+  const verifiedActivity = computeVerifiedCrmActivityMetrics(period, data)
+  metrics.toursScheduled = verifiedActivity.toursScheduled
+  metrics.toursCompleted = verifiedActivity.toursCompleted
+  metrics.proposalsSent = verifiedActivity.proposalsSent
+  for (const issue of verifiedActivity.issues) if (!issues.includes(issue)) issues.push(issue)
   // booked_at is assigned at tentative creation, not reliable confirmation.
   const bookings = unique(data.bookings).filter(r => eligible(r) && (['confirmed', 'completed', 'cancelled'].includes(str(r.status)) || meta(r).reservation_confirmed_at))
   const confirmation = (r: FunnelRow) => meta(r).reservation_confirmed_at
@@ -94,7 +141,7 @@ export function buildFunnelAnalytics(period: FunnelPeriod, data: FunnelAnalytics
     if (metrics.revenue !== null) metrics.revenue += eventAmount
   }
   if (metrics.revenue !== null) metrics.revenue = Math.round(metrics.revenue * 100) / 100
-  return { period, metrics, dailyLeads, cohort: { created: cohort.length, bookedByPeriodEnd: bookedCohort }, issues, definitions: {
+  return { period, metrics, dailyLeads, cohort: { created: cohort.length, bookedByPeriodEnd: bookedCohort }, tourOutcomes: { noShows: verifiedActivity.toursNoShows }, issues, definitions: {
     toursScheduled: 'Distinct visits by original scheduling receipt date; reschedules are not new bookings.',
     toursCompleted: 'Attended visits by actual visit date, not the date attendance was recorded.',
     proposalsSent: 'Distinct proposal families successfully emailed in the period; repeated sends count once per family.',
@@ -102,6 +149,6 @@ export function buildFunnelAnalytics(period: FunnelPeriod, data: FunnelAnalytics
     bookedEvents: 'Bookings by durable reservation confirmation date, including later cancellations.',
     conversionRate: 'Leads created in this period with a verified booking confirmation before period end, divided by period-created leads.',
     revenue: 'Gross event receipts by audited received_date when saved, otherwise paid_at in Chicago, including later refunds and excluding security portions; not net refund accounting.',
-    coverage: 'Undated legacy history can make a metric unavailable for every date range. Source reads are not a transactional snapshot.',
+    coverage: 'Older tour and proposal rows without visit or send tracking are excluded from period counts; notes explain gaps. Payment and booking metrics still fail closed when records conflict.',
   } }
 }

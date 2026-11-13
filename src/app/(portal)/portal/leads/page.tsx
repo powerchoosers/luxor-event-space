@@ -1162,10 +1162,10 @@ function LeadsDashboard({
   funnelRange: PortalDateRange
   onSelectTab?: (tab: 'dashboard' | 'pipeline' | 'tours' | 'proposals' | 'clients' | 'lost' | 'followups') => void
 }) {
-  const [dashboardPeriod, setDashboardPeriod] = useState<FunnelPeriod>(() => getFunnelPeriodFromRange(funnelRange.start, funnelRange.end))
-  useEffect(() => {
-    setDashboardPeriod(getFunnelPeriodFromRange(funnelRange.start, funnelRange.end))
-  }, [funnelRange.start, funnelRange.end])
+  const dashboardPeriod = useMemo(
+    () => getFunnelPeriodFromRange(funnelRange.start, funnelRange.end),
+    [funnelRange.start, funnelRange.end],
+  )
   const recentLeads = leads
     .filter((lead) => isFunnelInquiryEligible(lead)
       && Date.parse(lead.created_at) >= Date.parse(dashboardPeriod.startAt)
@@ -1175,57 +1175,81 @@ function LeadsDashboard({
 
   return (
     <div className="h-full max-md:h-auto overflow-y-auto max-md:overflow-visible portal-scrollbar pr-1 space-y-6 pb-8 max-md:pb-2">
-      <LeadsFunnelDashboard range={funnelRange} onSelectTab={onSelectTab} onPeriodChange={setDashboardPeriod} />
+      <LeadsFunnelDashboard range={funnelRange} onSelectTab={onSelectTab} />
 
       {/* Recent Activity / Inquiries List */}
       <PortalTableCard
+        mobilePageScroll
+        stickyMobileControls={false}
+        className="max-md:!rounded-2xl overflow-hidden md:overflow-hidden"
+        controlsClassName="max-md:rounded-t-2xl md:rounded-t-2xl"
         controls={
-          <div className="flex items-center justify-between gap-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-center gap-2.5">
               <Users size={18} className="shrink-0 text-[#caa24c]" />
-              <div>
-                <h3 className="text-base font-bold text-[color:var(--portal-text)]">Recent Lead Submissions</h3>
-                <p className="mt-0.5 text-xs text-[color:var(--portal-muted)]">Direct website inquiries and intake form submissions</p>
-              </div>
+              <h3 className="text-base font-bold text-[color:var(--portal-text)]">Recent Lead Submissions</h3>
             </div>
             <span className="text-xs text-[color:var(--portal-muted)]">Latest 5 in selected period</span>
           </div>
         }
       >
-        <PortalStickyTable minWidth="960px">
-          <PortalStickyThead>
-            <tr className="bg-[color:var(--portal-soft)] text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--portal-muted)]">
-              <th className="px-8 py-3.5">Full Name &amp; Contact</th>
-              <th className="px-6 py-3.5">Event Type</th>
-              <th className="px-6 py-3.5">Intake Date</th>
-              <th className="px-6 py-3.5">Source Node</th>
-              <th className="px-8 py-3.5 text-right">Pipeline Status</th>
-            </tr>
-          </PortalStickyThead>
-          <tbody className="divide-y divide-[color:var(--portal-border)]">
-            {loading ? (
-              <PortalTableSkeleton cols={5} rows={5} />
-            ) : recentLeads.length === 0 ? (
-              <tr><td colSpan={5} className="px-8 py-12 text-center text-sm text-[color:var(--portal-muted)]">No recent lead submissions.</td></tr>
-            ) : recentLeads.map((lead) => (
-              <tr key={lead.id} className="group transition-colors hover:bg-[#caa24c]/7">
-                <td className="px-8 py-3.5">
-                  <Link href={`/portal/leads/${lead.id}`} className="group/contact flex items-center gap-4 rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/50">
-                    <span className="shrink-0 transition-transform duration-200 hover:scale-105 group-focus-visible/contact:scale-105 motion-reduce:transition-none motion-reduce:hover:scale-100 motion-reduce:group-focus-visible/contact:scale-100"><PortalContactAvatar name={lead.full_name} avatarUrl={lead.metadata?.avatar_url as string | null} size="md" /></span>
-                    <div>
-                      <p className="mb-0.5 text-sm font-semibold leading-tight text-[color:var(--portal-text)] group-hover/contact:text-[#a8792f] group-focus-visible/contact:text-[#a8792f] dark:group-hover/contact:text-[#e6c77f] dark:group-focus-visible/contact:text-[#e6c77f]">{lead.full_name}</p>
-                      <p className="text-[11px] font-medium text-[color:var(--portal-muted)] group-hover:text-[color:var(--portal-text)]">{lead.email || 'No email registered'}</p>
-                    </div>
-                  </Link>
-                </td>
-                <td className="px-6 py-3.5 text-sm font-medium text-[color:var(--portal-text)]">{lead.event_type || 'Quinceañera'}</td>
-                <td className="px-6 py-3.5 tabular-nums text-xs font-medium text-[color:var(--portal-muted)]">{formatDate(lead.created_at)}</td>
-                <td className="px-6 py-3.5 tabular-nums text-[10px] font-bold uppercase tracking-wider text-[#a37d2c] dark:text-[#caa24c]">{formatSourceLabel(lead)}</td>
-                <td className="px-8 py-3.5 text-right"><PortalStatusBadge status={isLuxorInquiryArchived(lead) ? 'Archived' : lead.status} tone={isLuxorInquiryArchived(lead) ? 'neutral' : undefined} borderless /></td>
+        <div className="md:hidden divide-y divide-[color:var(--portal-border)]">
+          {loading ? (
+            <motion.div layout={false} className="space-y-3 p-4">{[1, 2, 3].map((key) => <PortalSkeleton key={key} className="h-28 w-full rounded-xl" />)}</motion.div>
+          ) : recentLeads.length === 0 ? (
+            <div className="max-md:rounded-b-2xl px-5 py-12 text-center text-sm text-[color:var(--portal-muted)]">No recent lead submissions.</div>
+          ) : recentLeads.map((lead, index) => (
+            <LuxorCrmRecordCard
+              key={lead.id}
+              lead={lead}
+              listFlush
+              listFlushEnd={index === recentLeads.length - 1}
+              headerHref={`/portal/leads/${lead.id}`}
+              badges={[{ label: isLuxorInquiryArchived(lead) ? 'Archived' : lead.status.replaceAll('_', ' '), tone: isLuxorInquiryArchived(lead) ? 'neutral' : luxorCrmStatusTone(lead.status) }]}
+              subtitle={<>{lead.event_type || 'Quinceañera'} · {formatDate(lead.created_at)}</>}
+              contact={<span className="block">{lead.email || 'No email registered'}{lead.phone ? <span className="mt-0.5 block">{formatPhoneDisplay(lead.phone)}</span> : null}</span>}
+              className={index === recentLeads.length - 1 ? '' : 'border-b border-[color:var(--portal-border)]'}
+            >
+              <p className="text-[10px] font-bold uppercase tracking-wider text-[#a37d2c] dark:text-[#caa24c]">{formatSourceLabel(lead)}</p>
+            </LuxorCrmRecordCard>
+          ))}
+        </div>
+        <div className="hidden md:block">
+          <PortalStickyTable minWidth="960px">
+            <PortalStickyThead>
+              <tr className="bg-[color:var(--portal-soft)] text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--portal-muted)]">
+                <th className="px-8 py-3.5">Full Name &amp; Contact</th>
+                <th className="px-6 py-3.5">Event Type</th>
+                <th className="px-6 py-3.5">Intake Date</th>
+                <th className="px-6 py-3.5">Source Node</th>
+                <th className="px-8 py-3.5 text-right">Pipeline Status</th>
               </tr>
-            ))}
-          </tbody>
-        </PortalStickyTable>
+            </PortalStickyThead>
+            <tbody className="divide-y divide-[color:var(--portal-border)]">
+              {loading ? (
+                <PortalTableSkeleton cols={5} rows={5} />
+              ) : recentLeads.length === 0 ? (
+                <tr><td colSpan={5} className="px-8 py-12 text-center text-sm text-[color:var(--portal-muted)]">No recent lead submissions.</td></tr>
+              ) : recentLeads.map((lead) => (
+                <tr key={lead.id} className="group transition-colors hover:bg-[#caa24c]/7">
+                  <td className="px-8 py-3.5">
+                    <Link href={`/portal/leads/${lead.id}`} className="group/contact flex items-center gap-4 rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/50">
+                      <span className="shrink-0 transition-transform duration-200 hover:scale-105 group-focus-visible/contact:scale-105 motion-reduce:transition-none motion-reduce:hover:scale-100 motion-reduce:group-focus-visible/contact:scale-100"><PortalContactAvatar name={lead.full_name} avatarUrl={lead.metadata?.avatar_url as string | null} size="md" /></span>
+                      <div>
+                        <p className="mb-0.5 text-sm font-semibold leading-tight text-[color:var(--portal-text)] group-hover/contact:text-[#a8792f] group-focus-visible/contact:text-[#a8792f] dark:group-hover/contact:text-[#e6c77f] dark:group-focus-visible/contact:text-[#e6c77f]">{lead.full_name}</p>
+                        <p className="text-[11px] font-medium text-[color:var(--portal-muted)] group-hover:text-[color:var(--portal-text)]">{lead.email || 'No email registered'}</p>
+                      </div>
+                    </Link>
+                  </td>
+                  <td className="px-6 py-3.5 text-sm font-medium text-[color:var(--portal-text)]">{lead.event_type || 'Quinceañera'}</td>
+                  <td className="px-6 py-3.5 tabular-nums text-xs font-medium text-[color:var(--portal-muted)]">{formatDate(lead.created_at)}</td>
+                  <td className="px-6 py-3.5 tabular-nums text-[10px] font-bold uppercase tracking-wider text-[#a37d2c] dark:text-[#caa24c]">{formatSourceLabel(lead)}</td>
+                  <td className="px-8 py-3.5 text-right"><PortalStatusBadge status={isLuxorInquiryArchived(lead) ? 'Archived' : lead.status} tone={isLuxorInquiryArchived(lead) ? 'neutral' : undefined} borderless /></td>
+                </tr>
+              ))}
+            </tbody>
+          </PortalStickyTable>
+        </div>
       </PortalTableCard>
     </div>
   )
@@ -1377,7 +1401,8 @@ function LeadsClientsTab({
               <LuxorCrmRecordCard
                 key={client.id}
                 lead={client}
-                className="max-md:!rounded-none max-md:!border-x-0 max-md:!border-t-0 max-md:!shadow-none"
+                listFlush
+                className="border-b border-[color:var(--portal-border)] md:border-b-0"
                 badges={[{ label: 'Booked', tone: 'green' }]}
                 subtitle={<>{client.event_type || 'Quinceañera'} · {client.target_date ? formatLuxorTourDate(client.target_date) : 'Date TBD'}{client.guest_count ? <> · {client.guest_count} guests</> : <> · Flexible guest count</>}</>}
                 onOpen={() => onOpen(client)}
@@ -1554,12 +1579,13 @@ function MobileLeadCard({
   return (
     <LuxorCrmRecordCard
       lead={lead}
+      listFlush
       badges={badges}
       subtitle={pipelineStage !== 'newsletter' ? <>{lead.event_type || 'Quinceañera'} · {lead.target_date ? formatLuxorTourDate(lead.target_date) : 'Date not set'} · {lead.guest_count || 'Flexible'} guests</> : 'Newsletter contact'}
       contact={<span className="block">{lead.email || 'No email captured'}{lead.phone ? <span className="mt-0.5 block">{formatPhoneDisplay(lead.phone)}</span> : null}</span>}
       onOpen={() => { window.location.href = `/portal/leads/${lead.id}` }}
       selected={selected}
-      className="rounded-none border-x-0 border-t-0 p-3 shadow-none sm:p-4"
+      className="border-b border-[color:var(--portal-border)] p-3 sm:p-4"
       actions={<div className="flex w-full items-center justify-between gap-3">
         {onToggle ? <PortalBulkRowSelector checked={selected} index={index || 1} onChange={() => onToggle(lead.id)} label={lead.full_name} /> : <span />}
         <LeadLifecycleActionsMenu lead={lead} onAction={(action) => onLifecycleAction(lead, action)} />
@@ -1665,7 +1691,8 @@ function LeadsLostTab({ leads, loading = false }: { leads: LuxorInquiry[]; loadi
               return <LuxorCrmRecordCard
                 key={lead.id}
                 lead={lead}
-                className="max-md:!rounded-none max-md:!border-x-0 max-md:!border-t-0 max-md:!shadow-none"
+                listFlush
+                className="border-b border-[color:var(--portal-border)]"
                 badges={[{ label: 'Archived', tone: 'neutral' }]}
                 subtitle={<>{lead.event_type || 'Event'} · {lead.target_date ? formatLuxorTourDate(lead.target_date) : 'Date not set'}{lead.guest_count ? <> · {lead.guest_count} guests</> : null}</>}
                 contact={lead.email || (lead.phone ? formatPhoneDisplay(lead.phone) : 'No contact detail')}
@@ -1819,6 +1846,7 @@ function LeadsToursTab({
       <LuxorCrmRecordCard
         key={tour.id}
         lead={tour}
+        listFlush
         badges={[{ label: statusLabel, tone: tourStatusTones[category], warning: category === 'needs_outcome' }]}
         headerAction={
           <LeadLifecycleActionsMenu
@@ -1829,7 +1857,7 @@ function LeadsToursTab({
         }
         subtitle={<>{tour.event_type || 'Quinceañera'} · {tour.target_date ? formatLuxorTourDate(tour.target_date) : 'Event date not set'}{tour.guest_count ? <> · {tour.guest_count} guests</> : null}</>}
         contact={tour.email || (tour.phone ? formatPhoneDisplay(tour.phone) : 'No contact details')}
-        className="max-md:shadow-none"
+        className="border-b border-[color:var(--portal-border)]"
         onOpen={() => { window.location.href = `/portal/leads/${tour.id}` }}
         interactionLabel={`Open lead record for ${tour.full_name}`}
       >

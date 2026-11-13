@@ -191,6 +191,7 @@ export function compareLuxorScheduledTours(a: LuxorInquiry, b: LuxorInquiry, dir
   return a.id.localeCompare(b.id)
 }
 
+/** Inquiry tour-date cohort counts for operational lists. Portal KPIs use computeVerifiedCrmActivityMetrics instead. */
 export function getLuxorTourAnalytics(inquiries: LuxorInquiry[], start: Date | string, end: Date | string) {
   const startKey = luxorDateKey(start)
   const endKey = luxorDateKey(end)

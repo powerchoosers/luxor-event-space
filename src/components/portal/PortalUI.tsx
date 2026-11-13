@@ -796,6 +796,7 @@ export function PortalTableCard({
   footer,
   className = '',
   footerClassName = '',
+  controlsClassName = '',
   mobilePageScroll = false,
   mobilePageScrollUntil = 'md',
   stickyMobileControls = true,
@@ -805,6 +806,7 @@ export function PortalTableCard({
   footer?: React.ReactNode
   className?: string
   footerClassName?: string
+  controlsClassName?: string
   /**
    * Lets a card's rows join the page scroll on phones instead of trapping
    * them in a very short nested table area.
@@ -834,7 +836,7 @@ export function PortalTableCard({
       {controls ? (
         <div
           style={{ WebkitBackdropFilter: isStickyMobile ? 'blur(24px)' : undefined }}
-          className={`shrink-0 border-b border-[color:var(--portal-border)] bg-[color:var(--portal-card)] py-3 px-4 sm:px-6 transition-shadow ${mobileStickyControlsClass}`}
+          className={`shrink-0 border-b border-[color:var(--portal-border)] bg-[color:var(--portal-card)] py-3 px-4 sm:px-6 transition-shadow ${mobileStickyControlsClass} ${controlsClassName}`}
         >
           {controls}
         </div>

@@ -40,6 +40,7 @@ const VALID_TABS: readonly Tab[] = [
   'promotions',
   'branding',
   'content',
+  'funnelGoals',
 ]
 
 function isValidTab(value: string | null): value is Tab {
