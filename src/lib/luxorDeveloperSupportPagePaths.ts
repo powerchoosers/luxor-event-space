@@ -24,6 +24,7 @@ export const PORTAL_DEVELOPER_SUPPORT_PAGES: DeveloperSupportPageOption[] = [
 export const PUBLIC_DEVELOPER_SUPPORT_PAGES: DeveloperSupportPageOption[] = [
   { path: '/', label: 'Home', description: 'Main marketing page' },
   { path: '/events', label: 'Events', description: 'Event types overview' },
+  { path: '/packages', label: 'Packages', description: 'Event package cards and pricing' },
   { path: '/spaces', label: 'Spaces', description: 'Venue spaces' },
   { path: '/gallery', label: 'Gallery', description: 'Photo gallery' },
   { path: '/visit', label: 'Visit', description: 'Tour and visit page' },
@@ -35,6 +36,7 @@ export const PUBLIC_DEVELOPER_SUPPORT_PAGES: DeveloperSupportPageOption[] = [
   { path: '/grand-opening-rsvp', label: 'Grand opening RSVP', description: 'RSVP landing page' },
   { path: '/es', label: 'Home (Spanish)', description: 'Spanish home' },
   { path: '/es/events', label: 'Events (Spanish)', description: 'Spanish events' },
+  { path: '/es/packages', label: 'Packages (Spanish)', description: 'Spanish packages' },
   { path: '/es/gallery', label: 'Gallery (Spanish)', description: 'Spanish gallery' },
   { path: '/es/visit', label: 'Visit (Spanish)', description: 'Spanish visit' },
   { path: '/es/contact', label: 'Contact (Spanish)', description: 'Spanish contact' },
@@ -43,7 +45,7 @@ export const PUBLIC_DEVELOPER_SUPPORT_PAGES: DeveloperSupportPageOption[] = [
 const PUBLIC_EXACT = new Set(PUBLIC_DEVELOPER_SUPPORT_PAGES.map((page) => page.path))
 
 /** Public marketing routes allowed when "Current page" is not in the static catalog. */
-const PUBLIC_ROUTE_PATTERN = /^\/(?:es\/)?(?:events|spaces|gallery|visit|tour|contact|terms|privacy|sms-signup|grand-opening-rsvp)$/
+const PUBLIC_ROUTE_PATTERN = /^\/(?:es\/)?(?:events|packages|spaces|gallery|visit|tour|contact|terms|privacy|sms-signup|grand-opening-rsvp)$/
 
 export function getDeveloperSupportPageArea(path: string | null | undefined): DeveloperSupportPageArea {
   if (!path) return 'portal'

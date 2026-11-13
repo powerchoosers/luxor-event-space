@@ -71,6 +71,24 @@ test('parseDeveloperSupportTicket keeps portal and public page paths', () => {
     attachments: [],
   })
   assert.equal(esSpaces.pagePath, '/es/spaces')
+
+  const packages = parseDeveloperSupportTicket({
+    title: 'Package card layout',
+    description: 'Flip card spacing',
+    priority: 'medium',
+    pagePath: '/packages',
+    attachments: [],
+  })
+  assert.equal(packages.pagePath, '/packages')
+
+  const esPackages = parseDeveloperSupportTicket({
+    title: 'Spanish packages',
+    description: null,
+    priority: 'low',
+    pagePath: '/es/packages',
+    attachments: [],
+  })
+  assert.equal(esPackages.pagePath, '/es/packages')
 })
 
 test('parseDeveloperSupportTicket rejects extra details over 20,000 characters', () => {
