@@ -35,6 +35,10 @@ import {
   normalizeDeveloperSupportPagePath,
   type DeveloperSupportPageArea,
 } from '@/lib/luxorDeveloperSupportPagePaths'
+import {
+  developerSupportDescriptionLimitMessage,
+  LUXOR_DEVELOPER_SUPPORT_DESCRIPTION_MAX,
+} from '@/lib/luxorDeveloperSupportLimits'
 
 // --- 1. Lead Update Container ---
 export interface LeadUpdatePayload {
@@ -1412,6 +1416,8 @@ export function ElenaDeveloperSupportCard({
   }
 
   const selectedAttachments = attachmentOptions.filter((item) => selectedAttachmentKeys.has(item.key))
+  const trimmedDescriptionLength = description.trim().length
+  const descriptionOverLimit = trimmedDescriptionLength > LUXOR_DEVELOPER_SUPPORT_DESCRIPTION_MAX
 
   const reduceMotion = useReducedMotion()
   const layoutEase = PORTAL_MODAL_EASE
@@ -1432,6 +1438,9 @@ export function ElenaDeveloperSupportCard({
   const issuePrepareRequest = async (): Promise<boolean> => {
     const attachments = await resolveDeveloperSupportAttachmentsForPrepare(chatId, selectedAttachments)
     const trimmedDescription = description.trim()
+    if (trimmedDescription.length > LUXOR_DEVELOPER_SUPPORT_DESCRIPTION_MAX) {
+      throw new Error(developerSupportDescriptionLimitMessage())
+    }
     const response = await fetch('/api/portal/elena-chat/actions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -1600,15 +1609,26 @@ export function ElenaDeveloperSupportCard({
                     className="block text-xs font-semibold text-[color:var(--portal-text)]"
                   >
                     Extra details
+                    <span className="mt-0.5 block text-[10px] font-normal text-[color:var(--portal-muted)]">
+                      {`Up to ${LUXOR_DEVELOPER_SUPPORT_DESCRIPTION_MAX.toLocaleString('en-US')} characters.`}
+                    </span>
                     <textarea
                       ref={detailsRef}
                       value={description}
                       onChange={(e) => setDescription(e.target.value)}
                       rows={3}
+                      maxLength={LUXOR_DEVELOPER_SUPPORT_DESCRIPTION_MAX}
                       disabled={isSaving}
                       placeholder="What happened? What did you expect?"
+                      aria-invalid={descriptionOverLimit}
                       className="mt-1 w-full resize-y rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-bg)] p-2.5 text-xs text-[color:var(--portal-text)] outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/50 disabled:opacity-60"
                     />
+                    <span
+                      className={`mt-1 block text-[10px] font-normal tabular-nums ${descriptionOverLimit ? 'text-red-600 dark:text-red-400' : 'text-[color:var(--portal-muted)]'}`}
+                      aria-live="polite"
+                    >
+                      {`${trimmedDescriptionLength.toLocaleString('en-US')} / ${LUXOR_DEVELOPER_SUPPORT_DESCRIPTION_MAX.toLocaleString('en-US')}`}
+                    </span>
                   </motion.label>
                   <motion.div layout transition={{ layout: { duration: layoutDuration, ease: layoutEase } }} className="space-y-2">
                     {attachmentOptions.length > 0 ? (
@@ -1700,7 +1720,7 @@ export function ElenaDeveloperSupportCard({
                   if (confirmationRef.current) void confirmTicket()
                   else void prepareTicket()
                 }}
-                disabled={isSaving || !title.trim()}
+                disabled={isSaving || !title.trim() || descriptionOverLimit}
                 className="luxor-gold-raised inline-flex min-h-10 items-center gap-2 rounded-lg px-4 py-2 text-xs font-bold !text-white disabled:opacity-50"
               >
                 {isSaving && <PortalConstellationLoader size={13} tone="white" />}

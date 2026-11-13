@@ -18,6 +18,11 @@ import {
   normalizeDeveloperSupportPagePath,
 } from '@/lib/luxorDeveloperSupportPagePaths'
 import type { LuxorDeveloperSupportWebhookPayload } from '@/lib/luxorCursorAutomationServer'
+import {
+  developerSupportDescriptionLimitMessage,
+  LUXOR_DEVELOPER_SUPPORT_DESCRIPTION_MAX,
+  LUXOR_DEVELOPER_SUPPORT_TITLE_MAX,
+} from '@/lib/luxorDeveloperSupportLimits'
 
 export class DeveloperSupportConfirmationExpiredError extends Error {
   readonly code = 'confirmation_expired' as const
@@ -46,11 +51,11 @@ export function parseDeveloperSupportTicket(input: unknown): DeveloperSupportTic
   if (typeof value.title !== 'string' || !value.title.trim()) {
     throw new Error('Add a short title describing what needs fixing.')
   }
-  if (value.title.trim().length > 200) {
-    throw new Error('Shorten the title to 200 characters or less.')
+  if (value.title.trim().length > LUXOR_DEVELOPER_SUPPORT_TITLE_MAX) {
+    throw new Error(`Shorten the title to ${LUXOR_DEVELOPER_SUPPORT_TITLE_MAX} characters or less.`)
   }
-  if (value.description != null && (typeof value.description !== 'string' || value.description.trim().length > 4000)) {
-    throw new Error('Shorten the extra details to 4000 characters or less.')
+  if (value.description != null && (typeof value.description !== 'string' || value.description.trim().length > LUXOR_DEVELOPER_SUPPORT_DESCRIPTION_MAX)) {
+    throw new Error(developerSupportDescriptionLimitMessage())
   }
   const priority = value.priority == null ? 'medium' : value.priority
   if (priority !== 'low' && priority !== 'medium' && priority !== 'high' && priority !== 'urgent') {
@@ -204,7 +209,7 @@ export async function issueElenaDeveloperSupportConfirmation(input: unknown) {
       throw new Error('Only an active owner session can prepare a developer ticket. Sign out and sign back in, then try again.')
     }
     if (error instanceof SupabaseRestError && (error.code === '22023' || /confirmation unavailable/i.test(error.message))) {
-      throw new Error('The ticket or a screenshot did not pass the save check. Remove the attachment, or shorten the title (200) and extra details (4000), then try again.')
+      throw new Error(`The ticket or a screenshot did not pass the save check. Remove the attachment, or shorten the title (${LUXOR_DEVELOPER_SUPPORT_TITLE_MAX}) and extra details (${LUXOR_DEVELOPER_SUPPORT_DESCRIPTION_MAX.toLocaleString('en-US')}), then try again.`)
     }
     throw error
   }

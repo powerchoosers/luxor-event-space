@@ -38,9 +38,10 @@ const stubs = {
   '@/lib/luxorDeveloperSupportAttachmentsServer': { parseDeveloperSupportAttachmentInputs: () => [] },
   '@/lib/luxorDeveloperSupportPagePaths': pagePaths,
 }
+const limits = load('src/lib/luxorDeveloperSupportLimits.ts')
 const { parseDeveloperSupportTicket, buildDeveloperSupportWebhookPayload } = load(
   'src/lib/luxorElenaDeveloperSupportConfirmationServer.ts',
-  stubs,
+  { ...stubs, '@/lib/luxorDeveloperSupportLimits': limits },
 )
 
 test('parseDeveloperSupportTicket keeps portal and public page paths', () => {
@@ -70,6 +71,26 @@ test('parseDeveloperSupportTicket keeps portal and public page paths', () => {
     attachments: [],
   })
   assert.equal(esSpaces.pagePath, '/es/spaces')
+})
+
+test('parseDeveloperSupportTicket rejects extra details over 20,000 characters', () => {
+  const ok = parseDeveloperSupportTicket({
+    title: 'Long spec',
+    description: 'x'.repeat(20_000),
+    priority: 'medium',
+    attachments: [],
+  })
+  assert.equal(ok.description?.length, 20_000)
+
+  assert.throws(
+    () => parseDeveloperSupportTicket({
+      title: 'Too long',
+      description: 'x'.repeat(20_001),
+      priority: 'medium',
+      attachments: [],
+    }),
+    /Shorten the extra details to 20,000 characters or less/,
+  )
 })
 
 test('webhook payload carries pagePath, pageArea, and context route lines', () => {
