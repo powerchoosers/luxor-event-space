@@ -1,14 +1,24 @@
 import {
   DEFAULT_LUXOR_PROPOSAL_PACKAGE_SETTINGS,
-  getLuxorPackageCatalogStartingPrice,
   LUXOR_PUBLIC_PACKAGE_TIER_IDS,
   packageInclusionsForDisplay,
   packageLimitationsForPublicDisplay,
   type LuxorPublicPackageTierId,
 } from '@/lib/luxorProposalPackages'
 
-/** Set to `true` after Arianna confirms public package pricing on the website. */
-export const LUXOR_PUBLIC_PACKAGES_SHOW_CARD_PRICES = false
+/** Toggle public package card pricing on /packages. */
+export const LUXOR_PUBLIC_PACKAGES_SHOW_CARD_PRICES = true
+
+/**
+ * Marketing "Starting at" amounts for the public packages page (Arianna's spec).
+ * Separate from proposal-catalog package fees and pricing engine totals.
+ */
+export const LUXOR_PUBLIC_PACKAGE_MARKETING_STARTING_PRICES_USD: Record<LuxorPublicPackageTierId, number> = {
+  essentials: 1000,
+  signature: 1800,
+  luxor: 2800,
+}
+
 export type PublicPackageCardData = {
   id: LuxorPublicPackageTierId
   displayName: string
@@ -55,10 +65,10 @@ export function buildPublicPackageCards(locale: 'en' | 'es' = 'en'): PublicPacka
       id,
       displayName: DISPLAY_NAMES[id][locale],
       shortDescription: option.description,
-      startingPrice: getLuxorPackageCatalogStartingPrice(option),
+      startingPrice: LUXOR_PUBLIC_PACKAGE_MARKETING_STARTING_PRICES_USD[id],
       previewInclusions: fullInclusions.slice(0, PREVIEW_INCLUSION_COUNT),
       fullInclusions,
-      limitations: packageLimitationsForPublicDisplay(id, settings, DEFAULT_RENTAL_HOURS, LUXOR_PUBLIC_PACKAGES_SHOW_CARD_PRICES),
+      limitations: packageLimitationsForPublicDisplay(id, settings, DEFAULT_RENTAL_HOURS, false),
       image: PACKAGE_IMAGES[id].src,
       imageAlt: PACKAGE_IMAGES[id].alt,
       mostPopular: option.most_popular_label,

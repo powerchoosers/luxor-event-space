@@ -54,7 +54,7 @@ function loadTypeScript(filePath, stubs = {}) {
   return loaded.exports
 }
 
-test('public package cards use catalog names, prices, and inclusions', () => {
+test('public package cards use catalog names, marketing starting prices, and inclusions', () => {
   const { buildPublicPackageCards } = loadTypeScript('src/lib/luxorPublicPackages.ts', {
     '@/components/packages/PackageFlipCard': {},
     'server-only': {},
@@ -76,9 +76,10 @@ test('public package cards use catalog names, prices, and inclusions', () => {
     ['essentials', 'signature', 'luxor'],
   )
   assert.equal(cards[0].displayName, 'Essentials')
-  assert.equal(cards[0].startingPrice, 0)
-  assert.equal(cards[1].startingPrice, 600)
-  assert.equal(cards[2].startingPrice, 1100)
+  assert.equal(cards[0].startingPrice, 1000)
+  assert.equal(cards[1].startingPrice, 1800)
+  assert.equal(cards[2].startingPrice, 2800)
+  assert.ok(cards[1].limitations.every((line) => !/\$\d/.test(line)))
   assert.ok(cards[0].fullInclusions.some((line) => line.includes('venue rental')))
   assert.ok(cards[2].fullInclusions.some((line) => /photobooth/i.test(line)))
   assert.equal(cards[0].shortDescription, 'Perfect for hosts who want to personalize and decorate their own event.')
