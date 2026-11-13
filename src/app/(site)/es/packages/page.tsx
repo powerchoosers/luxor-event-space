@@ -1,5 +1,9 @@
 import type { Metadata } from 'next'
 import { PackagesPageContent } from '@/components/packages/PackagesPageContent'
+import { buildPublicPackageCards } from '@/lib/luxorPublicPackages'
+import { loadPublicPackagesPricingSnapshot } from '@/lib/luxorPublicPackageStartingPricesServer'
+
+export const revalidate = 300
 
 export const metadata: Metadata = {
   title: 'Paquetes para eventos | Luxor at Las Palmas Events',
@@ -7,6 +11,8 @@ export const metadata: Metadata = {
   alternates: { canonical: '/es/packages', languages: { en: '/packages', es: '/es/packages' } },
 }
 
-export default function SpanishPackagesPage() {
-  return <PackagesPageContent locale="es" />
+export default async function SpanishPackagesPage() {
+  const pricing = await loadPublicPackagesPricingSnapshot()
+  const cards = buildPublicPackageCards('es', pricing)
+  return <PackagesPageContent locale="es" cards={cards} showCardPrices={pricing.showCardPrices} />
 }

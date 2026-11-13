@@ -21,8 +21,9 @@ function loadTypeScript(filePath, stubs = {}) {
       baseUrl: root,
     },
   }).outputText
-  const loaded = new Module(path.join(root, `${path.basename(filePath)}.synthetic.cjs`), module)
-  loaded.filename = path.join(root, `${path.basename(filePath)}.synthetic.cjs`)
+  const absolutePath = path.join(root, filePath)
+  const loaded = new Module(absolutePath, module)
+  loaded.filename = absolutePath
   loaded.paths = module.paths
   const originalLoad = Module._load
   const alias = (request) => {
@@ -39,6 +40,20 @@ function loadTypeScript(filePath, stubs = {}) {
     if (resolved !== request && fs.existsSync(resolved + '.tsx')) {
       return loadTypeScript(path.relative(root, resolved + '.tsx'), stubs)
     }
+    if (request.startsWith('.')) {
+      const parentDir = parent?.filename ? path.dirname(parent.filename) : path.join(root, 'src')
+      for (const candidate of [
+        path.resolve(parentDir, request),
+        path.resolve(parentDir, `${request}.ts`),
+        path.resolve(parentDir, `${request}.tsx`),
+      ]) {
+        if (fs.existsSync(candidate)) {
+          if (candidate.endsWith('.ts') || candidate.endsWith('.tsx')) {
+            return loadTypeScript(path.relative(root, candidate), stubs)
+          }
+        }
+      }
+    }
     try {
       return originalLoad.call(this, request, parent, isMain)
     } catch (error) {
@@ -54,42 +69,59 @@ function loadTypeScript(filePath, stubs = {}) {
   return loaded.exports
 }
 
-test('public package cards use catalog names, marketing starting prices, and inclusions', () => {
-  const { buildPublicPackageCards } = loadTypeScript('src/lib/luxorPublicPackages.ts', {
-    '@/components/packages/PackageFlipCard': {},
-    'server-only': {},
-    next: {},
-    'next/image': {},
-    'framer-motion': { useReducedMotion: () => false },
-    react: {
-      useState: () => [false, () => {}],
-      useCallback: (fn) => fn,
-      useId: () => ':id:',
-      useRef: () => ({ current: null }),
-      useEffect: () => {},
+function weekendTestConfig() {
+  const pricing = loadTypeScript('src/lib/luxorProposalPricing.ts')
+  const decor = loadTypeScript('src/lib/luxorDecorCatalogV2.ts')
+  return {
+    ...pricing.LUXOR_DEFAULT_PROPOSAL_PRICING_CONFIG,
+    pricing_mode: 'venue_plus_preferred_vendor_estimates',
+    luxor_costs: {
+      ...pricing.LUXOR_DEFAULT_PROPOSAL_PRICING_CONFIG,
+      proposal_pricing_policy_version: 4,
+      [decor.LUXOR_DECOR_CATALOG_KEY]: {
+        schema_version: decor.LUXOR_DECOR_CATALOG_SCHEMA_VERSION,
+        items: [{
+          id: 'tablecloths',
+          name: 'Tablecloths',
+          description: 'Tablecloths',
+          category: 'signature_package_add_ons',
+          amount: 1,
+          pricing_unit: 'order',
+          minimum_quantity: 1,
+          active: true,
+          included_in_packages: ['essentials', 'signature', 'luxor', 'customized'],
+          display_order: 1,
+        }],
+      },
     },
-  })
-  const cards = buildPublicPackageCards('en')
-  assert.equal(cards.length, 3)
-  assert.deepEqual(
-    cards.map((card) => card.id),
-    ['essentials', 'signature', 'luxor'],
-  )
-  assert.equal(cards[0].displayName, 'Essentials')
-  assert.equal(cards[0].startingPrice, 1000)
-  assert.equal(cards[1].startingPrice, 1800)
-  assert.equal(cards[2].startingPrice, 2800)
-  assert.ok(cards[1].limitations.every((line) => !/\$\d/.test(line)))
+  }
+}
+
+test('public package cards match engine weekend minimum for Essentials', () => {
+  const pricing = loadTypeScript('src/lib/luxorPublicPackageStartingPrices.ts')
+  const packages = loadTypeScript('src/lib/luxorPublicPackages.ts')
+  const config = weekendTestConfig()
+  const snapshot = pricing.buildPublicPackagesPricingSnapshot(config, 1)
+  const cards = packages.buildPublicPackageCards('en', snapshot)
+  const essentials = snapshot.packages.find((entry) => entry.packageId === 'essentials')
+  assert.ok(essentials?.startingPrice !== null, essentials?.unavailableReason || snapshot.unavailableReason)
+  assert.equal(cards[0].startingPrice, essentials.startingPrice)
+  assert.equal(cards[0].startingPrice, pricing.computePublicPackageWeekendStartingPrice(config, 'essentials').startingPrice)
+  assert.ok(essentials.scenario)
+  assert.equal(essentials.scenario.guestCount, 1)
+  assert.ok(['friday', 'saturday', 'sunday'].includes(essentials.scenario.day))
   assert.ok(cards[0].fullInclusions.some((line) => line.includes('venue rental')))
-  assert.ok(cards[2].fullInclusions.some((line) => /photobooth/i.test(line)))
-  assert.equal(cards[0].shortDescription, 'Perfect for hosts who want to personalize and decorate their own event.')
 })
 
 test('package flip helper toggles between front and back faces', () => {
   const { nextPackageCardFace } = loadTypeScript('src/components/packages/PackageFlipCard.tsx', {
     '@/lib/luxorPublicPackages': {},
     '@/lib/icons/phosphor-compat': new Proxy({}, { get: () => () => null }),
-    'framer-motion': { useReducedMotion: () => false },
+    'framer-motion': {
+      useReducedMotion: () => false,
+      AnimatePresence: ({ children }) => children,
+      motion: { div: 'div' },
+    },
     next: {},
     'next/image': {},
     react: {

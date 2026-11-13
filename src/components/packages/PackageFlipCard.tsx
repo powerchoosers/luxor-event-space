@@ -3,8 +3,8 @@
 import Image from 'next/image'
 import { useCallback, useEffect, useId, useRef, useState } from 'react'
 import { ArrowRight, Check } from '@/lib/icons/phosphor-compat'
-import { useReducedMotion } from 'framer-motion'
-import { LUXOR_PUBLIC_PACKAGES_SHOW_CARD_PRICES, type PublicPackageCardData } from '@/lib/luxorPublicPackages'
+import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
+import type { PublicPackageCardData } from '@/lib/luxorPublicPackages'
 
 type PackageFlipCardProps = {
   data: PublicPackageCardData
@@ -90,13 +90,13 @@ export function PackageFlipCard({ data, locale = 'en' }: PackageFlipCardProps) {
       <div className="flex flex-1 flex-col p-6 sm:p-7">
         <h3 className="font-serif text-4xl leading-none text-[#f7efe3]">{data.displayName}</h3>
         <p className="mt-4 text-sm leading-6 text-[#d7c29a]/72 sm:text-base">{data.shortDescription}</p>
-        {LUXOR_PUBLIC_PACKAGES_SHOW_CARD_PRICES ? (
+        {data.showStartingPrice && data.startingPrice !== null ? (
           <div className="mt-5">
             <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-[#caa24c]">{t.startingAt}</p>
             <p className="mt-1 font-serif text-4xl leading-none text-[#f1d27a]">{formatPrice(data.startingPrice)}</p>
           </div>
         ) : null}
-        <ul className={`grid gap-3 ${LUXOR_PUBLIC_PACKAGES_SHOW_CARD_PRICES ? 'mt-6' : 'mt-5'}`}>
+        <ul className={`grid gap-3 ${data.showStartingPrice ? 'mt-6' : 'mt-5'}`}>
           {data.previewInclusions.map((item) => (
             <li key={item} className="flex items-start gap-3 text-sm text-[#d7c29a]/78">
               <Check className="mt-0.5 h-4 w-4 shrink-0 text-[#caa24c]" aria-hidden />
@@ -169,7 +169,17 @@ export function PackageFlipCard({ data, locale = 'en' }: PackageFlipCardProps) {
         <span id={`${faceId}-title`} className="sr-only">
           {data.displayName} package {activeFace}
         </span>
-        {activeFace === 'front' ? renderFront() : renderBack()}
+        <AnimatePresence mode="wait" initial={false}>
+          <motion.div
+            key={activeFace}
+            initial={reduceMotion ? false : { opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={reduceMotion ? undefined : { opacity: 0 }}
+            transition={{ duration: reduceMotion ? 0 : 0.15 }}
+          >
+            {activeFace === 'front' ? renderFront() : renderBack()}
+          </motion.div>
+        </AnimatePresence>
       </article>
     )
   }

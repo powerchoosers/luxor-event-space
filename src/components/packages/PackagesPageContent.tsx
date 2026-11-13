@@ -2,15 +2,17 @@
 
 import Image from 'next/image'
 import Link from 'next/link'
-import { useMemo } from 'react'
 import { ArrowRight, CalendarCheck2, ShieldCheck, SlidersHorizontal, Sparkles } from '@/lib/icons/phosphor-compat'
 import { Reveal } from '@/components/Reveal'
 import { StaggerCard, StaggerCards } from '@/components/StaggerCards'
 import { PackageFlipCard } from '@/components/packages/PackageFlipCard'
-import { buildPublicPackageCards } from '@/lib/luxorPublicPackages'
+import type { PublicPackageCardData } from '@/lib/luxorPublicPackages'
+import { PUBLIC_PACKAGES_STARTING_PRICE_FOOTNOTE } from '@/lib/luxorPublicPackageStartingPrices'
 
 type PackagesPageContentProps = {
   locale?: 'en' | 'es'
+  cards: PublicPackageCardData[]
+  showCardPrices: boolean
 }
 
 const content = {
@@ -60,9 +62,9 @@ const content = {
   },
 } as const
 
-export function PackagesPageContent({ locale = 'en' }: PackagesPageContentProps) {
+export function PackagesPageContent({ locale = 'en', cards, showCardPrices }: PackagesPageContentProps) {
   const t = content[locale]
-  const cards = useMemo(() => buildPublicPackageCards(locale), [locale])
+  const footnote = PUBLIC_PACKAGES_STARTING_PRICE_FOOTNOTE[locale]
 
   return (
     <main className="overflow-x-hidden bg-[#050505] text-[#f7efe3]">
@@ -117,8 +119,7 @@ export function PackagesPageContent({ locale = 'en' }: PackagesPageContentProps)
       <section id="explore-packages" className="scroll-mt-28 bg-[#080706] py-16 sm:py-24 lg:py-28">
         <div className="mx-auto max-w-7xl px-5 sm:px-6 lg:px-8">
           <Reveal className="max-w-3xl">
-            <p className="font-mono text-[10px] uppercase tracking-[0.34em] text-[#caa24c]">{t.exploreEyebrow}</p>
-            <h2 className="mt-4 font-serif text-4xl leading-[0.95] sm:text-5xl lg:text-6xl">{t.exploreTitle}</h2>
+            <h2 className="font-serif text-4xl leading-[0.95] sm:text-5xl lg:text-6xl">{t.exploreTitle}</h2>
             <p className="mt-5 text-base leading-7 text-[#d7c29a]/72">{t.exploreCopy}</p>
           </Reveal>
           <StaggerCards className="mt-12 grid gap-6 lg:grid-cols-3" stagger={0.08}>
@@ -128,14 +129,16 @@ export function PackagesPageContent({ locale = 'en' }: PackagesPageContentProps)
               </StaggerCard>
             ))}
           </StaggerCards>
+          {showCardPrices ? (
+            <p className="mt-8 max-w-3xl text-sm leading-6 text-[#d7c29a]/68">{footnote}</p>
+          ) : null}
         </div>
       </section>
 
       <section id="build-your-experience" className="scroll-mt-28 border-y border-[#caa24c]/16 bg-[#0a0807] py-16 sm:py-24 lg:py-28">
         <div className="mx-auto max-w-7xl px-5 sm:px-6 lg:px-8">
           <Reveal className="max-w-3xl">
-            <p className="font-mono text-[10px] uppercase tracking-[0.34em] text-[#caa24c]">{t.configEyebrow}</p>
-            <h2 className="mt-4 font-serif text-4xl leading-[0.95] sm:text-5xl lg:text-6xl">{t.configTitle}</h2>
+            <h2 className="font-serif text-4xl leading-[0.95] sm:text-5xl lg:text-6xl">{t.configTitle}</h2>
             <p className="mt-5 max-w-2xl text-base leading-7 text-[#d7c29a]/72">{t.configCopy}</p>
           </Reveal>
           <Reveal className="mt-10">
@@ -154,12 +157,10 @@ export function PackagesPageContent({ locale = 'en' }: PackagesPageContentProps)
         </div>
       </section>
 
-      <section className="relative isolate overflow-hidden bg-[#120d0c] py-16 sm:py-24 lg:py-28">
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_15%_12%,rgba(202,162,76,0.12),transparent_22rem),radial-gradient(circle_at_88%_20%,rgba(189,101,117,0.14),transparent_20rem)]" />
-        <div className="relative z-10 mx-auto max-w-7xl px-5 sm:px-6 lg:px-8">
+      <section className="bg-[#120d0c] py-16 sm:py-24 lg:py-28">
+        <div className="mx-auto max-w-7xl px-5 sm:px-6 lg:px-8">
           <Reveal className="max-w-3xl">
-            <p className="font-mono text-[10px] uppercase tracking-[0.34em] text-[#caa24c]">Planning with confidence</p>
-            <h2 className="mt-4 font-serif text-4xl leading-[0.95] sm:text-5xl">Pricing transparency</h2>
+            <h2 className="font-serif text-4xl leading-[0.95] sm:text-5xl">Pricing transparency</h2>
           </Reveal>
           <StaggerCards className="mt-10 grid gap-3 sm:grid-cols-2 lg:grid-cols-4" stagger={0.07}>
             {t.benefits.map(([title, copy, Icon]) => (
@@ -180,7 +181,9 @@ export function PackagesPageContent({ locale = 'en' }: PackagesPageContentProps)
           <Reveal>
             <div className="luxor-panel grid gap-8 rounded-2xl !border-[#9b6f24]/20 !bg-[#fffdfa] p-6 shadow-[0_28px_78px_-56px_rgba(48,33,14,0.24)] sm:p-8 lg:grid-cols-[1fr_auto] lg:items-center lg:p-10">
               <div className="max-w-3xl">
-                <p className="font-mono text-[10px] uppercase tracking-[0.34em] text-[#caa24c]">{t.visitEyebrow}</p>
+                <p className="font-mono text-[11px] font-bold uppercase tracking-[0.2em] text-[#caa24c] sm:text-xs">
+                  Luxor at Las Palmas Events
+                </p>
                 <h2 className="mt-4 font-serif text-4xl leading-[0.95] !text-[#241d17] sm:text-5xl">{t.visitTitle}</h2>
                 <p className="mt-5 text-base leading-7 !text-[#665a4e]">{t.visitCopy}</p>
               </div>

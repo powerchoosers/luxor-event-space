@@ -5,25 +5,14 @@ import {
   packageLimitationsForPublicDisplay,
   type LuxorPublicPackageTierId,
 } from '@/lib/luxorProposalPackages'
-
-/** Toggle public package card pricing on /packages. */
-export const LUXOR_PUBLIC_PACKAGES_SHOW_CARD_PRICES = true
-
-/**
- * Marketing "Starting at" amounts for the public packages page (Arianna's spec).
- * Separate from proposal-catalog package fees and pricing engine totals.
- */
-export const LUXOR_PUBLIC_PACKAGE_MARKETING_STARTING_PRICES_USD: Record<LuxorPublicPackageTierId, number> = {
-  essentials: 1000,
-  signature: 1800,
-  luxor: 2800,
-}
+import type { PublicPackagesPricingSnapshot } from '@/lib/luxorPublicPackageStartingPrices'
 
 export type PublicPackageCardData = {
   id: LuxorPublicPackageTierId
   displayName: string
   shortDescription: string
-  startingPrice: number
+  startingPrice: number | null
+  showStartingPrice: boolean
   previewInclusions: string[]
   fullInclusions: string[]
   limitations: string[]
@@ -56,16 +45,22 @@ const DISPLAY_NAMES: Record<LuxorPublicPackageTierId, { en: string; es: string }
 const DEFAULT_RENTAL_HOURS = 8
 const PREVIEW_INCLUSION_COUNT = 5
 
-export function buildPublicPackageCards(locale: 'en' | 'es' = 'en'): PublicPackageCardData[] {
+export function buildPublicPackageCards(
+  locale: 'en' | 'es',
+  pricing: PublicPackagesPricingSnapshot,
+): PublicPackageCardData[] {
   const settings = DEFAULT_LUXOR_PROPOSAL_PACKAGE_SETTINGS
   return LUXOR_PUBLIC_PACKAGE_TIER_IDS.map((id) => {
     const option = settings.options[id]
     const fullInclusions = packageInclusionsForDisplay(option, DEFAULT_RENTAL_HOURS)
+    const computed = pricing.packages.find((entry) => entry.packageId === id)
+    const startingPrice = computed?.startingPrice ?? null
     return {
       id,
       displayName: DISPLAY_NAMES[id][locale],
       shortDescription: option.description,
-      startingPrice: LUXOR_PUBLIC_PACKAGE_MARKETING_STARTING_PRICES_USD[id],
+      startingPrice,
+      showStartingPrice: pricing.showCardPrices && startingPrice !== null,
       previewInclusions: fullInclusions.slice(0, PREVIEW_INCLUSION_COUNT),
       fullInclusions,
       limitations: packageLimitationsForPublicDisplay(id, settings, DEFAULT_RENTAL_HOURS, false),
