@@ -40,7 +40,8 @@ import { compareLuxorScheduledTours, formatLuxorTourDate, getLuxorTourSection, l
 import { createLuxorTourAttendancePayload } from '@/lib/luxorTourOutcome'
 import { MagicCard } from '@/components/ui/magic-card'
 import { LeadsFunnelDashboard } from '@/components/portal/LeadsFunnelDashboard'
-import { getFunnelPeriod, type FunnelPeriod } from '@/lib/luxorFunnelPeriods'
+import { getDefaultFunnelWeekRange, getFunnelPeriodFromRange, type FunnelPeriod } from '@/lib/luxorFunnelPeriods'
+import type { PortalDateRange } from '@/components/portal/PortalDateRangeControl'
 import { isFunnelInquiryEligible } from '@/lib/luxorFunnelEligibility'
 import { EnrollInWorkflowModal } from '@/components/portal/EnrollInWorkflowModal'
 
@@ -54,6 +55,7 @@ function bouncedAddressMatchesCurrentEmail(lead: LuxorInquiry) {
 import {
   PortalPageFrame,
   PortalPageHeader,
+  PortalDatePicker,
   PortalAnimatedTabs,
   PortalTabTransition,
   PortalStickyTable,
@@ -159,6 +161,7 @@ export default function LeadsPage() {
   const [activeTab, setActiveTab] = useState<'dashboard' | 'pipeline' | 'tours' | 'proposals' | 'clients' | 'lost' | 'followups'>('dashboard')
   const [viewPreferencesReady, setViewPreferencesReady] = useState(false)
   const [isTabMenuOpen, setIsTabMenuOpen] = useState(false)
+  const [funnelRange, setFunnelRange] = useState<PortalDateRange>(() => getDefaultFunnelWeekRange())
   
   // Search & Filter State
   const [searchTerm, setSearchTerm] = useState('')
@@ -501,6 +504,35 @@ export default function LeadsPage() {
     }] : []),
   ]
 
+  const funnelPeriodControls = activeTab === 'dashboard' ? (
+    <div className="flex w-full items-center gap-2">
+      <div className="min-w-0 flex-1 sm:w-[176px] sm:flex-none" aria-label="Funnel period from date">
+        <PortalDatePicker
+          value={funnelRange.start}
+          onChange={(value) => { if (value) setFunnelRange((range) => ({ start: value, end: value > range.end ? value : range.end })) }}
+          placeholder="From date"
+          label="From date"
+          triggerPrefix="From"
+          triggerClassName="!min-h-10 !justify-start !gap-1.5 !px-2.5 !text-xs !border-[color:var(--portal-border)]"
+          omitWeekday
+          timeZone="America/Chicago"
+        />
+      </div>
+      <div className="min-w-0 flex-1 sm:w-[176px] sm:flex-none" aria-label="Funnel period to date">
+        <PortalDatePicker
+          value={funnelRange.end}
+          onChange={(value) => { if (value) setFunnelRange((range) => ({ start: value < range.start ? value : range.start, end: value })) }}
+          placeholder="To date"
+          label="To date"
+          triggerPrefix="To"
+          triggerClassName="!min-h-10 !justify-start !gap-1.5 !px-2.5 !text-xs !border-[color:var(--portal-border)]"
+          omitWeekday
+          timeZone="America/Chicago"
+        />
+      </div>
+    </div>
+  ) : null
+
   return (
     <PortalPageFrame className="flex-1 min-h-0 overflow-hidden max-md:pt-4">
       <PortalPageHeader
@@ -535,7 +567,7 @@ export default function LeadsPage() {
       />
 
       {/* Mobile-only condensed view picker button (matches Settings browse experience) */}
-      <div className="md:hidden">
+      <div className="space-y-3 md:hidden">
         <button
           type="button"
           onClick={() => setIsTabMenuOpen(true)}
@@ -552,7 +584,10 @@ export default function LeadsPage() {
           </span>
           <ChevronDown size={17} className="text-[color:var(--portal-muted)] shrink-0" aria-hidden="true" />
         </button>
+        {funnelPeriodControls}
       </div>
+
+      {funnelPeriodControls ? <div className="hidden shrink-0 md:flex xl:hidden">{funnelPeriodControls}</div> : null}
 
       {/* Desktop sub-tab navigation (hidden on mobile and tablet/iPad to prevent overflow scrolling) */}
       <div className="hidden xl:flex portal-scrollbar min-w-0 w-full max-w-full shrink-0 gap-2 overflow-x-auto pb-0">
@@ -577,11 +612,14 @@ export default function LeadsPage() {
         />
       </div>
 
+      {funnelPeriodControls ? <div className="hidden shrink-0 xl:flex">{funnelPeriodControls}</div> : null}
+
       {viewPreferencesReady ? <PortalTabTransition activeKey={activeTab} className={`flex-1 min-h-0 flex flex-col overflow-visible mt-0 max-md:![transform:none] max-md:![filter:none] ${activeTab === 'dashboard' ? '' : '-mx-4 sm:mx-0'}`}>
         {activeTab === 'dashboard' && (
           <LeadsDashboard
             leads={leads}
             loading={loading}
+            funnelRange={funnelRange}
             onSelectTab={(tab) => {
               setActiveTab(tab)
               if (typeof window !== 'undefined') {
@@ -1116,13 +1154,18 @@ function formatTourDate(value: string) {
 function LeadsDashboard({
   leads,
   loading,
+  funnelRange,
   onSelectTab,
 }: {
   leads: LuxorInquiry[]
   loading: boolean
+  funnelRange: PortalDateRange
   onSelectTab?: (tab: 'dashboard' | 'pipeline' | 'tours' | 'proposals' | 'clients' | 'lost' | 'followups') => void
 }) {
-  const [dashboardPeriod, setDashboardPeriod] = useState<FunnelPeriod>(() => getFunnelPeriod())
+  const [dashboardPeriod, setDashboardPeriod] = useState<FunnelPeriod>(() => getFunnelPeriodFromRange(funnelRange.start, funnelRange.end))
+  useEffect(() => {
+    setDashboardPeriod(getFunnelPeriodFromRange(funnelRange.start, funnelRange.end))
+  }, [funnelRange.start, funnelRange.end])
   const recentLeads = leads
     .filter((lead) => isFunnelInquiryEligible(lead)
       && Date.parse(lead.created_at) >= Date.parse(dashboardPeriod.startAt)
@@ -1132,7 +1175,7 @@ function LeadsDashboard({
 
   return (
     <div className="h-full max-md:h-auto overflow-y-auto max-md:overflow-visible portal-scrollbar pr-1 space-y-6 pb-8 max-md:pb-2">
-      <LeadsFunnelDashboard onSelectTab={onSelectTab} onPeriodChange={setDashboardPeriod} />
+      <LeadsFunnelDashboard range={funnelRange} onSelectTab={onSelectTab} onPeriodChange={setDashboardPeriod} />
 
       {/* Recent Activity / Inquiries List */}
       <PortalTableCard

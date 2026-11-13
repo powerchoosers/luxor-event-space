@@ -85,11 +85,13 @@ test('daily chart retains seven, leap-month and full-quarter dates, labels, goal
     assert.ok(html.includes(p.startDate)); assert.ok(html.includes(p.endDate))
   }
 })
-test('dashboard defaults weekly with six number-only top KPIs and accessible period arrows', () => {
-  const html = renderToStaticMarkup(React.createElement(ui.LeadsFunnelDashboard))
+test('dashboard defaults weekly range with six KPIs and accessible period arrows', () => {
+  const week = periods.getDefaultFunnelWeekRange('2026-11-12')
+  const html = renderToStaticMarkup(React.createElement(ui.LeadsFunnelDashboard, { range: week }))
   for (const label of ['New inquiries', 'Tours scheduled', 'Tours completed', 'Proposals sent', 'Deposits received', 'Conversion rate']) assert.ok(html.includes(label))
-  assert.match(html, /aria-pressed="true"[^>]*>weekly/)
-  assert.match(html, /aria-label="Previous period"/); assert.match(html, /aria-label="Next period"/)
+  assert.doesNotMatch(html, /Performance period/)
+  assert.doesNotMatch(html, /aria-label="Previous period"/)
+  assert.doesNotMatch(html, /Sun – Sat · Central time/)
   assert.match(html, /Edit Goals/); assert.match(html, /Sales Funnel Analysis/)
 })
 test('source wires abort cleanup, all cadences/overrides and recovery without discarding unknown request', () => {

@@ -1,10 +1,10 @@
 'use client'
 
 import React, { useEffect, useMemo, useRef, useState } from 'react'
-import { ChevronLeft, ChevronRight } from '@/lib/icons/phosphor-compat'
 import { PortalButton, PortalModal } from '@/components/portal/PortalUI'
 import { FUNNEL_GOAL_CADENCES, FUNNEL_GOAL_METRICS, getFunnelGoal, parseFunnelGoals, funnelGoalProgress, type FunnelGoals, type FunnelGoalMetric } from '@/lib/luxorFunnelGoals'
-import { funnelDateKey, getFunnelPeriod, shiftFunnelPeriod, type FunnelPeriod, type FunnelPeriodKind } from '@/lib/luxorFunnelPeriods'
+import { getFunnelPeriodFromRange, type FunnelPeriod } from '@/lib/luxorFunnelPeriods'
+import type { PortalDateRange } from '@/components/portal/PortalDateRangeControl'
 
 type Metric = FunnelGoalMetric | 'depositsReceived' | 'conversionRate'
 export type FunnelAnalytics = { period: FunnelPeriod; metrics: Record<Metric, number | null>; dailyLeads: Array<{ date: string; count: number | null }>; issues: string[]; definitions: Record<string, string> }
@@ -91,10 +91,8 @@ export function FunnelDailyChart({ period, days, dailyGoal, total, periodGoal }:
   </section>
 }
 
-export function LeadsFunnelDashboard({ onSelectTab, onPeriodChange }: { onSelectTab?: (tab: 'pipeline' | 'tours' | 'proposals' | 'clients') => void; onPeriodChange?: (period: FunnelPeriod) => void }) {
-  const [kind, setKind] = useState<FunnelPeriodKind>('weekly')
-  const [anchor, setAnchor] = useState(() => funnelDateKey())
-  const period = useMemo(() => getFunnelPeriod(kind, anchor), [kind, anchor])
+export function LeadsFunnelDashboard({ range, onSelectTab, onPeriodChange }: { range: PortalDateRange; onSelectTab?: (tab: 'pipeline' | 'tours' | 'proposals' | 'clients') => void; onPeriodChange?: (period: FunnelPeriod) => void }) {
+  const period = useMemo(() => getFunnelPeriodFromRange(range.start, range.end), [range.start, range.end])
   useEffect(() => { onPeriodChange?.(period) }, [period, onPeriodChange])
   const [analytics, setAnalytics] = useState<FunnelAnalytics | null>(null)
   const [loading, setLoading] = useState(true)
@@ -107,21 +105,21 @@ export function LeadsFunnelDashboard({ onSelectTab, onPeriodChange }: { onSelect
   const [saveNotice, setSaveNotice] = useState('')
   const [saving, setSaving] = useState(false)
   const [pending, setPending] = useState(false)
-  const [month, setMonth] = useState(() => funnelDateKey().slice(0, 7))
-  const [quarter, setQuarter] = useState(() => `${funnelDateKey().slice(0, 4)}-Q${Math.floor((+funnelDateKey().slice(5, 7) - 1) / 3) + 1}`)
+  const [month, setMonth] = useState(() => range.start.slice(0, 7))
+  const [quarter, setQuarter] = useState(() => `${range.start.slice(0, 4)}-Q${Math.floor((+range.start.slice(5, 7) - 1) / 3) + 1}`)
   const savingRef = useRef(false)
   const mounted = useRef(true)
   useEffect(() => { mounted.current = true; return () => { mounted.current = false } }, [])
   useEffect(() => {
     const controller = new AbortController(); let active = true
     setLoading(true); setAnalytics(null); setDataError('')
-    fetch(`/api/portal/funnel-analytics?kind=${kind}&anchor=${encodeURIComponent(anchor)}`, { cache: 'no-store', signal: controller.signal }).then(async response => {
+    fetch(`/api/portal/funnel-analytics?start=${encodeURIComponent(range.start)}&end=${encodeURIComponent(range.end)}`, { cache: 'no-store', signal: controller.signal }).then(async response => {
       const parsed = parseFunnelAnalytics(await response.json(), period)
       if (!response.ok || !parsed) throw new Error('Period data is unavailable. No estimates are shown.')
       if (active) setAnalytics(parsed)
     }).catch(() => { if (active && !controller.signal.aborted) setDataError('Period data is unavailable. No estimates are shown.') }).finally(() => { if (active) setLoading(false) })
     return () => { active = false; controller.abort() }
-  }, [kind, anchor, period, reload])
+  }, [range.start, range.end, period, reload])
   useEffect(() => {
     const controller = new AbortController(); let active = true
     fetch('/api/portal/funnel-goals', { cache: 'no-store', signal: controller.signal }).then(async response => {
@@ -131,7 +129,7 @@ export function LeadsFunnelDashboard({ onSelectTab, onPeriodChange }: { onSelect
     }).catch(() => { if (active && !controller.signal.aborted) { setSnapshot(null); setGoalNotice('Saved goals are unavailable. Actual metrics remain visible.') } })
     return () => { active = false; controller.abort() }
   }, [reload])
-  const visible = analytics?.period.startDate === period.startDate && analytics.period.kind === kind ? analytics : null
+  const visible = analytics?.period.startDate === period.startDate && analytics.period.endDate === period.endDate ? analytics : null
   function openEditor() {
     if (!snapshot?.canEdit) return
     try { const old = readPendingFunnelGoals(); setDraft(old?.goals || structuredClone(snapshot.goals)); setPending(Boolean(old)); setSaveNotice(old ? 'An earlier save is unconfirmed. Retry it unchanged to check the result.' : ''); setEditorOpen(true) }
@@ -158,9 +156,7 @@ export function LeadsFunnelDashboard({ onSelectTab, onPeriodChange }: { onSelect
   const monthValid = /^\d{4}-(0[1-9]|1[0-2])$/.test(month)
   const quarterValid = /^\d{4}-Q[1-4]$/.test(quarter)
   return <section className="space-y-5" aria-label="Funnel performance dashboard">
-    <div className="flex flex-wrap items-center justify-between gap-3">
-      <div role="group" aria-label="Performance period" className="flex rounded-xl bg-[color:var(--portal-soft)] p-1">{(['weekly', 'monthly', 'quarterly'] as const).map(k => <button key={k} type="button" aria-pressed={kind === k} onClick={() => setKind(k)} className={`rounded-lg px-4 py-2 text-sm font-semibold capitalize focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c] ${kind === k ? 'luxor-gold-raised' : 'text-[color:var(--portal-muted)]'}`}>{k}</button>)}</div>
-      <div className="flex items-center gap-2"><PortalButton variant="ghost" size="sm" aria-label="Previous period" onClick={() => setAnchor(shiftFunnelPeriod(period, -1).anchorDate)}><ChevronLeft size={17} /></PortalButton><div className="min-w-40 text-center"><p className="text-sm font-bold">{period.label}</p><p className="text-[11px] text-[color:var(--portal-muted)]">{kind === 'weekly' ? 'Sun – Sat · ' : ''}Central time</p></div><PortalButton variant="ghost" size="sm" aria-label="Next period" onClick={() => setAnchor(shiftFunnelPeriod(period, 1).anchorDate)}><ChevronRight size={17} /></PortalButton></div>
+    <div className="flex justify-end">
       <PortalButton onClick={openEditor} disabled={!snapshot?.canEdit} title={snapshot && !snapshot.canEdit ? 'Settings permission is required.' : goalNotice || 'Edit saved goals'}>Edit Goals</PortalButton>
     </div>
     <div className="grid grid-cols-2 gap-y-4 rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/45 px-3 py-5 sm:grid-cols-3 xl:grid-cols-6" aria-busy={loading}>{KPIS.map(([key, label, tab]) => <button key={key} type="button" onClick={() => onSelectTab?.(tab)} title={visible?.definitions[key]} className="rounded-lg px-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c] xl:border-r xl:border-[color:var(--portal-border)] xl:last:border-0"><span className="text-xs font-semibold">{label}</span><span className="mt-3 block text-center text-3xl font-bold tabular-nums">{funnelNumber(visible?.metrics[key], key)}</span></button>)}</div>

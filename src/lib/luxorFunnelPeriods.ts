@@ -47,3 +47,58 @@ export function shiftFunnelPeriod(period:FunnelPeriod,direction:number):FunnelPe
   const anchor=period.kind==='weekly'?addFunnelDays(period.startDate,direction*7):new Date(Date.UTC(+period.startDate.slice(0,4),+period.startDate.slice(5,7)-1+direction*(period.kind==='monthly'?1:3),1)).toISOString().slice(0,10)
   return getFunnelPeriod(period.kind,anchor)
 }
+export function getDefaultFunnelWeekRange(anchor: Date | string = new Date()): { start: string; end: string } {
+  const period = getFunnelPeriod('weekly', anchor)
+  return { start: period.startDate, end: period.endDate }
+}
+function funnelRangeLabel(startDate: string, endDate: string): string {
+  const fmt = (key: string) => new Intl.DateTimeFormat('en-US', { timeZone: 'UTC', month: 'short', day: 'numeric', year: 'numeric' }).format(new Date(`${key}T12:00:00Z`))
+  return startDate === endDate ? fmt(startDate) : `${fmt(startDate)} – ${fmt(endDate)}`
+}
+function inferFunnelRangeKind(startDate: string, endDate: string): FunnelPeriodKind {
+  for (const kind of ['weekly', 'monthly', 'quarterly'] as const) {
+    for (const anchor of [startDate, endDate]) {
+      try {
+        const candidate = getFunnelPeriod(kind, anchor)
+        if (candidate.startDate === startDate && candidate.endDate === endDate) return kind
+      } catch { /* try next */ }
+    }
+  }
+  return startDate.slice(0, 7) === endDate.slice(0, 7) ? 'monthly' : 'weekly'
+}
+export function getFunnelPeriodFromRange(startDate: string, endDate: string): FunnelPeriod {
+  if (!isFunnelDateKey(startDate) || !isFunnelDateKey(endDate) || startDate > endDate) throw new Error('Invalid range')
+  for (const kind of ['monthly', 'quarterly', 'weekly'] as const) {
+    for (const anchor of [startDate, endDate]) {
+      try {
+        const candidate = getFunnelPeriod(kind, anchor)
+        if (candidate.startDate === startDate && candidate.endDate === endDate) return candidate
+      } catch { /* try next */ }
+    }
+  }
+  const endExclusiveDate = addFunnelDays(endDate, 1)
+  const dayCount = (Date.parse(`${endExclusiveDate}T00:00:00Z`) - Date.parse(`${startDate}T00:00:00Z`)) / 86400000
+  if (!Number.isInteger(dayCount) || dayCount < 1 || dayCount > 366) throw new Error('Invalid range span')
+  const days = Array.from({ length: dayCount }, (_, index) => addFunnelDays(startDate, index))
+  const kind = inferFunnelRangeKind(startDate, endDate)
+  const fullMonth = startDate.endsWith('-01') && addFunnelDays(endDate, 1).slice(8) === '01'
+  const label = kind === 'monthly' && fullMonth
+    ? new Intl.DateTimeFormat('en-US', { timeZone: 'UTC', month: 'long', year: 'numeric' }).format(new Date(`${startDate}T12:00:00Z`))
+    : funnelRangeLabel(startDate, endDate)
+  return {
+    kind,
+    anchorDate: startDate,
+    startDate,
+    endDate,
+    endExclusiveDate,
+    startAt: funnelMidnightUtc(startDate),
+    endAt: funnelMidnightUtc(endExclusiveDate),
+    dayCount,
+    days,
+    label,
+  }
+}
+export function shiftFunnelDateRange(range: { start: string; end: string }, direction: number): { start: string; end: string } {
+  const shifted = shiftFunnelPeriod(getFunnelPeriodFromRange(range.start, range.end), direction)
+  return { start: shifted.startDate, end: shifted.endDate }
+}
