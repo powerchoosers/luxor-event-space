@@ -46,6 +46,7 @@ export function PackageFlipCard({ data, locale = 'en' }: PackageFlipCardProps) {
   const frontControlRef = useRef<HTMLButtonElement>(null)
   const backControlRef = useRef<HTMLButtonElement>(null)
   const backPanelRef = useRef<HTMLDivElement>(null)
+  const backScrollRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     const widthQuery = window.matchMedia('(min-width: 1024px)')
@@ -79,12 +80,33 @@ export function PackageFlipCard({ data, locale = 'en' }: PackageFlipCardProps) {
   const shellClass =
     'rounded-md border border-[#caa24c]/22 bg-[#0a0807] shadow-[0_34px_90px_-62px_rgba(0,0,0,1)]'
   const shellClipClass = 'overflow-hidden'
-  const faceClipClass = 'h-full min-h-0 overflow-hidden rounded-md bg-[#0a0807]'
+  const sizerShellClass = 'overflow-hidden rounded-md bg-[#0a0807]'
+  const faceClipClass = 'flex h-full min-h-0 flex-col overflow-hidden rounded-md bg-[#0a0807]'
   const backfaceClass = '[backface-visibility:hidden] [-webkit-backface-visibility:hidden]'
   const imageShellClass = 'relative min-h-52 overflow-hidden rounded-t-md'
 
-  const renderFront = (options?: { hidden?: boolean }) => (
-    <div className="flex h-full flex-col" hidden={options?.hidden}>
+  useEffect(() => {
+    if (showSwapLayout || !flipped || !allow3dFlip) return
+    const scrollEl = backScrollRef.current
+    if (!scrollEl) return
+
+    const onWheel = (event: WheelEvent) => {
+      const maxScroll = scrollEl.scrollHeight - scrollEl.clientHeight
+      if (maxScroll <= 1) return
+      const canScrollUp = scrollEl.scrollTop > 0 && event.deltaY < 0
+      const canScrollDown = scrollEl.scrollTop < maxScroll - 1 && event.deltaY > 0
+      if (!canScrollUp && !canScrollDown) return
+      event.preventDefault()
+      event.stopPropagation()
+      scrollEl.scrollTop = Math.max(0, Math.min(maxScroll, scrollEl.scrollTop + event.deltaY))
+    }
+
+    scrollEl.addEventListener('wheel', onWheel, { passive: false })
+    return () => scrollEl.removeEventListener('wheel', onWheel)
+  }, [allow3dFlip, flipped, showSwapLayout])
+
+  const renderFront = (options?: { hidden?: boolean; sizeFromContent?: boolean }) => (
+    <div className={`flex flex-col ${options?.sizeFromContent ? 'w-full' : 'h-full'}`} hidden={options?.hidden}>
       <div className={imageShellClass}>
         <Image
           src={data.image}
@@ -143,10 +165,15 @@ export function PackageFlipCard({ data, locale = 'en' }: PackageFlipCardProps) {
       hidden={options?.hidden}
     >
       <div
-        className={`flex min-h-0 flex-col px-6 pt-6 sm:px-7 sm:pt-7 ${options?.scrollBody ? 'min-h-0 flex-1 touch-pan-y overflow-y-auto overscroll-contain [-webkit-overflow-scrolling:touch]' : ''}`}
+        ref={options?.scrollBody ? backScrollRef : undefined}
+        data-luxor-package-back-scroll={options?.scrollBody ? 'true' : undefined}
+        className={`flex min-h-0 flex-col px-6 pt-6 sm:px-7 sm:pt-7 max-lg:scroll-mt-28 max-lg:pt-8 ${options?.scrollBody ? 'min-h-0 flex-1 touch-pan-y overflow-y-auto overscroll-contain [-webkit-overflow-scrolling:touch]' : ''}`}
       >
         <p className="font-mono text-[10px] uppercase tracking-[0.28em] text-[#caa24c]">{data.displayName}</p>
-        <h3 id={`${faceId}-back-heading`} className="mt-3 font-serif text-3xl leading-none text-[#f7efe3]">
+        <h3
+          id={`${faceId}-back-heading`}
+          className="mt-3 scroll-mt-28 font-serif text-3xl leading-none text-[#f7efe3]"
+        >
           {t.included}
         </h3>
         <ul className="mt-4 space-y-2 text-sm text-[#d7c29a]/85">
@@ -219,29 +246,22 @@ export function PackageFlipCard({ data, locale = 'en' }: PackageFlipCardProps) {
   }
 
   return (
-    <article
-      className={`group grid h-full min-h-[560px] ${shellClass}`}
-      aria-labelledby={`${faceId}-title`}
-    >
+    <article className={`group grid h-full w-full ${shellClass}`} aria-labelledby={`${faceId}-title`}>
       <span id={`${faceId}-title`} className="sr-only">
         {data.displayName} package
       </span>
-      <div
-        className="pointer-events-none invisible col-start-1 row-start-1 flex min-h-0 min-w-0 flex-col"
-        aria-hidden
-        inert
-      >
-        <div className={faceClipClass}>{renderFront({ hidden: true })}</div>
+      <div className="pointer-events-none invisible [grid-area:1/1] w-full min-w-0" aria-hidden inert>
+        <div className={sizerShellClass}>{renderFront({ hidden: true, sizeFromContent: true })}</div>
       </div>
-      <div className="relative col-start-1 row-start-1 min-h-0 min-w-0 [perspective:1200px]">
+      <div className="relative [grid-area:1/1] min-w-0 self-stretch [perspective:1200px]">
         <div
-          className={`absolute inset-0 h-full w-full transition-transform duration-500 ease-in-out [transform-style:preserve-3d] ${
+          className={`absolute inset-0 w-full transition-transform duration-500 ease-in-out [transform-style:preserve-3d] ${
             flipped ? '[transform:rotateY(180deg)]' : ''
           }`}
         >
           <div
-            className={`absolute inset-0 flex h-full w-full min-h-0 flex-col ${backfaceClass} ${
-              flipped ? 'pointer-events-none' : 'pointer-events-auto z-[2]'
+            className={`absolute inset-0 flex min-h-0 w-full flex-col ${backfaceClass} ${
+              flipped ? 'pointer-events-none invisible' : 'pointer-events-auto z-[2]'
             }`}
             aria-hidden={flipped}
             {...(flipped ? { inert: true } : {})}
@@ -249,8 +269,8 @@ export function PackageFlipCard({ data, locale = 'en' }: PackageFlipCardProps) {
             <div className={faceClipClass}>{renderFront()}</div>
           </div>
           <div
-            className={`absolute inset-0 flex h-full max-h-full min-h-0 flex-col ${backfaceClass} [transform:rotateY(180deg)] ${
-              flipped ? 'pointer-events-auto z-[2]' : 'pointer-events-none'
+            className={`absolute inset-0 flex min-h-0 w-full flex-col ${backfaceClass} [transform:rotateY(180deg)] ${
+              flipped ? 'pointer-events-auto z-[3]' : 'pointer-events-none invisible'
             }`}
             aria-hidden={!flipped}
             {...(!flipped ? { inert: true } : {})}
