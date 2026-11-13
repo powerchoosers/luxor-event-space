@@ -1,3 +1,4 @@
+import { processPendingLuxorTranscriptTranslations } from '@/lib/luxorTranscriptTranslationServer'
 import { after, NextRequest, NextResponse } from 'next/server'
 import { syncPendingLuxorEmailBodies } from '@/lib/luxorEmailArchiveServer'
 import { processDueLuxorEmailJobs, processDueLuxorFollowUpEmailJobs, processDueLuxorInquiryNotifications, processDueLuxorTestEmailJobs, reconcileLuxorFollowUpFinalizations } from '@/lib/luxorEmailJobsServer'
@@ -66,6 +67,10 @@ export async function POST(request: NextRequest) {
     })
     return NextResponse.json({ success: true, authenticated: true, processed: 0 })
   }
+
+  after(async () => {
+    try { await processPendingLuxorTranscriptTranslations(2) } catch { console.warn('Transcript translation remains queued.') }
+  })
 
   const now = new Date()
   try {

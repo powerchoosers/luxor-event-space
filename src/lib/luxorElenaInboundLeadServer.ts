@@ -2,6 +2,7 @@ import 'server-only'
 import { randomUUID } from 'node:crypto'
 import { normalizePhoneNumber } from './luxorCallsServer'
 import { supabaseRestStrict } from './supabaseRestServer'
+import { normalizeCallerSpokenLanguage } from './luxorCallerLanguage'
 
 type Call = { twilio_call_sid: string; direction: string; to_number: string; status: string; inquiry_id: string | null; metadata: Record<string, unknown>; updated_at: string }
 type Inquiry = { id: string; full_name: string; phone: string | null; email: string | null; updated_at: string; archived_at: string | null; is_test: boolean }
@@ -17,7 +18,9 @@ const equalName = (a: string, b: string) => a.trim().replace(/\s+/g, ' ').toLowe
 /** Prepare only updates for a confirmed, uniquely matched lead; does not write lead data. */
 export async function prepareElenaLeadUpdate(input: { callSid: string; sessionId: string; fields: Record<string, unknown> }) {
   const fields = input.fields
-  if (Object.keys(fields).some(k => !['full_name', 'phone', 'email', 'event_type', 'target_date', 'guest_count', 'budget', 'package_interest', 'notes'].includes(k))) throw new ElenaLeadUpdateError('Only caller-confirmed contact and event details can be updated.')
+  if (Object.keys(fields).some(k => !['full_name', 'phone', 'email', 'event_type', 'target_date', 'guest_count', 'budget', 'package_interest', 'notes', 'spoken_language'].includes(k))) throw new ElenaLeadUpdateError('Only caller-confirmed contact and event details can be updated.')
+  const spokenLanguage = normalizeCallerSpokenLanguage(fields.spoken_language)
+  if (fields.spoken_language != null && fields.spoken_language !== '' && !spokenLanguage) throw new ElenaLeadUpdateError('Please clarify the caller’s own spoken language before saving.')
   const fullName = text(fields.full_name, 120)
   const rawPhone = text(fields.phone, 32)
   const phone = rawPhone ? normalizePhoneNumber(rawPhone) : null
@@ -30,7 +33,7 @@ export async function prepareElenaLeadUpdate(input: { callSid: string; sessionId
     || (targetDate && (!/^\d{4}-\d{2}-\d{2}$/.test(targetDate) || Number.isNaN(Date.parse(`${targetDate}T00:00:00Z`)) || new Date(`${targetDate}T00:00:00Z`).toISOString().slice(0, 10) !== targetDate))
     || (guests !== null && (!Number.isInteger(guests) || Number(guests) < 1 || Number(guests) > 180))
     || (packageInterest && !['Essentials', 'Signature', 'Luxor'].includes(packageInterest))
-    || (!fullName && !phone && !email && !notes && !eventType && !targetDate && guests === null && !budget && !packageInterest)) throw new ElenaLeadUpdateError('Please check the caller’s contact and event details before saving.')
+    || (!fullName && !phone && !email && !notes && !eventType && !targetDate && guests === null && !budget && !packageInterest && !spokenLanguage)) throw new ElenaLeadUpdateError('Please check the caller’s contact and event details before saving.')
   const [call] = await supabaseRestStrict<Call[]>(`luxor_calls?select=twilio_call_sid,direction,to_number,status,inquiry_id,metadata,updated_at&twilio_call_sid=eq.${encodeURIComponent(input.callSid)}&limit=1`)
   const capture = call?.metadata.inbound_capture as Contact | undefined
   if (!call || call.direction !== 'inbound' || !['ringing', 'in-progress'].includes(call.status) || call.to_number !== process.env.LUXOR_ELENA_LIVE_NUMBER
@@ -43,12 +46,12 @@ export async function prepareElenaLeadUpdate(input: { callSid: string; sessionId
     || (email && lead.email && !capture.email && lead.email.trim().toLowerCase() !== email)) throw new ElenaLeadUpdateError('The existing lead details need Arianna’s review before updating them.')
   const nonce = randomUUID(), expiresAt = new Date(Date.now() + 180_000).toISOString()
   const pending = { nonce, expires_at: expiresAt, inquiry_id: lead.id, inquiry_updated_at: lead.updated_at, contact_nonce: capture.nonce,
-    full_name: fullName, phone, email, notes, event_type: eventType, target_date: targetDate, guest_count: guests, budget, package_interest: packageInterest }
+    full_name: fullName, phone, email, notes, event_type: eventType, target_date: targetDate, guest_count: guests, budget, package_interest: packageInterest, spoken_language: spokenLanguage }
   const [changed] = await supabaseRestStrict<Call[]>(`luxor_calls?twilio_call_sid=eq.${encodeURIComponent(input.callSid)}&updated_at=eq.${encodeURIComponent(call.updated_at)}&metadata->>scope=eq.elena_live_inbound&metadata->>openai_session_id=eq.${encodeURIComponent(input.sessionId)}&select=twilio_call_sid`, {
     method: 'PATCH', headers: { Prefer: 'return=representation' }, body: JSON.stringify({ metadata: { ...call.metadata, lead_update_pending: pending }, updated_at: new Date(Math.max(Date.now(), Date.parse(call.updated_at) + 1)).toISOString() }),
   })
   if (!changed) throw new ElenaLeadUpdateError('The call changed. Please repeat the details before saving.')
-  const parts = [fullName && `name ${fullName}`, phone && `phone ${phone}`, email && `email ${email}`, eventType && `event type ${eventType}`, targetDate && `event date ${targetDate}`, guests !== null && `${guests} guests`, budget && `budget ${budget}`, packageInterest && `package interest ${packageInterest}`, notes && `call note: ${notes}`].filter(Boolean)
+  const parts = [spokenLanguage && `your spoken language is ${spokenLanguage}`, fullName && `name ${fullName}`, phone && `phone ${phone}`, email && `email ${email}`, eventType && `event type ${eventType}`, targetDate && `event date ${targetDate}`, guests !== null && `${guests} guests`, budget && `budget ${budget}`, packageInterest && `package interest ${packageInterest}`, notes && `call note: ${notes}`].filter(Boolean)
   return { nonce, expiresAt, question: `I have ${parts.join(', ')}. Is that correct, and may I save ${parts.length === 1 ? 'this' : 'these details'} for the Luxor team?` }
 }
 

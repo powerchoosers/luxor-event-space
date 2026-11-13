@@ -314,6 +314,8 @@ test('successful provider acceptance persists on a short ended parent and notice
   state.onAccept = () => { state.row.status = 'completed'; state.row.updated_at = new Date().toISOString() }
   const result = await service.acceptElenaLiveEvent({ id: 'event_synthetic', type: 'live.transport.incoming', created_at: Math.floor(Date.now() / 1000), data: { type: 'sip', session_id: 'live_synthetic', sip_headers: [{ name: 'X-Luxor-Live-Ingress', value: ingress }] } })
   assert.equal(result.accepted, true); assert.equal(state.row.metadata.accepted, true); assert.equal(state.row.status, 'completed')
+  assert.equal(state.notices.length, 0)
+  await assert.rejects(service.greetElenaLiveCall('live_synthetic', callSid), /not authorized/)
   assert.equal(state.notices.length, 1)
   assert.equal((await tool('prepare_transfer')).error, true)
 })

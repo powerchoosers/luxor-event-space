@@ -1,8 +1,10 @@
-import { NextResponse } from 'next/server'
+import { processPendingLuxorTranscriptTranslations } from '@/lib/luxorTranscriptTranslationServer'
+import { after, NextResponse } from 'next/server'
 import { canProcessLuxorRecording, getLuxorCallBySid, saveLuxorTranscriptEvent } from '@/lib/luxorCallsServer'
 import { parseTwilioInteger, readTwilioForm, validateTwilioWebhook } from '@/lib/luxorTwilioServer'
 
 export const runtime = 'nodejs'
+export const maxDuration = 60
 
 export async function POST(request: Request) {
   const params = await readTwilioForm(request)
@@ -24,6 +26,9 @@ export async function POST(request: Request) {
       callSid, event: event!, sequenceId, transcriptionSid: params.TranscriptionSid!,
       transcriptionData: params.TranscriptionData, transcriptionProviderData: params.TranscriptionProviderData,
       track: String(data.track || params.Track || ''), timestamp: params.Timestamp, final: params.Final,
+    })
+    if (call.metadata?.scope === 'elena_live_inbound') after(async () => {
+      try { await processPendingLuxorTranscriptTranslations(2, call.id) } catch { console.warn('Transcript translation remains queued.') }
     })
     return NextResponse.json({ ok: true })
   } catch (error) {

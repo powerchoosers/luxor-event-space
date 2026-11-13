@@ -331,7 +331,7 @@ export async function saveLuxorTranscriptEvent(input: {
     const startSeconds = Number.isFinite(eventMs) && Number.isFinite(recordingStartMs) ? Math.max(0, (eventMs - recordingStartMs) / 1000) : null
     const inserted = await supabaseRest<Array<{ id: string }>>('luxor_call_transcript_segments?on_conflict=call_id%2Ctranscription_sid%2Csequence_id%2Ctrack', {
       method: 'POST', headers: { Prefer: 'resolution=ignore-duplicates,return=representation' },
-      body: JSON.stringify({ call_id: call.id, transcription_sid: input.transcriptionSid, sequence_id: input.sequenceId, track, segment_start_seconds: startSeconds, segment_audio_timestamp: providerStartAt == null ? null : new Date(providerStartAt).toISOString(), segment_text: text, is_final: final, event_timestamp: eventTime }),
+      body: JSON.stringify({ call_id: call.id, transcription_sid: input.transcriptionSid, sequence_id: input.sequenceId, track, segment_start_seconds: startSeconds, segment_audio_timestamp: providerStartAt == null ? null : new Date(providerStartAt).toISOString(), segment_text: text, translation_status: call.metadata?.scope === 'elena_live_inbound' ? 'pending' : 'not_requested', is_final: final, event_timestamp: eventTime }),
     })
     addedSegment = inserted.length > 0
   }
@@ -416,7 +416,7 @@ export async function saveLuxorRecordingCopy(input: { callSid: string; recording
 }
 
 type TranscriptRow = {
-  id: string; call_id: string; sequence_id: number; track: string; segment_text: string
+  id: string; call_id: string; sequence_id: number; track: string; segment_text: string; english_text: string | null; spoken_languages: string[]; translation_status: string
   event_timestamp: string | null; segment_audio_timestamp: string | null; segment_start_seconds: number | null
 }
 
@@ -427,7 +427,7 @@ async function getTranscriptRows(callFilter: string) {
   // and lists of many calls do not silently lose turns.
   for (let offset = 0; ; offset += pageSize) {
     const page = await supabaseRest<TranscriptRow[]>(
-      `luxor_call_transcript_segments?select=id,call_id,sequence_id,track,segment_text,event_timestamp,segment_audio_timestamp,segment_start_seconds&${callFilter}&order=created_at.asc,id.asc&limit=${pageSize}&offset=${offset}`,
+      `luxor_call_transcript_segments?select=id,call_id,sequence_id,track,segment_text,english_text,spoken_languages,translation_status,event_timestamp,segment_audio_timestamp,segment_start_seconds&${callFilter}&order=created_at.asc,id.asc&limit=${pageSize}&offset=${offset}`,
     )
     rows.push(...page)
     if (page.length < pageSize) return rows
@@ -481,7 +481,7 @@ export async function listLuxorCalls(options: {
     rowsByCall.set(row.call_id, callRows)
   }
   return calls.map((call) => ({ ...call, transcript_segments: transcriptRowsInAudioOrder(rowsByCall.get(call.id) ?? [], call.recording_started_at)
-    .map((row) => ({ id: row.id, text: row.segment_text, track: row.track, timestamp: row.event_timestamp || '', final: true, startSeconds: row.segment_start_seconds })) }))
+    .map((row) => ({ id: row.id, text: row.english_text || row.segment_text, originalText: row.segment_text, spokenLanguages: row.spoken_languages || [], translationStatus: row.translation_status, track: row.track, timestamp: row.event_timestamp || '', final: true, startSeconds: row.segment_start_seconds })) }))
 }
 
 export async function getLuxorTranscriptSegments(callId: string) {

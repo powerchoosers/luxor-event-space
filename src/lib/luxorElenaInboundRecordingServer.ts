@@ -82,7 +82,7 @@ async function startElenaRecordingSessions(callSid: string, sessionId: string, c
   } catch { console.warn('[Elena Inbound] Recording did not start.') }
   if (recordingStarted) {
     try {
-      const transcription = await client.calls(callSid).transcriptions.create({ name: `Luxor ${callSid}`, statusCallbackUrl: `${BASE}/api/twilio/transcriptions?recordCallSid=${callSid}`, statusCallbackMethod: 'POST', track: 'both_tracks', inboundTrackLabel: 'caller', outboundTrackLabel: 'luxor_agent', transcriptionEngine: 'google', speechModel: 'telephony', partialResults: false, enableProviderData: true })
+      const transcription = await client.calls(callSid).transcriptions.create({ name: `Luxor ${callSid}`, statusCallbackUrl: `${BASE}/api/twilio/transcriptions?recordCallSid=${callSid}`, statusCallbackMethod: 'POST', track: 'both_tracks', inboundTrackLabel: 'caller', outboundTrackLabel: 'luxor_agent', transcriptionEngine: 'deepgram', speechModel: 'nova-3', languageCode: 'multi', partialResults: false, enableProviderData: true })
       if (!/^GT[0-9a-f]{32}$/i.test(transcription.sid)) throw new Error('Transcription identifier unavailable.')
       transcriptionSid = transcription.sid
       transcriptionStarted = true

@@ -1284,6 +1284,18 @@ export default function CallsPage() {
                                   <p className="mt-0.5 text-sm leading-relaxed text-[color:var(--portal-text)]">
                                     {segment.text}
                                   </p>
+                                  {segment.translationStatus === 'completed' && segment.originalText && segment.originalText !== segment.text && (
+                                    <p className="mt-1 text-xs text-[color:var(--portal-muted)]" >
+                                      Original: <bdi>{segment.originalText}</bdi>
+                                    </p>
+                                  )}
+                                  {segment.translationStatus && segment.translationStatus !== 'not_requested' && (
+                                    <p className="mt-1 text-xs text-[color:var(--portal-muted)]">
+                                      {segment.translationStatus === 'completed'
+                                        ? `Spoken language: ${segment.spokenLanguages?.join(', ') || 'uncertain'}. ${segment.originalText !== segment.text ? 'English translation.' : 'Transcript shown in English.'}`
+                                        : segment.translationStatus === 'failed' ? 'English translation unavailable. Original transcript shown.' : 'English translation pending. Original transcript shown; refresh to check.'}
+                                    </p>
+                                  )}
                                 </div>
                               </button>
                             )
