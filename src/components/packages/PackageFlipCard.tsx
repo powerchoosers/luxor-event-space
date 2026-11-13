@@ -251,7 +251,7 @@ export function PackageFlipCard({ data, locale = 'en' }: PackageFlipCardProps) {
         {data.displayName} package
       </span>
       <div className="pointer-events-none invisible [grid-area:1/1] w-full min-w-0" aria-hidden inert>
-        <div className={sizerShellClass}>{renderFront({ hidden: true, sizeFromContent: true })}</div>
+        <div className={sizerShellClass}>{renderFront({ sizeFromContent: true })}</div>
       </div>
       <div className="relative [grid-area:1/1] min-w-0 self-stretch [perspective:1200px]">
         <div
