@@ -1086,8 +1086,13 @@ function DeveloperSupportAttachmentList({
           const checked = reviewOnly ? true : Boolean(selectedKeys?.has(item.key))
           return (
             <li key={item.key}>
-              <label className={`flex items-center gap-2.5 rounded-lg border px-2.5 py-2 text-xs ${checked ? 'border-[#caa24c]/45 bg-[#caa24c]/8' : 'border-[color:var(--portal-border)] bg-[color:var(--portal-bg)]'} ${reviewOnly ? '' : 'cursor-pointer'}`}>
-                {reviewOnly ? null : (
+              {reviewOnly ? (
+                <div className={`flex items-center gap-2.5 rounded-lg border px-2.5 py-2 text-xs ${checked ? 'border-[#caa24c]/45 bg-[#caa24c]/8' : 'border-[color:var(--portal-border)] bg-[color:var(--portal-bg)]'}`}>
+                  <DeveloperSupportAttachmentThumb key={item.key} item={item} />
+                  <span className="min-w-0 flex-1 truncate font-medium text-[color:var(--portal-text)]">{item.name}</span>
+                </div>
+              ) : (
+                <label className={`flex cursor-pointer items-center gap-2.5 rounded-lg border px-2.5 py-2 text-xs ${checked ? 'border-[#caa24c]/45 bg-[#caa24c]/8' : 'border-[color:var(--portal-border)] bg-[color:var(--portal-bg)]'}`}>
                   <input
                     type="checkbox"
                     className="h-3.5 w-3.5 shrink-0 rounded border-[color:var(--portal-border)] accent-[#caa24c]"
@@ -1095,10 +1100,10 @@ function DeveloperSupportAttachmentList({
                     disabled={disabled || (!checked && (selectedKeys?.size || 0) >= 5)}
                     onChange={() => onToggle?.(item.key)}
                   />
-                )}
-                <DeveloperSupportAttachmentThumb key={item.key} item={item} />
-                <span className="min-w-0 flex-1 truncate font-medium text-[color:var(--portal-text)]">{item.name}</span>
-              </label>
+                  <DeveloperSupportAttachmentThumb key={item.key} item={item} />
+                  <span className="min-w-0 flex-1 truncate font-medium text-[color:var(--portal-text)]">{item.name}</span>
+                </label>
+              )}
             </li>
           )
         })}
@@ -1412,6 +1417,8 @@ export function ElenaDeveloperSupportCard({
   const layoutEase = PORTAL_MODAL_EASE
   const layoutDuration = reduceMotion ? 0 : 0.38
   const contentDuration = reduceMotion ? 0 : 0.3
+  const confirmationRef = useRef(confirmation)
+  confirmationRef.current = confirmation
   const supportCardPhase = isSent ? 'sent' : uncertain ? 'uncertain' : confirmation ? 'review' : 'compose'
 
   useEffect(() => {
@@ -1461,17 +1468,6 @@ export function ElenaDeveloperSupportCard({
     return true
   }
 
-  const refreshConfirmationAfterExpiry = async (): Promise<boolean> => {
-    setConfirmation(null)
-    try {
-      await issuePrepareRequest()
-      return true
-    } catch (refreshError) {
-      setError(refreshError instanceof Error ? refreshError.message : 'The review could not be refreshed. Tap Review ticket to try again.')
-      return false
-    }
-  }
-
   const prepareTicket = async () => {
     if (!title.trim() || isSaving || isSent || uncertain) return
     setIsSaving(true)
@@ -1486,57 +1482,38 @@ export function ElenaDeveloperSupportCard({
   }
 
   const confirmTicket = async () => {
-    if (!confirmation || isSaving || isSent || uncertain) return
+    const pending = confirmationRef.current
+    if (!pending || isSaving || isSent || uncertain) return
     setIsSaving(true)
     setError(null)
     try {
       const response = await fetch('/api/portal/elena-chat/actions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'CONFIRM_DEVELOPER_SUPPORT', token: confirmation.token }),
+        body: JSON.stringify({ action: 'CONFIRM_DEVELOPER_SUPPORT', token: pending.token }),
       })
       const data = await readPortalActionResponse(response)
-      const expired = response.status === 410 || data.code === 'confirmation_expired'
       if (!response.ok || data.success !== true) {
-        if (expired) {
-          const refreshed = await refreshConfirmationAfterExpiry()
-          if (refreshed) {
-            setError(null)
-            return
-          }
-        }
-        throw new Error(typeof data.error === 'string' ? data.error : 'Unverified result')
+        const message = typeof data.error === 'string'
+          ? data.error
+          : 'The ticket was not sent. Try Send again, or review the ticket once more.'
+        const expired = response.status === 410 || data.code === 'confirmation_expired'
+        if (expired) setConfirmation(null)
+        setError(message)
+        return
       }
       setConfirmation(null)
       setIsSent(true)
       onSuccess?.('Support ticket sent to Braxton. The cloud worker will pick it up.')
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'The ticket may or may not have been sent. Ask before sending another copy.'
-      const expired = /expired|confirmation unavailable/i.test(message)
-      if (expired) {
-        const refreshed = await refreshConfirmationAfterExpiry()
-        if (refreshed) {
-          setError(null)
-          return
-        }
-        setUncertain(false)
-        setError('This confirmation expired. We could not refresh it automatically. Tap Review ticket to try again.')
-        return
-      }
-      setConfirmation(null)
-      setUncertain(true)
-      setError(message)
+      setError(err instanceof Error ? err.message : 'The ticket was not sent. Check your connection, then try Send again.')
     } finally {
       setIsSaving(false)
     }
   }
 
   return (
-    <motion.div
-      layout
-      transition={{ layout: { duration: layoutDuration, ease: layoutEase } }}
-      className="mt-3 w-full overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)]"
-    >
+    <div className="mt-3 w-full overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)]">
       <motion.div layout="position" className="flex items-center gap-2 border-b border-[color:var(--portal-border)] px-4 py-3">
         <Wrench size={16} className="text-[#a8792f] dark:text-[#f1d27a]" aria-hidden="true" />
         <div>
@@ -1544,7 +1521,7 @@ export function ElenaDeveloperSupportCard({
           <p className="text-[10px] text-[color:var(--portal-muted)]">Sends a fix to Braxton in the cloud</p>
         </div>
       </motion.div>
-      <motion.div layout className="space-y-3 p-4">
+      <div className="space-y-3 p-4">
         <AnimatePresence mode="popLayout" initial={false}>
           {(supportCardPhase === 'review' || supportCardPhase === 'compose') ? (
             <motion.div
@@ -1669,7 +1646,7 @@ export function ElenaDeveloperSupportCard({
             </motion.p>
           ) : null}
         </AnimatePresence>
-        <motion.div layout="position" transition={{ layout: { duration: layoutDuration, ease: layoutEase } }} className="flex items-stretch justify-end gap-2">
+        <div className="flex items-stretch justify-end gap-2">
           <input
             ref={fileInputRef}
             type="file"
@@ -1717,28 +1694,18 @@ export function ElenaDeveloperSupportCard({
               </motion.button>
             ) : null}
             {!isSent && !uncertain ? (
-              <motion.button
-                key={confirmation ? 'send-ticket' : 'review-ticket'}
+              <button
                 type="button"
-                layout
-                initial={{ opacity: 0, y: reduceMotion ? 0 : 4 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: reduceMotion ? 0 : -4 }}
-                transition={{ duration: reduceMotion ? 0 : 0.24, ease: layoutEase, layout: { duration: layoutDuration, ease: layoutEase } }}
-                onClick={confirmation ? confirmTicket : prepareTicket}
+                onClick={() => {
+                  if (confirmationRef.current) void confirmTicket()
+                  else void prepareTicket()
+                }}
                 disabled={isSaving || !title.trim()}
                 className="luxor-gold-raised inline-flex min-h-10 items-center gap-2 rounded-lg px-4 py-2 text-xs font-bold !text-white disabled:opacity-50"
               >
                 {isSaving && <PortalConstellationLoader size={13} tone="white" />}
-                <motion.span
-                  key={confirmation ? 'send-label' : 'review-label'}
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  transition={{ duration: reduceMotion ? 0 : 0.18 }}
-                >
-                  {confirmation ? 'Send to developer' : 'Review ticket'}
-                </motion.span>
-              </motion.button>
+                {confirmation ? 'Send to developer' : 'Review ticket'}
+              </button>
             ) : null}
             {isSent ? (
               <motion.span
@@ -1753,8 +1720,8 @@ export function ElenaDeveloperSupportCard({
               </motion.span>
             ) : null}
           </AnimatePresence>
-        </motion.div>
-      </motion.div>
-    </motion.div>
+        </div>
+      </div>
+    </div>
   )
 }

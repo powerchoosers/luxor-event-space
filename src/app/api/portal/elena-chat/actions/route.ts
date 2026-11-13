@@ -9,10 +9,22 @@ import {
 // Preparation and confirmation are deliberately separate. A confirm request
 // supplies only an opaque token; neither the action nor its summary is trusted.
 export async function POST(request: Request) {
-  if (request.headers.get('origin') !== new URL(request.url).origin) return NextResponse.json({ error: 'Invalid request origin.' }, { status: 403 })
+  const originOk = request.headers.get('origin') === new URL(request.url).origin
   const body: unknown = await request.json().catch(() => null)
-  if (!body || typeof body !== 'object' || Array.isArray(body)) return NextResponse.json({ error: 'Invalid action.' }, { status: 400 })
+  if (!body || typeof body !== 'object' || Array.isArray(body)) {
+    if (!originOk) return NextResponse.json({ error: 'Invalid request origin.' }, { status: 403 })
+    return NextResponse.json({ error: 'Invalid action.' }, { status: 400 })
+  }
   const value = body as Record<string, unknown>
+  if (!originOk) {
+    if (value.action === 'CONFIRM_DEVELOPER_SUPPORT' || value.action === 'PREPARE_DEVELOPER_SUPPORT') {
+      console.error('[developer-support] request rejected', {
+        step: 'origin',
+        action: value.action === 'CONFIRM_DEVELOPER_SUPPORT' ? 'confirm' : 'prepare',
+      })
+    }
+    return NextResponse.json({ error: 'Invalid request origin.' }, { status: 403 })
+  }
   const options = { headers: { 'Cache-Control': 'no-store' } }
   try {
     if (value.action === 'PREPARE_TASK' && Object.keys(value).every(k => ['action', 'task'].includes(k))) {
@@ -36,19 +48,23 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: safe }, { ...options, status: 400 })
       }
     }
+    if (value.action === 'CONFIRM_DEVELOPER_SUPPORT' && !Object.keys(value).every(k => ['action', 'token'].includes(k))) {
+      console.error('[developer-support] confirm failed', { step: 'body' })
+    }
     if (value.action === 'CONFIRM_DEVELOPER_SUPPORT' && Object.keys(value).every(k => ['action', 'token'].includes(k))) {
       try {
         const result = await consumeElenaDeveloperSupportConfirmation(value.token)
         return NextResponse.json({ success: true, result }, options)
       } catch (error) {
-        if (error instanceof DeveloperSupportConfirmationExpiredError) {
-          return NextResponse.json({ error: error.message, code: error.code }, { ...options, status: 410 })
-        }
         const detail = error instanceof Error ? error.message : 'The support ticket could not be sent.'
-        console.error('[developer-support] confirm failed:', detail)
-        const safe = detail.length > 0 && detail.length <= 400 && !/token_hash|service_role|authorization/i.test(detail)
+        const safe = detail.length > 0 && detail.length <= 400 && !/token_hash|service_role|authorization|bearer /i.test(detail)
           ? detail
           : 'The support ticket could not be sent. Try reviewing the ticket again.'
+        if (error instanceof DeveloperSupportConfirmationExpiredError) {
+          console.error('[developer-support] confirm failed', { step: 'consume', status: 410, reason: 'confirmation_unavailable' })
+          return NextResponse.json({ error: safe, code: error.code }, { ...options, status: 410 })
+        }
+        console.error('[developer-support] confirm failed', { step: 'consume', status: 400, reason: safe })
         return NextResponse.json({ error: safe, code: 'confirmation_failed' }, { ...options, status: 400 })
       }
     }
@@ -56,6 +72,9 @@ export async function POST(request: Request) {
   } catch {
     // A failed response after a database commit is ambiguous. The client must
     // check the task list, not blindly issue a new confirmation.
+    if (value.action === 'CONFIRM_DEVELOPER_SUPPORT') {
+      console.error('[developer-support] confirm failed', { step: 'unhandled', status: 409 })
+    }
     return NextResponse.json({ error: 'The action could not be verified. Check the task list before trying again.' }, { ...options, status: 409 })
   }
 }

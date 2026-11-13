@@ -1793,7 +1793,7 @@ export function PortalElenaChat({ isOpen, onClose, activePath, portalRole, userE
         </AnimatePresence>
 
         {/* Messages Window */}
-        <div className={`portal-scrollbar min-h-0 flex-1 overflow-y-auto p-3 sm:p-4 ${voiceActive && !voiceHasResults && !isElenaResponding ? 'hidden' : ''}`}>
+        <motion.div layoutScroll className={`portal-scrollbar min-h-0 flex-1 overflow-y-auto p-3 sm:p-4 ${voiceActive && !voiceHasResults && !isElenaResponding ? 'hidden' : ''}`}>
           <AnimatePresence mode="wait">
             <motion.div
               key={currentSessionId || 'empty-session'}
@@ -2241,7 +2241,7 @@ export function PortalElenaChat({ isOpen, onClose, activePath, portalRole, userE
               <div ref={messagesEndRef} />
             </motion.div>
           </AnimatePresence>
-        </div>
+        </motion.div>
 
         {/* Input */}
         {!voiceActive && <div className="bg-[color:var(--portal-card)]/90 backdrop-blur-md p-3 shrink-0">

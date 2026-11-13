@@ -34,25 +34,34 @@ export async function triggerLuxorCursorAutomation(
 ): Promise<LuxorCursorAutomationDispatch> {
   const url = process.env.LUXOR_CURSOR_AUTOMATION_WEBHOOK_URL?.trim()
   const secret = process.env.LUXOR_CURSOR_AUTOMATION_WEBHOOK_SECRET?.trim()
-  if (!url || !secret) throw new Error('Developer support automation is not configured yet.')
+  if (!url || !secret) {
+    console.error('[developer-support] cursor webhook failed', { status: null, reason: 'not_configured' })
+    throw new Error('Developer support automation is not configured yet.')
+  }
 
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${secret}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      context: payload.context.slice(0, 24_000),
-      pagePath: payload.pagePath,
-      pageRoute: payload.pagePath,
-      pageArea: payload.pageArea,
-      title: payload.title.slice(0, 200),
-      priority: payload.priority,
-      ticketId: payload.ticketId,
-    }),
-    cache: 'no-store',
-  })
+  let response: Response
+  try {
+    response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${secret}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        context: payload.context.slice(0, 24_000),
+        pagePath: payload.pagePath,
+        pageRoute: payload.pagePath,
+        pageArea: payload.pageArea,
+        title: payload.title.slice(0, 200),
+        priority: payload.priority,
+        ticketId: payload.ticketId,
+      }),
+      cache: 'no-store',
+    })
+  } catch {
+    console.error('[developer-support] cursor webhook failed', { status: null, reason: 'network' })
+    throw new Error('Cursor automation could not be reached.')
+  }
 
   const raw = await response.text().catch(() => '')
   let parsed: unknown = null
@@ -65,11 +74,14 @@ export async function triggerLuxorCursorAutomation(
   }
 
   if (!response.ok) {
-    const preview = raw.trim().slice(0, 180)
-    throw new Error(preview ? `Cursor automation rejected the ticket (${response.status}): ${preview}` : `Cursor automation rejected the ticket (${response.status}).`)
+    console.error('[developer-support] cursor webhook failed', { status: response.status })
+    throw new Error(`Cursor automation rejected the ticket (${response.status}).`)
   }
 
   const dispatch = parseDispatchBody(parsed)
-  if (!dispatch.success) throw new Error('Cursor automation did not accept the ticket.')
+  if (!dispatch.success) {
+    console.error('[developer-support] cursor webhook failed', { status: response.status, reason: 'not_accepted' })
+    throw new Error('Cursor automation did not accept the ticket.')
+  }
   return dispatch
 }

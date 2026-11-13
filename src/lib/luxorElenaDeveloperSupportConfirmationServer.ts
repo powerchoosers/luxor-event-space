@@ -232,8 +232,21 @@ export async function issueElenaDeveloperSupportConfirmation(input: unknown) {
 }
 
 export async function consumeElenaDeveloperSupportConfirmation(input: unknown) {
-  const token = parseElenaConfirmationToken(input)
-  const auth = await ownerIdentity()
+  let token: ReturnType<typeof parseElenaConfirmationToken>
+  try {
+    token = parseElenaConfirmationToken(input)
+  } catch (error) {
+    console.error('[developer-support] confirm failed', { step: 'token' })
+    throw error
+  }
+  let auth: Awaited<ReturnType<typeof ownerIdentity>>
+  try {
+    auth = await ownerIdentity()
+  } catch (error) {
+    const reason = error instanceof Error ? error.message.slice(0, 160) : 'session'
+    console.error('[developer-support] confirm failed', { step: 'owner', reason })
+    throw error
+  }
   let consumed: {
     confirmation_id: string
     title: string
@@ -256,6 +269,9 @@ export async function consumeElenaDeveloperSupportConfirmation(input: unknown) {
       }),
     })
   } catch (error) {
+    const status = error instanceof SupabaseRestError ? error.status : undefined
+    const code = error instanceof SupabaseRestError ? error.code : undefined
+    console.error('[developer-support] confirm failed', { step: 'consume_rpc', status, code })
     if (error instanceof SupabaseRestError && /confirmation unavailable/i.test(error.message)) {
       throw new DeveloperSupportConfirmationExpiredError()
     }
@@ -267,11 +283,18 @@ export async function consumeElenaDeveloperSupportConfirmation(input: unknown) {
     || typeof consumed.title !== 'string'
     || typeof consumed.reporter_email !== 'string'
   ) {
+    console.error('[developer-support] confirm failed', { step: 'result' })
     throw new Error('Confirmation result unavailable.')
   }
 
   const storedAttachments = Array.isArray(consumed.context_attachments) ? consumed.context_attachments : []
-  const attachmentContext = await buildAttachmentContext(storedAttachments)
+  let attachmentContext: string | null
+  try {
+    attachmentContext = await buildAttachmentContext(storedAttachments)
+  } catch (error) {
+    console.error('[developer-support] confirm failed', { step: 'attachments' })
+    throw error
+  }
   const priority = (consumed.priority === 'low' || consumed.priority === 'medium' || consumed.priority === 'high' || consumed.priority === 'urgent')
     ? consumed.priority
     : 'medium'
@@ -302,6 +325,10 @@ export async function consumeElenaDeveloperSupportConfirmation(input: unknown) {
     }
     return { confirmation_id: consumed.confirmation_id, dispatch }
   } catch (error) {
-    throw new Error(error instanceof Error ? error.message : 'Cursor automation could not be notified.')
+    const message = error instanceof Error ? error.message : 'Cursor automation could not be notified.'
+    if (!message.startsWith('Cursor automation') && message !== 'Developer support automation is not configured yet.') {
+      console.error('[developer-support] confirm failed', { step: 'dispatch_record' })
+    }
+    throw new Error(message)
   }
 }
