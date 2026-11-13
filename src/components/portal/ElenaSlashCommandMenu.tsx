@@ -41,7 +41,7 @@ type SlashMenuCoords = { left: number; width: number; bottom: number }
 
 function useSlashMenuCoords(anchorRef: React.RefObject<HTMLElement | null>, open: boolean) {
   const [coords, setCoords] = useState<SlashMenuCoords | null>(null)
-  const lastCoordsRef = React.useRef<SlashMenuCoords | null>(null)
+  const [frozenCoords, setFrozenCoords] = useState<SlashMenuCoords | null>(null)
 
   const update = useCallback(() => {
     const anchor = anchorRef.current
@@ -54,8 +54,8 @@ function useSlashMenuCoords(anchorRef: React.RefObject<HTMLElement | null>, open
       width,
       bottom: Math.max(12, window.innerHeight - rect.top + 8),
     }
-    lastCoordsRef.current = next
     setCoords(next)
+    setFrozenCoords(next)
   }, [anchorRef])
 
   useLayoutEffect(() => {
@@ -71,7 +71,7 @@ function useSlashMenuCoords(anchorRef: React.RefObject<HTMLElement | null>, open
     }
   }, [open, update])
 
-  return open ? coords : lastCoordsRef.current
+  return open ? coords : frozenCoords
 }
 
 const LIST_MAX_PX = 224
