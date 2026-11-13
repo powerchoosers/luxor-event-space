@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect, Suspense, useCallback } from 'react'
+import React, { useState, useEffect, Suspense, useCallback, useMemo } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import {
   Wrench,
@@ -42,7 +42,9 @@ import {
   PortalCardSkeleton,
   PortalTableSkeleton,
   PortalStaggerGroup,
-  PortalStaggerCard
+  PortalStaggerCard,
+  PortalFilterBar,
+  PortalStatusBadge,
 } from '@/components/portal/PortalUI'
 import {
   PortalBulkActionDeck,
@@ -81,6 +83,34 @@ type ReadinessTask = {
 }
 
 const READINESS_STORAGE_KEY = 'luxor-operations-readiness-checklist-v1'
+
+const PREFERRED_VENDOR_TYPE_OPTIONS = [
+  { value: 'Venue Maintenance', label: 'Venue Maintenance' },
+  { value: 'Utilities', label: 'Utilities' },
+  { value: 'Insurance', label: 'Insurance' },
+  { value: 'Marketing', label: 'Marketing' },
+  { value: 'Event Rentals', label: 'Event Rentals' },
+  { value: 'Decor', label: 'Decor' },
+  { value: 'Entertainment', label: 'Entertainment' },
+  { value: 'Catering', label: 'Catering' },
+  { value: 'Cleaning', label: 'Cleaning' },
+  { value: 'Security', label: 'Security' },
+  { value: 'Technology', label: 'Technology' },
+  { value: 'Professional Services', label: 'Professional Services' },
+  { value: 'Other', label: 'Other' },
+  { value: 'DJs & Music', label: 'DJs & Music' },
+  { value: 'Fine Caterers', label: 'Fine Caterers' },
+  { value: 'Security Crew', label: 'Security Crew' },
+  { value: 'Florist Services', label: 'Florist Services' },
+  { value: 'Rentals & Decor', label: 'Rentals & Decor' },
+  { value: 'Valet Service', label: 'Valet Service' },
+  { value: 'Bartenders', label: 'Bartenders' },
+  { value: 'Photographers', label: 'Photographers' },
+  { value: 'Makeup Artist', label: 'Makeup Artist' },
+] as const
+
+const portalVendorFieldClass =
+  'w-full min-h-10 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 text-sm text-[color:var(--portal-text)] outline-none transition-colors placeholder:text-[color:var(--portal-faint)] focus:border-[#caa24c]/45 focus:ring-2 focus:ring-[#caa24c]/10'
 
 const operationsTabs: Array<{ id: SubTab; label: string; icon: React.ReactNode; description: string; group: string }> = [
   { id: 'dashboard', label: 'Operations Dashboard', icon: <Activity size={15} />, description: 'Facility readiness, alerts, and operational KPIs', group: 'Overview & Facility' },
@@ -232,6 +262,8 @@ export function OperationsPageContent({ embeddedBills = false }: { embeddedBills
   const [vendorPhone, setVendorPhone] = useState('')
   const [vendorRating, setVendorRating] = useState('')
   const [vendorCoi, setVendorCoi] = useState('false')
+  const [vendorSearchQuery, setVendorSearchQuery] = useState('')
+  const [vendorTypeFilter, setVendorTypeFilter] = useState('all')
 
   // State for interactive features
   const [readinessTasks, setReadinessTasks] = useState<ReadinessTask[]>([])
@@ -332,8 +364,29 @@ export function OperationsPageContent({ embeddedBills = false }: { embeddedBills
   }, [activeTab, bulkSelection.clear])
 
   const bulkType = activeTab === 'bills' ? 'bill' : activeTab === 'maintenance' ? 'task' : activeTab === 'inventory' ? 'inventory' : activeTab === 'vendors' ? 'vendor' : null
-  const preferredVendors = vendors.filter((vendor) => vendor.vendor_type !== 'Service Company')
-  const bulkRecords = bulkType === 'bill' ? bills : bulkType === 'task' ? maintenanceTasks : bulkType === 'inventory' ? inventory : bulkType === 'vendor' ? preferredVendors : []
+  const activePreferredVendors = useMemo(
+    () => vendors.filter((vendor) => vendor.vendor_type !== 'Service Company' && !vendor.archived_at),
+    [vendors],
+  )
+  const vendorTypeFilterOptions = useMemo(() => {
+    const types = new Set(activePreferredVendors.map((vendor) => vendor.vendor_type).filter(Boolean))
+    return [
+      { value: 'all', label: 'All vendor types' },
+      ...Array.from(types).sort((a, b) => a.localeCompare(b)).map((value) => ({ value, label: value })),
+    ]
+  }, [activePreferredVendors])
+  const filteredPreferredVendors = useMemo(() => {
+    const needle = vendorSearchQuery.trim().toLowerCase()
+    return activePreferredVendors.filter((vendor) => {
+      const matchesType = vendorTypeFilter === 'all' || vendor.vendor_type === vendorTypeFilter
+      const haystack = [vendor.name, vendor.vendor_type, vendor.email, vendor.phone, vendor.rating]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase()
+      return matchesType && (!needle || haystack.includes(needle))
+    })
+  }, [activePreferredVendors, vendorSearchQuery, vendorTypeFilter])
+  const bulkRecords = bulkType === 'bill' ? bills : bulkType === 'task' ? maintenanceTasks : bulkType === 'inventory' ? inventory : bulkType === 'vendor' ? filteredPreferredVendors : []
   const bulkRecordIds = bulkRecords.map((record) => record.id)
   const bulkSelectedCount = bulkSelection.selectedCount(bulkRecordIds.length)
 
@@ -1017,44 +1070,113 @@ export function OperationsPageContent({ embeddedBills = false }: { embeddedBills
         </div>
       )}      {/* PREFERRED VENDORS TAB */}
       {activeTab === 'vendors' && (
-        <div className="flex-1 min-h-0 flex flex-col gap-6 overflow-hidden">
-          <div className="flex items-center justify-between">
-            <h3 className="text-xs font-black uppercase tracking-[0.2em] text-white">Preferred Vendor Roster</h3>
-            {bulkRecordIds.length ? <div className="flex items-center gap-2"><PortalBulkHeaderSelector state={bulkSelection.pageSelectionState(bulkRecordIds)} onChange={() => bulkSelection.selectPage(bulkRecordIds)} /><span className="text-[9px] font-bold uppercase tracking-wider text-[color:var(--portal-faint)]">Select all vendors</span></div> : null}
-          </div>
-
-          <div className="flex-1 min-h-0 overflow-y-auto portal-scrollbar pr-1 pb-8">
+        <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-hidden">
+          <div className="shrink-0">
             <OperationsArchivePanel type="vendor" records={vendors.map((vendor) => ({ id: vendor.id, updated_at: vendor.updated_at, archived_at: vendor.archived_at, label: vendor.name }))} onUpdated={() => void loadOperationsData(false)} />
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              {preferredVendors.length === 0 ? (
-                <div className="col-span-3 text-center py-12 text-xs text-zinc-505">No preferred vendors logged.</div>
-              ) : (
-                preferredVendors.map((v, idx) => (
-                  <div key={v.id || idx} className={`luxor-glass-card rounded-2xl p-5 border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] space-y-3 cursor-pointer hover:border-[#caa24c]/40 transition-all ${bulkSelection.isSelected(v.id) ? 'border-[#caa24c]/45 bg-[#caa24c]/5' : ''}`} onClick={() => setEditingItem({ type: 'vendor', data: v })}>
-                    <div className="flex justify-between items-start">
-                      <div className="flex items-start gap-3">
-                        <PortalBulkRowSelector checked={bulkSelection.isSelected(v.id)} index={idx + 1} onChange={() => bulkSelection.toggle(v.id)} label={v.name} />
-                        <div>
-                        <span className="text-[9px] font-black uppercase tracking-widest text-zinc-500">{v.vendor_type}</span>
-                        <h4 className="text-sm font-bold text-white mt-1">{v.name}{v.archived_at ? <span className="ml-2 text-[10px] font-semibold text-[color:var(--portal-muted)]">Archived</span> : null}</h4>
-                        </div>
-                      </div>
-                      <span className="text-[10px] text-[color:var(--portal-muted)]">{v.rating?.trim() || 'Unrated'}</span>
-                    </div>
-                    <div className="space-y-1 text-xs text-zinc-400">
-                      <p className="truncate">Email: {v.email || 'N/A'}</p>
-                      <p>Phone: {v.phone || 'N/A'}</p>
-                    </div>
-                    <div className="pt-2 border-t border-zinc-900 flex justify-between items-center text-[10px]">
-                      <span className={v.coi_active ? 'text-emerald-400 font-bold' : 'text-rose-400 font-bold'}>
-                        {v.coi_active ? 'COI Active / Verified' : 'COI Pending / Inactive'}
-                      </span>
-                    </div>
+          </div>
+          <PortalTableCard
+            className="min-h-0 flex-1 overflow-hidden"
+            controlsClassName="rounded-t-2xl"
+            controls={
+              <div className="space-y-4">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <h2 className="font-sans text-base font-bold text-[color:var(--portal-text)] sm:text-lg">Preferred vendors</h2>
+                    <p className="mt-1 max-w-2xl text-sm leading-5 text-[color:var(--portal-muted)]">
+                      Approved partners for events. Insurance (COI) status is tracked but does not hide a vendor from this list.
+                    </p>
                   </div>
-                ))
+                  {bulkRecordIds.length ? (
+                    <div className="flex shrink-0 items-center gap-2">
+                      <PortalBulkHeaderSelector state={bulkSelection.pageSelectionState(bulkRecordIds)} onChange={() => bulkSelection.selectPage(bulkRecordIds)} />
+                      <span className="text-xs font-medium text-[color:var(--portal-muted)]">Select page</span>
+                    </div>
+                  ) : null}
+                </div>
+                <PortalFilterBar
+                  searchValue={vendorSearchQuery}
+                  onSearchChange={setVendorSearchQuery}
+                  searchPlaceholder="Search name, type, email, or phone"
+                  resultLabel={`${filteredPreferredVendors.length.toLocaleString()} ${filteredPreferredVendors.length === 1 ? 'vendor' : 'vendors'}`}
+                  activeFilters={
+                    vendorTypeFilter !== 'all'
+                      ? [{ id: 'type', label: vendorTypeFilter, onRemove: () => setVendorTypeFilter('all') }]
+                      : []
+                  }
+                  defaultExpanded={vendorTypeFilter !== 'all'}
+                >
+                  <PortalSelect
+                    aria-label="Vendor type"
+                    value={vendorTypeFilter}
+                    onChange={setVendorTypeFilter}
+                    options={vendorTypeFilterOptions}
+                    buttonClassName="min-h-10 w-full sm:min-w-[12rem]"
+                  />
+                </PortalFilterBar>
+              </div>
+            }
+          >
+            <div className="flex-1 min-h-0 overflow-y-auto portal-scrollbar px-4 py-4 sm:px-5 sm:py-5">
+              {filteredPreferredVendors.length === 0 ? (
+                <div className="flex min-h-48 flex-col items-center justify-center rounded-xl border border-dashed border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-5 py-10 text-center">
+                  <Users size={24} className="text-[color:var(--portal-faint)]" />
+                  <p className="mt-3 text-sm font-semibold text-[color:var(--portal-text)]">
+                    {activePreferredVendors.length === 0 ? 'No preferred vendors yet' : 'No vendors match this search'}
+                  </p>
+                  <p className="mt-1 max-w-sm text-xs leading-5 text-[color:var(--portal-muted)]">
+                    {activePreferredVendors.length === 0
+                      ? 'Add caterers, security, DJs, and other event partners your team recommends to clients.'
+                      : 'Try another vendor type or clear the search to see the full roster.'}
+                  </p>
+                  {activePreferredVendors.length === 0 ? (
+                    <PortalButton type="button" variant="primary" className="mt-4" onClick={() => setIsVendorModalOpen(true)}>
+                      <Plus size={14} /> Add vendor
+                    </PortalButton>
+                  ) : null}
+                </div>
+              ) : (
+                <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                  {filteredPreferredVendors.map((vendor, idx) => (
+                    <li key={vendor.id}>
+                      <button
+                        type="button"
+                        onClick={() => setEditingItem({ type: 'vendor', data: vendor })}
+                        className={`flex h-full w-full flex-col gap-3 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-4 text-left shadow-sm transition-colors hover:border-[#caa24c]/45 hover:bg-[color:var(--portal-soft)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/40 motion-reduce:transition-none ${
+                          bulkSelection.isSelected(vendor.id) ? 'border-[#caa24c]/50 bg-[#caa24c]/5' : ''
+                        }`}
+                      >
+                        <div className="flex items-start gap-3">
+                          <PortalBulkRowSelector
+                            checked={bulkSelection.isSelected(vendor.id)}
+                            index={idx + 1}
+                            onChange={() => bulkSelection.toggle(vendor.id)}
+                            label={vendor.name}
+                          />
+                          <span className="min-w-0 flex-1">
+                            <span className="block text-xs font-semibold text-[color:var(--portal-muted)]">{vendor.vendor_type}</span>
+                            <span className="mt-1 block text-sm font-bold leading-snug text-[color:var(--portal-text)]">{vendor.name}</span>
+                          </span>
+                          <span className="shrink-0 text-xs tabular-nums text-[color:var(--portal-muted)]">{vendor.rating?.trim() || 'Unrated'}</span>
+                        </div>
+                        <div className="space-y-1 text-xs text-[color:var(--portal-muted)]">
+                          <p className="break-all">Email: {vendor.email?.trim() || 'Not on file'}</p>
+                          <p className="break-words">Phone: {vendor.phone?.trim() || 'Not on file'}</p>
+                        </div>
+                        <div className="mt-auto flex items-center justify-between gap-2 border-t border-[color:var(--portal-border)] pt-3">
+                          <PortalStatusBadge
+                            status={vendor.coi_active ? 'COI verified' : 'COI pending'}
+                            tone={vendor.coi_active ? 'green' : 'gold'}
+                            borderless
+                          />
+                          <span className="text-xs font-semibold text-[#9a712e] dark:text-[#e6c77f]">Edit</span>
+                        </div>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
               )}
             </div>
-          </div>
+          </PortalTableCard>
         </div>
       )}
 
@@ -1469,72 +1591,49 @@ export function OperationsPageContent({ embeddedBills = false }: { embeddedBills
       >
         <form onSubmit={handleAddVendorSubmit} className="space-y-4">
           <div className="space-y-1">
-            <label className="text-[9px] uppercase font-bold text-zinc-500">Vendor Type</label>
+            <label className="text-xs font-semibold text-[color:var(--portal-muted)]">Vendor type</label>
             <PortalSelect
               value={vendorType}
               onChange={setVendorType}
-              options={[
-                { value: 'Venue Maintenance', label: 'Venue Maintenance' },
-                { value: 'Utilities', label: 'Utilities' },
-                { value: 'Insurance', label: 'Insurance' },
-                { value: 'Marketing', label: 'Marketing' },
-                { value: 'Event Rentals', label: 'Event Rentals' },
-                { value: 'Decor', label: 'Decor' },
-                { value: 'Entertainment', label: 'Entertainment' },
-                { value: 'Catering', label: 'Catering' },
-                { value: 'Cleaning', label: 'Cleaning' },
-                { value: 'Security', label: 'Security' },
-                { value: 'Technology', label: 'Technology' },
-                { value: 'Professional Services', label: 'Professional Services' },
-                { value: 'Other', label: 'Other' },
-                { value: 'DJs & Music', label: 'DJs & Music' },
-                { value: 'Fine Caterers', label: 'Fine Caterers' },
-                { value: 'Security Crew', label: 'Security Crew' },
-                { value: 'Florist Services', label: 'Florist Services' },
-                { value: 'Rentals & Decor', label: 'Rentals & Decor' },
-                { value: 'Valet Service', label: 'Valet Service' },
-                { value: 'Bartenders', label: 'Bartenders' },
-                { value: 'Photographers', label: 'Photographers' },
-                { value: 'Makeup Artist', label: 'Makeup Artist' },
-              ]}
+              options={[...PREFERRED_VENDOR_TYPE_OPTIONS]}
             />
           </div>
           <div className="space-y-1">
-            <label className="text-[9px] uppercase font-bold text-zinc-500">Business Name</label>
+            <label className="text-xs font-semibold text-[color:var(--portal-muted)]">Business name</label>
             <input
               type="text"
               required
               value={vendorName}
               onChange={(e) => setVendorName(e.target.value)}
               placeholder="e.g. Prestige Valet Co."
-              className="w-full bg-[#050505] border border-[color:var(--portal-border)] rounded-md px-3 py-2 text-xs text-zinc-300 outline-none"
+              className={portalVendorFieldClass}
             />
           </div>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div className="space-y-1">
-              <label className="text-[9px] uppercase font-bold text-zinc-550">Email</label>
+              <label className="text-xs font-semibold text-[color:var(--portal-muted)]">Email</label>
               <input
                 type="email"
                 value={vendorEmail}
                 onChange={(e) => setVendorEmail(e.target.value)}
                 placeholder="sales@prestige.com"
-                className="w-full bg-[#050505] border border-[color:var(--portal-border)] rounded-md px-3 py-2 text-xs text-zinc-300 outline-none"
+                className={portalVendorFieldClass}
               />
             </div>
             <div className="space-y-1">
-              <label className="text-[9px] uppercase font-bold text-zinc-555">Phone</label>
+              <label className="text-xs font-semibold text-[color:var(--portal-muted)]">Phone</label>
               <input
                 type="text"
                 value={vendorPhone}
                 onChange={(e) => setVendorPhone(e.target.value)}
                 placeholder="214-555-0100"
-                className="w-full bg-[#050505] border border-[color:var(--portal-border)] rounded-md px-3 py-2 text-xs text-zinc-300 outline-none"
+                className={portalVendorFieldClass}
               />
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div className="space-y-1">
-              <label className="text-[9px] uppercase font-bold text-zinc-550">Rating</label>
+              <label className="text-xs font-semibold text-[color:var(--portal-muted)]">Rating</label>
               <PortalSelect
                 value={vendorRating}
                 onChange={setVendorRating}
@@ -1549,31 +1648,20 @@ export function OperationsPageContent({ embeddedBills = false }: { embeddedBills
               />
             </div>
             <div className="space-y-1">
-              <label className="text-[9px] uppercase font-bold text-zinc-550">Active COI Insurance</label>
+              <label className="text-xs font-semibold text-[color:var(--portal-muted)]">COI on file</label>
               <PortalSelect
                 value={vendorCoi}
                 onChange={setVendorCoi}
                 options={[
-                  { value: 'true', label: 'Yes - Active COI' },
+                  { value: 'true', label: 'Yes — active COI' },
                   { value: 'false', label: 'Not verified' }
                 ]}
               />
             </div>
           </div>
-          <div className="flex gap-2 justify-end pt-2">
-            <button
-              type="button"
-              onClick={() => setIsVendorModalOpen(false)}
-              className="px-4 py-2 border border-transparent text-xs font-bold text-zinc-500 hover:text-zinc-350 cursor-pointer"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              className="luxor-gold-raised rounded-lg px-5 py-2 text-xs font-bold uppercase tracking-widest text-white transition-all"
-            >
-              Add Vendor
-            </button>
+          <div className="flex flex-wrap justify-end gap-2 pt-2">
+            <PortalButton type="button" variant="ghost" onClick={() => setIsVendorModalOpen(false)}>Cancel</PortalButton>
+            <PortalButton type="submit" variant="primary">Add vendor</PortalButton>
           </div>
         </form>
       </PortalModal>
@@ -1788,69 +1876,46 @@ export function OperationsPageContent({ embeddedBills = false }: { embeddedBills
             {editingItem.type === 'vendor' && (
               <>
                 <div className="space-y-1">
-                  <label className="text-[9px] uppercase font-bold text-zinc-550">Vendor Type</label>
+                  <label className="text-xs font-semibold text-[color:var(--portal-muted)]">Vendor type</label>
                   <PortalSelect
                     value={editFormData.vendor_type || 'DJs & Music'}
                     onChange={(val) => setEditFormData({ ...editFormData, vendor_type: val })}
-                    options={[
-                      { value: 'Venue Maintenance', label: 'Venue Maintenance' },
-                      { value: 'Utilities', label: 'Utilities' },
-                      { value: 'Insurance', label: 'Insurance' },
-                      { value: 'Marketing', label: 'Marketing' },
-                      { value: 'Event Rentals', label: 'Event Rentals' },
-                      { value: 'Decor', label: 'Decor' },
-                      { value: 'Entertainment', label: 'Entertainment' },
-                      { value: 'Catering', label: 'Catering' },
-                      { value: 'Cleaning', label: 'Cleaning' },
-                      { value: 'Security', label: 'Security' },
-                      { value: 'Technology', label: 'Technology' },
-                      { value: 'Professional Services', label: 'Professional Services' },
-                      { value: 'Other', label: 'Other' },
-                      { value: 'DJs & Music', label: 'DJs & Music' },
-                      { value: 'Fine Caterers', label: 'Fine Caterers' },
-                      { value: 'Security Crew', label: 'Security Crew' },
-                      { value: 'Florist Services', label: 'Florist Services' },
-                      { value: 'Rentals & Decor', label: 'Rentals & Decor' },
-                      { value: 'Valet Service', label: 'Valet Service' },
-                      { value: 'Bartenders', label: 'Bartenders' },
-                      { value: 'Photographers', label: 'Photographers' },
-                      { value: 'Makeup Artist', label: 'Makeup Artist' },
-                    ]}
+                    options={[...PREFERRED_VENDOR_TYPE_OPTIONS]}
                   />
                 </div>
                 <div className="space-y-1">
-                  <label className="text-[9px] uppercase font-bold text-zinc-550">Business Name</label>
+                  <label className="text-xs font-semibold text-[color:var(--portal-muted)]">Business name</label>
                   <input
                     type="text"
                     required
                     value={editFormData.name || ''}
                     onChange={(e) => setEditFormData({ ...editFormData, name: e.target.value })}
-                    className="w-full bg-[#050505] border border-[color:var(--portal-border)] rounded-md px-3 py-2 text-xs text-zinc-300 outline-none"
+                    className={portalVendorFieldClass}
                   />
                 </div>
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <div className="space-y-1">
-                    <label className="text-[9px] uppercase font-bold text-zinc-550">Email</label>
+                    <label className="text-xs font-semibold text-[color:var(--portal-muted)]">Email</label>
                     <input
                       type="email"
                       value={editFormData.email || ''}
                       onChange={(e) => setEditFormData({ ...editFormData, email: e.target.value || null })}
-                      className="w-full bg-[#050505] border border-[color:var(--portal-border)] rounded-md px-3 py-2 text-xs text-zinc-300 outline-none"
+                      className={portalVendorFieldClass}
                     />
                   </div>
                   <div className="space-y-1">
-                    <label className="text-[9px] uppercase font-bold text-zinc-550">Phone</label>
+                    <label className="text-xs font-semibold text-[color:var(--portal-muted)]">Phone</label>
                     <input
                       type="text"
                       value={editFormData.phone || ''}
                       onChange={(e) => setEditFormData({ ...editFormData, phone: e.target.value || null })}
-                      className="w-full bg-[#050505] border border-[color:var(--portal-border)] rounded-md px-3 py-2 text-xs text-zinc-300 outline-none"
+                      className={portalVendorFieldClass}
                     />
                   </div>
                 </div>
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <div className="space-y-1">
-                    <label className="text-[9px] uppercase font-bold text-zinc-550">Rating</label>
+                    <label className="text-xs font-semibold text-[color:var(--portal-muted)]">Rating</label>
                     <PortalSelect
                       value={editFormData.rating || ''}
                       onChange={(val) => setEditFormData({ ...editFormData, rating: val || null })}
@@ -1866,12 +1931,12 @@ export function OperationsPageContent({ embeddedBills = false }: { embeddedBills
                     />
                   </div>
                   <div className="space-y-1">
-                    <label className="text-[9px] uppercase font-bold text-zinc-550">Active COI Insurance</label>
+                    <label className="text-xs font-semibold text-[color:var(--portal-muted)]">COI on file</label>
                     <PortalSelect
                       value={editFormData.coi_active !== undefined ? String(editFormData.coi_active) : 'true'}
                       onChange={(val) => setEditFormData({ ...editFormData, coi_active: val === 'true' })}
                       options={[
-                        { value: 'true', label: 'Yes - Active COI' },
+                        { value: 'true', label: 'Yes — active COI' },
                         { value: 'false', label: 'Not verified' }
                       ]}
                     />

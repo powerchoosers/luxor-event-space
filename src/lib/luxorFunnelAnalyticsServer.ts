@@ -5,7 +5,7 @@ import type { FunnelPeriod } from './luxorFunnelPeriods'
 // Explicitly reviewed against Luxor production source columns. Do not download
 // invoice content, public tokens, contact details or notification templates.
 export const FUNNEL_SOURCE_FIELDS: Record<string, string> = {
-  luxor_inquiries: 'id,created_at,is_test,metadata,current_tour_visit_id,preferred_tour_date,tour_attendance_status',
+  luxor_inquiries: 'id,created_at,is_test,metadata,archived_at,status,pipeline_stage,current_tour_visit_id,preferred_tour_date,tour_attendance_status',
   luxor_tour_visits: 'id,inquiry_id,tour_date,attendance_status',
   luxor_tour_schedule_receipts: 'revision_id,visit_id,visit_intent,created_at,receipt_inquiry_id:request_payload->>inquiry_id',
   luxor_proposal_send_attempts: 'id,inquiry_id,invoice_id,proposal_family_id,channel,state,sent_at',
