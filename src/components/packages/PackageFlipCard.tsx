@@ -21,14 +21,14 @@ function formatPrice(value: number) {
 
 const copy = {
   en: {
-    weekendFromPrice: (price: string) => `Fri–Sun from ${price}`,
+    weekendFromLabel: 'Fri–Sun from',
     viewPackage: (name: string) => `View ${name} package`,
     back: 'Back',
     included: 'What’s included',
     details: 'Details and limitations',
   },
   es: {
-    weekendFromPrice: (price: string) => `Vie–Dom desde ${price}`,
+    weekendFromLabel: 'Vie–Dom desde',
     viewPackage: (name: string) => `Ver paquete ${name}`,
     back: 'Atrás',
     included: 'Qué incluye',
@@ -91,9 +91,10 @@ export function PackageFlipCard({ data, locale = 'en' }: PackageFlipCardProps) {
         <h3 className="font-serif text-4xl leading-none text-[#f7efe3]">{data.displayName}</h3>
         <p className="mt-4 text-sm leading-6 text-[#d7c29a]/72 sm:text-base">{data.shortDescription}</p>
         {data.showStartingPrice && data.startingPrice !== null ? (
-          <p className="mt-5 font-mono text-[10px] uppercase tracking-[0.18em] text-[#caa24c]">
-            {t.weekendFromPrice(formatPrice(data.startingPrice))}
-          </p>
+          <div className="mt-5">
+            <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-[#caa24c]">{t.weekendFromLabel}</p>
+            <p className="mt-1 font-serif text-4xl leading-none text-[#f1d27a]">{formatPrice(data.startingPrice)}</p>
+          </div>
         ) : null}
         <ul className={`grid gap-3 ${data.showStartingPrice ? 'mt-6' : 'mt-5'}`}>
           {data.previewInclusions.map((item) => (
@@ -109,7 +110,7 @@ export function PackageFlipCard({ data, locale = 'en' }: PackageFlipCardProps) {
           onClick={flipToBack}
           aria-expanded={flipped}
           aria-controls={`${faceId}-back`}
-          className="luxor-gold-raised mt-auto inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-md px-4 py-3 text-[11px] uppercase tracking-[0.14em]"
+          className="luxor-gold-raised mt-6 mt-auto inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-md px-4 py-3 text-[11px] uppercase tracking-[0.14em]"
         >
           {t.viewPackage(data.displayName)} <ArrowRight className="h-4 w-4" aria-hidden />
         </button>
@@ -164,13 +165,14 @@ export function PackageFlipCard({ data, locale = 'en' }: PackageFlipCardProps) {
 
   if (showSwapLayout) {
     return (
-      <article className={`${shellClass} h-full`} aria-labelledby={`${faceId}-title`}>
+      <article className={`${shellClass} flex h-full min-h-[560px] flex-col`} aria-labelledby={`${faceId}-title`}>
         <span id={`${faceId}-title`} className="sr-only">
           {data.displayName} package {activeFace}
         </span>
         <AnimatePresence mode="wait" initial={false}>
           <motion.div
             key={activeFace}
+            className="flex min-h-0 flex-1 flex-col"
             initial={reduceMotion ? false : { opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={reduceMotion ? undefined : { opacity: 0 }}
@@ -184,30 +186,28 @@ export function PackageFlipCard({ data, locale = 'en' }: PackageFlipCardProps) {
   }
 
   return (
-    <article className={`group h-full [perspective:1200px] ${shellClass}`} aria-labelledby={`${faceId}-title`}>
+    <article className={`group flex h-full min-h-[560px] flex-col [perspective:1200px] ${shellClass}`} aria-labelledby={`${faceId}-title`}>
       <span id={`${faceId}-title`} className="sr-only">
         {data.displayName} package
       </span>
       <div
-        className={`relative h-full min-h-[560px] transition-transform duration-500 ease-in-out [transform-style:preserve-3d] ${
+        className={`grid min-h-[560px] h-full flex-1 [grid-template-areas:'card-face'] transition-transform duration-500 ease-in-out [transform-style:preserve-3d] ${
           flipped ? '[transform:rotateY(180deg)]' : ''
         }`}
       >
         <div
-          className="absolute inset-0 overflow-hidden [backface-visibility:hidden]"
+          className="[grid-area:card-face] flex h-full min-h-[560px] flex-col [backface-visibility:hidden]"
           aria-hidden={flipped}
           {...(flipped ? { inert: true } : {})}
         >
           {renderFront()}
         </div>
         <div
-          className="absolute inset-0 overflow-hidden [backface-visibility:hidden] [transform:rotateY(180deg)]"
+          className="[grid-area:card-face] flex h-full min-h-[560px] flex-col overflow-hidden [backface-visibility:hidden] [transform:rotateY(180deg)]"
           aria-hidden={!flipped}
           {...(!flipped ? { inert: true } : {})}
         >
-          <div className="flex h-full min-h-[560px] flex-col">
-            {renderBack({ scrollBody: true })}
-          </div>
+          {renderBack({ scrollBody: true })}
         </div>
       </div>
     </article>
