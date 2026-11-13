@@ -20,11 +20,11 @@ The motivating example is the inquiry confirmation in `src/lib/luxorTextCampaign
 
 ## First steps and guardrails
 
-1. Read the repository `AGENTS.md`, the `luxor-design` skill, and [workflow-message-inventory.md](./workflow-message-inventory.md). Inspect the actual code and `git status -sb` before changing anything. Preserve any unrelated in-progress edits; do not reset, clean, or overwrite without Lewis asking.
+1. Read the repository `AGENTS.md`, [luxor-design-skill.md](./luxor-design-skill.md), and [workflow-message-inventory.md](./workflow-message-inventory.md). Inspect the actual code and `git status -sb` before changing anything. Preserve any unrelated in-progress edits; do not reset, clean, or overwrite without Lewis asking.
 2. Ship on **`main` only** (no side branches unless Lewis asks). Commit and push only when he explicitly authorizes. After push, confirm Vercel production and re-run `workflow-www-api-smoke` when workflow routes change.
 3. Existing checked-in/untracked migrations must be reconciled with the actual target before any database change. Repo policy authorizes needed Luxor schema work after confirming the target has Luxor tables; do not assume these migrations are installed. Verify migration ordering and dependencies, RLS, grants, and applicable advisors. Never weaken RLS or expose secrets. Do not send real email, SMS, calls, charges, or refunds for testing without explicit authorization.
 4. Preserve existing deduplication, opt-in and STOP handling, scheduling, cancellation, eligibility and send-time checks, retry/claim semantics, privacy, secure links, document attachments, financial facts, and immutable snapshots. Surface the true behavior of each path, including any exceptions and missing historical attribution.
-5. Use Mobbin for targeted inspiration if available, the Luxor design skill, shared portal tokens and controls, and the repo's in-app browser requirement. Check light and dark modes and desktop, 834px iPad portrait, and 390px mobile; exercise controls, focus, scrolling, loading/error states, and overflow. The in-app browser previously timed out attaching to the local page; do not claim visual QA until actually observed. Follow `AGENTS.md` if that remains blocked.
+5. Use Mobbin for targeted inspiration if available, [luxor-design-skill.md](./luxor-design-skill.md), shared portal tokens and controls, and the repo's in-app browser requirement. Check light and dark modes and desktop, 834px iPad portrait, and 390px mobile; exercise controls, focus, scrolling, loading/error states, and overflow. The in-app browser previously timed out attaching to the local page; do not claim visual QA until actually observed. Follow `AGENTS.md` if that remains blocked.
 
 ## What exists locally
 

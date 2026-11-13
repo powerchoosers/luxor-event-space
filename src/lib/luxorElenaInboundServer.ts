@@ -3,7 +3,7 @@ import 'server-only'
 import { createHmac, randomUUID, timingSafeEqual } from 'node:crypto'
 import twilio from 'twilio'
 import WebSocket from 'ws'
-import { supabaseRestStrict } from './supabaseRestServer'
+import { SupabaseRestError, supabaseRestStrict } from './supabaseRestServer'
 import { getLuxorAiVenueContext } from './luxorAiContextServer'
 import { getLuxorPhoneRoutingSettings } from './luxorPhoneRoutingServer'
 import { getElenaInboundSettings } from './luxorElenaInboundSettingsServer'
@@ -293,9 +293,14 @@ export async function acceptElenaLiveEvent(raw: unknown) {
 /** Acknowledgment is diagnostic; hearing the greeting requires a real caller test. */
 export async function greetElenaLiveCall(sessionId: string, callSid: string) {
   const config = getElenaLiveConfig()
-  const row = await verifiedCall({ kind: 'call', callSid, sessionId, exp: 0 })
-  const [claimed] = await patchCall(row, { greeting_requested: true }, '&metadata->>greeting_requested=is.null')
-  if (!claimed) return
+  let claimed = false
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    const row = await verifiedCall({ kind: 'call', callSid, sessionId, exp: 0 })
+    if (row.metadata.greeting_requested === true) return
+    const [updated] = await patchCall(row, { greeting_requested: true }, '&metadata->>greeting_requested=is.null')
+    if (updated) { claimed = true; break }
+  }
+  if (!claimed) throw new Error('The opening greeting could not be claimed after concurrent call updates.')
   const recordingSetup = (async () => {
     try {
       for (let attempt = 0; attempt < 20; attempt += 1) {
@@ -315,7 +320,10 @@ export async function greetElenaLiveCall(sessionId: string, callSid: string) {
     const finish = () => { if (done) return; done = true; clearTimeout(timer); socket.removeAllListeners(); socket.on('error', () => {}); if (socket.readyState === WebSocket.OPEN) socket.close(); else socket.terminate(); resolve() }
     const timer = setTimeout(finish, 10_000)
     const eventId = randomUUID()
-    socket.on('open', () => socket.send(JSON.stringify({ type: 'session.commentary.append', event_id: eventId, delegation_id: null, content: GREETING })))
+    socket.on('open', () => {
+      try { socket.send(JSON.stringify({ type: 'session.commentary.append', event_id: eventId, delegation_id: null, content: GREETING })) }
+      catch { console.warn('[Elena Inbound] Opening greeting request could not be sent.'); finish() }
+    })
     socket.on('message', (bytes) => { try { const event = JSON.parse(bytes.toString()); if (event.type === 'session.commentary.appended' && event.client_event_id === eventId) acknowledged = true; if (['session.output_audio.delta', 'session.output_transcript.delta'].includes(event.type) && typeof event.delta === 'string' && event.delta.length) outputObserved = true } catch { /* Never store audio or caller transcripts. */ } })
     socket.on('unexpected-response', (_req, response) => { response.resume(); finish() })
     socket.on('error', finish); socket.on('close', finish)
@@ -407,7 +415,16 @@ export async function handleElenaLiveMcp(request: Request) {
       case 'confirm_contact_capture': {
         const approval = typeof args.token === 'string' ? verifyElenaLiveClaim(args.token, config.webhookSecret) : null
         if (!approval || approval.kind !== 'capture' || approval.callSid !== claim.callSid || approval.sessionId !== claim.sessionId || !affirmative(args.spoken_confirmation)) throw new LiveActionError('Read back the details and obtain a later explicit yes before saving.')
-        const result = await supabaseRestStrict<{ saved?: boolean; linked?: boolean; matching_review_needed?: boolean }>('rpc/luxor_capture_elena_inbound_contact', { method: 'POST', body: JSON.stringify({ p_call_sid: claim.callSid, p_session_id: claim.sessionId, p_nonce: approval.nonce }) })
+        let result: { saved?: boolean; linked?: boolean; matching_review_needed?: boolean }
+        try {
+          result = await supabaseRestStrict<{ saved?: boolean; linked?: boolean; matching_review_needed?: boolean }>('rpc/luxor_capture_elena_inbound_contact', { method: 'POST', body: JSON.stringify({ p_call_sid: claim.callSid, p_session_id: claim.sessionId, p_nonce: approval.nonce }) })
+        } catch (error) {
+          if (error instanceof SupabaseRestError && error.code === '22023' && error.message === 'Test identifiers cannot be captured as customers') {
+            const pending = row.metadata.capture_pending as { purpose?: string } | undefined
+            throw new LiveActionError(`These contact details could not be saved. If the caller offers a different callback number or, when applicable, email address, prepare a new contact capture and read it back for confirmation. Do not retry unchanged details or claim they were saved.${pending?.purpose === 'tour' ? ' No tour was booked.' : ''}`)
+          }
+          throw error
+        }
         if (result.saved !== true) throw new Error('Capture was not saved.')
         output = { saved: true, message: 'The caller-confirmed contact details were saved for the Luxor team. No appointment was reserved and no email or text was sent.' }; break
       }

@@ -78,7 +78,7 @@ function PdfDocumentViewer({ url, title }: PortalPdfViewerProps) {
   const titleLabel = title.charAt(0).toUpperCase() + title.slice(1)
 
   return (
-    <section className="flex min-h-0 flex-1 flex-col overflow-hidden" aria-label={`${titleLabel} document preview`}>
+    <section className="flex min-h-0 flex-1 flex-col h-0 overflow-hidden lg:h-auto" aria-label={`${titleLabel} document preview`}>
       <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 py-2 sm:px-4">
         <p className="min-w-[72px] text-[10px] font-black uppercase tracking-[0.14em] text-[color:var(--portal-muted)] sm:min-w-[105px]" aria-live="polite">
           {pageCount ? `Page ${currentPage} of ${pageCount}` : 'Loading pages'}

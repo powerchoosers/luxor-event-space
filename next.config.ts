@@ -3,6 +3,8 @@ import path from "path";
 
 const nextConfig: NextConfig = {
   devIndicators: false,
+  // Load ws through Node so its optional native acceleration falls back correctly.
+  serverExternalPackages: ['ws'],
   webpack: (config) => {
     config.resolve = config.resolve || {};
     config.resolve.alias = {

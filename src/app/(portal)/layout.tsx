@@ -7,6 +7,7 @@ import { redirect } from 'next/navigation'
 import { getLuxorUserProfile } from '@/lib/luxorUserProfileServer'
 import { getLuxorPortalMember } from '@/lib/luxorPortalAccess'
 import { cookies } from 'next/headers'
+import { getActivePortalFixNotice } from '@/lib/luxorPortalFixNoticeServer'
 import '../globals.css'
 
 const manrope = Manrope({
@@ -65,13 +66,20 @@ async function ProtectedPortalLayout({ children }: { children: React.ReactNode }
   const themeCookie = portalCookies.get('luxor-portal-theme')?.value
   const initialTheme = themeCookie === 'dark' || themeCookie === 'light' ? themeCookie : 'light'
   const initialSidebarCollapsed = portalCookies.get('luxor-portal-sidebar')?.value === 'compact'
+  const fixNotice = await getActivePortalFixNotice()
 
   return (
     <html
       lang="en"
       className={`${manrope.variable} ${cormorant.variable} h-full scroll-smooth antialiased`}
     >
-      <PortalShell session={session} initialProfile={userProfile} initialTheme={initialTheme} initialSidebarCollapsed={initialSidebarCollapsed} permissions={member.permissions} role={member.role} buildId={process.env.VERCEL_GIT_COMMIT_SHA?.slice(0, 7)}>{children}</PortalShell>
+      <body
+        className="portal-shell h-[100dvh] h-full min-h-full overflow-hidden bg-[color:var(--portal-bg)] font-sans text-[color:var(--portal-muted)] antialiased selection:bg-[#caa24c]/30"
+        data-portal-theme={initialTheme}
+        suppressHydrationWarning
+      >
+        <PortalShell session={session} initialProfile={userProfile} initialTheme={initialTheme} initialSidebarCollapsed={initialSidebarCollapsed} permissions={member.permissions} role={member.role} buildId={process.env.VERCEL_GIT_COMMIT_SHA?.slice(0, 7)} fixNotice={fixNotice}>{children}</PortalShell>
+      </body>
     </html>
   );
 }

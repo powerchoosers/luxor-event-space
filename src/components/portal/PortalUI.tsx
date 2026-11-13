@@ -119,32 +119,43 @@ export function PortalPageHeader({
     router.push('/portal')
   }
 
+  const showBackButton = canGoBack && !hideBackButton
+
   return (
     <div className={`flex shrink-0 gap-2 sm:gap-3 ${mobileActionsInline ? 'flex-wrap items-center justify-between gap-x-2 sm:flex-nowrap sm:gap-3' : 'flex-col md:flex-row md:items-start md:justify-between'}`}>
-      <div className={`${description ? 'space-y-1' : ''} ${mobileActionsInline ? 'min-w-0 shrink-0' : ''}`}>
-        <div className={`flex items-center ${mobileActionsInline ? 'gap-2 sm:gap-2.5' : 'gap-2.5'}`}>
-          {canGoBack && !hideBackButton ? (
-            <PortalGhostIconButton
-              onClick={goBack}
-              aria-label="Go back"
-              title="Go back"
-            >
-              <ArrowLeft size={15} />
-            </PortalGhostIconButton>
+      <div
+        className={`${mobileActionsInline ? 'min-w-0 shrink-0' : 'min-w-0'} ${showBackButton ? 'flex items-start gap-2.5 sm:gap-3' : ''}`}
+      >
+        {showBackButton ? (
+          <PortalGhostIconButton
+            onClick={goBack}
+            aria-label="Go back"
+            title="Go back"
+            className="shrink-0"
+          >
+            <ArrowLeft size={15} />
+          </PortalGhostIconButton>
+        ) : null}
+        <div className={`min-w-0 ${showBackButton ? 'flex-1' : ''} ${description ? 'space-y-1' : ''}`}>
+          <div className={`flex items-center ${mobileActionsInline ? 'gap-2 sm:gap-2.5' : 'gap-2.5'}`}>
+            {icon && isPortalHome ? <span className="shrink-0 text-[#caa24c]">{icon}</span> : null}
+            <h1 suppressHydrationWarning className={`font-sans font-bold tracking-tight leading-tight text-[color:var(--portal-text)] ${titleClassName || (mobileActionsInline ? 'whitespace-nowrap text-xl sm:text-2xl' : 'text-xl sm:text-2xl')}`}>
+              {titleHref ? (
+                <Link href={titleHref} className="no-underline transition-colors hover:text-[#a8792f] dark:hover:text-[#f1d27a]">
+                  {title}
+                </Link>
+              ) : (
+                title
+              )}
+            </h1>
+            {titleAccessory}
+          </div>
+          {description ? (
+            <p className="max-w-2xl text-xs font-normal leading-relaxed text-[color:var(--portal-muted)] sm:text-sm">
+              {description}
+            </p>
           ) : null}
-          {icon && isPortalHome ? <span className="shrink-0 text-[#caa24c]">{icon}</span> : null}
-          <h1 suppressHydrationWarning className={`font-sans font-bold tracking-tight leading-tight text-[color:var(--portal-text)] ${titleClassName || (mobileActionsInline ? 'whitespace-nowrap text-xl sm:text-2xl' : 'text-xl sm:text-2xl')}`}>
-            {titleHref ? (
-              <Link href={titleHref} className="no-underline transition-colors hover:text-[#a8792f] dark:hover:text-[#f1d27a]">
-                {title}
-              </Link>
-            ) : (
-              title
-            )}
-          </h1>
-          {titleAccessory}
         </div>
-        {description ? <p className="max-w-2xl text-xs sm:text-sm font-normal leading-relaxed text-[color:var(--portal-muted)]">{description}</p> : null}
       </div>
       {actions ? <div className={`flex flex-wrap items-center gap-2.5 ${mobileActionsInline ? 'ml-auto shrink-0' : ''}`}>{actions}</div> : null}
     </div>
@@ -1501,6 +1512,8 @@ export function PortalModal({
   maxWidth = 'max-w-lg',
   zIndex,
   className = '',
+  bodyClassName = '',
+  fillBody = false,
   fullScreenOnCompact = false,
   fullScreenOnMobile = false,
   animateClose: _animateClose = true,
@@ -1519,6 +1532,9 @@ export function PortalModal({
   maxWidth?: string
   zIndex?: number
   className?: string
+  bodyClassName?: string
+  /** Stretch modal body to the space between header and footer (PDF and similar full-bleed layouts). */
+  fillBody?: boolean
   fullScreenOnCompact?: boolean
   fullScreenOnMobile?: boolean
   /** Smooth close is now always active; kept for backward compatibility. */
@@ -1721,7 +1737,7 @@ export function PortalModal({
           style={{ zIndex: computedZIndex, contain: 'layout style' }}
           className={sidePanel
             ? `fixed inset-y-0 right-0 flex h-dvh w-full ${maxWidth} ${className} will-change-[transform,opacity] flex-col overflow-hidden border-l border-[color:var(--portal-border)] bg-[color:var(--portal-card)] shadow-[-18px_0_48px_rgba(0,0,0,0.22)] outline-none`
-            : `fixed inset-x-0 top-[calc(env(safe-area-inset-top)+0.75rem)] bottom-[calc(env(safe-area-inset-bottom)+0.75rem)] sm:inset-0 m-auto flex h-fit max-h-[calc(100dvh-env(safe-area-inset-top)-env(safe-area-inset-bottom)-1.5rem)] w-[calc(100%-1.5rem)] sm:w-[calc(100%-2rem)] ${maxWidth} ${className} transform-gpu will-change-[transform,opacity] flex-col overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-bg)] shadow-2xl outline-none sm:max-h-[90vh] ${fullScreenOnCompact ? 'max-lg:!inset-0 max-lg:!m-0 max-lg:!w-full max-lg:!max-w-none max-lg:!h-dvh max-lg:!max-h-dvh max-lg:!rounded-none max-lg:!border-0 max-lg:!shadow-none' : ''} ${fullScreenOnMobile ? 'max-md:!inset-0 max-md:!m-0 max-md:!w-full max-md:!max-w-none max-md:!h-dvh max-md:!max-h-dvh max-md:!rounded-none max-md:!border-0 max-md:!shadow-none' : ''}`}
+            : `fixed inset-x-0 top-[calc(env(safe-area-inset-top)+0.75rem)] bottom-[calc(env(safe-area-inset-bottom)+0.75rem)] sm:inset-0 m-auto flex h-fit max-h-[calc(100dvh-env(safe-area-inset-top)-env(safe-area-inset-bottom)-1.5rem)] w-[calc(100%-1.5rem)] sm:w-[calc(100%-2rem)] ${maxWidth} ${className} transform-gpu will-change-[transform,opacity] flex-col overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-bg)] shadow-2xl outline-none sm:max-h-[90vh] ${fullScreenOnCompact ? 'max-lg:!inset-0 max-lg:!m-0 max-lg:!w-full max-lg:!max-w-none max-lg:!h-dvh max-lg:!max-h-dvh max-lg:!min-h-0 max-lg:!rounded-none max-lg:!border-0 max-lg:!shadow-none' : ''} ${fullScreenOnMobile ? 'max-md:!inset-0 max-md:!m-0 max-md:!w-full max-md:!max-w-none max-md:!h-dvh max-md:!max-h-dvh max-md:!min-h-0 max-md:!rounded-none max-md:!border-0 max-md:!shadow-none' : ''}`}
         >
           <ModalDepthContext.Provider value={depth + 1}>
             {title ? (
@@ -1742,8 +1758,11 @@ export function PortalModal({
             ) : null}
             {title || footer ? (
               <>
-                <div data-portal-modal-scroller className={`min-h-0 flex-1 overflow-y-auto overscroll-contain p-4 portal-scrollbar sm:p-6 ${fullScreenOnCompact ? 'max-lg:!pb-[calc(1rem+env(safe-area-inset-bottom))]' : ''} ${fullScreenOnMobile ? 'max-md:!pb-[calc(1rem+env(safe-area-inset-bottom))]' : ''}`}>
-                  {children}
+                <div
+                  data-portal-modal-scroller
+                  className={`min-h-0 flex-1 overscroll-contain p-4 portal-scrollbar sm:p-6 ${fillBody ? 'flex flex-col overflow-hidden' : 'overflow-y-auto'} ${fillBody ? '' : fullScreenOnCompact ? 'max-lg:!pb-[calc(1rem+env(safe-area-inset-bottom))]' : ''} ${fillBody ? '' : fullScreenOnMobile ? 'max-md:!pb-[calc(1rem+env(safe-area-inset-bottom))]' : ''} ${bodyClassName}`}
+                >
+                  {fillBody ? <div className="flex min-h-0 flex-1 flex-col h-0 w-full">{children}</div> : children}
                 </div>
                 {footer ? (
                   <div

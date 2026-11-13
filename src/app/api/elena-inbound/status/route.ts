@@ -78,7 +78,9 @@ export async function POST(request: Request) {
           [`${prefix}_answered`]: previous[`${prefix}_answered`] === true || status === 'in-progress',
           ...(seq !== null ? { [`${prefix}_last_sequence`]: Math.max(previousSeq, seq) } : {}),
           ...(status === 'in-progress' && !previous[`${prefix}_answered_at`] ? { [`${prefix}_answered_at`]: new Date().toISOString() } : {}) }
-        patch = { metadata, ...(leg === 'elena' && status === 'in-progress' && row.outcome === 'missed' ? { outcome: null } : {}), updated_at: version }
+        const activeElenaAnswer = leg === 'elena' && status === 'in-progress' && !preserve && !TERMINAL.includes(row.status)
+        patch = { metadata, ...(activeElenaAnswer ? { status: 'in-progress' } : {}),
+          ...(leg === 'elena' && status === 'in-progress' && row.outcome === 'missed' ? { outcome: null } : {}), updated_at: version }
       } else {
         const firstMiss = previous.sip_answered !== true && previous.elena_missed_recorded !== true
         patch = { status, ended_at: new Date().toISOString(), duration_seconds: parseTwilioInteger(params.CallDuration),

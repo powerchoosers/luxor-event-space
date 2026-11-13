@@ -38,6 +38,8 @@ import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import React, { useCallback, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, Suspense } from 'react'
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'
 import { LuxorWordmark } from '@/components/LuxorWordmark'
+import { PortalFixNotice } from '@/components/portal/PortalFixNotice'
+import type { PortalFixNotice as PortalFixNoticeData } from '@/lib/luxorPortalFixNotice'
 import { LuxorInquiry } from '@/lib/luxorInquiryTypes'
 import { RouteTransition } from '@/components/RouteTransition'
 import type { LuxorPortalSession } from '@/lib/luxorPortalAuth'
@@ -261,17 +263,17 @@ function getPortalDesktopViewportSnapshot() {
   return window.matchMedia(PORTAL_DESKTOP_MEDIA_QUERY).matches
 }
 
-export function PortalShell({ children, session, initialProfile, initialTheme, initialSidebarCollapsed, permissions, role, buildId }: { children: React.ReactNode; session: LuxorPortalSession; initialProfile: PortalUserProfile; initialTheme: PortalTheme; initialSidebarCollapsed: boolean; permissions: PortalPermission[]; role: PortalRole; buildId?: string }) {
+export function PortalShell({ children, session, initialProfile, initialTheme, initialSidebarCollapsed, permissions, role, buildId, fixNotice = null }: { children: React.ReactNode; session: LuxorPortalSession; initialProfile: PortalUserProfile; initialTheme: PortalTheme; initialSidebarCollapsed: boolean; permissions: PortalPermission[]; role: PortalRole; buildId?: string; fixNotice?: PortalFixNoticeData | null }) {
   return (
     <ToastProvider>
       <Suspense fallback={null}>
-        <PortalShellContent session={session} initialProfile={initialProfile} initialTheme={initialTheme} initialSidebarCollapsed={initialSidebarCollapsed} permissions={permissions} role={role} buildId={buildId}>{children}</PortalShellContent>
+        <PortalShellContent session={session} initialProfile={initialProfile} initialTheme={initialTheme} initialSidebarCollapsed={initialSidebarCollapsed} permissions={permissions} role={role} buildId={buildId} fixNotice={fixNotice}>{children}</PortalShellContent>
       </Suspense>
     </ToastProvider>
   )
 }
 
-function PortalShellContent({ children, session, initialProfile, initialTheme, initialSidebarCollapsed, permissions, role, buildId }: { children: React.ReactNode; session: LuxorPortalSession; initialProfile: PortalUserProfile; initialTheme: PortalTheme; initialSidebarCollapsed: boolean; permissions: PortalPermission[]; role: PortalRole; buildId?: string }) {
+function PortalShellContent({ children, session, initialProfile, initialTheme, initialSidebarCollapsed, permissions, role, buildId, fixNotice = null }: { children: React.ReactNode; session: LuxorPortalSession; initialProfile: PortalUserProfile; initialTheme: PortalTheme; initialSidebarCollapsed: boolean; permissions: PortalPermission[]; role: PortalRole; buildId?: string; fixNotice?: PortalFixNoticeData | null }) {
   const pathname = usePathname()
   const canAccess = useCallback((permission: PortalPermission) => role === 'owner' || permissions.includes(permission), [permissions, role])
   const accessibleMobilePrimaryNavItems = [
@@ -507,6 +509,10 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
     },
     () => initialTheme
   )
+
+  useLayoutEffect(() => {
+    document.body.setAttribute('data-portal-theme', portalTheme)
+  }, [portalTheme])
 
   useEffect(() => {
     const savedTheme = window.localStorage.getItem('luxor-portal-theme')
@@ -890,7 +896,7 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
   }, [inquiries, router])
 
   return (
-    <body data-portal-theme={portalTheme} className="portal-shell h-[100dvh] overflow-hidden bg-[color:var(--portal-bg)] font-sans text-[color:var(--portal-muted)] selection:bg-[#caa24c]/30">
+    <>
       <PortalVoiceProvider canUsePhone={canAccess('calls')} canViewLeadDetails={canAccess('leads')} canText={canAccess('messages')} canEmail={canAccess('emails')}>
       <aside
         onWheelCapture={handOffWheelToPage}
@@ -1846,6 +1852,7 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
               ? 'bg-[image:radial-gradient(circle_at_78%_0%,rgba(189,101,117,0.06),transparent_24rem),radial-gradient(circle_at_8%_12%,rgba(202,162,76,0.08),transparent_22rem)]'
               : 'bg-[image:radial-gradient(circle_at_78%_0%,rgba(189,101,117,0.08),transparent_24rem),radial-gradient(circle_at_8%_12%,rgba(202,162,76,0.08),transparent_22rem)]'
           }`}>
+            <PortalFixNotice notice={fixNotice} />
             <RouteTransition surface="portal" fillAvailableHeight={usesInternalPaneScroll}>{children}</RouteTransition>
           </div>
           <PortalFloatingScrollbar containerRef={contentScrollRef} />
@@ -2082,7 +2089,7 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
       ) : null}
       <PortalGlobalTooltip />
       </PortalVoiceProvider>
-    </body>
+    </>
   )
 }
 

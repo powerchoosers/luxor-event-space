@@ -91,10 +91,11 @@ Lewis has these connections available while working in Cursor. Use them for the 
 - Desktop heroes use the centered Luxor axis lockup with centered headline, copy, and CTAs unless the page is an intentional split hero. Do not wrap above-the-fold hero content in scroll-triggered `Reveal`.
 - Use `Quinceañera` and `Quinceañeras` with `ñ` everywhere user-facing.
 - The gallery is a custom filtered grid and lightbox. Do not add a gallery dependency unless it clearly improves that implementation.
-- For frontend changes, use the `luxor-design` skill at `C:/Users/lewis/.codex/skills/luxor-design/SKILL.md` with this file.
+- For frontend changes, read `docs/luxor-design-skill.md` in this repo together with this file. That path is committed for cloud agents and automations. Lewis's local Cursor copy may also live at `C:/Users/lewis/.codex/skills/luxor-design/SKILL.md`; keep substantive design guidance in sync with `docs/luxor-design-skill.md`.
 - The public site stays light, quiet, and warm, with restrained gold. Do not import portal dark surfaces onto public pages. Any retained dark editorial panel needs explicit light text and accessible contrast.
 - Every element has to earn its place. Prefer hierarchy, spacing, and type over extra cards, badges, pills, gradients, glows, blur, or decorative motion.
 - Do not add an assistant, suggestion panel, or automation affordance unless it solves a demonstrated user problem. The existing Elena surfaces are the exception already in the product: public Elena answers venue and tour questions; portal Elena is the signed-in internal assistant. Portal Elena may read business data. Any database write needs a clear user confirmation and must stay server-authorized.
+- An active `luxor_portal_fix_notices` row is the only source for the portal fix banner under the header. `title` is the short banner line. The window reads `summary`, `fixed_text`, `unchanged_text`, `steps`, and `if_stuck` from that same row. Do not hardcode a notice into a component.
 - The portal supports light and dark themes. Arianna prefers light mode, so QA light mode first, then confirm dark mode. Use `--portal-*` tokens and shared portal components. Portal dropdowns and calendars use `PortalSelect` and `PortalDatePicker` from `@/components/portal/PortalUI`. Pagination uses labeled previous/next arrow buttons and a visible current page.
 
 ## Phone, cron, and workers

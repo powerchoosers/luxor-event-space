@@ -2,7 +2,7 @@
 import { PortalConstellationLoader } from '@/components/portal/PortalConstellationLoader'
 import { LUXOR_MAX_GUESTS } from '@/lib/luxorInquiryTypes'
 
-import React, { useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import {
   UserCheck,
   FileSignature,
@@ -15,7 +15,10 @@ import {
   Send,
   AlertCircle,
   Calendar,
-  Users
+  Users,
+  Wrench,
+  FileText,
+  Plus,
 } from '@/lib/icons/phosphor-compat'
 import { PortalDatePicker, PortalSelect } from './PortalUI'
 
@@ -621,6 +624,487 @@ export function ElenaTaskCard({ payload, onSuccess }: { payload: TaskCardPayload
             {isSaving && <PortalConstellationLoader size={13} tone="white" />}{confirmation ? 'Confirm task' : 'Review task'}
           </button>}
           {isSaved && <span className="inline-flex items-center gap-1 text-xs font-semibold text-green-700 dark:text-green-400"><Check size={13} /> Task added</span>}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+export interface DeveloperSupportCardPayload {
+  title: string
+  description?: string
+  priority?: 'low' | 'medium' | 'high' | 'urgent'
+  pagePath?: string
+  reporterName?: string
+}
+
+export type DeveloperSupportAttachmentCandidate = {
+  key: string
+  name: string
+  type: string
+  kind: 'image' | 'document' | 'text'
+  dataUrl?: string
+  textContent?: string
+  storagePath?: string
+  chatId?: string | null
+}
+
+type DeveloperSupportMessageAttachment = {
+  name: string
+  type: string
+  dataUrl?: string
+  textContent?: string
+  storagePath?: string
+}
+
+type DeveloperSupportComposerAttachment = {
+  name: string
+  type: string
+  dataUrl?: string
+  textContent?: string
+}
+
+function DeveloperSupportAttachmentThumb({ item }: { item: DeveloperSupportAttachmentCandidate }) {
+  const [fetchedSrc, setFetchedSrc] = useState('')
+  const src = item.dataUrl || fetchedSrc
+
+  useEffect(() => {
+    if (item.dataUrl) return
+    if (item.kind !== 'image' || !item.storagePath || !item.chatId) return
+    let cancelled = false
+    void fetch(
+      `/api/portal/elena-chat/attachment?chatId=${encodeURIComponent(item.chatId)}&storagePath=${encodeURIComponent(item.storagePath)}&name=${encodeURIComponent(item.name)}`,
+    )
+      .then((response) => (response.ok ? response.json() : null))
+      .then((data: { url?: string } | null) => {
+        if (!cancelled && typeof data?.url === 'string') setFetchedSrc(data.url)
+      })
+      .catch(() => undefined)
+    return () => {
+      cancelled = true
+    }
+  }, [item])
+
+  if (item.kind === 'image' && src) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img src={src} alt="" className="h-9 w-9 shrink-0 rounded-md border border-[color:var(--portal-border)] object-cover" />
+    )
+  }
+  return (
+    <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] text-[#caa24c]">
+      <FileText size={14} aria-hidden="true" />
+    </span>
+  )
+}
+
+function DeveloperSupportAttachmentList({
+  items,
+  selectedKeys,
+  disabled,
+  onToggle,
+  reviewOnly = false,
+}: {
+  items: DeveloperSupportAttachmentCandidate[]
+  selectedKeys?: Set<string>
+  disabled?: boolean
+  onToggle?: (key: string) => void
+  reviewOnly?: boolean
+}) {
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-xs font-semibold text-[color:var(--portal-text)]">
+          {reviewOnly ? 'Sending with this ticket' : 'Include with ticket'}
+        </span>
+        <span className="text-[10px] text-[color:var(--portal-muted)]">
+          {reviewOnly ? `${items.length} file${items.length === 1 ? '' : 's'}` : `${selectedKeys?.size || 0}/5 selected`}
+        </span>
+      </div>
+      <ul className="space-y-1.5">
+        {items.map((item) => {
+          const checked = reviewOnly ? true : Boolean(selectedKeys?.has(item.key))
+          return (
+            <li key={item.key}>
+              <label className={`flex items-center gap-2.5 rounded-lg border px-2.5 py-2 text-xs ${checked ? 'border-[#caa24c]/45 bg-[#caa24c]/8' : 'border-[color:var(--portal-border)] bg-[color:var(--portal-bg)]'} ${reviewOnly ? '' : 'cursor-pointer'}`}>
+                {reviewOnly ? null : (
+                  <input
+                    type="checkbox"
+                    className="h-3.5 w-3.5 shrink-0 rounded border-[color:var(--portal-border)] accent-[#caa24c]"
+                    checked={checked}
+                    disabled={disabled || (!checked && (selectedKeys?.size || 0) >= 5)}
+                    onChange={() => onToggle?.(item.key)}
+                  />
+                )}
+                <DeveloperSupportAttachmentThumb key={item.key} item={item} />
+                <span className="min-w-0 flex-1 truncate font-medium text-[color:var(--portal-text)]">{item.name}</span>
+              </label>
+            </li>
+          )
+        })}
+      </ul>
+    </div>
+  )
+}
+
+export function collectDeveloperSupportAttachmentCandidates(
+  messages: Array<{ role: string; attachments?: DeveloperSupportMessageAttachment[] }>,
+  composer: DeveloperSupportComposerAttachment[],
+  chatId?: string | null,
+): DeveloperSupportAttachmentCandidate[] {
+  const map = new Map<string, DeveloperSupportAttachmentCandidate>()
+  const add = (name: string, type: string, dataUrl?: string, textContent?: string, storagePath?: string) => {
+    if (!dataUrl && !textContent && !storagePath) return
+    const fingerprint = `${storagePath || ''}:${dataUrl?.slice(0, 48) || ''}:${textContent?.slice(0, 48) || ''}`
+    const key = `${name}::${type}::${fingerprint}`
+    const isImage = Boolean(type.startsWith('image/') || (dataUrl && dataUrl.startsWith('data:image/')))
+    map.set(key, {
+      key,
+      name,
+      type,
+      kind: textContent && !storagePath ? 'text' : isImage ? 'image' : 'document',
+      ...(dataUrl ? { dataUrl } : {}),
+      ...(textContent ? { textContent } : {}),
+      ...(storagePath ? { storagePath } : {}),
+      ...(chatId ? { chatId } : {}),
+    })
+  }
+  for (const msg of messages) {
+    if (msg.role !== 'user' || !msg.attachments?.length) continue
+    for (const att of msg.attachments) add(att.name, att.type, att.dataUrl, att.textContent, att.storagePath)
+  }
+  for (const att of composer) add(att.name, att.type, att.dataUrl, att.textContent)
+  return Array.from(map.values()).slice(-5)
+}
+
+export function ElenaDeveloperSupportCard({
+  payload,
+  attachmentCandidates = [],
+  onSuccess,
+}: {
+  payload: DeveloperSupportCardPayload
+  attachmentCandidates?: DeveloperSupportAttachmentCandidate[]
+  onSuccess?: (msg: string) => void
+}) {
+  const [title, setTitle] = useState(payload.title || '')
+  const [description, setDescription] = useState(payload.description || '')
+  const [priority, setPriority] = useState<'low' | 'medium' | 'high' | 'urgent'>(payload.priority || 'medium')
+  const [confirmation, setConfirmation] = useState<{ token: string; expiresAt: string; summary: string } | null>(null)
+  const [isSaving, setIsSaving] = useState(false)
+  const [isSent, setIsSent] = useState(false)
+  const [uncertain, setUncertain] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [localAttachments, setLocalAttachments] = useState<DeveloperSupportAttachmentCandidate[]>([])
+  const [attachmentNotice, setAttachmentNotice] = useState('')
+  const [selectedAttachmentKeys, setSelectedAttachmentKeys] = useState<Set<string>>(() => new Set(attachmentCandidates.map((item) => item.key)))
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const seenChatKeysRef = useRef<Set<string>>(new Set())
+
+  const attachmentOptions = useMemo(() => {
+    const map = new Map<string, DeveloperSupportAttachmentCandidate>()
+    for (const item of attachmentCandidates) map.set(item.key, item)
+    for (const item of localAttachments) map.set(item.key, item)
+    return Array.from(map.values()).slice(0, 5)
+  }, [attachmentCandidates, localAttachments])
+  const attachmentOptionKey = attachmentCandidates.map((item) => item.key).join('|')
+
+  useEffect(() => {
+    setSelectedAttachmentKeys((prev) => {
+      const next = new Set(prev)
+      for (const item of attachmentCandidates) {
+        if (!seenChatKeysRef.current.has(item.key)) next.add(item.key)
+      }
+      seenChatKeysRef.current = new Set(attachmentCandidates.map((item) => item.key))
+      return next
+    })
+  }, [attachmentOptionKey, attachmentCandidates])
+
+  const toggleAttachment = (key: string) => {
+    setSelectedAttachmentKeys((prev) => {
+      const next = new Set(prev)
+      if (next.has(key)) next.delete(key)
+      else if (next.size < 5) next.add(key)
+      return next
+    })
+  }
+
+  const addTicketFiles = async (files: File[]) => {
+    if (!files.length || isSaving || isSent || uncertain) return
+    setAttachmentNotice('')
+    const remainingSlots = 5 - attachmentOptions.length
+    if (remainingSlots <= 0) {
+      setAttachmentNotice('This ticket already has 5 files. Uncheck one to add another.')
+      return
+    }
+    const rejected: string[] = []
+    const next: DeveloperSupportAttachmentCandidate[] = []
+    const maxPdf = 8 * 1024 * 1024
+    const maxImage = 5 * 1024 * 1024
+    const maxText = 512 * 1024
+
+    const readDataUrl = (file: File) => new Promise<string>((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onload = () => resolve(String(reader.result || ''))
+      reader.onerror = () => reject(new Error('read failed'))
+      reader.readAsDataURL(file)
+    })
+    const readText = (file: File) => new Promise<string>((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onload = () => resolve(String(reader.result || ''))
+      reader.onerror = () => reject(new Error('read failed'))
+      reader.readAsText(file)
+    })
+
+    for (const file of files.slice(0, remainingSlots)) {
+      const lowerName = file.name.toLowerCase()
+      const isPdf = file.type === 'application/pdf' || lowerName.endsWith('.pdf')
+      const isImage = file.type.startsWith('image/')
+      const isText = file.type === 'text/plain' || file.type === 'text/csv' || file.type === 'application/csv' || lowerName.endsWith('.txt') || lowerName.endsWith('.csv')
+      if (!isPdf && !isImage && !isText) {
+        rejected.push(file.name)
+        continue
+      }
+      if (isPdf && file.size > maxPdf) {
+        rejected.push(`${file.name} (PDF limit 8 MB)`)
+        continue
+      }
+      if (isImage && file.size > maxImage) {
+        rejected.push(`${file.name} (photo limit 5 MB)`)
+        continue
+      }
+      if (isText && file.size > maxText) {
+        rejected.push(`${file.name} (text limit 512 KB)`)
+        continue
+      }
+      try {
+        const type = isPdf ? 'application/pdf' : file.type || 'text/plain'
+        const kind: DeveloperSupportAttachmentCandidate['kind'] = isText ? 'text' : isImage ? 'image' : 'document'
+        const dataUrl = isImage || isPdf ? await readDataUrl(file) : undefined
+        const textContent = isText ? await readText(file) : undefined
+        const key = `local::${file.name}::${type}::${crypto.randomUUID()}`
+        next.push({
+          key,
+          name: file.name,
+          type,
+          kind,
+          ...(dataUrl ? { dataUrl } : {}),
+          ...(textContent ? { textContent } : {}),
+        })
+      } catch {
+        rejected.push(file.name)
+      }
+    }
+
+    if (next.length > 0) {
+      setLocalAttachments((prev) => [...prev, ...next].slice(0, 5))
+      setSelectedAttachmentKeys((prev) => {
+        const selected = new Set(prev)
+        for (const item of next) selected.add(item.key)
+        return selected
+      })
+    }
+    if (rejected.length > 0) {
+      setAttachmentNotice(
+        rejected.length === 1
+          ? `Could not attach ${rejected[0]}. Use a photo, PDF, or .txt/.csv under the size limit.`
+          : `Some files were skipped: ${rejected.slice(0, 3).join(', ')}${rejected.length > 3 ? '…' : ''}.`,
+      )
+    }
+    if (files.length > remainingSlots && remainingSlots > 0) {
+      setAttachmentNotice('This ticket can include 5 files. Extra files were not added.')
+    }
+  }
+
+  const selectedAttachments = attachmentOptions.filter((item) => selectedAttachmentKeys.has(item.key))
+
+  const prepareTicket = async () => {
+    if (!title.trim() || isSaving || isSent || uncertain) return
+    setIsSaving(true)
+    setError(null)
+    try {
+      const response = await fetch('/api/portal/elena-chat/actions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'PREPARE_DEVELOPER_SUPPORT',
+          ticket: {
+            title: title.trim(),
+            description: description.trim(),
+            priority,
+            pagePath: payload.pagePath || null,
+            attachments: selectedAttachments.map((item) => ({
+              name: item.name,
+              type: item.type,
+              ...(item.storagePath ? { storagePath: item.storagePath } : {}),
+              ...(item.storagePath ? {} : item.dataUrl ? { dataUrl: item.dataUrl } : {}),
+              ...(item.textContent ? { textContent: item.textContent } : {}),
+            })),
+          },
+        }),
+      })
+      const data = await response.json()
+      if (!response.ok || typeof data.confirmation?.token !== 'string' || typeof data.confirmation?.expiresAt !== 'string' || typeof data.confirmation?.summary !== 'string') {
+        throw new Error(typeof data.error === 'string' ? data.error : 'The support ticket could not be prepared. Please try again.')
+      }
+      setConfirmation(data.confirmation)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'The support ticket could not be prepared. Please try again.')
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  const confirmTicket = async () => {
+    if (!confirmation || isSaving || isSent || uncertain) return
+    setIsSaving(true)
+    setError(null)
+    try {
+      const response = await fetch('/api/portal/elena-chat/actions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'CONFIRM_DEVELOPER_SUPPORT', token: confirmation.token }),
+      })
+      const data = await response.json()
+      if (!response.ok || data.success !== true) throw new Error(typeof data.error === 'string' ? data.error : 'Unverified result')
+      setConfirmation(null)
+      setIsSent(true)
+      onSuccess?.('Support ticket sent to Lewis. He will pick it up in Cursor.')
+    } catch (err) {
+      setConfirmation(null)
+      setUncertain(true)
+      setError(err instanceof Error ? err.message : 'The ticket may or may not have been sent. Ask Lewis before sending another copy.')
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  return (
+    <div className="mt-3 w-full overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)]">
+      <div className="flex items-center gap-2 border-b border-[color:var(--portal-border)] px-4 py-3">
+        <Wrench size={16} className="text-[#a8792f] dark:text-[#f1d27a]" aria-hidden="true" />
+        <div>
+          <h4 className="font-sans text-sm font-bold text-[color:var(--portal-text)]">Developer support</h4>
+          <p className="text-[10px] text-[color:var(--portal-muted)]">Sends a fix request to Lewis in Cursor</p>
+        </div>
+      </div>
+      <div className="space-y-3 p-4">
+        {confirmation ? (
+          <div aria-live="polite" className="space-y-3">
+            <p className="text-xs font-semibold text-[color:var(--portal-text)]">Review before sending</p>
+            <p className="whitespace-pre-wrap break-words text-xs leading-relaxed text-[color:var(--portal-text)]">{confirmation.summary}</p>
+            {selectedAttachments.length > 0 ? (
+              <DeveloperSupportAttachmentList items={selectedAttachments} reviewOnly />
+            ) : (
+              <p className="text-[10px] leading-snug text-[color:var(--portal-muted)]">No files are attached to this ticket.</p>
+            )}
+            <p className="text-xs text-[color:var(--portal-muted)]">This confirmation expires shortly.</p>
+          </div>
+        ) : !isSent && !uncertain ? (
+          <>
+            {payload.pagePath ? (
+              <p className="text-xs text-[color:var(--portal-muted)]">
+                From page: <span className="font-mono text-[color:var(--portal-text)]">{payload.pagePath}</span>
+              </p>
+            ) : null}
+            <label className="block text-xs font-semibold text-[color:var(--portal-text)]">
+              What needs fixing?
+              <input
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                disabled={isSaving}
+                className="mt-1 w-full rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-bg)] px-3 py-2 text-xs text-[color:var(--portal-text)] outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/50 disabled:opacity-60"
+              />
+            </label>
+            <div>
+              <span className="mb-1 block text-xs font-semibold text-[color:var(--portal-text)]">Priority</span>
+              <PortalSelect
+                value={priority}
+                onChange={(value) => setPriority(value as 'low' | 'medium' | 'high' | 'urgent')}
+                disabled={isSaving}
+                className="w-full"
+                buttonClassName="!h-9 !rounded-lg !text-left !text-xs"
+                options={[
+                  { value: 'low', label: 'Low' },
+                  { value: 'medium', label: 'Medium' },
+                  { value: 'high', label: 'High' },
+                  { value: 'urgent', label: 'Urgent' },
+                ]}
+              />
+            </div>
+            <label className="block text-xs font-semibold text-[color:var(--portal-text)]">
+              Extra details
+              <textarea
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                rows={3}
+                disabled={isSaving}
+                placeholder="What happened? What did you expect?"
+                className="mt-1 w-full resize-y rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-bg)] p-2.5 text-xs text-[color:var(--portal-text)] outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/50 disabled:opacity-60"
+              />
+            </label>
+            <div className="space-y-2">
+              {attachmentOptions.length > 0 ? (
+                <DeveloperSupportAttachmentList
+                  items={attachmentOptions}
+                  selectedKeys={selectedAttachmentKeys}
+                  disabled={isSaving}
+                  onToggle={toggleAttachment}
+                />
+              ) : (
+                <p className="text-[10px] leading-snug text-[color:var(--portal-muted)]">
+                  Add a screenshot or PDF so Lewis can see the issue.
+                </p>
+              )}
+              {attachmentNotice ? <p role="status" className="text-[10px] leading-snug text-[color:var(--portal-muted)]">{attachmentNotice}</p> : null}
+            </div>
+          </>
+        ) : null}
+        {error && <p role="alert" className="text-xs text-red-600 dark:text-red-400">{error}</p>}
+        <div className="flex items-stretch justify-end gap-2">
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/jpeg,image/png,image/webp,image/gif,image/heic,image/heif,application/pdf,.pdf,text/plain,text/csv,.txt,.csv"
+            multiple
+            className="hidden"
+            onChange={(event) => {
+              const files = event.target.files
+              if (files?.length) void addTicketFiles(Array.from(files))
+              event.target.value = ''
+            }}
+          />
+          {confirmation && !uncertain ? (
+            <button type="button" onClick={() => setConfirmation(null)} disabled={isSaving} className="rounded-lg border border-[color:var(--portal-border)] px-3 py-2 text-xs font-semibold text-[color:var(--portal-text)] disabled:opacity-50">
+              Edit
+            </button>
+          ) : null}
+          {!confirmation && !isSent && !uncertain ? (
+            <button
+              type="button"
+              disabled={isSaving || attachmentOptions.length >= 5}
+              onClick={() => fileInputRef.current?.click()}
+              className="inline-flex min-h-10 items-center gap-2 self-stretch rounded-lg border-0 bg-[color:var(--portal-soft)] px-4 text-xs font-semibold text-[color:var(--portal-text)] hover:bg-[color:var(--portal-border)]/40 disabled:opacity-50"
+            >
+              <Plus size={14} aria-hidden="true" />
+              Add screenshot or PDF
+            </button>
+          ) : null}
+          {!isSent && !uncertain ? (
+            <button
+              type="button"
+              onClick={confirmation ? confirmTicket : prepareTicket}
+              disabled={isSaving || !title.trim()}
+              className="luxor-gold-raised inline-flex min-h-10 items-center gap-2 rounded-lg px-4 py-2 text-xs font-bold !text-white disabled:opacity-50"
+            >
+              {isSaving && <PortalConstellationLoader size={13} tone="white" />}
+              {confirmation ? 'Send to developer' : 'Review ticket'}
+            </button>
+          ) : null}
+          {isSent ? (
+            <span className="inline-flex items-center gap-1 text-xs font-semibold text-green-700 dark:text-green-400">
+              <Check size={13} /> Ticket sent
+            </span>
+          ) : null}
         </div>
       </div>
     </div>

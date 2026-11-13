@@ -3,7 +3,8 @@ import { LUXOR_MAX_GUESTS } from '@/lib/luxorInquiryTypes'
 import { formatLuxorDate } from '@/lib/luxorDateFormatting'
 import { isSafeWorkflowLink } from '@/lib/luxorWorkflowLink'
 
-import React, { useState, useEffect, useLayoutEffect, useRef, useId } from 'react'
+import React, { useState, useEffect, useLayoutEffect, useRef, useId, useCallback } from 'react'
+import { createPortal } from 'react-dom'
 import { 
   X, 
   Send, 
@@ -27,7 +28,7 @@ import {
   MicOff,
   PhoneOff,
   ArrowUp,
-  Paperclip,
+  Camera,
   FileText,
   CalendarDays,
   ChevronDown,
@@ -39,8 +40,9 @@ import { LuxorEventTypeCombobox } from '@/components/LuxorEventTypeCombobox'
 import Image from 'next/image'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { AnimatePresence, motion, useMotionValue, useReducedMotion, useSpring, useTransform } from 'framer-motion'
-import { PortalCloseButton, PortalContactAvatar, PortalSelect, PortalConstellationLoader } from './PortalUI'
+import { AnimatePresence, LayoutGroup, motion, useMotionValue, useReducedMotion, useSpring, useTransform } from 'framer-motion'
+import { PortalCloseButton, PortalContactAvatar, PortalModal, PortalSelect, PortalConstellationLoader } from './PortalUI'
+import { PortalPdfViewer } from '@/components/portal/PortalPdfViewer'
 import { ElenaLiveVoiceClient, type ElenaVoiceState } from '@/lib/elenaLiveVoiceClient'
 import { ElenaSilkOrb } from './ElenaSilkOrb'
 import { ElenaEmailDraftCard, EmailDraftPayload } from './ElenaEmailDraftCard'
@@ -50,10 +52,13 @@ import {
   ElenaContractCard,
   ElenaInvoiceCard,
   ElenaTaskCard,
+  ElenaDeveloperSupportCard,
   LeadUpdatePayload,
   ContractCardPayload,
   InvoiceCardPayload,
-  TaskCardPayload
+  TaskCardPayload,
+  DeveloperSupportCardPayload,
+  collectDeveloperSupportAttachmentCandidates,
 } from './ElenaCRMContainers'
 
 type ExecutedQuery = {
@@ -71,10 +76,21 @@ function confirmationEndpoint(confirmation: ElenaConfirmation) {
   return null
 }
 
+type MessageAttachment = {
+  id?: string
+  name: string
+  type: string
+  kind: 'image' | 'document' | 'text'
+  dataUrl?: string
+  textContent?: string
+  storagePath?: string
+}
+
 type Message = {
   id?: string
   role: 'user' | 'assistant'
   content: string
+  attachments?: MessageAttachment[]
   executedQueries?: ExecutedQuery[]
   toolActivity?: string[]
   toolActivityFailed?: boolean
@@ -87,6 +103,7 @@ type Message = {
   contractCard?: ContractCardPayload
   invoiceCard?: InvoiceCardPayload
   taskCard?: TaskCardPayload
+  developerSupportCard?: DeveloperSupportCardPayload
   contactCard?: LeadContactCardPayload
   newContactCard?: NewContactCardPayload
   tourInviteCard?: TourInviteCardPayload
@@ -107,12 +124,14 @@ type ElenaChatResponse = {
   contractCard?: ContractCardPayload
   invoiceCard?: InvoiceCardPayload
   taskCard?: TaskCardPayload
+  developerSupportCard?: DeveloperSupportCardPayload
   contactCard?: LeadContactCardPayload
   newContactCard?: NewContactCardPayload
   tourInviteCard?: TourInviteCardPayload
   workflowDraft?: ElenaWorkflowDraftPayload
   workflowLinks?: Array<{ name: string; href: string | null; note: string }>
   navigation?: { href: string }
+  userAttachments?: MessageAttachment[]
 }
 
 function isVoiceChoiceReply(message: Message) {
@@ -129,6 +148,7 @@ function hasVoiceActionOutput(message: Message) {
     || message.contractCard
     || message.invoiceCard
     || message.taskCard
+    || message.developerSupportCard
     || message.contactCard
     || message.newContactCard
     || message.tourInviteCard
@@ -151,8 +171,19 @@ function formatForVoiceCommentary(text: string) {
     .trim()
 }
 
-async function readElenaChatResponse(response: Response, onActivity: (step: string) => void): Promise<ElenaChatResponse> {
+function isAbortError(error: unknown) {
+  return error instanceof DOMException
+    ? error.name === 'AbortError'
+    : error instanceof Error && error.name === 'AbortError'
+}
+
+async function readElenaChatResponse(
+  response: Response,
+  onActivity: (step: string) => void,
+  signal?: AbortSignal,
+): Promise<ElenaChatResponse> {
   if (!response.headers.get('content-type')?.includes('text/event-stream')) {
+    if (signal?.aborted) throw new DOMException('Aborted', 'AbortError')
     return response.json() as Promise<ElenaChatResponse>
   }
   if (!response.body) throw new Error('Elena’s progress stream ended before the reply arrived.')
@@ -162,6 +193,11 @@ async function readElenaChatResponse(response: Response, onActivity: (step: stri
   let buffer = ''
   const resultRef: { current: { ok: boolean; status: number; data: ElenaChatResponse & { error?: string } } | null } = { current: null }
   let streamError = ''
+
+  const abortReader = () => {
+    void reader.cancel()
+  }
+  signal?.addEventListener('abort', abortReader, { once: true })
 
   const consume = (chunk: string) => {
     buffer += chunk
@@ -183,13 +219,19 @@ async function readElenaChatResponse(response: Response, onActivity: (step: stri
     }
   }
 
-  while (true) {
-    const { value, done } = await reader.read()
-    if (done) break
-    consume(decoder.decode(value, { stream: true }))
+  try {
+    while (true) {
+      if (signal?.aborted) throw new DOMException('Aborted', 'AbortError')
+      const { value, done } = await reader.read()
+      if (done) break
+      consume(decoder.decode(value, { stream: true }))
+    }
+    consume(decoder.decode())
+  } finally {
+    signal?.removeEventListener('abort', abortReader)
   }
-  consume(decoder.decode())
 
+  if (signal?.aborted) throw new DOMException('Aborted', 'AbortError')
   if (streamError) throw new Error(streamError)
   const result = resultRef.current
   if (!result) throw new Error('Elena’s progress stream ended before the reply arrived.')
@@ -414,6 +456,16 @@ function getQueryIndicatorText(sql: string) {
   return `${action} ${tableName}`
 }
 
+const ELENA_MAX_PDF_BYTES = 8 * 1024 * 1024
+const ELENA_MAX_IMAGE_BYTES = 5 * 1024 * 1024
+const ELENA_MAX_TEXT_BYTES = 512 * 1024
+
+const ELENA_ATTACHMENT_LAYOUT_TRANSITION = {
+  layout: { type: 'spring' as const, stiffness: 520, damping: 44, mass: 0.8 },
+  opacity: { duration: 0.16 },
+  scale: { duration: 0.16 },
+}
+
 export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChatProps) {
   const router = useRouter()
   const [messages, setMessages] = useState<Message[]>([])
@@ -449,7 +501,16 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
   }
 
   const [attachments, setAttachments] = useState<AttachedFile[]>([])
-  const fileInputRef = useRef<HTMLInputElement>(null)
+  const [attachmentNotice, setAttachmentNotice] = useState('')
+  const [attachMenuOpen, setAttachMenuOpen] = useState(false)
+  const [attachMenuCoords, setAttachMenuCoords] = useState<{ left: number; bottom: number } | null>(null)
+  const imageInputRef = useRef<HTMLInputElement>(null)
+  const documentInputRef = useRef<HTMLInputElement>(null)
+  const attachMenuRef = useRef<HTMLDivElement>(null)
+  const attachPlusRef = useRef<HTMLButtonElement>(null)
+  const attachStripRef = useRef<HTMLDivElement>(null)
+  const attachCountRef = useRef(0)
+  const elenaChatAbortRef = useRef<AbortController | null>(null)
   const voiceClientRef = useRef<ElenaLiveVoiceClient | null>(null)
   const handledVoiceDelegationsRef = useRef(new Set<string>())
   const pendingVoiceEmailDraftRef = useRef<{ draft: EmailDraftPayload; idempotencyKey: string } | null>(null)
@@ -635,34 +696,185 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
     return () => voiceClientRef.current?.stop()
   }, [isOpen])
 
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files
-    if (!files || files.length === 0) return
+  const readFileAsDataUrl = (file: File) => new Promise<string>((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(String(reader.result || ''))
+    reader.onerror = () => reject(new Error('read failed'))
+    reader.readAsDataURL(file)
+  })
 
-    Array.from(files).forEach((file) => {
+  const readFileAsText = (file: File) => new Promise<string>((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(String(reader.result || ''))
+    reader.onerror = () => reject(new Error('read failed'))
+    reader.readAsText(file)
+  })
+
+  const addElenaAttachmentFiles = useCallback(async (files: File[]) => {
+    if (!files.length) return
+    setAttachmentNotice('')
+    const rejected: string[] = []
+    const next: AttachedFile[] = []
+
+    for (const file of files) {
       const id = Math.random().toString(36).slice(2, 9)
-      const reader = new FileReader()
-      if (file.type.startsWith('image/')) {
-        reader.onload = (evt) => {
-          const dataUrl = evt.target?.result as string
-          setAttachments((prev) => [...prev, { id, name: file.name, type: file.type, dataUrl }])
-        }
-        reader.readAsDataURL(file)
-      } else {
-        reader.onload = (evt) => {
-          const textContent = evt.target?.result as string
-          setAttachments((prev) => [...prev, { id, name: file.name, type: file.type, textContent }])
-        }
-        reader.readAsText(file)
-      }
-    })
+      const lowerName = file.name.toLowerCase()
+      const isPdf = file.type === 'application/pdf' || lowerName.endsWith('.pdf')
+      const isImage = file.type.startsWith('image/')
+      const isText =
+        file.type === 'text/plain'
+        || file.type === 'text/csv'
+        || file.type === 'application/csv'
+        || lowerName.endsWith('.txt')
+        || lowerName.endsWith('.csv')
 
-    if (fileInputRef.current) fileInputRef.current.value = ''
+      if (!isPdf && !isImage && !isText) {
+        rejected.push(file.name)
+        continue
+      }
+      if (isPdf && file.size > ELENA_MAX_PDF_BYTES) {
+        rejected.push(`${file.name} (PDF limit 8 MB)`)
+        continue
+      }
+      if (isImage && file.size > ELENA_MAX_IMAGE_BYTES) {
+        rejected.push(`${file.name} (photo limit 5 MB)`)
+        continue
+      }
+      if (isText && file.size > ELENA_MAX_TEXT_BYTES) {
+        rejected.push(`${file.name} (text limit 512 KB)`)
+        continue
+      }
+
+      try {
+        if (isImage || isPdf) {
+          const dataUrl = await readFileAsDataUrl(file)
+          next.push({
+            id,
+            name: file.name,
+            type: isPdf ? 'application/pdf' : file.type,
+            dataUrl,
+          })
+        } else {
+          const textContent = await readFileAsText(file)
+          next.push({ id, name: file.name, type: file.type || 'text/plain', textContent })
+        }
+      } catch {
+        rejected.push(file.name)
+      }
+    }
+
+    if (next.length > 0) {
+      setAttachments((prev) => [...prev, ...next])
+    }
+    if (rejected.length > 0) {
+      setAttachmentNotice(
+        rejected.length === 1
+          ? `Could not attach ${rejected[0]}. Use a photo, PDF bill, or .txt/.csv under the size limit.`
+          : `Some files were skipped: ${rejected.slice(0, 3).join(', ')}${rejected.length > 3 ? '…' : ''}.`,
+      )
+    }
+  }, [])
+
+  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files
+    if (files?.length) void addElenaAttachmentFiles(Array.from(files))
+    if (imageInputRef.current) imageInputRef.current.value = ''
+    setAttachMenuOpen(false)
   }
+
+  const handleDocumentSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files
+    if (files?.length) void addElenaAttachmentFiles(Array.from(files))
+    if (documentInputRef.current) documentInputRef.current.value = ''
+    setAttachMenuOpen(false)
+  }
+
+  const handleComposerPaste = (e: React.ClipboardEvent) => {
+    const pasted: File[] = []
+    if (e.clipboardData.files.length > 0) {
+      pasted.push(...Array.from(e.clipboardData.files))
+    } else {
+      for (const item of Array.from(e.clipboardData.items)) {
+        if (item.kind !== 'file') continue
+        const file = item.getAsFile()
+        if (file) pasted.push(file)
+      }
+    }
+    if (!pasted.length) return
+    e.preventDefault()
+    void addElenaAttachmentFiles(pasted)
+  }
+
+  const repositionAttachMenu = useCallback(() => {
+    const anchor = attachPlusRef.current
+    if (!anchor) return
+    const rect = anchor.getBoundingClientRect()
+    const menuWidth = 208
+    const left = Math.min(Math.max(12, rect.left), window.innerWidth - menuWidth - 12)
+    const bottom = Math.max(12, window.innerHeight - rect.top + 8)
+    setAttachMenuCoords({ left, bottom })
+  }, [])
+
+  const toggleAttachMenu = useCallback(() => {
+    if (attachMenuOpen) {
+      setAttachMenuOpen(false)
+      return
+    }
+    repositionAttachMenu()
+    setAttachMenuOpen(true)
+  }, [attachMenuOpen, repositionAttachMenu])
+
+  useLayoutEffect(() => {
+    if (!attachMenuOpen) {
+      setAttachMenuCoords(null)
+      return
+    }
+    repositionAttachMenu()
+    window.addEventListener('resize', repositionAttachMenu)
+    window.addEventListener('scroll', repositionAttachMenu, true)
+    return () => {
+      window.removeEventListener('resize', repositionAttachMenu)
+      window.removeEventListener('scroll', repositionAttachMenu, true)
+    }
+  }, [attachMenuOpen, repositionAttachMenu])
+
+  useEffect(() => {
+    if (!attachMenuOpen) return
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target as Node
+      if (attachMenuRef.current?.contains(target) || attachPlusRef.current?.contains(target)) return
+      setAttachMenuOpen(false)
+    }
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setAttachMenuOpen(false)
+    }
+    document.addEventListener('pointerdown', onPointerDown)
+    document.addEventListener('keydown', onKeyDown)
+    return () => {
+      document.removeEventListener('pointerdown', onPointerDown)
+      document.removeEventListener('keydown', onKeyDown)
+    }
+  }, [attachMenuOpen])
 
   const removeAttachment = (id: string) => {
     setAttachments((prev) => prev.filter((a) => a.id !== id))
   }
+
+  const imageAttachments = attachments.filter((att) => Boolean(att.dataUrl && att.type.startsWith('image/')))
+  const documentAttachments = attachments.filter((att) => !(att.dataUrl && att.type.startsWith('image/')))
+
+  useEffect(() => {
+    const count = attachments.length
+    const strip = attachStripRef.current
+    if (!strip || count <= attachCountRef.current) {
+      attachCountRef.current = count
+      return
+    }
+    attachCountRef.current = count
+    requestAnimationFrame(() => {
+      strip.scrollTo({ left: strip.scrollWidth, behavior: reduceVoiceMotion ? 'auto' : 'smooth' })
+    })
+  }, [attachments.length, reduceVoiceMotion])
 
   useEffect(() => {
     if (isOpen) scrollToBottom()
@@ -889,22 +1101,53 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
     }
   }
 
+  const stopElenaResponse = useCallback(() => {
+    messageRequestRef.current += 1
+    elenaChatAbortRef.current?.abort()
+    elenaChatAbortRef.current = null
+    setIsLoading(false)
+    setLoadingActivities([])
+  }, [])
+
+  useEffect(() => {
+    if (!isOpen) {
+      setAttachMenuOpen(false)
+      stopElenaResponse()
+    }
+  }, [isOpen, stopElenaResponse])
+
   const handleSend = async (textToSend: string, onVoiceReply?: (reply: string) => void): Promise<string | null> => {
     if ((!textToSend.trim() && attachments.length === 0) || isLoading) return null
     const requestId = ++messageRequestRef.current
+    elenaChatAbortRef.current?.abort()
+    const abortController = new AbortController()
+    elenaChatAbortRef.current = abortController
 
     const userMessageText = textToSend.trim()
     const currentAttachments = [...attachments]
     setInput('')
     setAttachments([])
 
-    let fullDisplayContent = userMessageText
-    if (currentAttachments.length > 0) {
-      const attNames = currentAttachments.map(a => `📎 ${a.name}`).join(', ')
-      fullDisplayContent = userMessageText ? `${userMessageText}\n\n[Attached: ${attNames}]` : `[Attached: ${attNames}]`
-    }
-    
-    const updatedMessages: Message[] = [...messages, { role: 'user', content: fullDisplayContent }]
+    const messageAttachments: MessageAttachment[] = currentAttachments.map((attachment) => {
+      const isImage = Boolean(attachment.dataUrl && attachment.type.startsWith('image/'))
+      const isText = Boolean(attachment.textContent)
+      return {
+        name: attachment.name,
+        type: isImage ? attachment.type : attachment.type || 'application/octet-stream',
+        kind: isText ? 'text' : isImage ? 'image' : 'document',
+        ...(attachment.dataUrl ? { dataUrl: attachment.dataUrl } : {}),
+        ...(attachment.textContent ? { textContent: attachment.textContent } : {}),
+      }
+    })
+
+    const updatedMessages: Message[] = [
+      ...messages,
+      {
+        role: 'user',
+        content: userMessageText,
+        attachments: messageAttachments.length > 0 ? messageAttachments : undefined,
+      },
+    ]
     setMessages(updatedMessages)
     let streamedActivities: string[] = []
     setLoadingActivities([])
@@ -912,7 +1155,10 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
 
     try {
       // Keep cards in saved chat history; the server sends only role and text to the model.
-      const apiMessages = updatedMessages.map(({ confirmation: _confirmation, ...message }) => message)
+      const apiMessages = updatedMessages.map(({ confirmation: _confirmation, attachments: msgAttachments, ...message }) => ({
+        ...message,
+        ...(msgAttachments?.length ? { attachments: attachmentsForElenaPersistence(msgAttachments) } : {}),
+      }))
 
       const response = await fetch('/api/portal/elena-chat', {
         method: 'POST',
@@ -920,6 +1166,7 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
           'Content-Type': 'application/json',
           Accept: 'text/event-stream',
         },
+        signal: abortController.signal,
         body: JSON.stringify({ 
           messages: apiMessages,
           activePath,
@@ -935,7 +1182,7 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
       const data = await readElenaChatResponse(response, (step) => {
         streamedActivities = streamedActivities.at(-1) === step ? streamedActivities : [...streamedActivities, step]
         setLoadingActivities(streamedActivities)
-      })
+      }, abortController.signal)
       if (requestId !== messageRequestRef.current) return null
 
       if (data.textCampaignDraft) {
@@ -947,28 +1194,40 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
         onClose()
         router.push(data.navigation.href)
       }
-      
-      setMessages(prev => [
-        ...prev,
-        {
-          role: 'assistant',
-          content: data.reply?.trim() || 'I did not get a clear answer back from the query service. Please try that question again, or ask me for a daily brief.',
-          executedQueries: data.executedQueries,
-          toolActivity: data.toolActivity?.length ? data.toolActivity : streamedActivities,
-          confirmation: data.confirmation,
-          emailDraft: data.emailDraft,
-          crmUpdateCard: data.crmUpdateCard,
-          contractCard: data.contractCard,
-          invoiceCard: data.invoiceCard,
-          taskCard: data.taskCard,
-          contactCard: data.contactCard,
-          newContactCard: data.newContactCard,
-          tourInviteCard: data.tourInviteCard,
-          workflowDraft: data.workflowDraft,
-          workflowLinks: data.workflowLinks,
-          textCampaignDraft: data.textCampaignDraft,
+
+      setMessages((prev) => {
+        const next = [...prev]
+        if (data.userAttachments?.length) {
+          for (let index = next.length - 1; index >= 0; index -= 1) {
+            if (next[index]?.role === 'user') {
+              next[index] = { ...next[index], attachments: data.userAttachments }
+              break
+            }
+          }
         }
-      ])
+        return [
+          ...next,
+          {
+            role: 'assistant',
+            content: data.reply?.trim() || 'I did not get a clear answer back from the query service. Please try that question again, or ask me for a daily brief.',
+            executedQueries: data.executedQueries,
+            toolActivity: data.toolActivity?.length ? data.toolActivity : streamedActivities,
+            confirmation: data.confirmation,
+            emailDraft: data.emailDraft,
+            crmUpdateCard: data.crmUpdateCard,
+            contractCard: data.contractCard,
+            invoiceCard: data.invoiceCard,
+            taskCard: data.taskCard,
+            developerSupportCard: data.developerSupportCard,
+            contactCard: data.contactCard,
+            newContactCard: data.newContactCard,
+            tourInviteCard: data.tourInviteCard,
+            workflowDraft: data.workflowDraft,
+            workflowLinks: data.workflowLinks,
+            textCampaignDraft: data.textCampaignDraft,
+          },
+        ]
+      })
       const voiceReply = onVoiceReply && data.emailDraft
         ? voiceEmailReadback(data.emailDraft)
         : data.reply?.trim() || 'I did not get a clear answer back from the query service. Please try that question again, or ask me for a daily brief.'
@@ -987,6 +1246,7 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
       return voiceReply
     } catch (err) {
       if (requestId !== messageRequestRef.current) return null
+      if (isAbortError(err)) return null
       console.error(err)
       const voiceErrorReply = 'Sorry, I ran into an error connecting to the query service. Please check your network and try again.'
       setMessages(prev => [
@@ -1002,6 +1262,9 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
       return voiceErrorReply
     } finally {
       if (requestId === messageRequestRef.current) {
+        if (elenaChatAbortRef.current === abortController) {
+          elenaChatAbortRef.current = null
+        }
         setIsLoading(false)
         setLoadingActivities([])
       }
@@ -1019,7 +1282,10 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
       void fetch('/api/portal/elena-chat/sessions', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: currentSessionId, messages: updatedMessages.map(({ confirmation: _confirmation, ...message }) => message) }),
+        body: JSON.stringify({
+          id: currentSessionId,
+          messages: updatedMessages.map(({ confirmation: _confirmation, ...message }) => sanitizeMessageForStorage(message)),
+        }),
       }).then((response) => {
         if (!response.ok) throw new Error('Could not save the workflow draft status in chat history.')
         void refreshSessionsMetadata()
@@ -1474,7 +1740,9 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
                                 </div>
                                 </div>
                               </details>
-                            ) : renderFormattedContent(msg.content)}
+                            ) : (
+                              <ElenaChatMessageBody message={msg} chatId={currentSessionId} />
+                            )}
                           </div>
                         </motion.div>
                         )}
@@ -1686,6 +1954,21 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
                             />
                           </div>
                         )}
+
+                        {msg.developerSupportCard && (
+                          <div className="w-[96%] mt-2 pl-8">
+                            <ElenaDeveloperSupportCard
+                              payload={msg.developerSupportCard}
+                              attachmentCandidates={collectDeveloperSupportAttachmentCandidates(messages, attachments, currentSessionId)}
+                              onSuccess={(successMsg) => {
+                                setMessages((prev) => [
+                                  ...prev,
+                                  { role: 'assistant', content: successMsg },
+                                ])
+                              }}
+                            />
+                          </div>
+                        )}
                       </motion.div>
                     ))}
 
@@ -1740,106 +2023,280 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
               >
                 <div className="mb-2 flex items-center gap-2 rounded-lg border border-rose-500/20 bg-rose-500/5 pl-3 pr-1 text-[10px] text-rose-700 dark:text-rose-300">
                   <p role="status" className="min-w-0 flex-1 py-2">{voiceError}</p>
-                  <button
-                    type="button"
-                    aria-label="Dismiss voice notice"
+                  <PortalCloseButton
                     onClick={() => {
                       setVoiceError('')
                       voiceStartButtonRef.current?.focus()
                     }}
-                    className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-xl text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45"
-                  >
-                    <X size={14} aria-hidden="true" />
-                  </button>
+                    aria-label="Dismiss voice notice"
+                    className="!h-7 !w-7 !min-h-0 !min-w-0 shrink-0 rounded-lg"
+                  />
                 </div>
               </motion.div>
             )}
           </AnimatePresence>
-          {attachments.length > 0 && (
-            <div className="flex flex-wrap gap-2 mb-2 px-0.5">
-              {attachments.map((att) => (
-                <div key={att.id} className="flex items-center gap-1.5 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-2.5 py-1 text-[10px] text-[color:var(--portal-text)] shadow-xs">
-                  {att.dataUrl ? (
-                    /* eslint-disable-next-line @next/next/no-img-element */
-                    <img src={att.dataUrl} alt={att.name} className="h-4 w-4 rounded object-cover" />
-                  ) : (
-                    <FileText size={12} className="text-[#caa24c]" />
-                  )}
-                  <span className="max-w-[120px] truncate font-medium">{att.name}</span>
-                  <button type="button" onClick={() => removeAttachment(att.id)} className="text-[color:var(--portal-muted)] hover:text-rose-400 transition-colors ml-0.5 cursor-pointer">
-                    <X size={10} />
-                  </button>
+          <AnimatePresence>
+            {attachmentNotice ? (
+              <motion.div
+                key="attachment-notice"
+                initial={reduceVoiceMotion ? false : { height: 0, opacity: 0, y: 10 }}
+                animate={{ height: 'auto', opacity: 1, y: 0 }}
+                exit={reduceVoiceMotion ? { height: 0, opacity: 0 } : { height: 0, opacity: 0, y: 8 }}
+                transition={{ duration: reduceVoiceMotion ? 0 : 0.28, ease: [0.22, 1, 0.36, 1] }}
+                className="overflow-hidden"
+              >
+                <div className="mb-2 flex items-start gap-2 rounded-xl border border-amber-500/25 bg-amber-500/10 pl-3 pr-1 text-[10px] leading-snug text-amber-950 dark:border-amber-400/20 dark:bg-amber-400/10 dark:text-amber-100">
+                  <p role="status" className="min-w-0 flex-1 py-2">{attachmentNotice}</p>
+                  <PortalCloseButton
+                    onClick={() => setAttachmentNotice('')}
+                    aria-label="Dismiss attachment notice"
+                    className="!h-7 !w-7 !min-h-0 !min-w-0 shrink-0 rounded-lg"
+                  />
                 </div>
-              ))}
-            </div>
-          )}
+              </motion.div>
+            ) : null}
+          </AnimatePresence>
 
-          <form 
-            onSubmit={(e) => {
-              e.preventDefault()
-              handleSend(input)
-            }}
-            className="relative flex items-center rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-1.5 focus-within:border-[#caa24c]/50 transition-colors"
-          >
-            <input 
-              type="file" 
-              ref={fileInputRef} 
-              onChange={handleFileSelect} 
-              accept="image/*,.pdf,.txt,.csv" 
-              multiple 
-              className="hidden" 
+          {(() => {
+            const hasComposerAttachments = imageAttachments.length > 0 || documentAttachments.length > 0
+            return (
+              <div className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] shadow-xs focus-within:border-[#caa24c]/50">
+                <AnimatePresence initial={false}>
+                  {hasComposerAttachments && (
+                    <motion.div
+                      key="elena-composer-attachments"
+                      initial={reduceVoiceMotion ? false : { height: 0, opacity: 0 }}
+                      animate={{ height: 'auto', opacity: 1 }}
+                      exit={reduceVoiceMotion ? { height: 0, opacity: 0 } : { height: 0, opacity: 0, marginBottom: 0 }}
+                      transition={{ duration: reduceVoiceMotion ? 0 : 0.28, ease: [0.22, 1, 0.36, 1] }}
+                      className="overflow-hidden border-b border-[color:var(--portal-border)]/75 bg-[color:var(--portal-card)]/55"
+                    >
+                      <LayoutGroup id="elena-composer-attachments">
+                      <div
+                        ref={attachStripRef}
+                        className="portal-scrollbar flex min-w-0 items-center gap-2 overflow-x-auto overscroll-x-contain px-3 py-2 [scrollbar-width:thin] [scroll-padding-inline:0.75rem]"
+                        aria-label="Attached files"
+                      >
+                        <AnimatePresence initial={false} mode="popLayout">
+                          {imageAttachments.map((att) => (
+                            <motion.div
+                              key={att.id}
+                              layout="position"
+                              initial={reduceVoiceMotion ? false : { opacity: 0, scale: 0.9 }}
+                              animate={{ opacity: 1, scale: 1 }}
+                              exit={reduceVoiceMotion ? { opacity: 0, scale: 1 } : { opacity: 0, scale: 0.86 }}
+                              transition={reduceVoiceMotion ? { duration: 0 } : ELENA_ATTACHMENT_LAYOUT_TRANSITION}
+                              className="relative h-[4.5rem] w-[4.5rem] shrink-0 overflow-visible rounded-xl"
+                            >
+                              <div className="relative h-full w-full overflow-hidden rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]">
+                                {/* eslint-disable-next-line @next/next/no-img-element */}
+                                <img src={att.dataUrl} alt={att.name} className="pointer-events-none h-full w-full object-cover" />
+                                <button
+                                  type="button"
+                                  onClick={() => removeAttachment(att.id)}
+                                  aria-label={`Remove ${att.name}`}
+                                  className="portal-inline-action luxor-gold-raised absolute right-1 top-1 z-20 inline-flex !min-h-0 !min-w-0 h-5 w-5 shrink-0 items-center justify-center rounded-md p-0 text-white shadow-sm"
+                                >
+                                  <X size={10} strokeWidth={2.8} aria-hidden="true" />
+                                </button>
+                              </div>
+                            </motion.div>
+                          ))}
+                          {documentAttachments.map((att) => (
+                            <motion.div
+                              key={att.id}
+                              layout="position"
+                              initial={reduceVoiceMotion ? false : { opacity: 0, scale: 0.94 }}
+                              animate={{ opacity: 1, scale: 1 }}
+                              exit={reduceVoiceMotion ? { opacity: 0, scale: 1 } : { opacity: 0, scale: 0.92 }}
+                              transition={reduceVoiceMotion ? { duration: 0 } : ELENA_ATTACHMENT_LAYOUT_TRANSITION}
+                              className="flex w-max max-w-[12.5rem] shrink-0 items-center gap-1.5 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-2.5 py-1.5 text-[10px] text-[color:var(--portal-text)]"
+                            >
+                              <FileText size={12} className="shrink-0 text-[#caa24c]" />
+                              <span className="min-w-0 max-w-[9.5rem] truncate font-medium">{att.name}</span>
+                              <PortalCloseButton
+                                onClick={() => removeAttachment(att.id)}
+                                aria-label={`Remove ${att.name}`}
+                                className="!ml-0.5 !h-6 !w-6 !min-h-0 !min-w-0 shrink-0 rounded-lg"
+                              />
+                            </motion.div>
+                          ))}
+                        </AnimatePresence>
+                        <span className="shrink-0 pr-0.5" aria-hidden="true" />
+                      </div>
+                      </LayoutGroup>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+
+                <form
+                  onSubmit={(e) => {
+                    e.preventDefault()
+                    handleSend(input)
+                  }}
+                  className="relative flex items-center px-3 py-1.5"
+                >
+            <input
+              type="file"
+              ref={imageInputRef}
+              onChange={handleImageSelect}
+              accept="image/jpeg,image/png,image/webp,image/gif,image/heic,image/heif"
+              multiple
+              className="hidden"
+            />
+            <input
+              type="file"
+              ref={documentInputRef}
+              onChange={handleDocumentSelect}
+              accept="application/pdf,.pdf,text/plain,text/csv,.txt,.csv"
+              multiple
+              className="hidden"
             />
 
-            <button
-              type="button"
-              onClick={() => fileInputRef.current?.click()}
-              title="Attach image or document"
-              className="mr-2 text-[color:var(--portal-muted)] hover:text-[#caa24c] transition-colors p-1 rounded-md cursor-pointer"
-            >
-              <Paperclip size={14} />
-            </button>
+            <div className="relative mr-2 shrink-0">
+              <button
+                ref={attachPlusRef}
+                type="button"
+                onClick={toggleAttachMenu}
+                aria-expanded={attachMenuOpen}
+                aria-haspopup="menu"
+                title="Add a photo or file"
+                className="inline-flex h-7 w-7 items-center justify-center rounded-lg text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-card)] hover:text-[#caa24c] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45"
+              >
+                <Plus size={16} strokeWidth={2.2} aria-hidden="true" />
+              </button>
+            </div>
 
             <input 
               type="text"
               value={input}
               onChange={(e) => setInput(e.target.value)}
+              onPaste={handleComposerPaste}
               placeholder="Type a message or ask Elena anything..."
               className="portal-input-transparent flex-1 bg-transparent py-1 text-xs text-[color:var(--portal-text)] placeholder:text-[color:var(--portal-muted)] outline-none"
               disabled={isLoading}
             />
 
+            {(() => {
+              const composerCanSend = Boolean(input.trim() || attachments.length > 0)
+              return (
             <button
               ref={voiceStartButtonRef}
-              type={input.trim() || attachments.length > 0 ? 'submit' : 'button'}
-              onClick={input.trim() || attachments.length > 0 ? undefined : startVoice}
+              type={isLoading ? 'button' : composerCanSend ? 'submit' : 'button'}
+              onClick={
+                isLoading
+                  ? (event) => {
+                      event.preventDefault()
+                      stopElenaResponse()
+                    }
+                  : composerCanSend
+                    ? undefined
+                    : startVoice
+              }
               onMouseEnter={() => setVoiceButtonHovered(true)}
               onMouseLeave={() => setVoiceButtonHovered(false)}
               onFocus={() => setVoiceButtonHovered(true)}
               onBlur={() => setVoiceButtonHovered(false)}
-              disabled={isLoading || (!input.trim() && attachments.length === 0 && voiceState !== 'ended')}
-              aria-label={input.trim() || attachments.length > 0 ? 'Send message' : 'Start voice conversation with Elena'}
-              title={input.trim() || attachments.length > 0 ? 'Send message' : 'Start voice conversation'}
-              className="ml-1 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-[#caa24c]/35 bg-[#caa24c]/10 text-[#a8792f] transition-all hover:bg-[#caa24c]/20 disabled:cursor-not-allowed disabled:opacity-35"
+              disabled={!isLoading && !composerCanSend && voiceState !== 'ended'}
+              aria-label={
+                isLoading
+                  ? 'Stop response'
+                  : composerCanSend
+                    ? 'Send message'
+                    : 'Start voice conversation with Elena'
+              }
+              title={isLoading ? 'Stop response' : composerCanSend ? 'Send message' : 'Start voice conversation'}
+              className={`portal-inline-action ml-1 inline-flex !min-h-0 !min-w-0 h-8 w-8 shrink-0 items-center justify-center rounded-full border transition-all disabled:cursor-not-allowed disabled:opacity-35 ${
+                isLoading
+                  ? 'border-[color:var(--portal-border)] bg-[color:var(--portal-card)] text-[color:var(--portal-muted)] hover:border-rose-400/35 hover:bg-rose-500/10 hover:text-rose-500'
+                  : 'border-[#caa24c]/35 bg-[#caa24c]/10 text-[#a8792f] hover:bg-[#caa24c]/20'
+              }`}
             >
               <AnimatePresence mode="wait" initial={false}>
-                {input.trim() || attachments.length > 0 ? (
+                {isLoading ? (
+                  <motion.span key="stop" initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.7 }} transition={{ duration: 0.15 }}>
+                    <X size={16} strokeWidth={2.4} aria-hidden="true" />
+                  </motion.span>
+                ) : composerCanSend ? (
                   <motion.span key="send" initial={{ opacity: 0, y: 4, scale: 0.8 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -4, scale: 0.8 }} transition={{ duration: 0.15 }}>
                     <ArrowUp size={17} strokeWidth={2.4} />
                   </motion.span>
                 ) : (
                   <motion.span key="voice" initial={{ opacity: 0, scale: 0.7 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.7 }} transition={{ duration: 0.15 }}>
-                    <ElenaVoiceWave active={voiceButtonHovered && !input.trim() && attachments.length === 0} />
+                    <ElenaVoiceWave active={voiceButtonHovered && !composerCanSend} />
                   </motion.span>
                 )}
               </AnimatePresence>
             </button>
-          </form>
+              )
+            })()}
+                </form>
+              </div>
+            )
+          })()}
           <p className="mt-1.5 text-[9px] text-center text-[color:var(--portal-muted)] flex items-center justify-center gap-1">
             <Info size={9} />
             Queries run securely on the server with owner authorization.
           </p>
         </div>}
       </div>
+      {typeof document !== 'undefined' && isOpen
+        ? createPortal(
+            <AnimatePresence>
+              {attachMenuOpen && attachMenuCoords ? (
+                <motion.div
+                  key="elena-attach-menu"
+                  ref={attachMenuRef}
+                  data-portal-popover="true"
+                  role="menu"
+                  aria-label="Attach to Elena"
+                  initial={reduceVoiceMotion ? false : { opacity: 0, y: 8, scale: 0.96 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={reduceVoiceMotion ? { opacity: 0 } : { opacity: 0, y: 6, scale: 0.98 }}
+                  transition={{ duration: reduceVoiceMotion ? 0 : 0.22, ease: [0.22, 1, 0.36, 1] }}
+                  style={{
+                    position: 'fixed',
+                    left: attachMenuCoords.left,
+                    bottom: attachMenuCoords.bottom,
+                    zIndex: 120,
+                    width: '13rem',
+                  }}
+                  className="overflow-hidden rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-1 shadow-xl ring-1 ring-black/10"
+                >
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => imageInputRef.current?.click()}
+                    className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-[11px] font-medium text-[color:var(--portal-text)] transition-colors hover:bg-[color:var(--portal-soft)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45"
+                  >
+                    <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-[#caa24c]/10 text-[#a8792f] dark:text-[#e6c77f]">
+                      <Camera size={14} aria-hidden="true" />
+                    </span>
+                    <span>
+                      <span className="block">Photo or screenshot</span>
+                      <span className="mt-0.5 block text-[10px] font-normal text-[color:var(--portal-muted)]">Receipts, venue photos, bills as images</span>
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => documentInputRef.current?.click()}
+                    className="mt-0.5 flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-[11px] font-medium text-[color:var(--portal-text)] transition-colors hover:bg-[color:var(--portal-soft)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45"
+                  >
+                    <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-[#caa24c]/10 text-[#a8792f] dark:text-[#e6c77f]">
+                      <FileText size={14} aria-hidden="true" />
+                    </span>
+                    <span>
+                      <span className="block">PDF or text file</span>
+                      <span className="mt-0.5 block text-[10px] font-normal text-[color:var(--portal-muted)]">Vendor bills, CSV exports, notes</span>
+                    </span>
+                  </button>
+                </motion.div>
+              ) : null}
+            </AnimatePresence>,
+            document.body,
+          )
+        : null}
     </motion.aside>
   )
 }
@@ -2119,6 +2576,231 @@ function renderFormattedLine(line: string, key: React.Key) {
   }
 
   return <p key={key} className="mb-2 text-sm leading-relaxed">{renderBoldAndLinks(trimmed)}</p>
+}
+
+function attachmentKindFromName(name: string): MessageAttachment['kind'] {
+  if (/\.(txt|csv)$/i.test(name)) return 'text'
+  return /\.(png|jpe?g|webp|gif|heic|heif)$/i.test(name) ? 'image' : 'document'
+}
+
+function isPdfMessageAttachment(attachment: MessageAttachment) {
+  return attachment.kind === 'document'
+    && (attachment.type === 'application/pdf' || /\.pdf$/i.test(attachment.name))
+}
+
+function canOpenMessageAttachment(attachment: MessageAttachment) {
+  if (attachment.textContent) return true
+  if (attachment.storagePath) return attachment.kind === 'image' || isPdfMessageAttachment(attachment)
+  if (!attachment.dataUrl) return false
+  return attachment.kind === 'image' || isPdfMessageAttachment(attachment)
+}
+
+type ElenaMessageAttachmentPreview = {
+  name: string
+  url: string
+  kind: 'pdf' | 'image' | 'text'
+  textContent?: string
+}
+
+function messageAttachmentsForDisplay(message: Message): MessageAttachment[] {
+  if (message.attachments?.length) return message.attachments
+  const match = message.content.match(/\[Attached:\s*([^\]]+)\]\s*$/m)
+  if (!match) return []
+  return match[1]
+    .split(',')
+    .map((part) => part.replace(/^📎\s*/, '').trim())
+    .filter(Boolean)
+    .map((name) => ({
+      name,
+      type: attachmentKindFromName(name) === 'image' ? 'image/png' : 'application/pdf',
+      kind: attachmentKindFromName(name),
+    }))
+}
+
+function messageTextForDisplay(message: Message) {
+  const attachments = messageAttachmentsForDisplay(message)
+  let content = message.content.trim()
+  if (attachments.length > 0) {
+    content = content.replace(/\n?\[Attached:\s*[^\]]+\]\s*$/m, '').trim()
+  }
+  return content
+}
+
+function attachmentsForElenaPersistence(attachments?: MessageAttachment[]) {
+  if (!attachments?.length) return undefined
+  return attachments.map(({ dataUrl: _dataUrl, textContent, storagePath, id, ...attachment }) => ({
+    ...attachment,
+    ...(id ? { id } : {}),
+    ...(storagePath ? { storagePath } : {}),
+    ...(textContent ? { textContent: textContent.slice(0, 4000) } : {}),
+  }))
+}
+
+async function resolveElenaAttachmentPreviewUrl(chatId: string | null, attachment: MessageAttachment) {
+  if (attachment.dataUrl) return attachment.dataUrl
+  if (!chatId || !attachment.storagePath) return null
+  const response = await fetch(
+    `/api/portal/elena-chat/attachment?chatId=${encodeURIComponent(chatId)}&storagePath=${encodeURIComponent(attachment.storagePath)}&name=${encodeURIComponent(attachment.name)}`,
+  )
+  if (!response.ok) return null
+  const data = (await response.json()) as { url?: string }
+  return typeof data.url === 'string' ? data.url : null
+}
+
+function sanitizeMessageForStorage(message: Message): Message {
+  if (!message.attachments?.length) return message
+  return {
+    ...message,
+    attachments: attachmentsForElenaPersistence(message.attachments) || [],
+  }
+}
+
+function ElenaChatStoredImageThumb({
+  attachment,
+  chatId,
+  onOpen,
+}: {
+  attachment: MessageAttachment
+  chatId: string | null
+  onOpen: () => void
+}) {
+  const [fetchedSrc, setFetchedSrc] = useState('')
+  const [failed, setFailed] = useState(false)
+  const src = attachment.dataUrl || fetchedSrc
+
+  useEffect(() => {
+    if (attachment.dataUrl) return
+    if (!attachment.storagePath || !chatId) return
+    let cancelled = false
+    void resolveElenaAttachmentPreviewUrl(chatId, attachment).then((url) => {
+      if (cancelled) return
+      if (url) setFetchedSrc(url)
+      else setFailed(true)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [attachment, chatId])
+
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      disabled={!src && failed}
+      className="h-20 w-20 shrink-0 overflow-hidden rounded-xl border border-[color:var(--portal-border)]/80 bg-[color:var(--portal-soft)] shadow-xs transition hover:border-[#caa24c]/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 disabled:cursor-default disabled:opacity-70"
+      aria-label={`Open ${attachment.name}`}
+    >
+      {src ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={src} alt="" className="h-full w-full object-cover" />
+      ) : (
+        <span className="flex h-full w-full items-center justify-center text-[9px] font-semibold text-[color:var(--portal-muted)]">Loading…</span>
+      )}
+    </button>
+  )
+}
+
+function ElenaChatMessageBody({ message, chatId }: { message: Message; chatId: string | null }) {
+  const attachments = messageAttachmentsForDisplay(message)
+  const content = messageTextForDisplay(message)
+  const [preview, setPreview] = useState<ElenaMessageAttachmentPreview | null>(null)
+
+  const openAttachment = async (attachment: MessageAttachment) => {
+    if (!canOpenMessageAttachment(attachment)) return
+    if (attachment.textContent) {
+      setPreview({ name: attachment.name, url: '', kind: 'text', textContent: attachment.textContent })
+      return
+    }
+    const url = await resolveElenaAttachmentPreviewUrl(chatId, attachment)
+    if (!url) return
+    if (isPdfMessageAttachment(attachment)) {
+      setPreview({ name: attachment.name, url, kind: 'pdf' })
+      return
+    }
+    if (attachment.kind === 'image') {
+      setPreview({ name: attachment.name, url, kind: 'image' })
+    }
+  }
+
+  return (
+    <>
+      <div className="space-y-2">
+        {content ? <div>{renderFormattedContent(content)}</div> : null}
+        {attachments.length > 0 ? (
+          <div className={`flex flex-wrap gap-2 ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+            {attachments.map((attachment) => {
+              const openable = canOpenMessageAttachment(attachment)
+              if (attachment.kind === 'image' && (attachment.dataUrl || attachment.storagePath)) {
+                return (
+                  <ElenaChatStoredImageThumb
+                    key={`${attachment.id || attachment.name}-${attachment.storagePath || attachment.dataUrl || 'local'}-image`}
+                    attachment={attachment}
+                    chatId={chatId}
+                    onOpen={() => { void openAttachment(attachment) }}
+                  />
+                )
+              }
+              const title = openable
+                ? attachment.name
+                : `${attachment.name} (preview unavailable after reload — reattach to view)`
+              return (
+                <button
+                  key={`${attachment.name}-file`}
+                  type="button"
+                  disabled={!openable}
+                  onClick={() => { void openAttachment(attachment) }}
+                  title={title}
+                  className={`flex w-max max-w-[12.5rem] shrink-0 items-center gap-1.5 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)]/80 px-2.5 py-1.5 text-[10px] text-[color:var(--portal-text)] shadow-xs ${openable ? 'cursor-pointer transition hover:border-[#caa24c]/45 hover:bg-[color:var(--portal-soft)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45' : 'cursor-default opacity-80'}`}
+                  aria-label={openable ? `Open ${attachment.name}` : attachment.name}
+                >
+                  <FileText size={12} className="shrink-0 text-[#caa24c]" aria-hidden="true" />
+                  <span className="min-w-0 max-w-[9.5rem] truncate text-left font-medium">{attachment.name}</span>
+                </button>
+              )
+            })}
+          </div>
+        ) : null}
+      </div>
+
+      <PortalModal
+        isOpen={Boolean(preview)}
+        onClose={() => setPreview(null)}
+        title={preview?.name || 'Attachment'}
+        maxWidth="max-w-5xl"
+        fullScreenOnCompact
+        fillBody={preview?.kind === 'pdf'}
+        zIndex={200}
+        className={preview?.kind === 'pdf' ? 'max-lg:!flex max-lg:!min-h-0 max-lg:!h-dvh' : undefined}
+        bodyClassName={preview?.kind === 'pdf' ? '!flex !min-h-0 !flex-1 !flex-col !overflow-hidden !p-0 sm:!p-0' : undefined}
+        footer={preview?.url ? (
+          <a
+            href={preview.url}
+            download={preview.name}
+            className="inline-flex min-h-10 items-center rounded-lg px-3 text-sm font-semibold text-[color:var(--portal-text)] underline decoration-[#caa24c]/50 underline-offset-2"
+          >
+            Download
+          </a>
+        ) : undefined}
+      >
+        {preview?.kind === 'pdf' ? (
+          <div className="flex min-h-0 w-full flex-1 flex-col h-0 lg:min-h-[min(72vh,760px)] lg:h-auto">
+            <PortalPdfViewer url={preview.url} title={preview.name.replace(/\.pdf$/i, '') || 'PDF'} />
+          </div>
+        ) : null}
+        {preview?.kind === 'image' ? (
+          <div className="flex min-h-40 items-center justify-center bg-[color:var(--portal-soft)] p-3">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={preview.url} alt={preview.name} className="max-h-[65dvh] max-w-full rounded-lg object-contain" />
+          </div>
+        ) : null}
+        {preview?.kind === 'text' && preview.textContent ? (
+          <pre className="max-h-[65dvh] overflow-auto whitespace-pre-wrap break-words rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-4 text-xs leading-relaxed text-[color:var(--portal-text)]">
+            {preview.textContent}
+          </pre>
+        ) : null}
+      </PortalModal>
+    </>
+  )
 }
 
 function renderFormattedContent(content: string) {

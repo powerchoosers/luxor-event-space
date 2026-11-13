@@ -35,6 +35,7 @@ async function database(query, init = {}) {
   state.operations.push({ query, init })
   if (query.startsWith('luxor_phone_numbers?')) { if (state.beforeOwnership) { state.beforeOwnership = false; throw new Error('Synthetic ownership lookup failure') }; return [{ phone_number: number, twilio_number_sid: numberSid, is_public: true }] }
   if (query.startsWith('rpc/')) {
+    if (state.captureError) throw state.captureError
     state.captures.push(JSON.parse(init.body)); return { saved: true, linked: true }
   }
   assert.ok(query.startsWith('luxor_calls?'))
@@ -45,13 +46,22 @@ async function database(query, init = {}) {
   state.row = { ...state.row, ...JSON.parse(init.body) }; return [structuredClone(state.row)]
 }
 const twiml = require('twilio').twiml
+class SupabaseRestError extends Error {
+  constructor(message, status, code) { super(message); this.status = status; this.code = code }
+}
 const numbers = () => ({ fetch: async () => ({ phoneNumber: number, accountSid, trunkSid: '', voiceApplicationSid: '' }) })
 numbers.list = async ({ phoneNumber }) => state.owned.includes(phoneNumber) ? [{ phoneNumber }] : []
 const client = { incomingPhoneNumbers: numbers, calls: () => ({ fetch: async () => ({ accountSid, to: number, direction: 'inbound', status: 'in-progress' }), update: async (input) => { state.transfers.push(input); return {} } }) }
 const carrier = () => client
 const integrations = {
-  'server-only': {}, twilio: carrier, ws: class extends EventEmitter {},
-  './supabaseRestServer': { supabaseRestStrict: database },
+  'server-only': {}, twilio: carrier, ws: class extends EventEmitter {
+    static OPEN = 1
+    constructor() { super(); this.readyState = 1; setImmediate(() => this.emit('open')) }
+    send() { if (state.socketSendError) throw new Error('Synthetic WebSocket send failure'); state.greetingSends += 1; setImmediate(() => this.emit('close')) }
+    close() { this.readyState = 3 }
+    terminate() { this.readyState = 3 }
+  },
+  './supabaseRestServer': { SupabaseRestError, supabaseRestStrict: database },
   './luxorAiContextServer': { getLuxorAiVenueContext: async () => 'Verified venue reference.' },
   './luxorPhoneRoutingServer': { getLuxorPhoneRoutingSettings: async () => ({ ring_to_number: state.target }) },
   './luxorElenaInboundSettingsServer': { getElenaInboundSettings: async () => ({ voice: 'brise', ariannaAvailable: state.available }) },
@@ -79,7 +89,7 @@ const status = compile('src/app/api/elena-inbound/status/route.ts', {
 test.beforeEach(() => {
   Object.assign(process.env, { LUXOR_ELENA_LIVE_INBOUND_ENABLED: 'true', LUXOR_ELENA_LIVE_NUMBER: number, LUXOR_ELENA_LIVE_NUMBER_SID: numberSid,
     OPENAI_PROJECT_ID: 'proj_synthetic', OPENAI_VOICE_WEBHOOK_SECRET: secret, OPENAI_API_KEY: 'synthetic-do-not-call', LUXOR_TWILIO_ACCOUNT_SID: accountSid, LUXOR_TWILIO_AUTH_TOKEN: 'synthetic' })
-  state = { available: true, target, owned: [], operations: [], captures: [], transfers: [], bookings: [], recordings: [], automaticStarts: [], leadUpdates: [], emails: [], notices: [], signed: true,
+  state = { available: true, target, owned: [], operations: [], captures: [], transfers: [], bookings: [], recordings: [], automaticStarts: [], leadUpdates: [], emails: [], notices: [], greetingSends: 0, signed: true,
     row: { id: 'call', twilio_call_sid: callSid, direction: 'inbound', to_number: number, status: 'in-progress', updated_at: '2026-11-11T12:00:00.000Z', metadata: { scope: 'elena_live_inbound', ingress_mode: 'programmable_sip', accepted: true, rehearsal_only: false, openai_session_id: 'live_synthetic', transfer_state: 'none' } } }
   global.fetch = async (url) => { assert.match(String(url), /^https:\/\/api\.openai\.com\/v1\/live\/sessions\/live_synthetic\/accept$/); if (state.onAccept) state.onAccept(); return Response.json({}) }
 })
@@ -91,6 +101,21 @@ async function tool(name, args = {}) {
   return { error: result.isError === true, output: result.isError ? result.content[0].text : JSON.parse(result.content[0].text) }
 }
 const contact = { full_name: 'Synthetic Caller', phone: '(555) 123-4567', purpose: 'transfer' }
+test('opening greeting retries a concurrent call metadata update', async () => {
+  state.beforePatch = () => { state.row.updated_at = '2026-11-11T12:00:01.000Z' }
+  await service.greetElenaLiveCall('live_synthetic', callSid)
+  assert.equal(state.row.metadata.greeting_requested, true)
+  assert.equal(state.greetingSends, 1)
+  await service.greetElenaLiveCall('live_synthetic', callSid)
+  assert.equal(state.greetingSends, 1)
+})
+test('opening greeting send failure completes without claiming verified playback', async () => {
+  state.socketSendError = true
+  await service.greetElenaLiveCall('live_synthetic', callSid)
+  assert.equal(state.row.metadata.greeting_requested, true)
+  assert.equal(state.row.metadata.greeting_playback_verified, false)
+  assert.equal(state.greetingSends, 0)
+})
 test('new live sessions do not offer recording permission tools', () => {
   const names = service.ELENA_LIVE_TOOLS.map((entry) => entry.name)
   assert.equal(names.includes('prepare_recording'), false)
@@ -137,6 +162,31 @@ test('contact preparation issues capture kind without PII and waits for a later 
   assert.equal(confirmed.output.saved, true); assert.equal(state.captures.length, 1)
   assert.equal(state.captures[0].p_nonce, decoded.nonce)
 })
+test('protected test contact gives a safe next step without exposing internals', async () => {
+  const prepared = await tool('prepare_contact_capture', { ...contact, purpose: 'tour', email: 'synthetic@example.invalid' })
+  state.captureError = new SupabaseRestError('Test identifiers cannot be captured as customers', 400, '22023')
+  const refused = await tool('confirm_contact_capture', { token: prepared.output.token, spoken_confirmation: 'yes' })
+  assert.equal(refused.error, true)
+  assert.match(refused.output, /different callback number or, when applicable, email address/i)
+  assert.match(refused.output, /Do not retry unchanged details/i)
+  assert.match(refused.output, /No tour was booked/i)
+  assert.doesNotMatch(refused.output, /test identifiers|synthetic@example|555/i)
+  assert.equal(state.captures.length, 0)
+  state.captureError = new SupabaseRestError('Unrelated database error', 400, '22023')
+  const other = await tool('confirm_contact_capture', { token: prepared.output.token, spoken_confirmation: 'yes' })
+  assert.equal(other.error, true)
+  assert.match(other.output, /could not be verified/i)
+  assert.doesNotMatch(other.output, /Unrelated database error/i)
+})
+test('protected contact guidance remains appropriate for a transfer', async () => {
+  const prepared = await tool('prepare_contact_capture', contact)
+  state.captureError = new SupabaseRestError('Test identifiers cannot be captured as customers', 400, '22023')
+  const refused = await tool('confirm_contact_capture', { token: prepared.output.token, spoken_confirmation: 'yes' })
+  assert.equal(refused.error, true)
+  assert.match(refused.output, /different callback number/i)
+  assert.doesNotMatch(refused.output, /tour was booked|cannot be saved for a booking/i)
+  assert.equal(state.transfers.length, 0)
+})
 test('callback details require best time plus email or explicit refusal', () => {
   assert.throws(() => service.parseElenaLiveContact({ ...contact, purpose: 'callback' }))
   assert.throws(() => service.parseElenaLiveContact({ ...contact, purpose: 'callback', best_callback_time: 'Tomorrow afternoon' }))
@@ -167,6 +217,7 @@ test('saved transfer loops and stale races cannot trigger a paid attempt', async
 })
 function callback(body, query = '') { return new Request(`https://luxor.invalid/api/elena-inbound/status${query}`, { method: 'POST', body: new URLSearchParams({ AccountSid: accountSid, CallSid: childSid, ParentCallSid: callSid, CallStatus: 'in-progress', ...body }) }) }
 test('signed SIP progress binds distinct child and proves answered before owner notice', async () => {
+  state.row.status = 'ringing'
   const response = await status.POST(callback({}, `?parentCallSid=${callSid}&leg=elena`))
   assert.equal(response.status, 200); assert.equal(state.row.metadata.sip_answered, true)
   assert.deepEqual(state.automaticStarts, [{ call: callSid, session: 'live_synthetic' }])
@@ -184,6 +235,19 @@ test('terminal child callbacks never terminate the parent and preserve answered 
   await status.POST(callback({ CallStatus: 'completed', SequenceNumber: '3' }, `?parentCallSid=${callSid}&leg=elena`))
   await status.POST(callback({ CallStatus: 'ringing', SequenceNumber: '1' }, `?parentCallSid=${callSid}&leg=elena`))
   assert.equal(state.row.status, 'in-progress'); assert.equal(state.row.metadata.sip_status, 'completed'); assert.equal(state.row.metadata.sip_answered, true)
+})
+test('a late answered SIP callback does not reopen a completed parent', async () => {
+  state.row.status = 'completed'
+  await status.POST(callback({}, `?parentCallSid=${callSid}&leg=elena`))
+  assert.equal(state.row.status, 'completed')
+  assert.equal(state.row.metadata.sip_answered, true)
+})
+test('an older answered SIP callback does not mark a ringing parent active after the SIP leg ended', async () => {
+  state.row.status = 'ringing'
+  await status.POST(callback({ CallStatus: 'completed', SequenceNumber: '3' }, `?parentCallSid=${callSid}&leg=elena`))
+  await status.POST(callback({ CallStatus: 'in-progress', SequenceNumber: '1' }, `?parentCallSid=${callSid}&leg=elena`))
+  assert.equal(state.row.status, 'ringing')
+  assert.equal(state.row.metadata.sip_status, 'completed')
 })
 test('public terminal callbacks record call end while disabled and ignore pre-cutover calls', async () => {
   process.env.LUXOR_ELENA_LIVE_INBOUND_ENABLED = 'false'

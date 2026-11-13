@@ -15,7 +15,7 @@ const PortalPdfViewerRenderer = dynamic<PortalPdfViewerProps>(
   {
     ssr: false,
     loading: () => (
-      <div className="flex min-h-0 flex-1 flex-col items-center justify-center p-8 space-y-4" role="status" aria-label="Preparing document viewer">
+      <div className="flex h-full min-h-0 flex-1 flex-col items-center justify-center p-8 space-y-4" role="status" aria-label="Preparing document viewer">
         <PortalSkeleton className="h-[480px] w-full max-w-xl rounded-2xl" />
         <PortalSkeleton className="h-4 w-40 rounded" />
       </div>

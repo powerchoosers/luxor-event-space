@@ -1,5 +1,9 @@
 import { NextResponse } from 'next/server'
 import { issueElenaTaskConfirmation, consumeElenaTaskConfirmation } from '@/lib/luxorElenaTaskConfirmationServer'
+import {
+  issueElenaDeveloperSupportConfirmation,
+  consumeElenaDeveloperSupportConfirmation,
+} from '@/lib/luxorElenaDeveloperSupportConfirmationServer'
 
 // Preparation and confirmation are deliberately separate. A confirm request
 // supplies only an opaque token; neither the action nor its summary is trusted.
@@ -16,6 +20,14 @@ export async function POST(request: Request) {
     }
     if (value.action === 'CONFIRM_TASK' && Object.keys(value).every(k => ['action', 'token'].includes(k))) {
       const result = await consumeElenaTaskConfirmation(value.token)
+      return NextResponse.json({ success: true, result }, options)
+    }
+    if (value.action === 'PREPARE_DEVELOPER_SUPPORT' && Object.keys(value).every(k => ['action', 'ticket'].includes(k))) {
+      const confirmation = await issueElenaDeveloperSupportConfirmation(value.ticket)
+      return NextResponse.json({ confirmation }, options)
+    }
+    if (value.action === 'CONFIRM_DEVELOPER_SUPPORT' && Object.keys(value).every(k => ['action', 'token'].includes(k))) {
+      const result = await consumeElenaDeveloperSupportConfirmation(value.token)
       return NextResponse.json({ success: true, result }, options)
     }
     return NextResponse.json({ error: 'This Elena action is unavailable. Use the appropriate portal workflow.' }, { ...options, status: 403 })

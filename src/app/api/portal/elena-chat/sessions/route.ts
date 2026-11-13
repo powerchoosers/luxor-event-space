@@ -30,6 +30,14 @@ interface ChatMessage {
   tool_calls?: Record<string, unknown>[]
   executedQueries?: Record<string, unknown>[]
   voiceTranscript?: Array<{ role: 'user' | 'assistant'; text: string }>
+  attachments?: Array<{
+    id?: string
+    name: string
+    type: string
+    kind: 'image' | 'document' | 'text'
+    textContent?: string
+    storagePath?: string
+  }>
 }
 
 interface ElenaChatSession {

@@ -492,6 +492,28 @@ test('completion callback verifies carrier and test destination and never starts
   })
 })
 
+test('test call completion retries a concurrent update and stays bounded', async () => {
+  reset()
+  let reads = 0, patches = 0, alwaysConflict = false
+  const route = compile('src/app/api/elena-phone-test/status/route.ts', {
+    '@/lib/luxorElenaPhoneTestServer': { ELENA_PHONE_TEST_NUMBER: testNumber },
+    '@/lib/luxorTwilioServer': { readTwilioForm: async (request) => request.form, validateTwilioWebhook: () => true,
+      normalizeTwilioCallStatus: (value) => value, parseTwilioInteger: (value) => Number(value) },
+    '@/lib/supabaseRestServer': { supabaseRestStrict: async (_query, init = {}) => {
+      if (!init.method) { reads += 1; return [{ updated_at: new Date(1_000_000 + reads * 1000).toISOString() }] }
+      patches += 1; return alwaysConflict || patches === 1 ? [] : [{ twilio_call_sid: callSid }]
+    } },
+  })
+  await withConfiguration(async () => {
+    const callback = { form: { CallSid: callSid, AccountSid: accountSid, To: testNumber, CallStatus: 'completed', CallDuration: '9' }, url: 'https://synthetic.invalid/api/elena-phone-test/status' }
+    assert.equal((await route.POST(callback)).status, 200)
+    assert.equal(reads, 2); assert.equal(patches, 2)
+    reads = 0; patches = 0; alwaysConflict = true
+    assert.equal((await route.POST(callback)).status, 503)
+    assert.equal(reads, 3); assert.equal(patches, 3)
+  })
+})
+
 test('transfer callbacks require an authorized parent and preserve answer evidence across late events', async () => {
   reset()
   const writes = []
