@@ -220,34 +220,43 @@ export function PackageFlipCard({ data, locale = 'en' }: PackageFlipCardProps) {
 
   return (
     <article
-      className={`group relative flex h-full min-h-[560px] flex-col [perspective:1200px] ${shellClass}`}
+      className={`group grid h-full min-h-[560px] ${shellClass}`}
       aria-labelledby={`${faceId}-title`}
     >
       <span id={`${faceId}-title`} className="sr-only">
         {data.displayName} package
       </span>
       <div
-        className={`relative h-full min-h-0 w-full flex-1 transition-transform duration-500 ease-in-out [transform-style:preserve-3d] ${
-          flipped ? '[transform:rotateY(180deg)]' : ''
-        }`}
+        className="pointer-events-none invisible col-start-1 row-start-1 flex min-h-0 min-w-0 flex-col"
+        aria-hidden
+        inert
       >
+        <div className={faceClipClass}>{renderFront()}</div>
+      </div>
+      <div className="relative col-start-1 row-start-1 min-h-0 min-w-0 [perspective:1200px]">
         <div
-          className={`relative flex h-full w-full min-h-0 flex-col ${backfaceClass} ${
-            flipped ? 'pointer-events-none' : 'pointer-events-auto z-[2]'
+          className={`absolute inset-0 h-full w-full transition-transform duration-500 ease-in-out [transform-style:preserve-3d] ${
+            flipped ? '[transform:rotateY(180deg)]' : ''
           }`}
-          aria-hidden={flipped}
-          {...(flipped ? { inert: true } : {})}
         >
-          <div className={faceClipClass}>{renderFront()}</div>
-        </div>
-        <div
-          className={`absolute inset-0 flex h-full max-h-full min-h-0 flex-col ${backfaceClass} [transform:rotateY(180deg)] ${
-            flipped ? 'pointer-events-auto z-[2]' : 'pointer-events-none'
-          }`}
-          aria-hidden={!flipped}
-          {...(!flipped ? { inert: true } : {})}
-        >
-          <div className={faceClipClass}>{renderBack({ scrollBody: true })}</div>
+          <div
+            className={`absolute inset-0 flex h-full w-full min-h-0 flex-col ${backfaceClass} ${
+              flipped ? 'pointer-events-none' : 'pointer-events-auto z-[2]'
+            }`}
+            aria-hidden={flipped}
+            {...(flipped ? { inert: true } : {})}
+          >
+            <div className={faceClipClass}>{renderFront()}</div>
+          </div>
+          <div
+            className={`absolute inset-0 flex h-full max-h-full min-h-0 flex-col ${backfaceClass} [transform:rotateY(180deg)] ${
+              flipped ? 'pointer-events-auto z-[2]' : 'pointer-events-none'
+            }`}
+            aria-hidden={!flipped}
+            {...(!flipped ? { inert: true } : {})}
+          >
+            <div className={faceClipClass}>{renderBack({ scrollBody: true })}</div>
+          </div>
         </div>
       </div>
     </article>
