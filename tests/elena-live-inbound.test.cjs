@@ -78,6 +78,13 @@ const integrations = {
   './luxorTwilioServer': { createTwilioVoiceResponse: () => new twiml.VoiceResponse(), forbiddenTwimlResponse: () => new Response('', { status: 403 }),
     getLuxorTwilioConfig: () => ({ accountSid }), readTwilioForm: async (request) => Object.fromEntries(new URLSearchParams(await request.text())),
     twimlResponse: (response) => new Response(response.toString()), validateTwilioWebhook: () => state.signed },
+  './luxorElenaInboundNonEventServer': {
+    ElenaNonEventCaptureError: class extends Error {},
+    ELENA_CALLER_CATEGORIES: ['event_inquiry', 'vendor', 'job_seeker', 'partner', 'solicitor', 'wrong_number', 'other_non_event'],
+    confirmElenaNonEventContactCapture: async () => { state.nonEventCaptures += 1; return { saved: true, lead_created: false, message: 'saved without lead' } },
+    isEventInquiryCategory: (category) => category === 'event_inquiry',
+    parseElenaCallerCategory: (value) => value,
+  },
 }
 const service = compile('src/lib/luxorElenaInboundServer.ts', integrations)
 const status = compile('src/app/api/elena-inbound/status/route.ts', {
@@ -89,7 +96,7 @@ const status = compile('src/app/api/elena-inbound/status/route.ts', {
 test.beforeEach(() => {
   Object.assign(process.env, { LUXOR_ELENA_LIVE_INBOUND_ENABLED: 'true', LUXOR_ELENA_LIVE_NUMBER: number, LUXOR_ELENA_LIVE_NUMBER_SID: numberSid,
     OPENAI_PROJECT_ID: 'proj_synthetic', OPENAI_VOICE_WEBHOOK_SECRET: secret, OPENAI_API_KEY: 'synthetic-do-not-call', LUXOR_TWILIO_ACCOUNT_SID: accountSid, LUXOR_TWILIO_AUTH_TOKEN: 'synthetic' })
-  state = { available: true, target, owned: [], operations: [], captures: [], transfers: [], bookings: [], recordings: [], automaticStarts: [], leadUpdates: [], emails: [], notices: [], greetingSends: 0, signed: true,
+  state = { available: true, target, owned: [], operations: [], captures: [], nonEventCaptures: 0, transfers: [], bookings: [], recordings: [], automaticStarts: [], leadUpdates: [], emails: [], notices: [], greetingSends: 0, signed: true,
     row: { id: 'call', twilio_call_sid: callSid, direction: 'inbound', to_number: number, status: 'in-progress', updated_at: '2026-11-11T12:00:00.000Z', metadata: { scope: 'elena_live_inbound', ingress_mode: 'programmable_sip', accepted: true, rehearsal_only: false, openai_session_id: 'live_synthetic', transfer_state: 'none' } } }
   global.fetch = async (url) => { assert.match(String(url), /^https:\/\/api\.openai\.com\/v1\/live\/sessions\/live_synthetic\/accept$/); if (state.onAccept) state.onAccept(); return Response.json({}) }
 })
@@ -100,7 +107,7 @@ async function tool(name, args = {}) {
   const result = (await response.json()).result
   return { error: result.isError === true, output: result.isError ? result.content[0].text : JSON.parse(result.content[0].text) }
 }
-const contact = { full_name: 'Synthetic Caller', phone: '(555) 123-4567', purpose: 'transfer' }
+const contact = { full_name: 'Synthetic Caller', phone: '(555) 123-4567', purpose: 'transfer', caller_category: 'event_inquiry' }
 test('opening greeting retries a concurrent call metadata update', async () => {
   state.beforePatch = () => { state.row.updated_at = '2026-11-11T12:00:01.000Z' }
   await service.greetElenaLiveCall('live_synthetic', callSid)
@@ -191,6 +198,20 @@ test('callback details require best time plus email or explicit refusal', () => 
   assert.throws(() => service.parseElenaLiveContact({ ...contact, purpose: 'callback' }))
   assert.throws(() => service.parseElenaLiveContact({ ...contact, purpose: 'callback', best_callback_time: 'Tomorrow afternoon' }))
   assert.equal(service.parseElenaLiveContact({ ...contact, purpose: 'callback', best_callback_time: 'Tomorrow afternoon', email_declined: true }).email, null)
+})
+test('caller id can stand in for an unstated callback number', () => {
+  const parsed = service.parseElenaLiveContact({ full_name: 'Synthetic Caller', purpose: 'callback', caller_category: 'event_inquiry', best_callback_time: 'Tomorrow afternoon', email_declined: true }, '+15559876543')
+  assert.equal(parsed.phone, '+15559876543')
+})
+test('non-event vendor capture saves through the app path without lead RPC', async () => {
+  const vendorContact = { full_name: 'Vendor Rep', phone: '(555) 123-4567', purpose: 'callback', caller_category: 'vendor', vendor_name: 'Acme Security', call_note: 'Offered armed security services.', best_callback_time: 'Anytime', email: 'vendor@example.invalid' }
+  const prepared = await tool('prepare_contact_capture', vendorContact)
+  assert.equal(prepared.error, false)
+  const confirmed = await tool('confirm_contact_capture', { token: prepared.output.token, spoken_confirmation: 'yes, correct' })
+  assert.equal(confirmed.error, false)
+  assert.equal(confirmed.output.lead_created, false)
+  assert.equal(state.nonEventCaptures, 1)
+  assert.equal(state.captures.length, 0)
 })
 test('transfer requires saved confirmed contact and checks human availability twice', async () => {
   assert.equal((await tool('prepare_transfer')).error, true)

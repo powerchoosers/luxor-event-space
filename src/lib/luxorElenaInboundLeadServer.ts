@@ -36,6 +36,8 @@ export async function prepareElenaLeadUpdate(input: { callSid: string; sessionId
     || (!fullName && !phone && !email && !notes && !eventType && !targetDate && guests === null && !budget && !packageInterest && !spokenLanguage)) throw new ElenaLeadUpdateError('Please check the caller’s contact and event details before saving.')
   const [call] = await supabaseRestStrict<Call[]>(`luxor_calls?select=twilio_call_sid,direction,to_number,status,inquiry_id,metadata,updated_at&twilio_call_sid=eq.${encodeURIComponent(input.callSid)}&limit=1`)
   const capture = call?.metadata.inbound_capture as Contact | undefined
+  const callerCategory = typeof call?.metadata.caller_category === 'string' ? call.metadata.caller_category : null
+  if (callerCategory && callerCategory !== 'event_inquiry') throw new ElenaLeadUpdateError('Lead updates are only for event inquiries. Save vendor and other callers with contact capture only.')
   if (!call || call.direction !== 'inbound' || !['ringing', 'in-progress'].includes(call.status) || call.to_number !== process.env.LUXOR_ELENA_LIVE_NUMBER
     || call.metadata.scope !== 'elena_live_inbound' || call.metadata.ingress_mode !== 'programmable_sip' || call.metadata.rehearsal_only !== false
     || call.metadata.accepted !== true || call.metadata.openai_session_id !== input.sessionId || !call.inquiry_id
@@ -44,14 +46,43 @@ export async function prepareElenaLeadUpdate(input: { callSid: string; sessionId
   if (!lead || lead.archived_at || lead.is_test || !equalName(lead.full_name, capture.full_name) || normalizePhoneNumber(lead.phone || '') !== normalizePhoneNumber(capture.phone)
     || (lead.email && capture.email && lead.email.trim().toLowerCase() !== capture.email.trim().toLowerCase())
     || (email && lead.email && !capture.email && lead.email.trim().toLowerCase() !== email)) throw new ElenaLeadUpdateError('The existing lead details need Arianna’s review before updating them.')
+  const captureName = capture.full_name || ''
+  const capturePhone = normalizePhoneNumber(capture.phone)
+  const captureEmail = capture.email?.trim().toLowerCase() || null
+  const pendingFields = {
+    full_name: fullName && equalName(fullName, captureName) ? null : fullName,
+    phone: phone && capturePhone && phone === capturePhone ? null : phone,
+    email: email && captureEmail && email === captureEmail ? null : email,
+    notes,
+    event_type: eventType,
+    target_date: targetDate,
+    guest_count: guests,
+    budget,
+    package_interest: packageInterest,
+    spoken_language: spokenLanguage,
+  }
+  if (!Object.values(pendingFields).some((value) => value !== null && value !== undefined && value !== '')) {
+    throw new ElenaLeadUpdateError('Only new event details or call notes belong in a lead update. Contact details were already saved.')
+  }
   const nonce = randomUUID(), expiresAt = new Date(Date.now() + 180_000).toISOString()
   const pending = { nonce, expires_at: expiresAt, inquiry_id: lead.id, inquiry_updated_at: lead.updated_at, contact_nonce: capture.nonce,
-    full_name: fullName, phone, email, notes, event_type: eventType, target_date: targetDate, guest_count: guests, budget, package_interest: packageInterest, spoken_language: spokenLanguage }
+    ...pendingFields }
   const [changed] = await supabaseRestStrict<Call[]>(`luxor_calls?twilio_call_sid=eq.${encodeURIComponent(input.callSid)}&updated_at=eq.${encodeURIComponent(call.updated_at)}&metadata->>scope=eq.elena_live_inbound&metadata->>openai_session_id=eq.${encodeURIComponent(input.sessionId)}&select=twilio_call_sid`, {
     method: 'PATCH', headers: { Prefer: 'return=representation' }, body: JSON.stringify({ metadata: { ...call.metadata, lead_update_pending: pending }, updated_at: new Date(Math.max(Date.now(), Date.parse(call.updated_at) + 1)).toISOString() }),
   })
   if (!changed) throw new ElenaLeadUpdateError('The call changed. Please repeat the details before saving.')
-  const parts = [spokenLanguage && `your spoken language is ${spokenLanguage}`, fullName && `name ${fullName}`, phone && `phone ${phone}`, email && `email ${email}`, eventType && `event type ${eventType}`, targetDate && `event date ${targetDate}`, guests !== null && `${guests} guests`, budget && `budget ${budget}`, packageInterest && `package interest ${packageInterest}`, notes && `call note: ${notes}`].filter(Boolean)
+  const parts = [
+    pendingFields.spoken_language && `your spoken language is ${pendingFields.spoken_language}`,
+    pendingFields.full_name && `name ${pendingFields.full_name}`,
+    pendingFields.phone && `phone ${pendingFields.phone}`,
+    pendingFields.email && `email ${pendingFields.email}`,
+    pendingFields.event_type && `event type ${pendingFields.event_type}`,
+    pendingFields.target_date && `event date ${pendingFields.target_date}`,
+    pendingFields.guest_count !== null && pendingFields.guest_count !== undefined && `${pendingFields.guest_count} guests`,
+    pendingFields.budget && `budget ${pendingFields.budget}`,
+    pendingFields.package_interest && `package interest ${pendingFields.package_interest}`,
+    pendingFields.notes && `call note: ${pendingFields.notes}`,
+  ].filter(Boolean)
   return { nonce, expiresAt, question: `I have ${parts.join(', ')}. Is that correct, and may I save ${parts.length === 1 ? 'this' : 'these details'} for the Luxor team?` }
 }
 
