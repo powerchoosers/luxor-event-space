@@ -8,7 +8,7 @@ import { buildLuxorTourPlan } from './luxorTourPlanningServer'
 import { getActiveLuxorPhoneNumber } from './luxorPhoneNumbersServer'
 import { assertEmailHasNoUnresolvedPlaceholders, getTourResponseLinks } from './luxorEmailJobsServer'
 
-import { compactText, getLuxorConsentFormProfile, LuxorInquiry, LuxorInquiryInput, LuxorPipelineStage, LuxorInquiryStatus, isLuxorEventTypeRequiredFlow, normalizeLuxorEventType, parseGuestCount } from './luxorInquiryTypes'
+import { compactText, getLuxorConsentFormProfile, LuxorInquiry, LuxorInquiryInput, LuxorPipelineStage, LuxorInquiryStatus, isLuxorEventTypeRequiredFlow, normalizeLuxorEventType, parseGuestCount, LUXOR_INQUIRY_EMAIL_DISCLOSURE, LUXOR_INQUIRY_EMAIL_DISCLOSURE_VERSION } from './luxorInquiryTypes'
 import { buildTourEmail, createLuxorEmailJob, createPublicToken } from './luxorEmailJobsServer'
 import { supabaseRest } from './supabaseRestServer'
 import { findRecentLuxorInquiryMatch } from './luxorInquiryDuplicateMatch'
@@ -86,6 +86,7 @@ export function normalizeInquiry(input: LuxorInquiryInput, userAgent?: string) {
   const customerCareSmsOptIn = Boolean(phone && consentProfile?.customerCareSmsDisclosure && input.smsOptIn === true)
   const marketingSmsOptIn = Boolean(phone && consentProfile?.marketingSmsDisclosure && input.smsMarketingOptIn === true)
   const marketingEmailOptIn = Boolean(email && consentProfile?.marketingEmailDisclosure && input.marketingOptIn === true)
+  const emailInquiryOptIn = Boolean(email && input.emailInquiryOptIn === true)
   const smsScopes = [
     ...(customerCareSmsOptIn ? consentProfile?.customerCareScopes ?? [] : []),
     ...(marketingSmsOptIn ? ['marketing'] : []),
@@ -109,6 +110,18 @@ export function normalizeInquiry(input: LuxorInquiryInput, userAgent?: string) {
             source: consentProfile!.source,
             disclosureVersion: consentProfile!.marketingEmailDisclosureVersion,
             disclosure: consentProfile!.marketingEmailDisclosure,
+            email,
+            capturedAt: new Date().toISOString(),
+          },
+        }
+      : {}),
+    ...(emailInquiryOptIn
+      ? {
+          emailCommunicationConsent: {
+            status: 'opted_in',
+            source: consentProfile?.source || input.source || 'website_inquiry_form',
+            disclosureVersion: LUXOR_INQUIRY_EMAIL_DISCLOSURE_VERSION,
+            disclosure: LUXOR_INQUIRY_EMAIL_DISCLOSURE,
             email,
             capturedAt: new Date().toISOString(),
           },
@@ -157,6 +170,14 @@ export function normalizeInquiry(input: LuxorInquiryInput, userAgent?: string) {
 }
 
 export async function findRecentDuplicateLuxorInquiry(input: LuxorInquiryInput, minutes = 10) {
+  const idempotencyKey = typeof input.metadata?.idempotencyKey === 'string' ? input.metadata.idempotencyKey.trim() : ''
+  if (idempotencyKey.length >= 8) {
+    const [match] = await supabaseRest<LuxorInquiry[]>(
+      `luxor_inquiries?select=*&metadata->>idempotencyKey=eq.${encodeURIComponent(idempotencyKey)}&order=created_at.desc&limit=1`,
+    )
+    if (match) return match
+  }
+
   const email = compactText(input.email).toLowerCase()
   const phone = compactText(input.phone)
   if (!email && !phone) return null

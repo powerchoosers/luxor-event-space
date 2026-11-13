@@ -7,6 +7,11 @@ export const metadata: Metadata = {
   alternates: { canonical: '/es/visit', languages: { en: '/visit', es: '/es/visit' } },
 }
 
-export default function SpanishVisitPage() {
-  return <TourPageContent locale="es" />
+type PageProps = { searchParams: Promise<{ inquiryId?: string; source?: string }> }
+
+export default async function SpanishVisitPage({ searchParams }: PageProps) {
+  const params = await searchParams
+  const inquiryId = params.inquiryId?.trim() || null
+  const source = params.source?.trim() || null
+  return <TourPageContent locale="es" packagesInquiryId={inquiryId} packagesInquirySource={source} />
 }

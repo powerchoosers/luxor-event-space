@@ -12,6 +12,7 @@ import { zonedTourDateTimeToUtc } from '@/lib/luxorTourPlanningServer'
 import { supabaseRest } from '@/lib/supabaseRestServer'
 import { isConfiguredTestSubmission, startLuxorTestRun } from '@/lib/luxorTestLeadServer'
 import { isLuxorBookingDateWithinLimit, isPublicEventDateSelectable } from '@/lib/publicEventDate'
+import { attachTourToPackagesInquiry, readPackagesInquiryContinuationId } from '@/lib/luxorPackagesInquiryTourServer'
 
 const VALID_INQUIRY_STATUSES: LuxorInquiryStatus[] = [
   'new',
@@ -162,6 +163,20 @@ export async function POST(request: NextRequest) {
       })
     } catch (protectionError) {
       console.warn('Public inquiry protection event could not be recorded:', protectionError)
+    }
+
+    const packagesContinuationId = readPackagesInquiryContinuationId(payload.metadata)
+    if (packagesContinuationId) {
+      const requestKey = request.headers.get('idempotency-key')?.trim()
+      const bookingOptions: { idempotencyKey?: string; replayed?: boolean; userAgent?: string } = {
+        idempotencyKey: requestKey,
+        userAgent: request.headers.get('user-agent') ?? undefined,
+      }
+      const inquiry = await attachTourToPackagesInquiry(packagesContinuationId, payload, bookingOptions)
+      if (bookingOptions.replayed) {
+        return NextResponse.json({ inquiry, tourScheduled: Boolean(selectedTourSlotId), replayed: true }, { status: 200 })
+      }
+      return NextResponse.json({ inquiry, tourScheduled: Boolean(selectedTourSlotId) }, { status: 201 })
     }
 
     if (!selectedTourSlotId) {

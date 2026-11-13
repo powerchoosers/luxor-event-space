@@ -32,7 +32,15 @@ const copy = {
 const googleMapsUrl = 'https://maps.app.goo.gl/qQyX6MP98A9FNwvr6?g_st=ic'
 const appleMapsUrl = 'https://maps.apple/p/SYUX3ViRAh0KJ2'
 
-export function TourPageContent({ locale }: { locale: Locale }) {
+export function TourPageContent({
+  locale,
+  packagesInquiryId = null,
+  packagesInquirySource = null,
+}: {
+  locale: Locale
+  packagesInquiryId?: string | null
+  packagesInquirySource?: string | null
+}) {
   const text = copy[locale]
 
   const mapCard = (
@@ -98,7 +106,11 @@ export function TourPageContent({ locale }: { locale: Locale }) {
 
             {/* Right Column on Desktop (Form + Under-form section) / Second on Mobile */}
             <div className="space-y-6">
-              <TourRequestForm locale={locale} />
+              <TourRequestForm
+                locale={locale}
+                packagesInquiryId={packagesInquiryId}
+                packagesInquirySource={packagesInquirySource}
+              />
               <TourPageActions locale={locale} />
 
               {/* Mobile Map (under the form & contact actions) */}

@@ -75,6 +75,7 @@ import { saveRecentLead } from '@/lib/luxorRecentLeads'
 import { decodeHtmlEntities } from '@/lib/luxorTextUtils'
 import { LUXOR_TIME_DROPDOWN_OPTIONS, normalizeLuxorTimeDropdownValue } from '@/lib/luxorTimeOptions'
 import { PortalPageFrame, PortalStatusBadge, PortalSelect, PortalDatePicker, PortalModal, PortalContactAvatar, PortalCloseButton, PortalFilterBar, PortalAnimatedTabs, PortalButton, PortalSkeleton } from '@/components/portal/PortalUI'
+import { PackagesWebsiteInquiryPanel } from '@/components/portal/PackagesWebsiteInquiryPanel'
 import { MagicCard } from '@/components/ui/magic-card'
 import { AnimatedCircularProgressBar } from '@/components/ui/animated-circular-progress-bar'
 import { useToast } from '@/components/portal/ToastProvider'
@@ -5588,6 +5589,8 @@ export default function LeadDetailPage({
           </button>
         ) : null}
       </section>
+
+      <PackagesWebsiteInquiryPanel lead={lead} />
 
                     {/* Concierge AI session replay */}
                     {chatMessages.length > 0 && (

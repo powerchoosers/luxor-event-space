@@ -107,9 +107,18 @@ function createCalendarLinks(dateStr: string, timeStr: string) {
   return { googleUrl, icsDataUri }
 }
 
-export function TourRequestForm({ locale = 'en' }: { locale?: Locale }) {
+export function TourRequestForm({
+  locale = 'en',
+  packagesInquiryId = null,
+  packagesInquirySource = null,
+}: {
+  locale?: Locale
+  packagesInquiryId?: string | null
+  packagesInquirySource?: string | null
+}) {
   const spanish = locale === 'es'
   const { slots, loading: slotsLoading, error: slotsError } = useLuxorTourSlots()
+  const linkedPackagesInquiryId = packagesInquirySource === 'packages_inquiry' && packagesInquiryId ? packagesInquiryId : null
 
   // Form Step: 1 = Choose a Time, 2 = Your Information, 3 = Event Details, 4 = Confirmation
   const [step, setStep] = useState<1 | 2 | 3 | 4>(1)
@@ -176,6 +185,36 @@ export function TourRequestForm({ locale = 'en' }: { locale?: Locale }) {
     })
     return () => cancelAnimationFrame(frame)
   }, [customMode])
+
+  useEffect(() => {
+    if (!linkedPackagesInquiryId) return
+    let cancelled = false
+    ;(async () => {
+      try {
+        const response = await fetch(`/api/public/packages-inquiry/prefill?inquiryId=${encodeURIComponent(linkedPackagesInquiryId)}`)
+        const data = await response.json().catch(() => ({})) as {
+          fullName?: string
+          email?: string
+          phone?: string
+          eventType?: string | null
+          targetDate?: string | null
+          guestCount?: number | null
+          packageInterest?: string | null
+        }
+        if (!response.ok || cancelled) return
+        if (data.fullName) setFullName(data.fullName)
+        if (data.email) setEmail(data.email)
+        if (data.phone) setPhone(formatPhoneNumber(data.phone))
+        if (data.eventType) setEventType(data.eventType)
+        if (data.targetDate) setEventDate(data.targetDate)
+        if (data.guestCount) setGuestCount(String(data.guestCount))
+        if (data.packageInterest) setPackageInterest(data.packageInterest)
+      } catch {
+        // Prefill is optional
+      }
+    })()
+    return () => { cancelled = true }
+  }, [linkedPackagesInquiryId])
 
   // Date computations
   const availableDates = useMemo(() => new Set(slots.map((slot) => slot.date)), [slots])
@@ -328,6 +367,7 @@ export function TourRequestForm({ locale = 'en' }: { locale?: Locale }) {
         autoScheduleTour: Boolean(slotId && !customMode),
         tourBookingType: slotId && !customMode ? 'confirmed_slot' : 'pending_custom_request',
         alternateTourDate: alternateDate || null,
+        ...(linkedPackagesInquiryId ? { continuePackagesInquiryId: linkedPackagesInquiryId } : {}),
       },
     }
 

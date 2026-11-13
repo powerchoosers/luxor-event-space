@@ -38,6 +38,7 @@ export const LUXOR_EVENT_TYPE_REQUIRED_FLOWS = [
   'brochure_lead',
   'visit_booking',
   'custom_visit_request',
+  'packages_event_inquiry',
   'manual_entry',
 ] as const
 
@@ -107,6 +108,7 @@ export type LuxorInquiryInput = {
   campaignKey?: string
   rsvpStatus?: 'attending' | 'not_attending' | 'maybe'
   marketingOptIn?: boolean
+  emailInquiryOptIn?: boolean
   smsOptIn?: boolean
   smsMarketingOptIn?: boolean
   website?: string
@@ -119,13 +121,15 @@ export type LuxorInquiryInput = {
   metadata?: Record<string, unknown>
 }
 
-const LUXOR_INQUIRY_CONSENT_FIELDS = ['smsOptIn', 'smsMarketingOptIn', 'marketingOptIn'] as const
+const LUXOR_INQUIRY_CONSENT_FIELDS = ['smsOptIn', 'smsMarketingOptIn', 'marketingOptIn', 'emailInquiryOptIn'] as const
 
 export const LUXOR_SMS_CONSENT_DISCLOSURE_VERSION = '2026-10-23-v2'
 export const LUXOR_INQUIRY_SMS_DISCLOSURE = 'By checking this box, I agree to receive text messages from Luxor at Las Palmas Events regarding my inquiry, tour scheduling, appointment reminders, and related event-planning communications. Message frequency varies. Message and data rates may apply. Reply STOP to opt out or HELP for help. Consent is not a condition of purchase.'
 export const LUXOR_MARKETING_SMS_DISCLOSURE = 'By checking this box, I agree to receive recurring promotional text messages from Luxor at Las Palmas Events about exclusive offers, upcoming events, workshops, special classes, open houses, and other experiences hosted at our venue. Message frequency varies. Message and data rates may apply. Reply STOP to opt out or HELP for help. Consent is not a condition of purchase.'
 export const LUXOR_MARKETING_EMAIL_DISCLOSURE_VERSION = '2026-10-23-v1'
 export const LUXOR_MARKETING_EMAIL_DISCLOSURE = 'Get special offers, event updates, and inspiration. Unsubscribe using the link in any marketing email.'
+export const LUXOR_INQUIRY_EMAIL_DISCLOSURE_VERSION = '2026-11-13-v1'
+export const LUXOR_INQUIRY_EMAIL_DISCLOSURE = 'Email me about my inquiry, tour scheduling, proposals, and related event-planning communications from Luxor at Las Palmas Events.'
 
 // Consent evidence is selected from server-owned form profiles. The browser
 // may report its source/flow and separate checkbox values, but it may never
@@ -157,6 +161,19 @@ export type LuxorConsentFormProfile = {
 
 export function getLuxorConsentFormProfile(source: unknown, flow: unknown, locale?: unknown): LuxorConsentFormProfile | null {
   const spanish = locale === 'es' || locale === 'Spanish'
+  if (source === 'website_packages' && flow === 'packages_event_inquiry') {
+    return {
+      source: 'website_inquiry_form',
+      flow: 'packages_event_inquiry',
+      smsDisclosureVersion: LUXOR_SMS_CONSENT_DISCLOSURE_VERSION,
+      customerCareSmsDisclosure: LUXOR_INQUIRY_SMS_DISCLOSURE,
+      marketingSmsDisclosure: LUXOR_MARKETING_SMS_DISCLOSURE,
+      marketingEmailDisclosureVersion: LUXOR_MARKETING_EMAIL_DISCLOSURE_VERSION,
+      marketingEmailDisclosure: LUXOR_MARKETING_EMAIL_DISCLOSURE,
+      customerCareScopes: ['customer_care', 'tour', 'event'],
+    }
+  }
+
   if (source === 'homepage_brochure' && flow === 'brochure_lead') {
     return {
       source: 'website_inquiry_form',

@@ -6,6 +6,7 @@ import { ArrowRight, CalendarCheck2, ShieldCheck, SlidersHorizontal, Sparkles } 
 import { Reveal } from '@/components/Reveal'
 import { StaggerCard, StaggerCards } from '@/components/StaggerCards'
 import { PackageFlipCard } from '@/components/packages/PackageFlipCard'
+import { PackagesConfigurator } from '@/components/packages/PackagesConfigurator'
 import type { PublicPackageCardData } from '@/lib/luxorPublicPackages'
 type PackagesPageContentProps = {
   locale?: 'en' | 'es'
@@ -21,17 +22,16 @@ const content = {
     exploreCopy: 'Essentials, Signature, and Luxor — designed to fit your vision, style, and event needs.',
     configEyebrow: 'Get an instant quote',
     configTitle: 'Build Your Luxor Experience',
-    configCopy: 'Soon you will be able to choose your date, guest count, rental period, package level, and enhancements and see pricing update in real time.',
-    configTeaser: 'The interactive calculator is coming to this page next. Until then, schedule a visit to walk through your date, guest count, and package with our team.',
+    configCopy: 'Select your event details below to see your exact price in real time.',
     benefits: [
       ['Real pricing', 'See your exact cost instantly.', CalendarCheck2],
       ['Flexible options', 'Customize to fit your vision.', SlidersHorizontal],
       ['Full transparency', 'All required fees included.', ShieldCheck],
       ['Personalized support', 'Our team is here to help.', Sparkles],
     ] as const,
-    visitEyebrow: 'Next step',
-    visitTitle: 'Walk through Luxor with your package in mind.',
-    visitCopy: 'A visit is where you check guest count, decor level, flow, and the exact feeling you want guests to have.',
+    visitEyebrow: 'Ready to see it in person?',
+    visitTitle: 'Schedule a Visit',
+    visitCopy: 'Tour the space, ask questions, and picture your celebration at Luxor.',
     visitCta: 'Schedule a Visit',
     visitHref: '/visit',
   },
@@ -43,17 +43,16 @@ const content = {
     exploreCopy: 'Esenciales, Signature y Luxor — diseñados para tu visión, tu estilo y las necesidades de tu evento.',
     configEyebrow: 'Cotización al instante',
     configTitle: 'Arma tu experiencia Luxor',
-    configCopy: 'Pronto podrás elegir fecha, invitados, periodo de renta, nivel de paquete y mejoras y ver el precio actualizarse en tiempo real.',
-    configTeaser: 'La calculadora interactiva llegará a esta página. Mientras tanto, agenda una visita para conversar fecha, invitados y paquete con nuestro equipo.',
+    configCopy: 'Selecciona los detalles de tu evento abajo para ver tu precio exacto en tiempo real.',
     benefits: [
       ['Precios reales', 'Mira el costo exacto al instante.', CalendarCheck2],
       ['Opciones flexibles', 'Personaliza según tu visión.', SlidersHorizontal],
       ['Transparencia total', 'Todos los cargos requeridos incluidos.', ShieldCheck],
       ['Apoyo personalizado', 'Nuestro equipo está para ayudarte.', Sparkles],
     ] as const,
-    visitEyebrow: 'Siguiente paso',
-    visitTitle: 'Conoce Luxor pensando en tu paquete.',
-    visitCopy: 'En la visita revisas invitados, nivel de decoración, flujo del evento y la sensación que quieres para tus invitados.',
+    visitEyebrow: '¿Listo para conocerlo en persona?',
+    visitTitle: 'Agenda una visita',
+    visitCopy: 'Recorre el espacio, haz preguntas e imagina tu celebración en Luxor.',
     visitCta: 'Agendar una visita',
     visitHref: '/es/visit',
   },
@@ -135,17 +134,7 @@ export function PackagesPageContent({ locale = 'en', cards }: PackagesPageConten
             <p className="mt-5 max-w-2xl text-base leading-7 text-[#d7c29a]/72">{t.configCopy}</p>
           </Reveal>
           <Reveal className="mt-10">
-            <div className="rounded-md border border-[#caa24c]/20 bg-black/24 p-6 sm:p-8 lg:p-10">
-              <p className="max-w-3xl text-sm leading-7 text-[#d7c29a]/68">{t.configTeaser}</p>
-              <Link
-                href={t.visitHref}
-                data-conversion="visit_cta_click"
-                data-conversion-label="Packages configurator teaser"
-                className="mt-6 inline-flex min-h-11 items-center justify-center gap-2 rounded-md border border-[#caa24c]/32 bg-black/35 px-5 py-3 text-xs font-semibold uppercase tracking-[0.14em] text-[#f7efe3] transition hover:border-[#caa24c]/55"
-              >
-                {t.visitCta} <ArrowRight className="h-4 w-4" />
-              </Link>
-            </div>
+            <PackagesConfigurator locale={locale} />
           </Reveal>
         </div>
       </section>
@@ -169,29 +158,26 @@ export function PackagesPageContent({ locale = 'en', cards }: PackagesPageConten
         </div>
       </section>
 
-      <section className="bg-[#050505] py-16 sm:py-24">
-        <div className="mx-auto max-w-7xl px-5 sm:px-6 lg:px-8">
-          <Reveal>
-            <div className="luxor-panel grid gap-8 rounded-2xl !border-[#9b6f24]/20 !bg-[#fffdfa] p-6 shadow-[0_28px_78px_-56px_rgba(48,33,14,0.24)] sm:p-8 lg:grid-cols-[1fr_auto] lg:items-center lg:p-10">
-              <div className="max-w-3xl">
-                <p className="font-mono text-[11px] font-bold uppercase tracking-[0.2em] text-[#caa24c] sm:text-xs">
-                  Luxor at Las Palmas Events
-                </p>
-                <h2 className="mt-4 font-serif text-4xl leading-[0.95] !text-[#241d17] sm:text-5xl">{t.visitTitle}</h2>
-                <p className="mt-5 text-base leading-7 !text-[#665a4e]">{t.visitCopy}</p>
-              </div>
-              <Link
-                href={t.visitHref}
-                data-conversion="visit_cta_click"
-                data-conversion-label="Packages footer"
-                className="luxor-gold-raised inline-flex items-center justify-center gap-2 rounded-md px-5 py-3 text-sm uppercase tracking-[0.14em]"
-              >
-                {t.visitCta} <ArrowRight className="h-4 w-4" />
-              </Link>
-            </div>
+      <section className="relative isolate overflow-hidden bg-[#050505] py-16 sm:py-24">
+        <div className="pointer-events-none absolute inset-0 bg-[url('/images/dining-hall/main-hall-wedding-wide.png')] bg-cover bg-center opacity-20" aria-hidden />
+        <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-[#050505]/70 via-[#050505]/55 to-[#050505]" aria-hidden />
+        <div className="relative mx-auto max-w-7xl px-5 sm:px-6 lg:px-8">
+          <Reveal className="max-w-3xl text-center lg:text-left">
+            <p className="font-mono text-xs font-bold uppercase tracking-[0.28em] text-[#f1d27a]">{t.visitEyebrow}</p>
+            <h2 className="mt-4 font-serif text-4xl leading-[0.95] text-[#f7efe3] sm:text-5xl">{t.visitTitle}</h2>
+            <p className="mt-5 text-base leading-7 text-[#d7c29a]/72">{t.visitCopy}</p>
+            <Link
+              href={t.visitHref}
+              data-conversion="visit_cta_click"
+              data-conversion-label="Packages schedule visit"
+              className="luxor-gold-raised mt-8 inline-flex min-h-12 items-center justify-center gap-2 rounded-md px-6 py-3 text-sm uppercase tracking-[0.14em]"
+            >
+              {t.visitCta} <ArrowRight className="h-4 w-4" />
+            </Link>
           </Reveal>
         </div>
       </section>
+
     </main>
   )
 }
