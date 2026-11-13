@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { CalendarDays, Clock, Tag, Users } from '@/lib/icons/phosphor-compat'
+import { isGuestCountOverCapacity, LUXOR_GUEST_CAPACITY_MESSAGE, LUXOR_GUEST_CAPACITY_MESSAGE_ES, LUXOR_MAX_GUESTS } from '@/lib/luxorInquiryTypes'
 import { PortalSelect } from '@/components/portal/PortalUI'
 import { LuxorEventTypeCombobox } from '@/components/LuxorEventTypeCombobox'
 import { PublicEventDatePicker } from '@/components/PublicEventDatePicker'
@@ -27,7 +28,7 @@ type QuoteResponse = {
 }
 
 type OptionsResponse = {
-  guestCounts?: number[]
+  guestCount?: { min: number; max: number }
   rentalPeriods?: Array<{ value: string; label: string }>
   packageTiers?: LuxorPublicPackageTierId[]
   error?: string
@@ -49,7 +50,7 @@ export function PackagesConfigurator({ locale = 'en', defaultPackageTier = 'sign
   const [rentalPeriod, setRentalPeriod] = useState('evening')
   const [packageTierId, setPackageTierId] = useState<LuxorPublicPackageTierId>(defaultPackageTier)
   const [enhancementQuantities, setEnhancementQuantities] = useState<Record<string, number>>({})
-  const [guestOptions, setGuestOptions] = useState<number[]>([50, 75, 100, 125, 150, 175])
+  const [guestBounds, setGuestBounds] = useState({ min: 1, max: LUXOR_MAX_GUESTS })
   const [rentalOptions, setRentalOptions] = useState<Array<{ value: string; label: string }>>([])
   const [summaryLines, setSummaryLines] = useState<PublicPackagesSummaryLine[]>([])
   const [total, setTotal] = useState<number | null>(null)
@@ -62,7 +63,6 @@ export function PackagesConfigurator({ locale = 'en', defaultPackageTier = 'sign
 
   const labels = useMemo(() => ({
     en: {
-      subtitle: 'Select your event details below to see your exact price in real time.',
       eventDate: 'Event date',
       eventType: 'Event type',
       guestCount: 'Guest count',
@@ -70,10 +70,10 @@ export function PackagesConfigurator({ locale = 'en', defaultPackageTier = 'sign
       packageLevel: 'Package level',
       enhancements: 'Add enhancements (optional)',
       chooseDate: 'Choose a date',
-      chooseGuests: 'Select guests',
+      guestPlaceholder: 'For example, 120',
+      guestInvalid: 'Enter a whole guest count between 1 and 180.',
     },
     es: {
-      subtitle: 'Selecciona los detalles de tu evento abajo para ver tu precio exacto en tiempo real.',
       eventDate: 'Fecha del evento',
       eventType: 'Tipo de evento',
       guestCount: 'Invitados',
@@ -81,9 +81,17 @@ export function PackagesConfigurator({ locale = 'en', defaultPackageTier = 'sign
       packageLevel: 'Nivel de paquete',
       enhancements: 'Agrega mejoras (opcional)',
       chooseDate: 'Elige una fecha',
-      chooseGuests: 'Selecciona invitados',
+      guestPlaceholder: 'Por ejemplo, 120',
+      guestInvalid: 'Ingresa un número de invitados entre 1 y 180.',
     },
   }[locale]), [locale])
+
+  const guestInvalid = guestCount !== '' && (
+    !Number.isInteger(Number(guestCount))
+    || Number(guestCount) < guestBounds.min
+    || Number(guestCount) > guestBounds.max
+    || isGuestCountOverCapacity(guestCount)
+  )
 
   useEffect(() => {
     let active = true
@@ -91,17 +99,17 @@ export function PackagesConfigurator({ locale = 'en', defaultPackageTier = 'sign
       .then(async (response) => response.json() as Promise<OptionsResponse>)
       .then((data) => {
         if (!active) return
-        if (data.guestCounts?.length) setGuestOptions(data.guestCounts)
+        if (data.guestCount) setGuestBounds(data.guestCount)
         if (data.rentalPeriods?.length) setRentalOptions(data.rentalPeriods)
-        if (!guestCount && data.guestCounts?.includes(100)) setGuestCount('100')
+        if (!guestCount) setGuestCount('100')
         setOptionsLoading(false)
       })
       .catch(() => { if (active) setOptionsLoading(false) })
     return () => { active = false }
-  }, [guestCount, locale])
+  }, [locale])
 
   const recalculate = useCallback(async () => {
-    if (!eventDate || !guestCount || !rentalPeriod || !packageTierId) {
+    if (!eventDate || !guestCount || guestInvalid || !rentalPeriod || !packageTierId) {
       setSummaryLines([])
       setTotal(null)
       setError(null)
@@ -142,7 +150,7 @@ export function PackagesConfigurator({ locale = 'en', defaultPackageTier = 'sign
     } finally {
       if (current === requestId.current) setLoading(false)
     }
-  }, [enhancementQuantities, eventDate, eventType, guestCount, locale, packageTierId, rentalPeriod])
+  }, [enhancementQuantities, eventDate, eventType, guestCount, guestInvalid, locale, packageTierId, rentalPeriod])
 
   useEffect(() => {
     const timer = window.setTimeout(() => { void recalculate() }, 220)
@@ -150,7 +158,7 @@ export function PackagesConfigurator({ locale = 'en', defaultPackageTier = 'sign
   }, [recalculate])
 
   async function handleInquire() {
-    if (!eventDate || !guestCount || !total) return
+    if (!eventDate || !guestCount || guestInvalid || !total) return
     setInquireBusy(true)
     setError(null)
     try {
@@ -183,8 +191,7 @@ export function PackagesConfigurator({ locale = 'en', defaultPackageTier = 'sign
 
   return (
     <>
-      <p className="mt-5 max-w-2xl text-base leading-7 text-[#d7c29a]/72">{labels.subtitle}</p>
-      <div className="mt-10 grid gap-8 lg:grid-cols-[minmax(0,1.15fr)_minmax(280px,0.85fr)] lg:items-start">
+      <div className="grid gap-8 lg:grid-cols-[minmax(0,1.15fr)_minmax(280px,0.85fr)] lg:items-start">
         <div className="rounded-md border border-[#caa24c]/20 bg-black/24 p-5 sm:p-6 lg:p-8">
           <div className="grid gap-4 sm:grid-cols-2">
             <label className="block sm:col-span-1">
@@ -211,14 +218,25 @@ export function PackagesConfigurator({ locale = 'en', defaultPackageTier = 'sign
               <span className="mb-2 flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.16em] text-[#d7c29a]/78">
                 <Users className="h-4 w-4 text-[#caa24c]" aria-hidden /> {labels.guestCount}
               </span>
-              <PortalSelect
+              <input
+                type="number"
+                inputMode="numeric"
+                min={guestBounds.min}
+                max={guestBounds.max}
+                step={1}
                 value={guestCount}
-                onChange={setGuestCount}
-                placeholder={labels.chooseGuests}
-                options={guestOptions.map((count) => ({ value: String(count), label: `${count} ${locale === 'es' ? 'invitados' : 'guests'}` }))}
+                onChange={(event) => setGuestCount(event.target.value)}
                 disabled={optionsLoading}
-                className={`w-full ${PUBLIC_SELECT_CLASS}`}
+                placeholder={labels.guestPlaceholder}
+                className="min-h-12 w-full rounded-md border border-[#caa24c]/24 bg-black/35 px-4 text-sm text-[#f7efe3] outline-none placeholder:text-[#d7c29a]/45 focus:border-[#caa24c]"
               />
+              {guestInvalid ? (
+                <p role="alert" className="mt-2 text-xs leading-5 text-[#f1d27a]">
+                  {isGuestCountOverCapacity(guestCount)
+                    ? (locale === 'es' ? LUXOR_GUEST_CAPACITY_MESSAGE_ES : LUXOR_GUEST_CAPACITY_MESSAGE)
+                    : labels.guestInvalid}
+                </p>
+              ) : null}
             </label>
             <label className="block sm:col-span-1">
               <span className="mb-2 flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.16em] text-[#d7c29a]/78">
@@ -294,16 +312,17 @@ export function PackagesConfigurator({ locale = 'en', defaultPackageTier = 'sign
 
         <PackagesConfiguratorSummary
           locale={locale}
+          variant="dark"
           lines={summaryLines}
           total={total}
           loading={loading}
           error={error}
           onInquire={handleInquire}
-          inquireDisabled={inquireBusy || !isLuxorDateSelectable(eventDate, formatLocalDateKey(new Date()))}
+          inquireDisabled={inquireBusy || guestInvalid || !isLuxorDateSelectable(eventDate, formatLocalDateKey(new Date()))}
         />
       </div>
 
-      <div className="pointer-events-none fixed inset-x-0 bottom-0 z-40 border-t border-[#caa24c]/20 bg-[#0a0807]/95 p-3 backdrop-blur md:hidden">
+      <div className="pointer-events-none fixed inset-x-0 bottom-[calc(4.25rem+env(safe-area-inset-bottom,0px))] z-[125] border-t border-[#caa24c]/20 bg-[#080706]/95 p-3 backdrop-blur md:hidden">
         <div className="pointer-events-auto mx-auto flex max-w-lg items-center justify-between gap-3">
           <div>
             <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[#d7c29a]/70">

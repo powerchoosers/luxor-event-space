@@ -87,8 +87,6 @@ export type PublicPackagesEnhancementOption = {
   includedWithPackage: boolean
 }
 
-const DEFAULT_GUEST_OPTIONS = [50, 75, 100, 125, 150, 175, 180] as const
-
 const RENTAL_PERIOD_OPTIONS: PublicPackagesRentalPeriod[] = ['morning', 'evening', 'full_day']
 
 function record(value: unknown): Record<string, unknown> | null {
@@ -118,25 +116,13 @@ export function defaultPublicPackagesPaymentPlan(config: LuxorProposalPricingCon
   }
 }
 
-export function listPublicPackageGuestCountOptions(config: LuxorProposalPricingConfig) {
+export function getPublicPackageGuestCountBounds(config: LuxorProposalPricingConfig) {
   const luxor = record(config.luxor_costs) || config
-  const min = Math.max(1, Math.floor(readNumber(luxor, 'guest_count', 'minimum') ?? 1))
-  const max = Math.min(LUXOR_MAX_GUESTS, Math.floor(readNumber(luxor, 'guest_count', 'maximum') ?? LUXOR_MAX_GUESTS))
-  const tierMids = new Set<number>()
-  const cleaning = record(record(luxor)?.required_fees)?.cleaning
-  const retailTiers = Array.isArray(record(cleaning)?.retail) ? record(cleaning)?.retail as unknown[] : []
-  for (const tier of retailTiers) {
-    const row = record(tier)
-    const minGuests = Math.floor(Number(row?.min_guests))
-    const maxGuests = Math.floor(Number(row?.max_guests))
-    if (Number.isInteger(minGuests) && Number.isInteger(maxGuests)) {
-      tierMids.add(Math.min(max, Math.max(min, Math.round((minGuests + maxGuests) / 2))))
-    }
-  }
-  const merged = [...new Set([...DEFAULT_GUEST_OPTIONS, ...tierMids])]
-    .filter((value) => value >= min && value <= max)
-    .sort((left, right) => left - right)
-  return merged.length ? merged : [min, max].filter((value, index, array) => array.indexOf(value) === index)
+  const configuredMin = Math.floor(readNumber(luxor, 'guest_count', 'minimum') ?? 1)
+  const configuredMax = Math.floor(readNumber(luxor, 'guest_count', 'maximum') ?? LUXOR_MAX_GUESTS)
+  const min = Math.max(1, configuredMin)
+  const max = Math.min(LUXOR_MAX_GUESTS, Math.max(min, configuredMax))
+  return { min, max }
 }
 
 function buildPublicPackagesPaymentSchedulePreview(
@@ -301,6 +287,7 @@ function summaryLinesFromPackage(
     if (item.isChecklistItem) return false
     if (item.pricingRole === 'included' && item.total === 0) return false
     if (item.pricingRole === 'discount' || item.pricingRole === 'tax_coverage') return false
+    return true
   })
   const lines: PublicPackagesSummaryLine[] = chargeable.map((item) => ({
     id: String(item.id || item.description),
@@ -373,6 +360,18 @@ export function calculatePublicPackagesQuote(
   const summaryLines = packageCalculation
     ? [
         ...summaryLinesFromPackage(packageCalculation, calculation, input),
+        ...(paymentSchedulePreview.finalEventBalance !== null && paymentSchedulePreview.finalEventBalance !== undefined
+          ? [{
+            id: 'remaining-balance',
+            label: 'Remaining balance',
+            amount: paymentSchedulePreview.finalEventBalance,
+            obligation: 'mandatory' as const,
+            category: 'balance' as const,
+            detail: paymentSchedulePreview.finalPaymentDueDate
+              ? `Final payment due ${paymentSchedulePreview.finalPaymentDueDate}`
+              : undefined,
+          }]
+          : []),
         ...paymentSchedulePreview.rows.map((row) => ({
           id: row.id,
           label: row.label || row.description,

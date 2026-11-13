@@ -7,7 +7,7 @@ import { LUXOR_PUBLIC_PACKAGE_TIER_IDS } from '@/lib/luxorProposalPackages'
 import {
   calculatePublicPackagesQuote,
   listPublicPackageEnhancementOptions,
-  listPublicPackageGuestCountOptions,
+  getPublicPackageGuestCountBounds,
   listPublicPackageRentalPeriodOptions,
   type PublicPackagesConfiguratorInput,
   type PublicPackagesRentalPeriod,
@@ -29,7 +29,7 @@ export async function GET(request: NextRequest) {
     if (configError) return NextResponse.json({ error: configError }, { status: 503 })
     return NextResponse.json({
       pricingConfigVersion: pricing.version,
-      guestCounts: listPublicPackageGuestCountOptions(pricing.config),
+      guestCount: getPublicPackageGuestCountBounds(pricing.config),
       rentalPeriods: listPublicPackageRentalPeriodOptions(locale),
       packageTiers: LUXOR_PUBLIC_PACKAGE_TIER_IDS,
       policyVersion: 4,

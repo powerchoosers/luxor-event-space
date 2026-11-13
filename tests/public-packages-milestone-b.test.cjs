@@ -36,8 +36,20 @@ function loadTypeScript(filePath, stubs = {}) {
     if (resolved !== request && fs.existsSync(resolved + '.ts')) {
       return loadTypeScript(path.relative(root, resolved + '.ts'), stubs)
     }
-  if (resolved !== request && fs.existsSync(resolved + '.tsx')) {
+    if (resolved !== request && fs.existsSync(resolved + '.tsx')) {
       return loadTypeScript(path.relative(root, resolved + '.tsx'), stubs)
+    }
+    if (request.startsWith('.')) {
+      const parentDir = parent?.filename ? path.dirname(parent.filename) : path.join(root, 'src')
+      for (const candidate of [
+        path.resolve(parentDir, request),
+        path.resolve(parentDir, `${request}.ts`),
+        path.resolve(parentDir, `${request}.tsx`),
+      ]) {
+        if (fs.existsSync(candidate) && (candidate.endsWith('.ts') || candidate.endsWith('.tsx'))) {
+          return loadTypeScript(path.relative(root, candidate), stubs)
+        }
+      }
     }
     try {
       return originalLoad.call(this, request, parent, isMain)
@@ -158,12 +170,58 @@ test('findRecentDuplicateLuxorInquiry prefers metadata idempotency key', async (
   assert.match(calls[0], /idempotencyKey/)
 })
 
+const packagesConfigurator = loadTypeScript('src/lib/luxorPublicPackagesConfigurator.ts', { 'server-only': {} })
+
+function weekendTestConfig() {
+  const pricing = loadTypeScript('src/lib/luxorProposalPricing.ts')
+  const decor = loadTypeScript('src/lib/luxorDecorCatalogV2.ts')
+  const packages = loadTypeScript('src/lib/luxorProposalPackages.ts')
+  return {
+    ...pricing.LUXOR_DEFAULT_PROPOSAL_PRICING_CONFIG,
+    pricing_mode: 'venue_plus_preferred_vendor_estimates',
+    luxor_costs: {
+      ...pricing.LUXOR_DEFAULT_PROPOSAL_PRICING_CONFIG,
+      proposal_pricing_policy_version: 4,
+      package_selection_v1: packages.DEFAULT_LUXOR_PROPOSAL_PACKAGE_SETTINGS,
+      [decor.LUXOR_DECOR_CATALOG_KEY]: {
+        schema_version: decor.LUXOR_DECOR_CATALOG_SCHEMA_VERSION,
+        items: [],
+      },
+    },
+  }
+}
+
+test('summaryLinesFromPackage returns itemized charge lines', () => {
+  const quote = packagesConfigurator.calculatePublicPackagesQuote({
+    eventDate: '2026-10-24',
+    eventType: 'Birthday Party',
+    guestCount: 100,
+    rentalPeriod: 'evening',
+    packageTierId: 'signature',
+    decorAddOnQuantities: {},
+  }, weekendTestConfig(), 1)
+  assert.ok(quote.summaryLines.some((line) => line.category === 'package' || line.category === 'venue'), quote.summaryLines.map((line) => line.category).join(','))
+  assert.ok(quote.summaryLines.some((line) => line.category === 'total'))
+  assert.equal(quote.summaryLines.filter((line) => line.category === 'reserve').length, 1)
+})
+
+test('getPublicPackageGuestCountBounds returns min and max without synthetic guest picklists', () => {
+  const bounds = packagesConfigurator.getPublicPackageGuestCountBounds({
+    guest_count: { minimum: 1, maximum: 250 },
+    luxor_costs: { guest_count: { minimum: 1, maximum: 250 } },
+  })
+  assert.equal(bounds.min, 1)
+  assert.equal(bounds.max, 180)
+  assert.equal(typeof packagesConfigurator.listPublicPackageGuestCountOptions, 'undefined')
+})
+
 test('readPackagesInquiryContinuationId accepts valid metadata only', () => {
   const { readPackagesInquiryContinuationId } = loadTypeScript('src/lib/luxorPackagesInquiryTourServer.ts', {
     'server-only': {},
     '@/lib/luxorTourPlanningServer': {},
     '@/lib/luxorEmailJobsServer': {},
     '@/lib/luxorTourSlotsServer': {},
+    '@/lib/luxorTourSlots': {},
     '@/lib/luxorInquiriesServer': {},
     '@/lib/luxorTourScheduleServer': {},
     '@/lib/luxorPhoneNumbersServer': {},

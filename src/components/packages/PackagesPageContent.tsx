@@ -127,10 +127,10 @@ export function PackagesPageContent({ locale = 'en', cards }: PackagesPageConten
         </div>
       </section>
 
-      <section id="build-your-experience" className="scroll-mt-28 border-y border-[#caa24c]/16 bg-[#0a0807] py-16 sm:py-24 lg:py-28">
-        <div className="mx-auto max-w-7xl px-5 sm:px-6 lg:px-8">
+      <section id="build-your-experience" className="scroll-mt-28 border-y border-[#caa24c]/16 bg-[#080706] py-16 text-[#f7efe3] sm:py-24 lg:py-28">
+        <div className="mx-auto max-w-7xl px-5 pb-[calc(11.5rem+env(safe-area-inset-bottom,0px))] sm:px-6 sm:pb-24 lg:px-8 lg:pb-28">
           <Reveal className="max-w-3xl">
-            <h2 className="font-serif text-4xl leading-[0.95] sm:text-5xl lg:text-6xl">{t.configTitle}</h2>
+            <h2 className="font-serif text-4xl leading-[0.95] text-[#f7efe3] sm:text-5xl lg:text-6xl">{t.configTitle}</h2>
             <p className="mt-5 max-w-2xl text-base leading-7 text-[#d7c29a]/72">{t.configCopy}</p>
           </Reveal>
           <Reveal className="mt-10">
