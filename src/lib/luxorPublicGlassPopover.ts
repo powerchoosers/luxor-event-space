@@ -19,3 +19,7 @@ export const LUXOR_PUBLIC_GLASS_OPTION_BASE =
 
 export const LUXOR_PUBLIC_GLASS_OPTION_SELECTED =
   'border-[#b98a3d]/30 bg-[#f5ead8] font-semibold text-[#6f4d1f]'
+
+/** Portal listbox menus — same frosted recipe as Elena slash commands (read via shared CSS classes). */
+export const PORTAL_FROSTED_POPOVER_MENU =
+  'elena-slash-command-popover portal-popover-surface portal-scrollbar w-full max-h-[380px] overflow-y-auto overscroll-contain rounded-xl border border-[color:var(--portal-border)] p-1.5 shadow-[0_18px_40px_-24px_rgba(0,0,0,0.55)] ring-1 ring-black/5'
