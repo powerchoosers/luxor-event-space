@@ -52,6 +52,7 @@
     "lucide-react": "^0.562.0",
     "mailauth": "5.0.2",
     "motion": "^14.6.0",
+    "mpg123-decoder": "^1.0.3",
     "next": "16.1.4",
     "nodemailer": "^7.0.6",
     "pdf-lib": "^1.17.1",

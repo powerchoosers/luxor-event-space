@@ -355,6 +355,14 @@ function isTranscriptManuallyCorrected(call: LuxorCall) {
   return call.metadata?.transcript_manually_corrected === true
 }
 
+function isTranscriptPostCallSnapshot(call: LuxorCall) {
+  return call.metadata?.transcript_source === 'post_call'
+}
+
+function usesFrozenTranscriptSnapshot(call: LuxorCall) {
+  return isTranscriptManuallyCorrected(call) || isTranscriptPostCallSnapshot(call)
+}
+
 function transcriptSegmentsFromCallSnapshot(call: LuxorCall): TranscriptRow[] {
   return (call.transcript_segments ?? []).map((segment, index) => ({
     id: segment.id,
@@ -372,7 +380,7 @@ function transcriptSegmentsFromCallSnapshot(call: LuxorCall): TranscriptRow[] {
 }
 
 async function syncLuxorCallTranscriptSnapshot(call: LuxorCall, sequenceId?: number) {
-  if (isTranscriptManuallyCorrected(call)) return call
+  if (usesFrozenTranscriptSnapshot(call)) return call
   const rows = await getTranscriptRows(`call_id=eq.${encodeURIComponent(call.id)}`)
   const ordered = transcriptRowsInAudioOrder(rows, call.recording_started_at)
   const maxSequence = Math.max(
@@ -588,7 +596,7 @@ export async function listLuxorCalls(options: {
     rowsByCall.set(row.call_id, callRows)
   }
   return enriched.map((call) => {
-    if (isTranscriptManuallyCorrected(call)) return call
+    if (usesFrozenTranscriptSnapshot(call)) return call
     return {
       ...call,
       transcript_segments: transcriptRowsInAudioOrder(rowsByCall.get(call.id) ?? [], call.recording_started_at)
@@ -609,7 +617,7 @@ export async function listLuxorCalls(options: {
 
 export async function getLuxorTranscriptSegments(callId: string) {
   const call = await getLuxorCallById(callId)
-  if (call && isTranscriptManuallyCorrected(call)) {
+  if (call && usesFrozenTranscriptSnapshot(call)) {
     return transcriptRowsInAudioOrder(transcriptSegmentsFromCallSnapshot(call), call.recording_started_at)
   }
   const rows = await getTranscriptRows(`call_id=eq.${encodeURIComponent(callId)}`)
