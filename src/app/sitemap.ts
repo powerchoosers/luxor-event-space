@@ -5,6 +5,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
   const routes = [
     '',
     '/events',
+    '/events/weddings-romance',
     '/events/weddings',
     '/events/quinceaneras',
     '/events/baby-showers',
@@ -15,6 +16,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
     '/privacy',
     '/terms',
     '/es',
+    '/es/events/weddings-romance',
     '/es/visit',
     '/es/contact',
   ]
