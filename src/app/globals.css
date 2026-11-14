@@ -2243,6 +2243,48 @@ body[data-portal-theme='light'] .portal-search-dropdown {
   transition: opacity 0.32s cubic-bezier(0.23, 1, 0.32, 1), transform 0.32s cubic-bezier(0.23, 1, 0.32, 1);
 }
 
+/* Reserve space for the public Ask Elena launcher — height, offset, and safe area. */
+body[data-luxor-site] {
+  --luxor-launcher-inset-bottom: 5rem;
+  --luxor-launcher-inset-end: 1rem;
+  --luxor-launcher-chip-height: 3.5rem;
+  --luxor-launcher-chip-width: 0rem;
+}
+
+@media (min-width: 640px) {
+  body[data-luxor-site] {
+    --luxor-launcher-inset-bottom: 1.5rem;
+    --luxor-launcher-inset-end: 1.5rem;
+    --luxor-launcher-chip-height: 4.5rem;
+    --luxor-launcher-chip-width: 13rem;
+  }
+}
+
+body[data-luxor-site] .luxor-launcher-clearance-last {
+  padding-bottom: calc(
+    var(--luxor-launcher-inset-bottom) + var(--luxor-launcher-chip-height) + 1.5rem +
+      env(safe-area-inset-bottom, 0px)
+  );
+}
+
+body[data-luxor-site] .luxor-launcher-clearance-scroll {
+  padding-bottom: calc(
+    var(--luxor-launcher-inset-bottom) + var(--luxor-launcher-chip-height) + 1rem +
+      env(safe-area-inset-bottom, 0px)
+  );
+}
+
+body[data-luxor-site] .luxor-launcher-clearance-inset {
+  padding-right: calc(var(--luxor-launcher-chip-width) + var(--luxor-launcher-inset-end) + 0.5rem);
+  padding-left: max(0px, env(safe-area-inset-left, 0px));
+}
+
+@media (max-width: 639px) {
+  body[data-luxor-site] .luxor-launcher-clearance-inset {
+    padding-right: calc(3.75rem + var(--luxor-launcher-inset-end));
+  }
+}
+
 @media (max-width: 639px) {
   body[data-luxor-site][data-packages-mobile-sticky='true'] {
     padding-bottom: calc(4rem + 4.25rem);
@@ -2300,14 +2342,13 @@ body[data-luxor-site] .luxor-concierge-launcher {
 
 /* Events routes: keep the tablet-width launcher icon-only so it does not cover collection cards. */
 @media (min-width: 640px) and (max-width: 1023px) {
-  body[data-luxor-site] .site-floating-action[data-events-landing='true'] {
-    bottom: 2rem !important;
-    right: 1.25rem !important;
+  body[data-luxor-site]:has([data-events-floating-guard='true']) {
+    --luxor-launcher-chip-width: 0rem;
+    --luxor-launcher-chip-height: 3.75rem;
   }
 
-  body[data-luxor-site] .events-collections-grid {
-    padding-right: 4.75rem;
-    padding-bottom: 1.5rem;
+  body[data-luxor-site]:has([data-events-floating-guard='true']) .luxor-launcher-clearance-inset {
+    padding-right: calc(3.75rem + var(--luxor-launcher-inset-end) + 0.5rem);
   }
 
   body[data-luxor-site] .site-floating-action[data-events-floating-guard='true'] .luxor-concierge-launcher {

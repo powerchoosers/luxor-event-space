@@ -79,7 +79,7 @@ export default function EventsPage() {
         </div>
       </section>
 
-      <section className="relative py-20 pb-28 sm:py-24 sm:pb-32 lg:py-28 lg:pb-28">
+      <section className="luxor-launcher-clearance-last luxor-launcher-clearance-scroll relative py-20 sm:py-24 lg:py-28">
         <div
           aria-hidden
           className="pointer-events-none absolute inset-0 opacity-40"
@@ -88,7 +88,7 @@ export default function EventsPage() {
               'radial-gradient(circle at 0% 0%, rgba(202,162,76,0.12), transparent 28%), radial-gradient(circle at 100% 100%, rgba(202,162,76,0.1), transparent 24%)',
           }}
         />
-        <div className="relative mx-auto max-w-7xl px-5 sm:px-6 lg:px-8">
+        <div className="luxor-launcher-clearance-inset relative mx-auto max-w-7xl px-5 sm:px-6 lg:px-8">
           <div className="max-w-2xl">
             <p className="font-mono text-[10px] font-bold uppercase tracking-[0.34em] text-[#8d672b]">
               {spanish ? 'Encuentra tu celebración' : 'Find your celebration'}
@@ -103,7 +103,7 @@ export default function EventsPage() {
             </p>
           </div>
 
-          <div className="events-collections-grid mt-12 grid gap-10 lg:mt-16 lg:gap-12">
+          <div className="mt-12 grid gap-10 lg:mt-16 lg:gap-12">
             {LUXOR_EVENT_COLLECTIONS.map((collection, index) => (
               <EventsCollectionCard
                 key={collection.href}

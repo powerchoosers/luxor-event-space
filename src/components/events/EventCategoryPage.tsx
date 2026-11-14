@@ -173,8 +173,8 @@ export function EventCategoryPage({
         </motion.div>
       </section>
 
-      <section className="pb-16 sm:pb-20 lg:pb-24">
-        <div className="mx-auto max-w-7xl px-5 sm:px-6 lg:px-8">
+      <section className="luxor-launcher-clearance-scroll pb-16 sm:pb-20 lg:pb-24">
+        <div className="luxor-launcher-clearance-inset mx-auto max-w-7xl px-5 sm:px-6 lg:px-8">
           <ul className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-3 lg:gap-5">
             {gallery.map((item, index) => {
               const isLastOdd = galleryOdd && index === gallery.length - 1
@@ -235,7 +235,7 @@ export function EventCategoryPage({
         </section>
       ) : null}
 
-      <section className="relative isolate min-h-[22rem] overflow-hidden sm:min-h-[26rem]">
+      <section className="luxor-launcher-clearance-last relative isolate min-h-[22rem] overflow-hidden sm:min-h-[26rem]">
         <Image src={closingImage} alt={closingImageAlt} fill sizes="100vw" className="object-cover object-center" />
         <div className="pointer-events-none absolute inset-0" style={CLOSING_SCRIM} aria-hidden />
 
