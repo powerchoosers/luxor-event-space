@@ -151,7 +151,9 @@ function getVisitorGreeting() {
 }
 
 export function LuxorConciergeChat() {
-  const spanish = usePathname().startsWith('/es')
+  const pathname = usePathname()
+  const spanish = pathname.startsWith('/es')
+  const packagesPage = /^\/(?:es\/)?packages(?:\/|$)/.test(pathname)
   const [open, setOpen] = useState(false)
   const [input, setInput] = useState('')
   const [pending, setPending] = useState(false)
@@ -596,7 +598,9 @@ export function LuxorConciergeChat() {
   }
 
   return (
-    <div className="site-floating-action fixed bottom-20 right-4 z-[130] sm:bottom-6 sm:right-6">
+    <div
+      className={`site-floating-action fixed bottom-20 right-4 z-[130] sm:right-6 ${packagesPage ? 'md:bottom-[8.75rem]' : 'sm:bottom-6'}`}
+    >
       <AnimatePresence initial={false}>
         {open ? (
           <motion.section
