@@ -204,11 +204,13 @@ export function PackagesConfigurator({ locale = 'en', defaultPackageTier = 'sign
                 onChange={setEventDate}
                 placeholder={labels.chooseDate}
                 className={PUBLIC_DATE_CLASS}
+                popoverSurface="public-glass"
               />
             </label>
             <LuxorEventTypeCombobox
               label={labels.eventType}
-              variant="public-dark"
+              variant="public-light"
+              popoverSurface="public-glass"
               value={eventType}
               onChange={setEventType}
               className="block sm:col-span-1"
@@ -248,7 +250,10 @@ export function PackagesConfigurator({ locale = 'en', defaultPackageTier = 'sign
                 onChange={setRentalPeriod}
                 options={rentalOptions.map((option) => ({ value: option.value, label: option.label }))}
                 disabled={optionsLoading || !rentalOptions.length}
+                theme="light"
+                popoverSurface="public-glass"
                 className={`w-full ${PUBLIC_SELECT_CLASS}`}
+                buttonClassName="!border-[#d8c4a4] !bg-white !text-[#241d17] !font-normal"
               />
             </label>
           </div>

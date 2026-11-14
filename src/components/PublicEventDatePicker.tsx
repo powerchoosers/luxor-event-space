@@ -12,8 +12,9 @@ type PublicEventDatePickerProps = {
   availableDates?: Set<string>
   timeZone?: string
   label?: string
+  popoverSurface?: 'default' | 'public-glass'
 }
 
-export function PublicEventDatePicker({ value, onChange, placeholder = 'Select a date', locale = 'en-US', className = '', availableDates, timeZone, label = 'Event date' }: PublicEventDatePickerProps) {
-  return <LuxorDatePicker value={value} onChange={onChange} placeholder={placeholder} locale={locale} className={className} availableDates={availableDates} timeZone={timeZone} label={label} theme="light" maxMonths={LUXOR_BOOKING_DATE_MAX_MONTHS} />
+export function PublicEventDatePicker({ value, onChange, placeholder = 'Select a date', locale = 'en-US', className = '', availableDates, timeZone, label = 'Event date', popoverSurface = 'default' }: PublicEventDatePickerProps) {
+  return <LuxorDatePicker value={value} onChange={onChange} placeholder={placeholder} locale={locale} className={className} availableDates={availableDates} timeZone={timeZone} label={label} theme="light" maxMonths={LUXOR_BOOKING_DATE_MAX_MONTHS} popoverSurface={popoverSurface} />
 }

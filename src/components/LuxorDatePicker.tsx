@@ -5,6 +5,7 @@ import { createPortal } from 'react-dom'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import { CalendarDays, ChevronDown, ChevronLeft, ChevronRight } from '@/lib/icons/phosphor-compat'
 import { addCalendarMonthsDateKey, formatLocalDateKey, getDateKeyInTimeZone } from '@/lib/publicEventDate'
+import { LUXOR_PUBLIC_GLASS_POPOVER_SHELL, LUXOR_PUBLIC_GLASS_POPOVER_Z_INDEX } from '@/lib/luxorPublicGlassPopover'
 
 function parseDateKey(value: string) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return null
@@ -48,6 +49,7 @@ export function LuxorDatePicker({
   omitWeekday = false,
   triggerPrefix,
   triggerClassName = '',
+  popoverSurface = 'default',
 }: {
   value: string
   onChange: (value: string) => void
@@ -66,6 +68,7 @@ export function LuxorDatePicker({
   omitWeekday?: boolean
   triggerPrefix?: string
   triggerClassName?: string
+  popoverSurface?: 'default' | 'public-glass'
 }) {
   const triggerRef = useRef<HTMLButtonElement>(null)
   const panelRef = useRef<HTMLDivElement>(null)
@@ -76,6 +79,7 @@ export function LuxorDatePicker({
   const safeAreaInsetsRef = useRef<{ top: number; right: number; bottom: number; left: number } | null>(null)
   const prefersReducedMotion = useReducedMotion()
   const isPortal = theme === 'portal'
+  const isPublicGlass = popoverSurface === 'public-glass'
   const motionDuration = prefersReducedMotion ? 0 : 0.18
   const [open, setOpen] = useState(false)
   const [monthYearOpen, setMonthYearOpen] = useState(false)
@@ -496,7 +500,7 @@ export function LuxorDatePicker({
         <AnimatePresence initial={false} onExitComplete={() => { if (returnFocusAfterCloseRef.current) { returnFocusAfterCloseRef.current = false; triggerRef.current?.focus() } }}>
         {open ? <>
           <motion.button key="calendar-backdrop" type="button" tabIndex={-1} aria-label="Close calendar" onClick={closeAndReturnFocus} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: motionDuration }} className="fixed inset-0 z-[9980] cursor-default bg-transparent" />
-          <motion.div key="calendar-panel" initial={{ opacity: 0, y: 8, scale: 0.985 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 6, scale: 0.99 }} transition={{ duration: motionDuration }} style={{ position: 'fixed', zIndex: 9981, top: coords.top, left: coords.left, width: coords.width }}>
+          <motion.div key="calendar-panel" initial={isPublicGlass || prefersReducedMotion ? { opacity: 0 } : { opacity: 0, y: 8, scale: 0.985 }} animate={isPublicGlass || prefersReducedMotion ? { opacity: 1 } : { opacity: 1, y: 0, scale: 1 }} exit={isPublicGlass || prefersReducedMotion ? { opacity: 0 } : { opacity: 0, y: 6, scale: 0.99 }} transition={{ duration: motionDuration }} style={{ position: 'fixed', zIndex: isPublicGlass ? LUXOR_PUBLIC_GLASS_POPOVER_Z_INDEX : 9981, top: coords.top, left: coords.left, width: coords.width }}>
           <div
             ref={panelRef}
             data-portal-popover="true"
@@ -505,7 +509,7 @@ export function LuxorDatePicker({
             aria-modal="false"
             tabIndex={-1}
             onKeyDown={handleGridKeyDown}
-            className={`public-calendar-scroll relative z-[9981] w-full overflow-visible overscroll-contain rounded-2xl border p-2.5 shadow-[0_18px_48px_-24px_rgba(55,37,19,0.48)] focus:outline-none sm:p-4 ${isPortal ? 'border-[color:var(--portal-border,rgba(202,162,76,0.24))] bg-[color:var(--portal-bg,#100d0b)] text-[color:var(--portal-text,#f7efe3)]' : 'border-[#d8c4a4] bg-[#fffdfa] text-[#3b2b1d]'}`}
+            className={`public-calendar-scroll relative w-full overflow-visible overscroll-contain rounded-2xl p-2.5 focus:outline-none sm:p-4 ${isPublicGlass ? `${LUXOR_PUBLIC_GLASS_POPOVER_SHELL} text-[#3b2b1d]` : `border shadow-[0_18px_48px_-24px_rgba(55,37,19,0.48)] ${isPortal ? 'z-[9981] border-[color:var(--portal-border,rgba(202,162,76,0.24))] bg-[color:var(--portal-bg,#100d0b)] text-[color:var(--portal-text,#f7efe3)]' : 'z-[9981] border-[#d8c4a4] bg-[#fffdfa] text-[#3b2b1d]'}`}`}
             style={{ WebkitOverflowScrolling: 'touch' }}
           >
             <div className={`flex items-center justify-between gap-2 border-b pb-1.5 sm:pb-2.5 ${isPortal ? 'border-[color:var(--portal-border,rgba(202,162,76,0.24))]' : 'border-[#eadfce]'}`}>
@@ -561,7 +565,7 @@ export function LuxorDatePicker({
           </motion.div>
           {monthYearOpen ? (
             <div className="fixed inset-0 z-[9990] flex items-center justify-center bg-[#241d17]/45 p-4" onMouseDown={(event) => { if (event.target === event.currentTarget) { returnFocusToMonthYearRef.current = true; setMonthYearOpen(false) } }}>
-              <section ref={monthYearDialogRef} role="dialog" aria-modal="true" aria-label="Select Month & Year" tabIndex={-1} className={`flex max-h-[min(440px,calc(100dvh-2rem))] w-full max-w-[320px] flex-col overflow-hidden rounded-2xl border p-4 shadow-2xl ${isPortal ? 'border-[color:var(--portal-border,rgba(202,162,76,0.24))] bg-[color:var(--portal-bg,#100d0b)] text-[color:var(--portal-text,#f7efe3)]' : 'border-[#e4d4bf] bg-[#fffdfa]'}`}>
+              <section ref={monthYearDialogRef} role="dialog" aria-modal="true" aria-label="Select Month & Year" tabIndex={-1} className={`flex max-h-[min(440px,calc(100dvh-2rem))] w-full max-w-[320px] flex-col overflow-hidden rounded-2xl p-4 ${isPublicGlass ? `${LUXOR_PUBLIC_GLASS_POPOVER_SHELL} text-[#3b2b1d]` : `border shadow-2xl ${isPortal ? 'border-[color:var(--portal-border,rgba(202,162,76,0.24))] bg-[color:var(--portal-bg,#100d0b)] text-[color:var(--portal-text,#f7efe3)]' : 'border-[#e4d4bf] bg-[#fffdfa]'}`}`}>
                 <h2 className={`text-center font-serif text-lg font-semibold ${isPortal ? 'text-[color:var(--portal-text,#f7efe3)]' : 'text-[#33291f]'}`}>Select Month &amp; Year</h2>
                 <div className="mt-3 grid min-h-0 flex-1 grid-cols-2 gap-2 overflow-hidden">
                   <div aria-label="Months" className={`public-calendar-scroll overflow-y-auto overscroll-contain rounded-xl border p-1 ${isPortal ? 'border-[color:var(--portal-border,rgba(202,162,76,0.24))]' : 'border-[#eadfce]'}`} style={{ WebkitOverflowScrolling: 'touch' }}>

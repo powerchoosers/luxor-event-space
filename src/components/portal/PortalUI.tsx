@@ -8,6 +8,12 @@ import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { useToast } from '@/components/portal/ToastProvider'
 import { LuxorDatePicker } from '@/components/LuxorDatePicker'
+import {
+  LUXOR_PUBLIC_GLASS_OPTION_BASE,
+  LUXOR_PUBLIC_GLASS_OPTION_SELECTED,
+  LUXOR_PUBLIC_GLASS_POPOVER_MENU,
+  LUXOR_PUBLIC_GLASS_POPOVER_Z_INDEX,
+} from '@/lib/luxorPublicGlassPopover'
 
 const LUXOR_PORTAL_EASE = [0.22, 1, 0.36, 1] as const
 /** Shared modal open/close curves and durations across PortalModal, sheets, and PortalSettingsModal. */
@@ -1815,6 +1821,7 @@ export function PortalSelect({
   placeholder = 'Select option...',
   disabled = false,
   theme = 'portal',
+  popoverSurface = 'default',
   'aria-label': ariaLabel,
 }: {
   value: string
@@ -1825,6 +1832,8 @@ export function PortalSelect({
   placeholder?: string
   disabled?: boolean
   theme?: 'portal' | 'light'
+  /** Public packages configurator only — frosted portaled menu with public-readable tokens. */
+  popoverSurface?: 'default' | 'public-glass'
   'aria-label'?: string
 }) {
   const [isOpen, setIsOpen] = React.useState(false)
@@ -1832,7 +1841,8 @@ export function PortalSelect({
   const buttonRef = React.useRef<HTMLButtonElement>(null)
   const dropdownRef = React.useRef<HTMLDivElement>(null)
   const [coords, setCoords] = React.useState<{ top: number; left: number; width: number; maxHeight: number; opensAbove: boolean }>({ top: 0, left: 0, width: 0, maxHeight: 360, opensAbove: false })
-  const isLight = theme === 'light'
+  const isLight = theme === 'light' || popoverSurface === 'public-glass'
+  const isPublicGlass = popoverSurface === 'public-glass'
   const reduceMotion = useReducedMotion()
 
   const updateCoords = React.useCallback(() => {
@@ -1914,7 +1924,7 @@ export function PortalSelect({
         className={`portal-select-trigger flex min-h-11 w-full cursor-pointer items-center justify-between gap-2.5 rounded-xl border px-3.5 py-2 text-xs font-medium transition-all duration-150 hover:border-[#caa24c]/35 focus:outline-none focus:ring-2 focus:ring-[#caa24c]/15 focus-visible:border-[#caa24c]/40 focus-visible:ring-2 focus-visible:ring-[#caa24c]/15 disabled:cursor-not-allowed disabled:opacity-40 sm:min-h-9 ${isLight ? 'border-[#d8c4a4]/80 bg-[#f6efe2] text-[#3b2b1d]' : 'border-transparent bg-[color:var(--portal-soft)] text-[color:var(--portal-text)]'} ${buttonClassName}`}
       >
         <span className="truncate">{selectedOption ? selectedOption.label : placeholder}</span>
-        <ChevronDown size={14} className={`shrink-0 text-[color:var(--portal-muted)] transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
+        <ChevronDown size={14} className={`shrink-0 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''} ${isLight ? 'text-[#8d672b]' : 'text-[color:var(--portal-muted)]'}`} />
       </button>
       {typeof document !== 'undefined' ? createPortal(
         <AnimatePresence initial={false}>
@@ -1937,17 +1947,22 @@ export function PortalSelect({
               role="listbox"
               data-portal-popover="true"
               data-scroll-lock="true"
-              initial={reduceMotion ? { opacity: 0 } : { opacity: 0, y: coords.opensAbove ? 6 : -6, scale: 0.99 }}
-              animate={{ opacity: 1, y: 0, scale: 1, transition: { duration: reduceMotion ? 0.05 : 0.16, ease: PORTAL_MODAL_EASE } }}
-              exit={reduceMotion ? { opacity: 0, pointerEvents: 'none', transition: { duration: 0.04 } } : { opacity: 0, y: coords.opensAbove ? 4 : -4, scale: 0.99, pointerEvents: 'none', transition: { duration: 0.12, ease: PORTAL_MODAL_EXIT_EASE } }}
-              className={`portal-scrollbar fixed z-[9999] max-h-[380px] overflow-y-auto overscroll-contain rounded-xl border p-1.5 shadow-xl ring-1 ring-black/5 ${isLight ? 'portal-scrollbar-light border-[#d8c4a4] bg-[#fffdfa] shadow-[#3b2b1d]/12' : 'portal-popover-surface border-[color:var(--portal-border,rgba(202,162,76,0.18))] shadow-black/25'}`}
+              initial={reduceMotion || isPublicGlass ? { opacity: 0 } : { opacity: 0, y: coords.opensAbove ? 6 : -6, scale: 0.99 }}
+              animate={reduceMotion || isPublicGlass
+                ? { opacity: 1, transition: { duration: reduceMotion ? 0.05 : 0.16, ease: PORTAL_MODAL_EASE } }
+                : { opacity: 1, y: 0, scale: 1, transition: { duration: 0.16, ease: PORTAL_MODAL_EASE } }}
+              exit={reduceMotion || isPublicGlass
+                ? { opacity: 0, pointerEvents: 'none', transition: { duration: reduceMotion ? 0.04 : 0.12, ease: PORTAL_MODAL_EXIT_EASE } }
+                : { opacity: 0, y: coords.opensAbove ? 4 : -4, scale: 0.99, pointerEvents: 'none', transition: { duration: 0.12, ease: PORTAL_MODAL_EXIT_EASE } }}
+              className={`fixed max-h-[380px] ${isPublicGlass ? LUXOR_PUBLIC_GLASS_POPOVER_MENU : `portal-scrollbar z-[9999] overflow-y-auto overscroll-contain rounded-xl border p-1.5 shadow-xl ring-1 ring-black/5 ${isLight ? 'portal-scrollbar-light border-[#d8c4a4] bg-[#fffdfa] shadow-[#3b2b1d]/12' : 'portal-popover-surface border-[color:var(--portal-border,rgba(202,162,76,0.18))] shadow-black/25'}`}`}
               style={{
                 top: `${coords.top}px`,
                 left: `${coords.left}px`,
                 width: `${coords.width}px`,
                 maxHeight: `${coords.maxHeight}px`,
                 transformOrigin: coords.opensAbove ? 'bottom center' : 'top center',
-                ...(isLight ? { backgroundColor: '#fffdfa', backdropFilter: 'none', WebkitBackdropFilter: 'none' } : {}),
+                ...(isPublicGlass ? { zIndex: LUXOR_PUBLIC_GLASS_POPOVER_Z_INDEX } : {}),
+                ...(isLight && !isPublicGlass ? { backgroundColor: '#fffdfa', backdropFilter: 'none', WebkitBackdropFilter: 'none' } : {}),
               }}
             >
               <div className="space-y-0.5">
@@ -1963,11 +1978,14 @@ export function PortalSelect({
                         onChange(opt.value)
                         setIsOpen(false)
                       }}
-                      className={`group flex w-full cursor-pointer items-center justify-between rounded-lg border px-3 py-2 text-left text-xs font-medium transition-all duration-150 ease-[cubic-bezier(0.23,1,0.32,1)] ${
-                        isSelected
-                          ? isLight ? 'border-[#b98a3d]/30 bg-[#f5ead8] font-semibold text-[#6f4d1f]' : 'border-[#caa24c]/20 bg-[#caa24c]/12 font-semibold text-[#f1d27a]'
-                          : isLight ? 'border-transparent text-[#5b4632] hover:bg-[#f8f1e6] hover:text-[#3b2b1d]' : 'border-transparent text-[color:var(--portal-muted,#d7c29a)] hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text,#f7efe3)]'
-                      }`}
+                      className={isPublicGlass
+                        ? `${LUXOR_PUBLIC_GLASS_OPTION_BASE} luxor-public-glass-option justify-between text-xs ${isSelected ? LUXOR_PUBLIC_GLASS_OPTION_SELECTED : ''}`
+                        : `group flex w-full cursor-pointer items-center justify-between rounded-lg border px-3 py-2 text-left text-xs font-medium transition-all duration-150 ease-[cubic-bezier(0.23,1,0.32,1)] ${
+                          isSelected
+                            ? isLight ? 'border-[#b98a3d]/30 bg-[#f5ead8] font-semibold text-[#6f4d1f]' : 'border-[#caa24c]/20 bg-[#caa24c]/12 font-semibold text-[#f1d27a]'
+                            : isLight ? 'border-transparent text-[#5b4632] hover:bg-[#f8f1e6] hover:text-[#3b2b1d]' : 'border-transparent text-[color:var(--portal-muted,#d7c29a)] hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text,#f7efe3)]'
+                        }`}
+                      {...(isPublicGlass ? { 'data-selected': isSelected ? 'true' : 'false' } : {})}
                     >
                       <span>{opt.label}</span>
                       <span className={`text-[9px] transition-opacity duration-150 ${isSelected ? isLight ? 'text-[#8d672b]' : 'text-[#f1d27a]' : isLight ? 'text-[#8d672b] opacity-0 group-hover:opacity-100' : 'text-[color:var(--portal-muted,#d7c29a)] opacity-0 group-hover:opacity-100'}`}>
