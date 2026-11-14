@@ -50,6 +50,8 @@ test('confirmation starts recording and transcript once for the bound live call'
   assert.equal(calls[1][1].track, 'both_tracks')
   assert.equal(calls[1][1].partialResults, true)
   assert.match(calls[1][1].hints, /quinceañera/)
+  assert.match(calls[1][1].hints, /luxoratlaspalmas\.com/)
+  assert.match(calls[1][1].hints, /Signature Package/)
   await assert.rejects(() => confirmElenaRecording(callSid, sessionId, prepared.nonce, true))
   assert.equal(calls.length, 2)
 })

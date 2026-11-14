@@ -26,6 +26,13 @@ test('elena sip bridge normalizes storage tracks for new transcript rows', () =>
   const metadata = { scope: 'elena_live_inbound' }
   assert.equal(types.luxorTranscriptStorageTrack('inbound_track', metadata), 'luxor_agent')
   assert.equal(types.luxorTranscriptStorageTrack('outbound_track', metadata), 'caller')
+  assert.equal(types.luxorTranscriptStorageTrack('caller', metadata), 'caller')
+  assert.equal(types.luxorTranscriptStorageTrack('luxor_agent', metadata), 'luxor_agent')
+})
+
+test('elena sip bridge maps labeled tracks to the correct speaker', () => {
+  assert.equal(types.luxorTranscriptSpeaker('caller', { elenaSipBridge: true }), 'caller')
+  assert.equal(types.luxorTranscriptSpeaker('luxor_agent', { elenaSipBridge: true }), 'luxor')
 })
 
 test('standard calls keep twilio track mapping', () => {

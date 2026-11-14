@@ -1,5 +1,6 @@
 import { after } from 'next/server'
 import { acceptElenaPhoneTestEvent, elenaPhoneTestReady, verifyOpenAiVoiceSignature, greetElenaPhoneTest, ElenaPhoneTestDiagnosticError } from '@/lib/luxorElenaPhoneTestServer'
+import { triggerElenaInboundAgentTranscriptSideband } from '@/lib/luxorElenaInboundAgentTranscriptServer'
 import { acceptElenaLiveEvent, elenaLiveInboundReady, greetElenaLiveCall, isElenaLiveIncomingEvent } from '@/lib/luxorElenaInboundServer'
 
 export const runtime = 'nodejs'
@@ -22,6 +23,7 @@ export async function POST(request: Request) {
     const result = live ? await acceptElenaLiveEvent(event) : await acceptElenaPhoneTestEvent(event)
     if (result.accepted && result.sessionId && result.callSid) {
       after(async () => {
+        if (live) triggerElenaInboundAgentTranscriptSideband(result.callSid!, result.sessionId!)
         await (live ? greetElenaLiveCall(result.sessionId!, result.callSid!) : greetElenaPhoneTest(result.sessionId!, result.callSid!)).catch(() => console.warn('[Elena Voice] Opening greeting was not verified'))
       })
     }

@@ -2,6 +2,7 @@ import { supabaseRestStrict } from '@/lib/supabaseRestServer'
 import { normalizeTwilioCallStatus, parseTwilioInteger, readTwilioForm, validateTwilioWebhook } from '@/lib/luxorTwilioServer'
 import { notifyElenaInboundAnswered } from '@/lib/luxorElenaInboundNotificationServer'
 import { finalizeElenaInboundCall, syncElenaInboundAnsweredAt } from '@/lib/luxorElenaInboundFinalizeServer'
+import { triggerElenaInboundAgentTranscriptSideband } from '@/lib/luxorElenaInboundAgentTranscriptServer'
 import { startAutomaticElenaRecording } from '@/lib/luxorElenaInboundRecordingServer'
 
 export const runtime = 'nodejs'
@@ -95,6 +96,7 @@ export async function POST(request: Request) {
       const changed = await supabaseRestStrict<Call[]>(`luxor_calls?twilio_call_sid=eq.${parent}&metadata->>scope=eq.${SCOPE}&updated_at=eq.${encodeURIComponent(row.updated_at)}&select=twilio_call_sid`, { method: 'PATCH', headers: { Prefer: 'return=representation' }, body: JSON.stringify(patch) })
       if (!changed.length) continue
       if (leg === 'elena' && status === 'in-progress' && typeof previous.openai_session_id === 'string') {
+        triggerElenaInboundAgentTranscriptSideband(parent, previous.openai_session_id)
         await notifyElenaInboundAnswered({ callSid: parent, sessionId: previous.openai_session_id })
         await syncElenaInboundAnsweredAt(parent).catch(() => undefined)
         await startAutomaticElenaRecording(parent, previous.openai_session_id).catch(() => console.warn('[Elena Inbound] Automatic recording awaits an accepted call.'))
