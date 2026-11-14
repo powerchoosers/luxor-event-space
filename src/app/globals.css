@@ -2398,6 +2398,7 @@ body[data-luxor-site] footer.site-footer--light .footer-text-link:is(:hover, :fo
   transform: scaleX(1);
 }
 
+/* Match the navigation underline on footer contact links. */
 body[data-luxor-site] footer.site-footer--light a.footer-contact-link > span {
   position: relative;
   display: inline-block;
