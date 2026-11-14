@@ -324,7 +324,8 @@ export async function saveLuxorTranscriptEvent(input: {
   // Our sessions request final results only; retain compatibility if the field is absent.
   const final = input.final == null || input.final === '' ? true : input.final.toLowerCase() === 'true'
   let addedSegment = false
-  if (text && final) {
+  const savePartial = call.metadata?.scope === 'elena_live_inbound'
+  if (text && (final || savePartial)) {
     const eventTime = input.timestamp && Number.isFinite(Date.parse(input.timestamp)) ? input.timestamp : new Date().toISOString()
     const eventMs = providerStartAt ?? Number.NaN
     const recordingStartMs = Date.parse(call.recording_started_at || '')
@@ -349,7 +350,9 @@ export async function saveLuxorTranscriptEvent(input: {
     const currentStatus = current.transcription_status || 'pending'
     let nextStatus = currentStatus
     if (input.event === 'transcription-stopped' && currentStatus !== 'failed') nextStatus = 'completed'
-    else if (input.event === 'transcription-error' && currentStatus !== 'completed') nextStatus = 'failed'
+    else if (input.event === 'transcription-error' && currentStatus !== 'completed') {
+      nextStatus = current.metadata?.scope === 'elena_live_inbound' && current.metadata?.recording_start_status === 'started' ? 'processing' : 'failed'
+    }
     else if (input.event === 'transcription-content' && currentStatus !== 'completed' && currentStatus !== 'failed') nextStatus = 'processing'
     else if (input.event === 'transcription-started' && currentStatus === 'not_requested') nextStatus = 'pending'
 

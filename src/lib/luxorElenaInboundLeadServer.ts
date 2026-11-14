@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto'
 import { normalizePhoneNumber } from './luxorCallsServer'
 import { supabaseRestStrict } from './supabaseRestServer'
 import { normalizeCallerSpokenLanguage } from './luxorCallerLanguage'
+import { resolveElenaCallerEventType } from './luxorElenaCallerEventType'
 
 type Call = { twilio_call_sid: string; direction: string; to_number: string; status: string; inquiry_id: string | null; metadata: Record<string, unknown>; updated_at: string }
 type Inquiry = { id: string; full_name: string; phone: string | null; email: string | null; updated_at: string; archived_at: string | null; is_test: boolean }
@@ -18,7 +19,7 @@ const equalName = (a: string, b: string) => a.trim().replace(/\s+/g, ' ').toLowe
 /** Prepare only updates for a confirmed, uniquely matched lead; does not write lead data. */
 export async function prepareElenaLeadUpdate(input: { callSid: string; sessionId: string; fields: Record<string, unknown> }) {
   const fields = input.fields
-  if (Object.keys(fields).some(k => !['full_name', 'phone', 'email', 'event_type', 'target_date', 'guest_count', 'budget', 'package_interest', 'notes', 'spoken_language'].includes(k))) throw new ElenaLeadUpdateError('Only caller-confirmed contact and event details can be updated.')
+  if (Object.keys(fields).some(k => !['full_name', 'phone', 'email', 'event_type', 'conversational_event_type', 'target_date', 'guest_count', 'budget', 'package_interest', 'notes', 'spoken_language'].includes(k))) throw new ElenaLeadUpdateError('Only caller-confirmed contact and event details can be updated.')
   const spokenLanguage = normalizeCallerSpokenLanguage(fields.spoken_language)
   if (fields.spoken_language != null && fields.spoken_language !== '' && !spokenLanguage) throw new ElenaLeadUpdateError('Please clarify the caller’s own spoken language before saving.')
   const fullName = text(fields.full_name, 120)
@@ -26,7 +27,10 @@ export async function prepareElenaLeadUpdate(input: { callSid: string; sessionId
   const phone = rawPhone ? normalizePhoneNumber(rawPhone) : null
   const email = text(fields.email, 254)?.toLowerCase() || null
   const notes = text(fields.notes, 1500)
-  const eventType = text(fields.event_type, 120), targetDate = text(fields.target_date, 10)
+  const conversationalEvent = typeof fields.conversational_event_type === 'string' ? fields.conversational_event_type : fields.event_type
+  const normalizedEvent = resolveElenaCallerEventType(fields.event_type, conversationalEvent)
+  const eventType = normalizedEvent ? text(normalizedEvent, 120) : text(fields.event_type, 120)
+  const targetDate = text(fields.target_date, 10)
   const budget = text(fields.budget, 120), packageInterest = text(fields.package_interest, 120)
   const guests = fields.guest_count == null ? null : fields.guest_count
   if ((rawPhone && !phone) || (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
@@ -88,5 +92,36 @@ export async function prepareElenaLeadUpdate(input: { callSid: string; sessionId
 
 /** The caller-facing MCP handler verifies a signed token and a later affirmative before calling. */
 export async function confirmElenaLeadUpdate(input: { callSid: string; sessionId: string; nonce: string }) {
-  return supabaseRestStrict<{ saved: boolean; duplicate?: boolean }>('rpc/luxor_confirm_elena_lead_update', { method: 'POST', body: JSON.stringify({ p_call_sid: input.callSid, p_session_id: input.sessionId, p_nonce: input.nonce }) })
+  let lastError: unknown
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      return await supabaseRestStrict<{ saved: boolean; duplicate?: boolean }>('rpc/luxor_confirm_elena_lead_update', {
+        method: 'POST',
+        body: JSON.stringify({ p_call_sid: input.callSid, p_session_id: input.sessionId, p_nonce: input.nonce }),
+      })
+    } catch (error) {
+      lastError = error
+      if (attempt < 2) await new Promise((resolve) => setTimeout(resolve, 350))
+    }
+  }
+  throw lastError
+}
+
+function affirmativeLeadConfirmation(value: unknown) {
+  return typeof value === 'string' && /^(yes|yeah|yep|sure|please|go ahead|okay|ok|correct|sí|si)(?=$|[\s,.!?])/i.test(value.trim())
+    && !/\b(no|not|don't|dont|wait|cancel|later|never|espera|cancela|después)\b/i.test(value)
+}
+
+/** One caller confirmation: prepare and save in the same live turn; keep talking while persistence runs. */
+export async function saveElenaLeadUpdate(input: { callSid: string; sessionId: string; fields: Record<string, unknown>; spokenConfirmation: string }) {
+  if (!affirmativeLeadConfirmation(input.spokenConfirmation)) throw new ElenaLeadUpdateError('Obtain an explicit yes from the caller before saving lead details.')
+  const { spokenConfirmation: _spoken, ...fields } = input
+  const prepared = await prepareElenaLeadUpdate({ callSid: input.callSid, sessionId: input.sessionId, fields })
+  const result = await confirmElenaLeadUpdate({ callSid: input.callSid, sessionId: input.sessionId, nonce: prepared.nonce })
+  return {
+    ...result,
+    acknowledged: true,
+    saved_fields: fields,
+    message: result.saved ? 'The caller-confirmed lead details were saved for the Luxor team. Do not ask to confirm the same details again.' : 'Those lead details were already saved.',
+  }
 }

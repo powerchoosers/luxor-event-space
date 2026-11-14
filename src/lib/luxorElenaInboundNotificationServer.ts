@@ -61,7 +61,12 @@ export async function notifyElenaInboundAnswered(input: { callSid: string; sessi
       const now = new Date().toISOString()
       const changed = await supabaseRestStrict<LiveCall[]>(`luxor_calls?twilio_call_sid=eq.${input.callSid}&direction=eq.inbound&to_number=eq.${encodeURIComponent(number)}&updated_at=eq.${encodeURIComponent(row.updated_at)}&metadata->>scope=eq.${SCOPE}&metadata->>ingress_mode=eq.programmable_sip&metadata->>accepted=eq.true&metadata->>sip_answered=eq.true&metadata->>openai_session_id=eq.${encodeURIComponent(input.sessionId)}&metadata->>elena_answered_notification_claimed_at=is.null&select=twilio_call_sid`, {
         method: 'PATCH', headers: { Prefer: 'return=representation' },
-        body: JSON.stringify({ is_read: false, metadata: { ...row.metadata, elena_answered_at: row.metadata.sip_answered_at, elena_answered_notification_claimed_at: now }, updated_at: nextVersion(row) }),
+        body: JSON.stringify({
+          is_read: false,
+          answered_at: row.metadata.sip_answered_at,
+          metadata: { ...row.metadata, elena_answered_at: row.metadata.sip_answered_at, elena_answered_notification_claimed_at: now },
+          updated_at: nextVersion(row),
+        }),
       })
       if (changed.length) { claimedAt = now; break }
     }

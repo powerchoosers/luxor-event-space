@@ -67,7 +67,8 @@ const integrations = {
   './luxorElenaInboundSettingsServer': { getElenaInboundSettings: async () => ({ voice: 'brise', ariannaAvailable: state.available }) },
   './luxorElenaInboundNotificationServer': { notifyElenaInboundAnswered: async (input) => { state.notices.push(input) } },
   './luxorElenaInboundRecordingServer': { prepareElenaRecording: async () => ({ nonce: '77777777-7777-4777-8777-777777777777', expiresAt: new Date(Date.now() + 120_000).toISOString(), question: 'May I record and transcribe?' }), confirmElenaRecording: async (_call, _session, _nonce, consented) => { state.recordings.push(consented); return { consented } }, startAutomaticElenaRecording: async (call, session) => { state.automaticStarts.push({ call, session }); return { automatic: true, recordingStarted: true } }, stopElenaRecording: async () => ({ stopped: true }) },
-  './luxorElenaInboundLeadServer': { ElenaLeadUpdateError: class extends Error {}, prepareElenaLeadUpdate: async () => ({ nonce: '66666666-6666-4666-8666-666666666666', expiresAt: new Date(Date.now() + 120_000).toISOString(), question: 'May I save this?' }), confirmElenaLeadUpdate: async () => { state.leadUpdates.push(true); return { saved: true } } },
+  './luxorElenaInboundLeadServer': { ElenaLeadUpdateError: class extends Error {}, prepareElenaLeadUpdate: async () => ({ nonce: '66666666-6666-4666-8666-666666666666', expiresAt: new Date(Date.now() + 120_000).toISOString(), question: 'May I save this?' }), confirmElenaLeadUpdate: async () => { state.leadUpdates.push(true); return { saved: true } }, saveElenaLeadUpdate: async () => { state.leadUpdates.push(true); return { saved: true, acknowledged: true, message: 'saved' } } },
+  './luxorElenaInboundScheduleServer': { getElenaInboundScheduleContext: async () => ({ timezone: 'America/Chicago', tour_booking: {}, event_schedule: {} }) },
   './luxorElenaCallEmailServer': { prepareElenaCallEmail: async () => ({ nonce: '55555555-5555-4555-8555-555555555555', expires_at: new Date(Date.now() + 120_000).toISOString(), question: 'May I send this email?' }), confirmElenaCallEmail: async () => { state.emails.push(true); return { queued: true } }, getElenaCallEmailStatus: async () => ({ status: 'pending' }) },
   './luxorElenaInboundToursServer': { ElenaInboundTourBookingError: class extends Error {},
     prepareElenaLiveTourBooking: async () => ({ nonce: '88888888-8888-4888-8888-888888888888', expiresAt: new Date(Date.now() + 180_000).toISOString(), question: 'Book this published venue tour?', slot: { date: '2099-01-01', time: '4 PM' } }),
@@ -91,6 +92,7 @@ const status = compile('src/app/api/elena-inbound/status/route.ts', {
   '@/lib/supabaseRestServer': integrations['./supabaseRestServer'],
   '@/lib/luxorElenaInboundNotificationServer': integrations['./luxorElenaInboundNotificationServer'],
   '@/lib/luxorElenaInboundRecordingServer': integrations['./luxorElenaInboundRecordingServer'],
+  '@/lib/luxorElenaInboundFinalizeServer': { syncElenaInboundAnsweredAt: async () => null, finalizeElenaInboundCall: async () => ({ status: 'skipped' }) },
   '@/lib/luxorTwilioServer': { ...integrations['./luxorTwilioServer'], normalizeTwilioCallStatus: (value) => value === 'answered' ? 'in-progress' : value, parseTwilioInteger: (value) => /^\d+$/.test(value || '') ? Number(value) : null },
 })
 test.beforeEach(() => {
@@ -130,6 +132,13 @@ test('new live sessions do not offer recording permission tools', () => {
   assert.equal(names.includes('recording_status'), true)
   assert.equal(names.includes('stop_recording'), true)
 })
+test('save_lead_update persists after one explicit yes without a second prepare cycle', async () => {
+  const saved = await tool('save_lead_update', { event_type: 'Wedding', target_date: '2027-06-01', guest_count: 120, spoken_confirmation: 'yes, that is right' })
+  assert.equal(saved.error, false)
+  assert.equal(saved.output.acknowledged, true)
+  assert.equal(state.leadUpdates.length, 1)
+})
+
 test('recording, lead changes and emails require their own explicit caller decisions', async () => {
   const recording = (await tool('prepare_recording')).output.token
   const update = (await tool('prepare_lead_update', { notes: 'Interested in a tour' })).output.token

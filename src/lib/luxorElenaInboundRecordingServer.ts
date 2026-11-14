@@ -7,6 +7,7 @@ import { supabaseRestStrict } from './supabaseRestServer'
 
 const BASE = 'https://www.luxoratlaspalmas.com'
 const SID = /^CA[0-9a-f]{32}$/i
+const ELENA_TRANSCRIPTION_HINTS = 'quinceañera, quince, XV, sweet fifteen, boda, wedding, Luxor at Las Palmas, Las Palmas, San Antonio'
 type Call = { twilio_call_sid: string; direction: string; to_number: string; status: string; recording_consent_status: string; metadata: Record<string, unknown>; updated_at: string }
 
 async function readBoundCall(callSid: string, sessionId: string) {
@@ -82,7 +83,12 @@ async function startElenaRecordingSessions(callSid: string, sessionId: string, c
   } catch { console.warn('[Elena Inbound] Recording did not start.') }
   if (recordingStarted) {
     try {
-      const transcription = await client.calls(callSid).transcriptions.create({ name: `Luxor ${callSid}`, statusCallbackUrl: `${BASE}/api/twilio/transcriptions?recordCallSid=${callSid}`, statusCallbackMethod: 'POST', track: 'both_tracks', inboundTrackLabel: 'caller', outboundTrackLabel: 'luxor_agent', transcriptionEngine: 'deepgram', speechModel: 'nova-3', languageCode: 'multi', partialResults: false, enableProviderData: true })
+      const transcription = await client.calls(callSid).transcriptions.create({
+        name: `Luxor ${callSid}`, statusCallbackUrl: `${BASE}/api/twilio/transcriptions?recordCallSid=${callSid}`, statusCallbackMethod: 'POST',
+        track: 'both_tracks', inboundTrackLabel: 'caller', outboundTrackLabel: 'luxor_agent', transcriptionEngine: 'deepgram',
+        speechModel: 'nova-3', languageCode: 'multi', partialResults: true, hints: ELENA_TRANSCRIPTION_HINTS, enableAutomaticPunctuation: true,
+        enableProviderData: true,
+      })
       if (!/^GT[0-9a-f]{32}$/i.test(transcription.sid)) throw new Error('Transcription identifier unavailable.')
       transcriptionSid = transcription.sid
       transcriptionStarted = true

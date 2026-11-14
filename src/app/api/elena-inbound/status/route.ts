@@ -1,6 +1,7 @@
 import { supabaseRestStrict } from '@/lib/supabaseRestServer'
 import { normalizeTwilioCallStatus, parseTwilioInteger, readTwilioForm, validateTwilioWebhook } from '@/lib/luxorTwilioServer'
 import { notifyElenaInboundAnswered } from '@/lib/luxorElenaInboundNotificationServer'
+import { finalizeElenaInboundCall, syncElenaInboundAnsweredAt } from '@/lib/luxorElenaInboundFinalizeServer'
 import { startAutomaticElenaRecording } from '@/lib/luxorElenaInboundRecordingServer'
 
 export const runtime = 'nodejs'
@@ -79,8 +80,13 @@ export async function POST(request: Request) {
           ...(seq !== null ? { [`${prefix}_last_sequence`]: Math.max(previousSeq, seq) } : {}),
           ...(status === 'in-progress' && !previous[`${prefix}_answered_at`] ? { [`${prefix}_answered_at`]: new Date().toISOString() } : {}) }
         const activeElenaAnswer = leg === 'elena' && status === 'in-progress' && !preserve && !TERMINAL.includes(row.status)
-        patch = { metadata, ...(activeElenaAnswer ? { status: 'in-progress' } : {}),
-          ...(leg === 'elena' && status === 'in-progress' && row.outcome === 'missed' ? { outcome: null } : {}), updated_at: version }
+        const answeredAt = typeof metadata.sip_answered_at === 'string' ? metadata.sip_answered_at : null
+        patch = {
+          metadata,
+          ...(activeElenaAnswer ? { status: 'in-progress', ...(answeredAt ? { answered_at: answeredAt } : {}) } : {}),
+          ...(leg === 'elena' && status === 'in-progress' && row.outcome === 'missed' ? { outcome: null } : {}),
+          updated_at: version,
+        }
       } else {
         const firstMiss = previous.sip_answered !== true && previous.elena_missed_recorded !== true
         patch = { status, ended_at: new Date().toISOString(), duration_seconds: parseTwilioInteger(params.CallDuration),
@@ -90,7 +96,11 @@ export async function POST(request: Request) {
       if (!changed.length) continue
       if (leg === 'elena' && status === 'in-progress' && typeof previous.openai_session_id === 'string') {
         await notifyElenaInboundAnswered({ callSid: parent, sessionId: previous.openai_session_id })
+        await syncElenaInboundAnsweredAt(parent).catch(() => undefined)
         await startAutomaticElenaRecording(parent, previous.openai_session_id).catch(() => console.warn('[Elena Inbound] Automatic recording awaits an accepted call.'))
+      }
+      if (!child && terminal) {
+        finalizeElenaInboundCall(parent).catch(() => console.warn('[Elena Inbound] Call-end summary could not be queued.'))
       }
       return Response.json({ ok: true })
     }
