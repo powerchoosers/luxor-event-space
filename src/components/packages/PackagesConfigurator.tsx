@@ -35,8 +35,8 @@ type OptionsResponse = {
   error?: string
 }
 
-const PUBLIC_SELECT_CLASS = '!h-12 !rounded-md !px-4 !py-0 !text-left !text-sm'
-const PUBLIC_DATE_CLASS = 'w-full [&>button]:h-12 [&>button]:rounded-md [&>button]:px-4 [&>button]:py-0'
+const PUBLIC_SELECT_BUTTON_CLASS = '!h-12 !rounded-xl !border-[#d8c4a4] !bg-white !px-4 !py-0 !text-left !text-sm !font-normal !text-[#241d17]'
+const PUBLIC_DATE_CLASS = 'w-full [&>button]:h-12 [&>button]:rounded-xl [&>button]:px-4 [&>button]:py-0'
 
 const tierCopy = {
   en: { essentials: 'Essentials', signature: 'Signature', luxor: 'Luxor' },
@@ -193,7 +193,7 @@ export function PackagesConfigurator({ locale = 'en', defaultPackageTier = 'sign
   return (
     <>
       <div className="grid gap-8 lg:grid-cols-[minmax(0,1.15fr)_minmax(280px,0.85fr)] lg:items-start">
-        <div className="rounded-md border border-[#caa24c]/22 bg-white/85 p-5 text-[#241d17] sm:p-6 lg:p-8">
+        <div className="rounded-2xl border border-[#caa24c]/22 bg-white/85 p-5 text-[#241d17] sm:p-6 lg:p-8">
           <div className="grid gap-4 sm:grid-cols-2">
             <label className="block sm:col-span-1">
               <span className="mb-2 flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.16em] text-[#8d672b]">
@@ -216,7 +216,7 @@ export function PackagesConfigurator({ locale = 'en', defaultPackageTier = 'sign
               onChange={setEventType}
               className="block sm:col-span-1"
               labelClassName="mb-2 flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.16em] text-[#8d672b]"
-              inputClassName="h-12 rounded-md border border-[#d8c4a4] bg-white px-4 text-sm text-[#241d17]"
+              inputClassName="h-12 rounded-xl border border-[#d8c4a4] bg-white px-4 text-sm text-[#241d17]"
             />
             <label className="block sm:col-span-1">
               <span className="mb-2 flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.16em] text-[#8d672b]">
@@ -232,7 +232,7 @@ export function PackagesConfigurator({ locale = 'en', defaultPackageTier = 'sign
                 onChange={(event) => setGuestCount(event.target.value)}
                 disabled={optionsLoading}
                 placeholder={labels.guestPlaceholder}
-                className="min-h-12 w-full rounded-md border border-[#d8c4a4] bg-white px-4 text-sm text-[#241d17] outline-none placeholder:text-[#a0907e] focus:border-[#b98a3d]"
+                className="min-h-12 w-full rounded-xl border border-[#d8c4a4] bg-white px-4 text-sm text-[#241d17] outline-none placeholder:text-[#a0907e] focus:border-[#b98a3d]"
               />
               {guestInvalid ? (
                 <p role="alert" className="mt-2 text-xs leading-5 text-[#f1d27a]">
@@ -253,8 +253,8 @@ export function PackagesConfigurator({ locale = 'en', defaultPackageTier = 'sign
                 disabled={optionsLoading || !rentalOptions.length}
                 theme="light"
                 popoverSurface="public-glass"
-                className={`w-full ${PUBLIC_SELECT_CLASS}`}
-                buttonClassName="!border-[#d8c4a4] !bg-white !text-[#241d17] !font-normal"
+                className="w-full"
+                buttonClassName={PUBLIC_SELECT_BUTTON_CLASS}
               />
             </label>
           </div>
@@ -271,7 +271,7 @@ export function PackagesConfigurator({ locale = 'en', defaultPackageTier = 'sign
                     key={tier}
                     type="button"
                     onClick={() => setPackageTierId(tier)}
-                    className={`min-h-12 rounded-md border px-3 py-2 text-sm font-semibold transition ${active ? 'border-[#caa24c] bg-[#caa24c]/16 text-[#241d17]' : 'border-[#d8c4a4] bg-white text-[#665a4e] hover:border-[#caa24c]/45'}`}
+                    className={`min-h-12 rounded-xl border px-3 py-2 text-sm font-semibold transition ${active ? 'border-[#caa24c] bg-[#caa24c]/16 text-[#241d17]' : 'border-[#d8c4a4] bg-white text-[#665a4e] hover:border-[#caa24c]/45'}`}
                   >
                     {tierCopy[locale][tier]}
                   </button>
@@ -288,7 +288,7 @@ export function PackagesConfigurator({ locale = 'en', defaultPackageTier = 'sign
                   const checked = Boolean(enhancementQuantities[item.id])
                   return (
                     <li key={item.id}>
-                      <label className="flex cursor-pointer items-start gap-3 rounded-md border border-[#eadfcf] bg-[#fffdfa] px-3 py-3 text-sm text-[#241d17]">
+                      <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-[#eadfcf] bg-[#fffdfa] px-3 py-3 text-sm text-[#241d17]">
                         <input
                           type="checkbox"
                           checked={checked}

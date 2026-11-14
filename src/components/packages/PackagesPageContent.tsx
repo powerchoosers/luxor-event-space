@@ -2,6 +2,7 @@
 
 import Image from 'next/image'
 import Link from 'next/link'
+import { motion, useReducedMotion } from 'framer-motion'
 import { ArrowRight, CalendarCheck2, ShieldCheck, SlidersHorizontal, Sparkles } from '@/lib/icons/phosphor-compat'
 import { Reveal } from '@/components/Reveal'
 import { StaggerCard, StaggerCards } from '@/components/StaggerCards'
@@ -60,6 +61,7 @@ const content = {
 
 export function PackagesPageContent({ locale = 'en', cards }: PackagesPageContentProps) {
   const t = content[locale]
+  const reduceMotion = useReducedMotion()
 
   return (
     <main className="overflow-x-hidden bg-[#050505] text-[#f7efe3]">
@@ -158,22 +160,65 @@ export function PackagesPageContent({ locale = 'en', cards }: PackagesPageConten
         </div>
       </section>
 
-      <section className="relative isolate overflow-hidden bg-[#050505] py-16 sm:py-24">
-        <div className="pointer-events-none absolute inset-0 bg-[url('/images/dining-hall/main-hall-wedding-wide.png')] bg-cover bg-center opacity-20" aria-hidden />
-        <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-[#050505]/70 via-[#050505]/55 to-[#050505]" aria-hidden />
+      <section className="relative isolate overflow-hidden py-16 sm:py-24">
+        <div className="pointer-events-none absolute inset-0 -z-10 flex items-center justify-center overflow-hidden" aria-hidden>
+          <motion.div
+            animate={reduceMotion ? undefined : { scale: [1, 1.07, 1], opacity: [0.22, 0.34, 0.22] }}
+            transition={{ duration: 9, repeat: Infinity, ease: 'easeInOut' }}
+            className="h-[34rem] w-[34rem] rounded-full blur-3xl sm:h-[44rem] sm:w-[44rem]"
+            style={{ background: 'radial-gradient(circle, rgba(202, 162, 76, 0.36) 0%, rgba(185, 138, 61, 0.12) 48%, transparent 72%)' }}
+          />
+          <motion.svg
+            viewBox="0 0 640 640"
+            className="absolute h-[36rem] w-[36rem] text-[#caa24c]/30 sm:h-[48rem] sm:w-[48rem]"
+            animate={reduceMotion ? undefined : { rotate: 360 }}
+            transition={{ duration: 64, repeat: Infinity, ease: 'linear' }}
+          >
+            <circle cx="320" cy="320" r="290" fill="none" stroke="currentColor" strokeWidth="1" strokeDasharray="3 9" />
+            <circle cx="320" cy="320" r="245" fill="none" stroke="currentColor" strokeWidth="0.9" opacity="0.7" />
+            <circle cx="320" cy="320" r="195" fill="none" stroke="currentColor" strokeWidth="1" strokeDasharray="12 18" opacity="0.65" />
+            <g stroke="currentColor" strokeWidth="0.9" opacity="0.55">
+              {Array.from({ length: 24 }, (_, index) => {
+                const angle = (index * 15 * Math.PI) / 180
+                const x1 = 320 + Math.cos(angle) * 145
+                const y1 = 320 + Math.sin(angle) * 145
+                const x2 = 320 + Math.cos(angle) * 290
+                const y2 = 320 + Math.sin(angle) * 290
+                return <line key={index} x1={x1} y1={y1} x2={x2} y2={y2} />
+              })}
+            </g>
+            <rect x="175" y="175" width="290" height="290" fill="none" stroke="currentColor" strokeWidth="0.85" opacity="0.4" transform="rotate(45 320 320)" />
+            <rect x="175" y="175" width="290" height="290" fill="none" stroke="currentColor" strokeWidth="0.85" opacity="0.3" />
+          </motion.svg>
+          <motion.svg
+            viewBox="0 0 420 420"
+            className="absolute h-[23rem] w-[23rem] text-[#9b6f24]/28 sm:h-[30rem] sm:w-[30rem]"
+            animate={reduceMotion ? undefined : { rotate: -360 }}
+            transition={{ duration: 48, repeat: Infinity, ease: 'linear' }}
+          >
+            <circle cx="210" cy="210" r="180" fill="none" stroke="currentColor" strokeWidth="1.1" strokeDasharray="6 14" />
+            <polygon points="210,18 228,192 402,210 228,228 210,402 192,228 18,210 192,192" fill="none" stroke="currentColor" strokeWidth="0.95" opacity="0.6" />
+          </motion.svg>
+        </div>
+
         <div className="relative mx-auto max-w-7xl px-5 sm:px-6 lg:px-8">
-          <Reveal className="max-w-3xl text-center lg:text-left">
-            <p className="font-mono text-xs font-bold uppercase tracking-[0.28em] text-[#f1d27a]">{t.visitEyebrow}</p>
-            <h2 className="mt-4 font-serif text-4xl leading-[0.95] text-[#f7efe3] sm:text-5xl">{t.visitTitle}</h2>
-            <p className="mt-5 text-base leading-7 text-[#d7c29a]/72">{t.visitCopy}</p>
-            <Link
-              href={t.visitHref}
-              data-conversion="visit_cta_click"
-              data-conversion-label="Packages schedule visit"
-              className="luxor-gold-raised mt-8 inline-flex min-h-12 items-center justify-center gap-2 rounded-md px-6 py-3 text-sm uppercase tracking-[0.14em]"
-            >
-              {t.visitCta} <ArrowRight className="h-4 w-4" />
-            </Link>
+          <Reveal>
+            <div className="luxor-panel relative overflow-hidden grid gap-8 rounded-2xl !border-[#9b6f24]/25 !bg-[#fffdfa]/92 p-6 shadow-[0_28px_78px_-48px_rgba(48,33,14,0.28)] backdrop-blur-md sm:p-8 lg:grid-cols-[1fr_auto] lg:items-center lg:p-10">
+              <div className="pointer-events-none absolute -right-16 -top-16 h-56 w-56 rounded-full opacity-55 blur-2xl" style={{ background: 'radial-gradient(circle, rgba(202, 162, 76, 0.28) 0%, transparent 70%)' }} aria-hidden />
+              <div className="relative max-w-3xl">
+                <p className="font-mono text-xs font-bold uppercase tracking-[0.28em] text-[#8d672b]">{t.visitEyebrow}</p>
+                <h2 className="mt-4 font-serif text-4xl leading-[0.95] !text-[#241d17] sm:text-5xl">{t.visitTitle}</h2>
+                <p className="mt-5 text-base leading-7 !text-[#665a4e]">{t.visitCopy}</p>
+              </div>
+              <Link
+                href={t.visitHref}
+                data-conversion="visit_cta_click"
+                data-conversion-label="Packages schedule visit"
+                className="luxor-gold-raised relative inline-flex min-h-12 items-center justify-center gap-2 rounded-md px-6 py-3 text-sm uppercase tracking-[0.14em]"
+              >
+                {t.visitCta} <ArrowRight className="h-4 w-4" />
+              </Link>
+            </div>
           </Reveal>
         </div>
       </section>

@@ -40,8 +40,8 @@ const copy = {
 
 export function PackageFlipCard({ data, locale = 'en' }: PackageFlipCardProps) {
   const [flipped, setFlipped] = useState(false)
-  const [allow3dFlip, setAllow3dFlip] = useState(false)
   const reduceMotion = useReducedMotion() ?? false
+  const allow3dFlip = !reduceMotion
   const faceId = useId()
   const t = copy[locale]
   const activeFace = nextPackageCardFace(flipped)
@@ -49,19 +49,6 @@ export function PackageFlipCard({ data, locale = 'en' }: PackageFlipCardProps) {
   const backControlRef = useRef<HTMLButtonElement>(null)
   const backPanelRef = useRef<HTMLDivElement>(null)
   const backScrollRef = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    const widthQuery = window.matchMedia('(min-width: 1024px)')
-    const motionQuery = window.matchMedia('(prefers-reduced-motion: reduce)')
-    const sync = () => setAllow3dFlip(widthQuery.matches && !motionQuery.matches && !reduceMotion)
-    sync()
-    widthQuery.addEventListener('change', sync)
-    motionQuery.addEventListener('change', sync)
-    return () => {
-      widthQuery.removeEventListener('change', sync)
-      motionQuery.removeEventListener('change', sync)
-    }
-  }, [reduceMotion])
 
   const notIncludedPattern = /^\s*(not included|no incluido)\s*:\s*/i
   const limitNotes = data.limitations.filter((item) => !notIncludedPattern.test(item))
