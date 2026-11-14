@@ -5,7 +5,7 @@ import { supabaseRestStrict } from './supabaseRestServer'
 import { normalizeCallerSpokenLanguage } from './luxorCallerLanguage'
 import { resolveElenaCallerEventType } from './luxorElenaCallerEventType'
 
-type Call = { twilio_call_sid: string; direction: string; to_number: string; status: string; inquiry_id: string | null; metadata: Record<string, unknown>; updated_at: string }
+type Call = { twilio_call_sid: string; direction: string; to_number: string; caller_number?: string | null; status: string; inquiry_id: string | null; metadata: Record<string, unknown>; updated_at: string }
 type Inquiry = { id: string; full_name: string; phone: string | null; email: string | null; updated_at: string; archived_at: string | null; is_test: boolean }
 type Contact = { confirmed?: boolean; nonce?: string; inquiry_id?: string; matching_review_needed?: boolean; full_name?: string; phone?: string; email?: string | null }
 export class ElenaLeadUpdateError extends Error {}
@@ -112,9 +112,46 @@ function affirmativeLeadConfirmation(value: unknown) {
     && !/\b(no|not|don't|dont|wait|cancel|later|never|espera|cancela|después)\b/i.test(value)
 }
 
+async function ensureElenaInboundContactForLeadSave(input: { callSid: string; sessionId: string; fields: Record<string, unknown> }) {
+  const [call] = await supabaseRestStrict<Call[]>(`luxor_calls?select=twilio_call_sid,direction,to_number,caller_number,status,inquiry_id,metadata,updated_at&twilio_call_sid=eq.${encodeURIComponent(input.callSid)}&limit=1`)
+  if (!call) throw new ElenaLeadUpdateError('This live call could not be verified.')
+  const capture = call.metadata.inbound_capture as Contact | undefined
+  if (capture?.confirmed === true && call.inquiry_id) return
+  const fullName = text(input.fields.full_name, 120)
+  const rawPhone = text(input.fields.phone, 32)
+  const phone = rawPhone ? normalizePhoneNumber(rawPhone) : (typeof call.caller_number === 'string' && call.caller_number !== 'anonymous' ? normalizePhoneNumber(call.caller_number) : null)
+  const email = text(input.fields.email, 254)?.toLowerCase() || null
+  if (!fullName || !phone) throw new ElenaLeadUpdateError('Save the caller name and callback number before saving event details.')
+  const nonce = randomUUID()
+  const expiresAt = new Date(Date.now() + 180_000).toISOString()
+  const pending = {
+    full_name: fullName,
+    phone,
+    email,
+    purpose: 'transfer',
+    caller_category: 'event_inquiry',
+    nonce,
+    expires_at: expiresAt,
+  }
+  const [changed] = await supabaseRestStrict<Call[]>(`luxor_calls?twilio_call_sid=eq.${encodeURIComponent(input.callSid)}&updated_at=eq.${encodeURIComponent(call.updated_at)}&metadata->>scope=eq.elena_live_inbound&metadata->>openai_session_id=eq.${encodeURIComponent(input.sessionId)}&select=twilio_call_sid`, {
+    method: 'PATCH', headers: { Prefer: 'return=representation' },
+    body: JSON.stringify({
+      metadata: { ...call.metadata, capture_pending: pending, caller_category: 'event_inquiry' },
+      updated_at: new Date(Math.max(Date.now(), Date.parse(call.updated_at) + 1)).toISOString(),
+    }),
+  })
+  if (!changed) throw new ElenaLeadUpdateError('The call changed. Repeat the details before saving.')
+  const result = await supabaseRestStrict<{ saved?: boolean }>('rpc/luxor_capture_elena_inbound_contact', {
+    method: 'POST',
+    body: JSON.stringify({ p_call_sid: input.callSid, p_session_id: input.sessionId, p_nonce: nonce }),
+  })
+  if (result.saved !== true) throw new ElenaLeadUpdateError('The caller contact details could not be saved. Confirm name, phone, and email, then try again.')
+}
+
 /** One caller confirmation: prepare and save in the same live turn; keep talking while persistence runs. */
 export async function saveElenaLeadUpdate(input: { callSid: string; sessionId: string; fields: Record<string, unknown>; spokenConfirmation: string }) {
   if (!affirmativeLeadConfirmation(input.spokenConfirmation)) throw new ElenaLeadUpdateError('Obtain an explicit yes from the caller before saving lead details.')
+  await ensureElenaInboundContactForLeadSave(input)
   const { spokenConfirmation: _spoken, ...fields } = input
   const prepared = await prepareElenaLeadUpdate({ callSid: input.callSid, sessionId: input.sessionId, fields })
   const result = await confirmElenaLeadUpdate({ callSid: input.callSid, sessionId: input.sessionId, nonce: prepared.nonce })

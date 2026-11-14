@@ -75,18 +75,7 @@ export function PortalFixNotice({ notice }: { notice: PortalFixNoticeData | null
   const focusBeforeOpenRef = useRef<HTMLElement | null>(null)
   const dismissedPersistRef = useRef(false)
   const pendingDismissRef = useRef(false)
-  const bannerHydratedRef = useRef(false)
-  const [showBanner, setShowBanner] = useState(false)
-
-  useEffect(() => {
-    if (!dismissSnapshot.ready) return
-    if (!bannerHydratedRef.current) {
-      bannerHydratedRef.current = true
-      setShowBanner(!dismissSnapshot.dismissed)
-      return
-    }
-    if (dismissSnapshot.dismissed) setShowBanner(false)
-  }, [dismissSnapshot.ready, dismissSnapshot.dismissed])
+  const showBanner = mounted && dismissSnapshot.ready && !dismissSnapshot.dismissed
 
   const closeModal = useCallback(() => {
     setOpen(false)
@@ -113,7 +102,6 @@ export function PortalFixNotice({ notice }: { notice: PortalFixNoticeData | null
     dismissPortalFixNotice(notice.id)
     publishPortalFixNoticeDismissSnapshot(notice.id, true)
     window.dispatchEvent(new Event(FIX_NOTICE_DISMISS_EVENT))
-    setShowBanner(false)
     restoreFocusAfterModal()
   }, [notice, restoreFocusAfterModal])
 

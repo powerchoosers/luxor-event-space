@@ -2,8 +2,18 @@ export type LuxorCallDirection = 'inbound' | 'outbound'
 
 // Transcription runs on the customer-facing leg for both incoming and outgoing calls.
 // Twilio's inbound track is audio received from that leg; outbound is audio sent to it.
-export function luxorTranscriptSpeaker(track: string): 'caller' | 'luxor' | 'unknown' {
-  switch (track.toLowerCase()) {
+// Elena live inbound uses a programmable SIP bridge, so inbound/outbound tracks are reversed.
+export function luxorElenaLiveInboundTranscriptUsesSipBridge(metadata: Record<string, unknown> | null | undefined) {
+  return metadata?.scope === 'elena_live_inbound'
+}
+
+export function luxorTranscriptSpeaker(track: string, options: { elenaSipBridge?: boolean } = {}): 'caller' | 'luxor' | 'unknown' {
+  const lower = track.toLowerCase()
+  if (options.elenaSipBridge) {
+    if (lower === 'inbound_track' || lower === 'inbound') return 'luxor'
+    if (lower === 'outbound_track' || lower === 'outbound') return 'caller'
+  }
+  switch (lower) {
     case 'inbound_track':
     case 'caller':
     case 'customer':
@@ -15,6 +25,19 @@ export function luxorTranscriptSpeaker(track: string): 'caller' | 'luxor' | 'unk
     default:
       return 'unknown'
   }
+}
+
+export function luxorCallTranscriptManuallyCorrected(metadata: Record<string, unknown> | null | undefined) {
+  const value = metadata?.transcript_manually_corrected
+  return value === true || value === 'true'
+}
+
+export function luxorTranscriptStorageTrack(track: string, metadata: Record<string, unknown> | null | undefined) {
+  if (!luxorElenaLiveInboundTranscriptUsesSipBridge(metadata)) return track
+  const lower = track.toLowerCase()
+  if (lower === 'inbound_track' || lower === 'inbound') return 'luxor_agent'
+  if (lower === 'outbound_track' || lower === 'outbound') return 'caller'
+  return track
 }
 
 export type LuxorCallStatus =

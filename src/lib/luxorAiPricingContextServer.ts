@@ -33,14 +33,25 @@ export async function getLuxorAiPricingContext(): Promise<string> {
         const policy = getLuxorCustomTimeRentalPolicyV4(pricing.config, date)
         return policy ? [{ day, minimum_price: policy.minimum_price, minimum_hours: policy.minimum_hours }] : []
       }) : []
+    const costs = pricing.config?.luxor_costs && typeof pricing.config.luxor_costs === 'object' ? pricing.config.luxor_costs as Record<string, unknown> : {}
+    const bookingRecord = costs.booking_payment && typeof costs.booking_payment === 'object' ? costs.booking_payment as Record<string, unknown> : null
+    const depositRecord = costs.security_deposit && typeof costs.security_deposit === 'object' ? costs.security_deposit as Record<string, unknown> : null
+    const bookingPayment = typeof bookingRecord?.amount === 'number' ? bookingRecord.amount : null
+    const securityDeposit = typeof depositRecord?.amount === 'number' ? depositRecord.amount : null
     if (!days.some((day) => day.options.length) && !custom.length) throw new Error('No public rental rates')
     return `ACTIVE PROPOSAL CATALOG CONTEXT — current approved Settings pricing and packages, version ${pricing.version}:
+STANDARD DEPOSITS (from current Settings — state these when callers ask about reserving or deposits):
+${JSON.stringify({
+      initial_booking_payment_usd: bookingPayment,
+      refundable_security_deposit_usd: securityDeposit,
+      note: 'The initial booking payment reserves the date after agreement signing. The refundable security deposit is separate from package pricing.',
+    })}
 VENUE RENTAL DAYS:
 ${JSON.stringify(days)}
 PACKAGES (single source of truth from portal Settings; do not use obsolete Bronze/Silver/Gold names):
 ${JSON.stringify(activePackages, null, 2)}
 Public Custom Time starting prices (only when enabled and published): ${JSON.stringify(custom)}.
-These are venue rental starting rates, package options, and time windows, not final event prices. Rates and packages in current Settings take precedence over older messages, notes, knowledge, examples, and model memory for current general pricing. Only quote a rate when its day, period and conditions match. Include hourly minimums when shown. Missing or non-public rates, custom time totals, fees, package totals, deposits, promotions, tax and availability are not established by this list: do not guess them. Do not calculate or promise a final quote; use the proposal builder and its server calculator. A client's accepted or locked proposal remains the authority for that specific existing agreement, not a new current-rate quote.`
+These are venue rental starting rates, package options, and time windows, not final event prices. Only quote a rate when its day, period and conditions match. Include hourly minimums when shown. You may quote the standard initial booking payment and refundable security deposit amounts from STANDARD DEPOSITS when asked. Do not say website or online prices may be outdated; current Settings and luxoratlaspalmas.com reflect the published catalog. Missing or non-public rates, custom time totals, fees, package totals, promotions, tax and availability are not established by this list: do not guess them. Do not calculate or promise a final quote; use the proposal builder and its server calculator. A client's accepted or locked proposal remains the authority for that specific existing agreement, not a new current-rate quote.`
   } catch {
     return 'ACTIVE PROPOSAL CATALOG CONTEXT: unavailable. Do not quote current prices from old emails, knowledge, examples or memory. Ask the Luxor team to confirm current pricing.'
   }

@@ -43,6 +43,27 @@
   to { transform: translateY(-12px); }
 }
 
+/* Portal login frosted glass card */
+.portal-login-card-frosted {
+  background-color: rgba(255, 255, 255, 0.48);
+  -webkit-backdrop-filter: blur(20px) saturate(160%);
+  backdrop-filter: blur(20px) saturate(160%);
+  border-color: rgba(124, 91, 36, 0.22);
+  box-shadow:
+    0 24px 60px -20px rgba(35, 25, 10, 0.18),
+    0 0 0 1px rgba(255, 255, 255, 0.65) inset;
+}
+
+body[data-portal-theme='dark'] .portal-login-card-frosted {
+  background-color: rgba(18, 16, 14, 0.52);
+  -webkit-backdrop-filter: blur(20px) saturate(160%);
+  backdrop-filter: blur(20px) saturate(160%);
+  border-color: rgba(202, 162, 76, 0.22);
+  box-shadow:
+    0 28px 70px -24px rgba(0, 0, 0, 0.75),
+    0 0 0 1px rgba(202, 162, 76, 0.18) inset;
+}
+
 :root {
   --background: #050505;
   --foreground: #f6efe8;

@@ -23,7 +23,14 @@ export default async function PortalLoginPage({ searchParams }: LoginPageProps) 
         <Link href="/" aria-label="Luxor home" className="mb-8 flex justify-center">
           <LuxorWordmark compact horizontal subline={false} className="[&_.luxor-wordmark]:!text-[2.2rem]" />
         </Link>
-        <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-6 shadow-[0_16px_48px_-28px_rgba(35,25,10,0.3)] sm:p-9">
+        <section
+          style={{
+            backgroundColor: 'rgba(255, 255, 255, 0.46)',
+            backdropFilter: 'blur(18px) saturate(160%)',
+            WebkitBackdropFilter: 'blur(18px) saturate(160%)',
+          }}
+          className="portal-login-card-frosted rounded-2xl border p-6 sm:p-9 transition-colors"
+        >
           <p className="text-xs font-bold uppercase tracking-[0.18em] text-[#a8792f] dark:text-[#d6b666]">Luxor owner portal</p>
           <h1 className="mt-3 text-2xl font-bold tracking-tight sm:text-3xl">Sign in to continue</h1>
           <p className="mt-3 text-sm leading-6 text-[color:var(--portal-muted)]">Use your approved Luxor email and password to access your workspace.</p>
