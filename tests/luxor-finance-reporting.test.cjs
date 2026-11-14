@@ -234,8 +234,8 @@ test('strict booking metrics keep the event-page enriched-row contract for non-e
   assert.match(routeSource, /strictMetrics\s*&&\s*financeRowsOnly[\s\S]*?listLuxorBookings\(1000,\s*true\)/)
   assert.match(routeSource, /listLuxorBookingsWithPayments\(1000,\s*strictMetrics\)/)
   const consumerUrls = [
-    require('node:fs').readFileSync(path.join(repo, 'src/app/(portal)/portal/finances/page.tsx'), 'utf8'),
-    require('node:fs').readFileSync(path.join(repo, 'src/app/(portal)/portal/reports/page.tsx'), 'utf8'),
+    require('node:fs').readFileSync(path.join(repo, 'src/app/(workspace)/(portal)/portal/finances/page.tsx'), 'utf8'),
+    require('node:fs').readFileSync(path.join(repo, 'src/app/(workspace)/(portal)/portal/reports/page.tsx'), 'utf8'),
   ]
   assert.ok(consumerUrls[0].includes('strictMetrics=1&financeRowsOnly=1'))
   assert.ok(consumerUrls[1].includes('strictMetrics=1&financeRowsOnly=1'))
@@ -346,3 +346,4 @@ test('refund-status records remain separate and mark paid-only finance figures u
   assert.equal(summary.refundReconciliationRequired, true)
   assert.equal(summary.eventPaymentsReceived, 500)
 })
+

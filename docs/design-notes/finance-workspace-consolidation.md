@@ -36,7 +36,7 @@ Finance providers and preferred event vendors share historical vendor records. E
 
 | Concern | Source |
 | --- | --- |
-| Finance navigation and legacy view handling | `src/app/(portal)/portal/finances/page.tsx` |
+| Finance navigation and legacy view handling | `src/app/(workspace)/(portal)/portal/finances/page.tsx` |
 | Bill list and shared review/approval content | `src/components/portal/BillsPayableLedger.tsx` |
 | Recurring costs and expense ledger | `src/components/portal/expenses/ExpenseManagement.tsx` |
 | Existing company grouping and details | `ProvidersWorkspace.tsx`, `VendorBillsProfile.tsx`, `VendorBusinessDetails.tsx` |
@@ -63,3 +63,4 @@ On November 10, the real classifier processed two synthetic PDFs generated only 
 - Exercised bill details/edit/back, filters and empty results, schedule edit/back, expected-charge pagination, expected-charge details, and company-to-record drill-down without submitting changes. Browser console reported no errors.
 - Attempted an isolated browser upload with intercepted API responses, but the in-app file chooser timed out. No file was selected and no upload request occurred. Interception was cleared afterward. This does not count as a rendered upload acceptance pass.
 - No payments, financial records, or uploaded documents were created in the live account. Application source remains local and uncommitted; the applied schema migration is separately verified above.
+

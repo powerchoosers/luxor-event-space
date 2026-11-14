@@ -15,7 +15,7 @@ const dueClaims = await readFile(new URL('../supabase/migrations/20261015010000_
 const sequenceRetarget = await readFile(new URL('../supabase/migrations/20261016010000_retarget_all_future_sequence_emails.sql', import.meta.url), 'utf8')
 const calendarLifecycleSql = await readFile(new URL('../supabase/migrations/20260828033511_luxor_calendar_lifecycle.sql', import.meta.url), 'utf8')
 const inquiryRoute = await readFile(new URL('../src/app/api/inquiries/route.ts', import.meta.url), 'utf8')
-const leadPage = await readFile(new URL('../src/app/(portal)/portal/leads/[id]/page.tsx', import.meta.url), 'utf8')
+const leadPage = await readFile(new URL('../src/app/(workspace)/(portal)/portal/leads/[id]/page.tsx', import.meta.url), 'utf8')
 const emailJobTypes = await readFile(new URL('../src/lib/luxorInquiryTypes.ts', import.meta.url), 'utf8')
 
 function createSequenceRecipientStore({ lead, booking, jobs = [], now = Date.parse('2026-10-16T12:00:00Z') }) {
@@ -519,3 +519,4 @@ test('due-worker job claim commits independently before per-lead validation, wit
   assert.match(worker, /idempotencyKey: `email-job\/\$\{job\.id\}`/)
   assert.match(worker, /Retry only this same job so the provider idempotency key can reconcile it/)
 })
+

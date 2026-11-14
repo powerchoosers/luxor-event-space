@@ -3,6 +3,7 @@ import { Cormorant_Garamond, Manrope } from 'next/font/google'
 import type { ReactNode } from 'react'
 import { cookies } from 'next/headers'
 import '../globals.css'
+import { PortalLoginHandoffProvider } from '@/components/portal/PortalLoginHandoff'
 
 const manrope = Manrope({
   variable: '--font-manrope',
@@ -37,13 +38,15 @@ export const viewport: Viewport = {
   themeColor: '#050505',
 }
 
-export default async function AuthLayout({ children }: { children: ReactNode }) {
+export default async function WorkspaceLayout({ children }: { children: ReactNode }) {
   const savedTheme = (await cookies()).get('luxor-portal-theme')?.value
   const theme = savedTheme === 'dark' ? 'dark' : 'light'
   return (
     <html lang="en" className={`${manrope.variable} ${cormorant.variable} h-full antialiased`}>
-      <body data-portal-theme={theme} suppressHydrationWarning className="min-h-full bg-[color:var(--portal-bg)] text-[color:var(--portal-text)]"><script dangerouslySetInnerHTML={{ __html: "try{var t=localStorage.getItem('luxor-portal-theme');if(t=== 'light' || t=== 'dark')document.body.dataset.portalTheme=t}catch(e){}" }} />{children}</body>
+      <body data-portal-theme={theme} suppressHydrationWarning className="min-h-full font-sans bg-[color:var(--portal-bg)] text-[color:var(--portal-text)]"><script dangerouslySetInnerHTML={{ __html: "try{var t=localStorage.getItem('luxor-portal-theme');if(t=== 'light' || t=== 'dark')document.body.dataset.portalTheme=t}catch(e){}" }} /><PortalLoginHandoffProvider>{children}</PortalLoginHandoffProvider></body>
     </html>
   )
 }
+
+
 

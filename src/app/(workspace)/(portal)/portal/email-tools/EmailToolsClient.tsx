@@ -6,10 +6,10 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { Activity, ArrowUpRight, FlaskConical, Mail, Send, FileText, Wrench } from '@/lib/icons/phosphor-compat'
 import { EmailQueueHealthWidget } from '@/components/portal/EmailQueueHealthWidget'
 import { PortalAnimatedTabs, PortalPageFrame, PortalPageHeader, PortalTabTransition, PortalSkeleton } from '@/components/portal/PortalUI'
-import { EMAIL_TEMPLATES } from '@/app/(portal)/portal/marketing/emailTemplates'
+import { EMAIL_TEMPLATES } from '@/app/(workspace)/(portal)/portal/marketing/emailTemplates'
 import type { LuxorMarketingTemplate } from '@/lib/luxorInquiryTypes'
 import type { LuxorMailboxPageResult } from '@/lib/luxorMailboxPage'
-import type { EmailMessageItem } from '@/app/(portal)/portal/marketing/tabs/AllEmailsTab'
+import type { EmailMessageItem } from '@/app/(workspace)/(portal)/portal/marketing/tabs/AllEmailsTab'
 
 type ToolsTab = 'queue' | 'templates' | 'activity' | 'test-tools'
 type TestLeadSummary = {

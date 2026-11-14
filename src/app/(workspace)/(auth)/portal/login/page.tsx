@@ -4,6 +4,7 @@ import { PortalPasswordLogin } from './PortalPasswordLogin'
 import { LuxorWordmark } from '@/components/LuxorWordmark'
 import { LuxorVisitBackdrop } from '@/components/LuxorVisitBackdrop'
 
+
 type LoginPageProps = { searchParams?: Promise<{ error?: string }> }
 
 export default async function PortalLoginPage({ searchParams }: LoginPageProps) {
@@ -15,9 +16,10 @@ export default async function PortalLoginPage({ searchParams }: LoginPageProps) 
       : error ? 'The portal could not complete sign-in. Check your email and password and try again.' : null
 
   return (
-    <main className="relative isolate flex min-h-[100dvh] items-center justify-center overflow-hidden bg-[color:var(--portal-bg)] px-5 py-10 font-sans text-[color:var(--portal-text)] sm:px-8">
+    <main className="portal-login-screen relative isolate flex min-h-[100dvh] items-center justify-center overflow-hidden bg-[color:var(--portal-bg)] px-5 py-10 font-sans text-[color:var(--portal-text)] sm:px-8">
       <LuxorVisitBackdrop login />
-      <div className="w-full max-w-md">
+
+      <div className="portal-login-content w-full max-w-md">
         <Link href="/" aria-label="Luxor home" className="mb-8 flex justify-center">
           <LuxorWordmark compact horizontal subline={false} className="[&_.luxor-wordmark]:!text-[2.2rem]" />
         </Link>
@@ -36,3 +38,4 @@ export default async function PortalLoginPage({ searchParams }: LoginPageProps) 
     </main>
   )
 }
+

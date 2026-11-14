@@ -80,7 +80,7 @@ import { PLANNER_INVITATION_DEFAULT, renderPlannerInvitationCopy, type PlannerIn
 import { PLANNER_VERIFICATION_DEFAULT, renderPlannerVerificationCopy, type PlannerVerificationCopy } from '@/lib/luxorPlannerVerificationCopy'
 import { AGREEMENT_OWNER_DEFAULT, renderAgreementOwnerCopy, type AgreementOwnerCopy } from '@/lib/luxorAgreementOwnerCopy'
 import { LAYOUT_REVIEW_EMAIL_DEFAULT, renderLayoutReviewEmailCopy, type LayoutReviewEmailCopy } from '@/lib/luxorLayoutReviewEmailCopy'
-import type { LuxorEmailDocument } from '@/app/(portal)/portal/marketing/emailTemplates'
+import type { LuxorEmailDocument } from '@/app/(workspace)/(portal)/portal/marketing/emailTemplates'
 
 type WorkflowRow = {
   id: string

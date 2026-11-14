@@ -63,7 +63,7 @@ import { useToast } from '@/components/portal/ToastProvider'
 import { getPortalSupabaseClient } from '@/lib/supabaseClient'
 import { AnimatedCircularProgressBar } from '@/components/ui/animated-circular-progress-bar'
 import { MagicCard } from '@/components/ui/magic-card'
-import { OperationsLoadingSkeleton } from '@/app/(portal)/portal/operations/OperationsLoadingSkeleton'
+import { OperationsLoadingSkeleton } from '@/app/(workspace)/(portal)/portal/operations/OperationsLoadingSkeleton'
 import { NeedsAttentionNow } from '@/components/portal/NeedsAttentionNow'
 
 type SubTab =

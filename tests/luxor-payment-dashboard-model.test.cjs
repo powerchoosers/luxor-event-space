@@ -71,7 +71,7 @@ test('draft, cancelled, unaccepted, and superseded invoices do not create collec
 })
 
 test('Invoices and Lead Payments both render lifecycle and collection labels through the shared model', () => {
-  const invoicesPage = fs.readFileSync(path.join(repo, 'src/app/(portal)/portal/invoices/page.tsx'), 'utf8')
+  const invoicesPage = fs.readFileSync(path.join(repo, 'src/app/(workspace)/(portal)/portal/invoices/page.tsx'), 'utf8')
   const leadPaymentsPage = fs.readFileSync(path.join(repo, 'src/components/portal/LeadPaymentsDashboard.tsx'), 'utf8')
   for (const source of [invoicesPage, leadPaymentsPage]) {
     assert.match(source, /getInvoiceCollectionDisplayState/)
@@ -152,3 +152,4 @@ test('reminder history only includes the selected event and payment reminder kin
   ], 'booking-1', new Set(['invoice-1']))
   assert.deepEqual(rows.map((row) => row.id).sort(), ['installment', 'same-booking', 'same-invoice'])
 })
+

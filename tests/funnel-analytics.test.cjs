@@ -42,7 +42,7 @@ test('shared inquiry eligibility keeps recent submissions and metrics consistent
  const rows=cases.map(r=>({...r,created_at:at}));const data={...base(),inquiries:rows}
  const recent=rows.filter(eligibility.isFunnelInquiryEligible)
  assert.deepEqual(recent.map(r=>r.id),['real']);assert.equal(build(period,data).metrics.newInquiries,recent.length)
- const page=fs.readFileSync('src/app/(portal)/portal/leads/page.tsx','utf8')
+ const page=fs.readFileSync('src/app/(workspace)/(portal)/portal/leads/page.tsx','utf8')
  const dashboard=page.slice(page.indexOf('function LeadsDashboard('),page.indexOf('function SortableHeader'))
  assert.match(dashboard,/isFunnelInquiryEligible\(lead\)/);assert.match(dashboard,/dashboardPeriod.startAt/);assert.match(dashboard,/dashboardPeriod.endAt/)
  assert.match(page,/leads=\{leads\}/)
@@ -55,3 +55,4 @@ test('metadata-deleted child activity does not inflate eligible lead metrics',()
 
 test('all loader projections are explicit and omit large documents and contact fields',async()=>{const tables=['luxor_inquiries','luxor_tour_visits','luxor_tour_schedule_receipts','luxor_proposal_send_attempts','luxor_payments','luxor_invoices','luxor_bookings'];for(const table of tables){const key=table==='luxor_tour_schedule_receipts'?'revision_id':'id';const h=loader([[{[key]:'row',receipt_inquiry_id:'lead'}]],[1,1]);const rows=await h.loadFunnelRows(table);assert.doesNotMatch(h.paths[0],/select=\*|line_items|public_token|recipient_email|full_name|request_payload,/);if(table==='luxor_tour_schedule_receipts'){assert.match(h.paths[0],/receipt_inquiry_id:request_payload->>inquiry_id/);assert.equal(rows[0].request_payload.inquiry_id,'lead')}if(table==='luxor_payments')assert.match(h.paths[0],/received_date/)}})
 test('unknown source is rejected before reads',async()=>{const h=loader([]);await assert.rejects(h.loadFunnelRows('unrelated_table'));assert.equal(h.paths.length,0)})
+

@@ -157,6 +157,16 @@ export const Header = () => {
 
   useEffect(() => {
     if (!mobileMenuOpen) return
+    const desktop = window.matchMedia('(min-width: 1280px)')
+    const onBreakpointChange = (event: MediaQueryListEvent) => {
+      if (event.matches) { setMobileEventsOpen(false); setMobileMenuOpen(false) }
+    }
+    desktop.addEventListener('change', onBreakpointChange)
+    return () => desktop.removeEventListener('change', onBreakpointChange)
+  }, [mobileMenuOpen])
+
+  useEffect(() => {
+    if (!mobileMenuOpen) return
 
     function handleKeyDown(event: KeyboardEvent) {
       if (event.key !== 'Escape') return
@@ -206,7 +216,7 @@ export const Header = () => {
         </Link>
 
         {/* Desktop Nav */}
-        <nav className="hidden items-center gap-8 lg:flex xl:gap-10">
+        <nav className="hidden items-center gap-8 xl:flex 2xl:gap-10">
           <div
                 ref={eventsNavRef}
                 className="relative"
@@ -311,7 +321,7 @@ export const Header = () => {
           <button 
             ref={mobileMenuButtonRef}
             onClick={() => (mobileMenuOpen ? closeMobileMenu() : setMobileMenuOpen(true))}
-            className="site-header-menu relative z-[120] flex min-h-11 min-w-11 items-center justify-center rounded-xl text-[#d7c29a]/80 transition-colors hover:text-[#f1d27a] lg:hidden"
+            className="site-header-menu relative z-[120] flex min-h-11 min-w-11 items-center justify-center rounded-xl text-[#d7c29a]/80 transition-colors hover:text-[#f1d27a] xl:hidden"
             aria-label={mobileMenuOpen ? (spanish ? 'Cerrar menú de navegación' : 'Close navigation menu') : (spanish ? 'Abrir menú de navegación' : 'Open navigation menu')}
             aria-expanded={mobileMenuOpen}
             aria-controls="mobile-navigation"
@@ -330,7 +340,7 @@ export const Header = () => {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.48, ease: [0.23, 1, 0.32, 1] }}
-            className="fixed inset-0 z-[100] h-[100dvh] w-screen overflow-hidden bg-[#f7f3ec] lg:hidden"
+            className="fixed inset-0 z-[100] h-[100dvh] w-screen overflow-hidden bg-[#f7f3ec] xl:hidden"
           >
             <div className="absolute inset-0 luxor-noise opacity-20" />
             <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_0%,rgba(202,162,76,0.16),transparent_26rem),radial-gradient(circle_at_50%_52%,rgba(202,162,76,0.12),transparent_22rem),linear-gradient(180deg,#fffdf9,#f1e9df_58%)]" />

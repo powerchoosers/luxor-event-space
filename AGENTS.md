@@ -23,8 +23,8 @@ These instructions apply to this entire repository. Cursor loads this file as st
 
 ```
 src/app/(site)          Public marketing site, Spanish pages under /es, payment result pages
-src/app/(portal)        Signed-in owner workspace at /portal
-src/app/(auth)          Portal login and activation, without the public header or Elena widget
+src/app/(workspace)/(portal)        Signed-in owner workspace at /portal
+src/app/(workspace)/(auth)          Portal login and activation, without the public header or Elena widget
 src/app/(proposal)      Tokenized client proposal review
 src/app/api             Route handlers: auth, bookings, mail, Twilio, Stripe, cron, portal data
 src/app/layout-review   Tokenized layout review
@@ -48,8 +48,8 @@ Do not treat `To Delete/`, `.next`, `tmp`, or generated `tsconfig*.tsbuildinfo` 
 - `src/app/(site)/layout.tsx` for the public shell, fonts, and shared site chrome.
 - `src/components/Header.tsx` and `src/components/Footer.tsx` for public navigation.
 - `src/components/Reveal.tsx` for public-site animation policy.
-- `src/app/(portal)/layout.tsx` for portal protection and redirect behavior.
-- `src/app/(auth)/portal/login/page.tsx` and `src/app/api/auth/portal-login/route.ts` for owner sign-in.
+- `src/app/(workspace)/(portal)/layout.tsx` for portal protection and redirect behavior.
+- `src/app/(workspace)/(auth)/portal/login/page.tsx` and `src/app/api/auth/portal-login/route.ts` for owner sign-in.
 - `src/lib/luxorPortalAuth.ts` for the `luxor_portal_session` cookie.
 - `src/lib/luxorPortalAccess.ts` and `src/lib/luxorSupabaseAuthServer.ts` for active `@luxoratlaspalmas.com` members and Supabase Auth.
 - `src/lib/luxorMailConfig.ts` for the mail provider switch, approved senders, and Resend configuration check.
@@ -151,3 +151,4 @@ Fetch `origin` before relying on branch history, and fetch again before describi
 Lewis's preferred release is scoped edits, local checks, a non-force push to `main` when the task authorizes it, verification of the Vercel deployment, then plain user-acceptance steps for Arianna. A push alone does not prove live behavior.
 
 Vercel builds this repo from the root with `npm run build`. The public site can run without secrets. Portal login, Resend, Stripe, Twilio, and cron need their server-only env vars in Vercel. `vercel.json` is currently empty, so do not assume a cron schedule from that file; check the Vercel project when cron timing matters.
+

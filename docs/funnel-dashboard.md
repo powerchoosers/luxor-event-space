@@ -1,6 +1,6 @@
 # Funnel Dashboard
 
-Dashboard scope: `src/app/(portal)/portal/leads/page.tsx`, the standalone `LeadsFunnelDashboard`, funnel APIs and model helpers. Existing navigation, Tours, Calendar, other lead tabs and Recent Lead Submissions are preserved.
+Dashboard scope: `src/app/(workspace)/(portal)/portal/leads/page.tsx`, the standalone `LeadsFunnelDashboard`, funnel APIs and model helpers. Existing navigation, Tours, Calendar, other lead tabs and Recent Lead Submissions are preserved.
 
 ## Periods and metrics
 - Full Sunday–Saturday weeks, calendar months and quarters in America/Chicago, including DST boundaries. New inquiries and daily bars use original creation timestamps.
@@ -19,3 +19,4 @@ The migration `20261113010000_luxor_funnel_goals.sql` creates only new goals and
 - Repository typecheck, full uncached lint and production build are required before release.
 - Rendered QA must cover light/dark, phone/tablet/desktop, period changes, chart scrolling, modal keyboard/focus, shared persistence and conflict/retry states. Unit/static rendering results do not replace browser verification.
 - Verify the exact production commit and deployed schema before reporting the dashboard live.
+

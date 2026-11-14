@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import dynamic from 'next/dynamic'
 import { Download, Loader2, Mail, Reply, Send } from '@/lib/icons/phosphor-compat'
-import type { EmailMessageItem } from '@/app/(portal)/portal/marketing/tabs/AllEmailsTab'
+import type { EmailMessageItem } from '@/app/(workspace)/(portal)/portal/marketing/tabs/AllEmailsTab'
 import type { LuxorInquiry } from '@/lib/luxorInquiryTypes'
 import { decodeHtmlEntities } from '@/lib/luxorTextUtils'
 import { EmailRichTextEditor } from './EmailRichTextEditor'
@@ -23,7 +23,7 @@ function EmailLoading() {
   </div>
 }
 
-const ThreadMessage = dynamic(() => import('@/app/(portal)/portal/marketing/tabs/AllEmailsTab').then((module) => module.ThreadMessage), {
+const ThreadMessage = dynamic(() => import('@/app/(workspace)/(portal)/portal/marketing/tabs/AllEmailsTab').then((module) => module.ThreadMessage), {
   ssr: false,
   loading: () => <EmailLoading />,
 })

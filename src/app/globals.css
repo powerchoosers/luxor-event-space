@@ -2,6 +2,46 @@
 
 @variant dark (&:where([data-portal-theme="dark"], [data-portal-theme="dark"] *));
 
+.portal-login-handoff {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--portal-bg);
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity 650ms ease, visibility 0s linear 650ms;
+}
+.portal-login-handoff-active {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  transition: opacity 400ms ease;
+}
+@media (prefers-reduced-motion: reduce) {
+  .portal-login-handoff { transition: none; }
+}
+@media (prefers-reduced-motion: no-preference) {
+  body:has(.portal-login-handoff-leaving) .portal-main {
+    animation: portal-login-arrival 650ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+  body:has(.portal-login-handoff-leaving) .portal-login-content {
+    animation: portal-login-arrival 650ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+  .portal-login-handoff-leaving > div {
+    animation: portal-login-mark-exit 650ms ease both;
+  }
+}
+@keyframes portal-login-arrival {
+  from { opacity: 0.35; transform: translateY(18px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes portal-login-mark-exit {
+  to { transform: translateY(-12px); }
+}
 
 :root {
   --background: #050505;
@@ -3266,3 +3306,4 @@ body[data-luxor-site] main.pricing-page > .pricing-section {
   95% { transform: translate(12.2px, 1px) scale(0.98); }
   100% { transform: translate(12.2px, 0px) scale(1); }
 }
+

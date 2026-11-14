@@ -11,7 +11,7 @@ function Invoke-WorkflowGitNames {
 
 function Get-WorkflowReleaseExcludePatterns {
   return @(
-    'src/app/(portal)/portal/finances/',
+    'src/app/(workspace)/(portal)/portal/finances/',
     'src/components/portal/Bill',
     'src/components/portal/Books',
     'src/components/portal/Finance',
@@ -68,3 +68,4 @@ function Get-WorkflowScopedPaths {
     -not ($exclude | Where-Object { $path -like "$_*" })
   }
 }
+

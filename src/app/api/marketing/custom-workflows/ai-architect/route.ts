@@ -5,7 +5,7 @@ import { createNewContactFollowUpDefinition, validateCustomWorkflowDefinition, t
 import { getLuxorAiVenueContext } from '@/lib/luxorAiContextServer'
 import { getCustomWorkflowEmailOptions } from '@/lib/luxorWorkflowEmailServer'
 import { listMarketingTemplates } from '@/lib/luxorMarketingServer'
-import { EMAIL_TEMPLATES, type LuxorEmailDocument } from '@/app/(portal)/portal/marketing/emailTemplates'
+import { EMAIL_TEMPLATES, type LuxorEmailDocument } from '@/app/(workspace)/(portal)/portal/marketing/emailTemplates'
 import { normalizeLuxorEmailTheme } from '@/lib/luxorEmailDesignSystem'
 import { WORKFLOW_EMAIL_BLOCK_GUIDANCE, validateGeneratedWorkflowImages } from '@/lib/luxorWorkflowAiServer'
 import { LUXOR_UNSLOP_COPY_RULES } from '@/lib/luxorUnslop'

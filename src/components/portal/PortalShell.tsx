@@ -1,5 +1,7 @@
 'use client'
 
+import { PortalLogoutForm } from '@/components/portal/PortalLoginHandoff'
+
 import {
   Bell,
   Clock,
@@ -1092,7 +1094,7 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
 
                     {/* Divider & Logout */}
                     <div className="mt-1 border-t border-[color:var(--portal-border)]/60 pt-1">
-                      <form action="/api/auth/logout" method="post">
+                      <PortalLogoutForm>
                         <button
                           type="submit"
                           className="group flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-xs font-medium text-[color:var(--portal-muted)] transition-all hover:bg-red-500/10 hover:text-red-500 dark:hover:text-red-400 cursor-pointer"
@@ -1100,7 +1102,7 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
                           <LogOut size={15} className="transition-transform group-hover:translate-x-0.5" />
                           <span>Sign out</span>
                         </button>
-                      </form>
+                      </PortalLogoutForm>
                     </div>
                   </motion.div>
                 ) : null}
@@ -2014,12 +2016,12 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
                   <span className="block truncate text-sm font-bold text-[color:var(--portal-text)]">{userProfile.displayName}</span>
                   <span className="mt-0.5 block truncate text-[11px] text-[color:var(--portal-muted)]">{userProfile.email}</span>
                 </span>
-                <form action="/api/auth/logout" method="post">
+                <PortalLogoutForm>
                   <button type="submit" className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-red-500/20 px-3 text-xs font-bold text-red-600 transition-colors hover:bg-red-500/10 dark:text-red-300">
                     <LogOut size={16} />
                     Log out
                   </button>
-                </form>
+                </PortalLogoutForm>
               </div>
             </motion.section>
           </motion.div>

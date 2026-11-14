@@ -1,4 +1,4 @@
-import type { LuxorEmailDocument } from '@/app/(portal)/portal/marketing/emailTemplates'
+import type { LuxorEmailDocument } from '@/app/(workspace)/(portal)/portal/marketing/emailTemplates'
 import { validateWorkflowEmailDocument } from './luxorWorkflowEmailDocument'
 
 export const CUSTOM_WORKFLOW_TRIGGER = 'contact_form_inquiry_created' as const

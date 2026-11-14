@@ -53,7 +53,7 @@ Pre-publication baseline HEAD and `origin/main` reference: `c0efb8b15cf32ef5ca4c
 
 Chrome was unavailable in the session, so browser QA used an existing standalone Playwright runtime. The actual builder component was bundled into a disposable fixture with synthetic auth/pricing/database responses; assets were fulfilled in memory. This was not authenticated production portal verification. Disposable scripts, bundles, PDFs, screenshots and the Chromium debug log were removed.
 
-Independent final review found no remaining source blocker for the held local checkpoint. It confirmed unchanged legal exclusivity, preserved weekend/historical paths and correction of the status-only publication bypass. The unrelated `src/app/(portal)/portal/leads/page.tsx` edit remains untouched; its SHA256 is `2DDE7868A8F99628E16A5B4D74485970FC245C91F451D607396C8CDB83E04C34`.
+Independent final review found no remaining source blocker for the held local checkpoint. It confirmed unchanged legal exclusivity, preserved weekend/historical paths and correction of the status-only publication bypass. The unrelated `src/app/(workspace)/(portal)/portal/leads/page.tsx` edit remains untouched; its SHA256 is `2DDE7868A8F99628E16A5B4D74485970FC245C91F451D607396C8CDB83E04C34`.
 
 Reviewed SQL artifact SHA256 before the follow-up corrections: `1E61D9739C3FDE4870348154311E3C101DBD888C02793E9683192BE2F64E83A5`. This evidence does not remove the business, production schema/RLS or real concurrency prerequisites above.
 
@@ -61,7 +61,7 @@ The disabled-publication review confirmed both weekday flags are absent from the
 
 ## Cloud continuation after Arianna’s answers — October 13, 2026
 
-The checkout was verified on `main` at the parent-authorized starting commit `b56476a048dc3982d114841b8b31854d07f803e8`. Arianna’s six answers were available in the supplied handoff; no Gmail polling or customer messaging was performed. Implementation changes and the generated migration are pushed to `main` and remain disabled/unapplied. The unrelated `src/app/(portal)/portal/leads/page.tsx` work remains untouched.
+The checkout was verified on `main` at the parent-authorized starting commit `b56476a048dc3982d114841b8b31854d07f803e8`. Arianna’s six answers were available in the supplied handoff; no Gmail polling or customer messaging was performed. Implementation changes and the generated migration are pushed to `main` and remain disabled/unapplied. The unrelated `src/app/(workspace)/(portal)/portal/leads/page.tsx` work remains untouched.
 
 | Check | Result |
 | --- | --- |
@@ -89,7 +89,7 @@ Updated SQL review artifact SHA256: `bffebdccd028f51c1b1f24e40745f50ddc267c69027
 
 ## Cloud continuation
 
-The implementation and production activation described above are complete. The unrelated `src/app/(portal)/portal/leads/page.tsx` work was deliberately excluded from the implementation and remains untouched. Do not commit temporary test routes, fixtures, secrets, environment files or QA artifacts.
+The implementation and production activation described above are complete. The unrelated `src/app/(workspace)/(portal)/portal/leads/page.tsx` work was deliberately excluded from the implementation and remains untouched. Do not commit temporary test routes, fixtures, secrets, environment files or QA artifacts.
 
 ## Production rollout and migration identity reconciliation — October 13, 2026
 
@@ -106,3 +106,4 @@ Synthetic calculator checks used the current production catalog configuration an
 No authenticated owner portal session was available in the cloud tools, so the signed-in proposal-builder UI was not exercised. Arianna can verify the UI at [the owner portal login](https://www.luxoratlaspalmas.com/portal/login): sign in, open [Leads](https://www.luxoratlaspalmas.com/portal/leads), open an existing lead, begin a new proposal, select a Monday–Thursday date, then choose custom rental times. Confirm whole-hour choices, the three-hour minimum, reset-window availability, the $400/hour rental line and unchanged fees. Stop before saving, sending, accepting, or taking payment. No authentication was bypassed.
 
 No customer bookings, charges, messages, agreements, historical snapshots, credentials, legal terms, or unrelated access controls were changed during this rollout.
+

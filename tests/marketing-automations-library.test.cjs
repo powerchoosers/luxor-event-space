@@ -249,7 +249,7 @@ test('search and status filters work together, and an open target resolves to it
 })
 
 test('library UI includes loading, empty, no-match, error, and retry states', () => {
-  const source = fs.readFileSync(path.join(root, 'src/app/(portal)/portal/marketing/tabs/AutomationsLibraryTab.tsx'), 'utf8')
+  const source = fs.readFileSync(path.join(root, 'src/app/(workspace)/(portal)/portal/marketing/tabs/AutomationsLibraryTab.tsx'), 'utf8')
   assert.match(source, /Loading automations/)
   assert.match(source, /No saved automations yet/)
   assert.match(source, /No automations match those filters/)
@@ -257,3 +257,4 @@ test('library UI includes loading, empty, no-match, error, and retry states', ()
   assert.match(source, /Try again/)
   assert.match(source, /setRetryVersion/)
 })
+

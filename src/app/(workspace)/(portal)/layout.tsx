@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from 'next'
-import { Cormorant_Garamond, Manrope } from 'next/font/google'
+import { PortalLoginArrival } from '@/components/portal/PortalLoginHandoff'
 import React from "react";
 import { PortalShell } from "@/components/portal/PortalShell";
 import { getLuxorPortalSession } from '@/lib/luxorPortalAuth'
@@ -8,20 +8,7 @@ import { getLuxorUserProfile } from '@/lib/luxorUserProfileServer'
 import { getLuxorPortalMember } from '@/lib/luxorPortalAccess'
 import { cookies } from 'next/headers'
 import { getActivePortalFixNotice } from '@/lib/luxorPortalFixNoticeServer'
-import '../globals.css'
 
-const manrope = Manrope({
-  variable: '--font-manrope',
-  subsets: ['latin'],
-  display: 'swap',
-})
-
-const cormorant = Cormorant_Garamond({
-  variable: '--font-cormorant',
-  subsets: ['latin'],
-  weight: ['400', '500', '600', '700'],
-  display: 'swap',
-})
 
 export const metadata: Metadata = {
   title: 'Luxor | Owner Portal',
@@ -69,17 +56,8 @@ async function ProtectedPortalLayout({ children }: { children: React.ReactNode }
   const fixNotice = await getActivePortalFixNotice()
 
   return (
-    <html
-      lang="en"
-      className={`${manrope.variable} ${cormorant.variable} h-full scroll-smooth antialiased`}
-    >
-      <body
-        className="portal-shell h-[100dvh] h-full min-h-full overflow-hidden bg-[color:var(--portal-bg)] font-sans text-[color:var(--portal-muted)] antialiased selection:bg-[#caa24c]/30"
-        data-portal-theme={initialTheme}
-        suppressHydrationWarning
-      >
-        <PortalShell session={session} initialProfile={userProfile} initialTheme={initialTheme} initialSidebarCollapsed={initialSidebarCollapsed} permissions={member.permissions} role={member.role} buildId={process.env.VERCEL_GIT_COMMIT_SHA?.slice(0, 7)} fixNotice={fixNotice}>{children}</PortalShell>
-      </body>
-    </html>
-  );
+    <PortalLoginArrival>
+      <PortalShell session={session} initialProfile={userProfile} initialTheme={initialTheme} initialSidebarCollapsed={initialSidebarCollapsed} permissions={member.permissions} role={member.role} buildId={process.env.VERCEL_GIT_COMMIT_SHA?.slice(0, 7)} fixNotice={fixNotice}>{children}</PortalShell>
+    </PortalLoginArrival>
+  )
 }

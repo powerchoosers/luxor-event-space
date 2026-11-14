@@ -6,7 +6,7 @@ import { normalizeLuxorEmailTheme } from './luxorEmailDesignSystem'
 import { getLuxorAiVenueContext } from './luxorAiContextServer'
 import { LUXOR_WEBSITE } from './luxorVenue'
 import { LUXOR_UNSLOP_COPY_RULES } from './luxorUnslop'
-import type { LuxorEmailDocument } from '@/app/(portal)/portal/marketing/emailTemplates'
+import type { LuxorEmailDocument } from '@/app/(workspace)/(portal)/portal/marketing/emailTemplates'
 
 type WorkflowMessageStep = CustomWorkflowEmailStep | CustomWorkflowTextStep
 type SenderContext = { displayName: string; email?: string; roleTitle?: string }

@@ -14,8 +14,8 @@ why. Excludes Elena confirmations, financial planning, and statement-match work.
 ## Stage (paths relative to repo root)
 
 ### Portal UI
-src/app/(portal)/portal/finances/bills/page.tsx
-src/app/(portal)/portal/finances/bills/vendors/[id]/page.tsx
+src/app/(workspace)/(portal)/portal/finances/bills/page.tsx
+src/app/(workspace)/(portal)/portal/finances/bills/vendors/[id]/page.tsx
 src/components/portal/BillPlanning.tsx
 src/components/portal/BillsPayableLedger.tsx
 src/components/portal/FinancialBills.tsx
@@ -28,8 +28,8 @@ src/components/portal/VendorDocuments.tsx
 src/components/portal/expenses/ExpenseManagement.tsx
 
 ### Portal shells touched for Bills routes only (review diff before staging)
-src/app/(portal)/portal/finances/page.tsx
-src/app/(portal)/portal/operations/page.tsx
+src/app/(workspace)/(portal)/portal/finances/page.tsx
+src/app/(workspace)/(portal)/portal/operations/page.tsx
 
 ### API
 src/app/api/operations/archive/
@@ -119,3 +119,4 @@ npm run lint -- --quiet
 ## UAT evidence (Nov 8, 2026, prod DB + localhost:3000)
 - Balance bill 3ca1fff2-…5742: $150 paid, KPI Paid this month $150, vendor link blocked when paid (DB + UI copy).
 - Reminder bill 6e3bcadc-…902fd: vendor Golden Rose linked, expense 959faaa9-…, prefs seven_days=true, Bill reminders list shows Due in 7 days · $75.
+

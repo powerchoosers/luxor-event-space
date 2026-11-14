@@ -1,18 +1,24 @@
 'use client'
 
 import { FormEvent, useState } from 'react'
+import { useRouter } from 'next/navigation'
+import { usePortalLoginHandoff } from '@/components/portal/PortalLoginHandoff'
 import { ArrowRight, Eye, LoaderCircle } from '@/lib/icons/phosphor-compat'
 import { EyeSlash } from '@phosphor-icons/react'
 
 export function PortalPasswordLogin() {
+  const router = useRouter()
+  const handoff = usePortalLoginHandoff()
   const [email, setEmail] = useState('a.patterson@luxoratlaspalmas.com')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
+  const [signedIn, setSignedIn] = useState(false)
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    let responseSucceeded = false
     setSubmitting(true)
     setError(null)
     try {
@@ -22,11 +28,17 @@ export function PortalPasswordLogin() {
         const payload = await response.json().catch(() => ({})) as { error?: string }
         throw new Error(payload.error || 'Sign-in failed.')
       }
-      window.location.assign('/portal')
+      responseSucceeded = true
+      setSignedIn(true)
+      await handoff.begin()
+      router.replace('/portal')
     } catch (cause) {
+      responseSucceeded = false
+      setSignedIn(false)
+      handoff.finish()
       setError(cause instanceof Error ? cause.message : 'Sign-in failed.')
     } finally {
-      setSubmitting(false)
+      if (!responseSucceeded) setSubmitting(false)
     }
   }
 
@@ -48,8 +60,9 @@ export function PortalPasswordLogin() {
     {error ? <p role="alert" className="rounded-lg border border-red-500/25 bg-red-500/10 px-3 py-2 text-left text-xs leading-5 text-red-700 dark:text-red-200">{error}</p> : null}
     <button type="submit" disabled={submitting} className="luxor-gold-raised flex min-h-12 w-full items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-bold text-white transition disabled:cursor-not-allowed disabled:opacity-65">
       {submitting ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <ArrowRight className="h-4 w-4" />}
-      {submitting ? 'Signing in…' : 'Sign in securely'}
+      {signedIn ? 'Opening portal…' : submitting ? 'Signing in…' : 'Sign in securely'}
     </button>
   </form>
 }
+
 

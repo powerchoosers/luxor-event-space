@@ -10,7 +10,7 @@ Goals must persist in the database across devices: daily/weekly/monthly/quarterl
 
 ## Confirmed current implementation
 
-- `src/app/(portal)/portal/leads/page.tsx`, `LeadsDashboard`, approximately lines1118–1400, owns this dashboard. This differs from the call-outcome detail route `leads/[id]/page.tsx`.
+- `src/app/(workspace)/(portal)/portal/leads/page.tsx`, `LeadsDashboard`, approximately lines1118–1400, owns this dashboard. This differs from the call-outcome detail route `leads/[id]/page.tsx`.
 - Current counts use lead status snapshots, not selected-period events: new=status new; proposals=status proposal_sent; deposits=status booked. Tours also use current inquiry status/attendance. These are not valid substitutes for the requested historical metrics.
 - `luxorTourMetrics.ts` has reusable Chicago date-key helpers, pagination and tour filtering, but its current presets are rolling/month-to-date, not the requested full calendar week/month/quarter windows.
 - `luxorAnalyticsServer.ts` contains broader reporting and should be reviewed for reusable loaders, not treated as proof its existing definitions match this request.
@@ -30,3 +30,4 @@ Extract a dashboard-only component/model, use a dedicated period analytics respo
 Test Sunday boundaries, Chicago DST, leap years, quarter/year navigation, calendar-length goal calculation/overrides, zero/missing goals, >100% progress, deduplication, failures/exclusions, cross-period bookings versus cohorts, saved goals across reloads, and chart/KPI consistency against actual records.
 
 Production schema/record verification is still needed. Existing call-outcome catalog calls timed out; no new production writes or catalog workaround was attempted for this intake.
+

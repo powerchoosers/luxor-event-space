@@ -56,8 +56,8 @@ See `tests/README.md` for what those cover. They do not hit production mail, pho
 | Area | Path |
 | --- | --- |
 | Public pages | `src/app/(site)` |
-| Owner portal | `src/app/(portal)/portal` |
-| Login and activation | `src/app/(auth)/portal` |
+| Owner portal | `src/app/(workspace)/(portal)/portal` |
+| Login and activation | `src/app/(workspace)/(auth)/portal` |
 | API routes | `src/app/api` |
 | Server helpers | `src/lib` |
 | Portal UI | `src/components/portal` |
@@ -82,3 +82,4 @@ Web push uses one stable VAPID pair: `LUXOR_WEB_PUSH_PUBLIC_KEY`, `LUXOR_WEB_PUS
 - Public hero content should be visible on first paint, not after a scroll animation.
 - Do not add a package unless the current stack cannot do the job.
 - Never commit `.env*`, credentials, or `TWILIO_PRIVATE_CONTEXT.md`.
+

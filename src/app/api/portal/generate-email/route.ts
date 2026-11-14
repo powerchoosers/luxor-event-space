@@ -5,7 +5,7 @@ import { generateWorkflowMessage } from '@/lib/luxorWorkflowAiServer'
 import { getLuxorUserProfile } from '@/lib/luxorUserProfileServer'
 import { normalizeLuxorEmailTheme } from '@/lib/luxorEmailDesignSystem'
 import { validateWorkflowEmailDocument } from '@/lib/luxorWorkflowEmailDocument'
-import { EMAIL_TEMPLATES, type LuxorEmailDocument } from '@/app/(portal)/portal/marketing/emailTemplates'
+import { EMAIL_TEMPLATES, type LuxorEmailDocument } from '@/app/(workspace)/(portal)/portal/marketing/emailTemplates'
 import type { CustomWorkflowEmailStep } from '@/lib/luxorCustomWorkflowDefinition'
 
 export async function POST(request: Request) {

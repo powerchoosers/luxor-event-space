@@ -21,7 +21,7 @@ Use this when you want a **workflow-only** commit separate from finance/ops edit
 - `src/components/portal/LogCallOutcomeModal.tsx`
 - `src/components/portal/LeadScheduledWorkflowEmail.tsx`
 - `src/components/portal/LeadTaskActivity.tsx`
-- `src/app/(portal)/portal/leads/[id]/page.tsx`
+- `src/app/(workspace)/(portal)/portal/leads/[id]/page.tsx`
 - `src/app/api/workflow-call-continue/`
 - `src/app/api/workflow-call-intent/`
 - `src/app/api/workflow-current-email/`
@@ -53,3 +53,4 @@ Codex checkout (optional same day):
 npm run test:scoped-workflow
 npm run test:postgres-races
 ```
+

@@ -6,6 +6,8 @@ import { FUNNEL_GOAL_METRICS, getFunnelGoal, parseFunnelGoals, funnelGoalProgres
 import { getFunnelPeriodFromRange, type FunnelPeriod } from '@/lib/luxorFunnelPeriods'
 import type { PortalDateRange } from '@/components/portal/PortalDateRangeControl'
 import { MagicCard } from '@/components/ui/magic-card'
+import { NumberTicker } from '@/components/ui/number-ticker'
+import { motion, useReducedMotion } from 'framer-motion'
 
 type Metric = FunnelGoalMetric | 'depositsReceived' | 'conversionRate'
 export type FunnelAnalytics = { period: FunnelPeriod; metrics: Record<Metric, number | null>; dailyLeads: Array<{ date: string; count: number | null }>; issues: string[]; definitions: Record<string, string> }
@@ -36,12 +38,14 @@ const KPI_TONE_CLASS = {
 function FunnelKpiCard({
   label,
   value,
+  metric,
   tone,
   definition,
   onClick,
 }: {
   label: string
-  value: string
+  value: number | null
+  metric: Metric
   tone: 'blue' | 'gold' | 'green'
   definition?: string
   onClick?: () => void
@@ -56,7 +60,7 @@ function FunnelKpiCard({
       <MagicCard className="h-full rounded-xl px-4 py-3.5">
         <div className="flex flex-col gap-2">
           <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--portal-muted)]">{label}</p>
-          <p className="text-2xl font-extrabold tabular-nums tracking-tight text-[color:var(--portal-text)]">{value}</p>
+          <p className="text-2xl font-extrabold tabular-nums tracking-tight text-[color:var(--portal-text)]" aria-label={funnelNumber(value, metric)}>{value === null ? '—' : <NumberTicker key={value} aria-hidden="true" value={value} decimalPlaces={metric === 'conversionRate' ? 1 : 0} suffix={metric === 'conversionRate' ? '%' : ''} />}</p>
           <span className={`self-start rounded-md border px-2 py-0.5 text-[8px] font-bold uppercase tracking-[0.14em] ${KPI_TONE_CLASS[tone]}`}>Period</span>
         </div>
       </MagicCard>
@@ -114,6 +118,7 @@ export function funnelNumber(value: number | null | undefined, kind?: string): s
 }
 
 export function FunnelDailyChart({ period, days, dailyGoal, total, periodGoal }: { period: FunnelPeriod; days: FunnelAnalytics['dailyLeads']; dailyGoal: number | null; total: number | null; periodGoal: number | null }) {
+  const reduceMotion = useReducedMotion()
   const scale = Math.max(1, Math.ceil(Math.max(dailyGoal || 0, ...days.map(d => d.count || 0)) / 5) * 5)
   const progress = funnelGoalProgress(total, periodGoal)
   return <section className={`${panel} min-w-0 p-5 xl:col-span-2`} aria-label="Leads by Day">
@@ -124,7 +129,7 @@ export function FunnelDailyChart({ period, days, dailyGoal, total, periodGoal }:
           {dailyGoal !== null ? <div aria-hidden="true" className="pointer-events-none absolute inset-x-0 z-10 border-t-2 border-dashed border-[#a8792f]" style={{ bottom: `${dailyGoal / scale * 100}%` }} /> : null}
           <div className="absolute inset-0 flex items-end">{days.map(d => <div key={d.date} className="flex h-full min-w-0 flex-1 flex-col justify-end px-2" title={`${d.date}: ${funnelNumber(d.count)} leads`}>
             <span className="mb-1 text-center text-xs font-semibold tabular-nums">{funnelNumber(d.count)}</span>
-            <div className="mx-auto w-full max-w-8 rounded-t-sm bg-[#caa24c]" style={{ height: d.count === null ? 0 : `${d.count / scale * 100}%`, flexShrink: 0 }} />
+            <motion.div key={`${period.startDate}-${period.endDate}-${d.count}`} className="mx-auto w-full max-w-8 origin-bottom rounded-t-sm bg-[#caa24c]" style={{ height: d.count === null ? 0 : `${d.count / scale * 100}%`, flexShrink: 0 }} initial={reduceMotion ? false : { scaleY: 0 }} whileInView={{ scaleY: 1 }} viewport={{ once: true, amount: 0.2 }} transition={{ duration: reduceMotion ? 0 : 0.7, ease: [0.22, 1, 0.36, 1] }} />
           </div>)}</div>
         </div>
         <div className="mt-2 flex">{days.map(d => <span key={d.date} className="flex-1 text-center text-[10px] tabular-nums text-[color:var(--portal-muted)]">{new Intl.DateTimeFormat('en-US', { timeZone: 'UTC', ...(period.kind === 'weekly' ? { weekday: 'short' } : { month: 'numeric', day: 'numeric' }) }).format(new Date(`${d.date}T12:00:00Z`))}</span>)}</div>
@@ -175,7 +180,8 @@ export function LeadsFunnelDashboard({ range, onSelectTab, onPeriodChange }: { r
         <FunnelKpiCard
           key={key}
           label={label}
-          value={funnelNumber(visible?.metrics[key], key)}
+          value={visible?.metrics[key] ?? null}
+          metric={key}
           tone={KPI_TONE[key]}
           definition={visible?.definitions[key]}
           onClick={() => onSelectTab?.(tab)}

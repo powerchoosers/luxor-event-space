@@ -1,5 +1,7 @@
 'use client'
 
+import { PortalLogoutForm } from '@/components/portal/PortalLoginHandoff'
+
 import React, { Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { LayoutGroup, motion, useReducedMotion } from 'framer-motion'
@@ -278,12 +280,12 @@ function SettingsPageContent() {
                 ))}
               </nav>
             </LayoutGroup>
-            <form action="/api/auth/logout" method="post" className="mt-4 border-t border-[color:var(--portal-border)] pt-3 lg:hidden">
+            <PortalLogoutForm className="mt-4 border-t border-[color:var(--portal-border)] pt-3 lg:hidden">
               <button type="submit" className="flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-left text-xs font-semibold text-red-600 transition-colors hover:bg-red-500/10 dark:text-red-300 cursor-pointer">
                 <LogOut size={16} />
                 Log out
               </button>
-            </form>
+            </PortalLogoutForm>
           </PortalSkeletonTransition>
         </motion.aside>
 
@@ -351,7 +353,7 @@ function SettingsPageContent() {
         description="Choose what you want to manage."
         fullScreenOnMobile
         footer={
-          <form action="/api/auth/logout" method="post" className="w-full">
+          <PortalLogoutForm className="w-full">
             <button
               type="submit"
               className="flex min-h-11 w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-semibold text-red-600 transition-colors hover:bg-red-500/10 dark:text-red-300"
@@ -359,7 +361,7 @@ function SettingsPageContent() {
               <LogOut size={17} />
               Log out of Luxor Portal
             </button>
-          </form>
+          </PortalLogoutForm>
         }
       >
         <nav aria-label="Settings categories" className="space-y-5">

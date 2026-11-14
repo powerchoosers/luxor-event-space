@@ -1,4 +1,4 @@
-import type { EmailBlock, LuxorEmailDocument } from '@/app/(portal)/portal/marketing/emailTemplates'
+import type { EmailBlock, LuxorEmailDocument } from '@/app/(workspace)/(portal)/portal/marketing/emailTemplates'
 
 const blockFields: Record<string, string[]> = {
   hero: ['headline', 'subheadline', 'backgroundImage', 'overlayOpacity', 'textAlign', 'ctaLabel', 'ctaUrl', 'ctaVisible'],
