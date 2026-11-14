@@ -7,15 +7,8 @@ import { usePathname } from 'next/navigation'
 import { CalendarDays, Mail, MapPin } from '@/lib/icons/phosphor-compat'
 import { LuxorAxisLockup } from '@/components/LuxorWordmark'
 import { PublicPhoneLink } from '@/components/PublicPhoneLink'
+import { getPublicFooterNavLinks } from '@/lib/luxorPublicNavLinks'
 import { publicSitePath } from '@/lib/publicSitePaths'
-
-const navLinks = [
-  { label: 'Events', labelEs: 'Eventos', href: '/events' },
-  { label: 'Packages', labelEs: 'Paquetes', href: '/packages' },
-  { label: 'Gallery', labelEs: 'Galería', href: '/gallery' },
-  { label: 'Visit', labelEs: 'Visita', href: '/visit' },
-  { label: 'Contact', labelEs: 'Contacto', href: '/contact' },
-]
 
 const socialLinks = [
   { label: 'Instagram', href: 'https://www.instagram.com/luxoratlaspalmas?utm_source=qr', icon: '/social-instagram.png' },
@@ -25,6 +18,7 @@ const socialLinks = [
 
 export const Footer = () => {
   const spanish = usePathname().startsWith('/es')
+  const navLinks = getPublicFooterNavLinks(spanish)
 
   return (
     <footer id="shared-footer" className="site-footer--light relative isolate overflow-hidden bg-[#faf7f1] pt-24 pb-12 text-[#241d17] sm:pt-32 sm:pb-16">
@@ -42,9 +36,9 @@ export const Footer = () => {
             <h3 className="font-mono text-[10px] uppercase tracking-[0.45em] text-[#caa24c]">{spanish ? 'Navegación' : 'Navigation'}</h3>
             <ul className="mt-6 space-y-4">
               {navLinks.map((link) => (
-                <li key={link.label}>
-                  <Link href={publicSitePath(link.href, spanish)} className="footer-text-link text-sm text-[#d7c29a]/62">
-                    {spanish ? link.labelEs : link.label}
+                <li key={link.key}>
+                  <Link href={link.href} className="footer-text-link text-sm text-[#d7c29a]/62 transition-colors hover:text-[#f8f3ed]">
+                    {link.label}
                   </Link>
                 </li>
               ))}

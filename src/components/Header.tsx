@@ -8,15 +8,8 @@ import { LuxorAxisLockup, LuxorWordmark } from '@/components/LuxorWordmark'
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'
 import { PublicPhoneLink } from '@/components/PublicPhoneLink'
 import { LUXOR_EVENT_COLLECTIONS, eventCollectionHref } from '@/lib/luxorEventCollections'
+import { getPublicFooterNavLinks, getPublicNavEventsLink, getPublicNavLinks } from '@/lib/luxorPublicNavLinks'
 import { publicSiteEventsActive, publicSitePath } from '@/lib/publicSitePaths'
-
-const navLinks = [
-  { label: 'Events', labelEs: 'Eventos', href: '/events' },
-  { label: 'Packages', labelEs: 'Paquetes', href: '/packages' },
-  { label: 'Gallery', labelEs: 'Galería', href: '/gallery' },
-  { label: 'Visit', labelEs: 'Visita', href: '/visit' },
-  { label: 'Contact', labelEs: 'Contacto', href: '/contact' },
-]
 
 export const Header = () => {
   const [isScrolled, setIsScrolled] = useState(false)
@@ -25,6 +18,9 @@ export const Header = () => {
   const [mobileEventsOpen, setMobileEventsOpen] = useState(false)
   const pathname = usePathname()
   const spanish = pathname.startsWith('/es')
+  const eventsNavLink = getPublicNavEventsLink(spanish)
+  const secondaryNavLinks = getPublicNavLinks(spanish)
+  const mobileNavLinks = getPublicFooterNavLinks(spanish)
   const mobileMenuButtonRef = useRef<HTMLButtonElement>(null)
   const eventsNavRef = useRef<HTMLDivElement>(null)
   const reduceMotion = useReducedMotion()
@@ -142,28 +138,7 @@ export const Header = () => {
 
         {/* Desktop Nav */}
         <nav className="hidden items-center gap-8 lg:flex xl:gap-10">
-          {navLinks.map((item) => {
-            if (item.label !== 'Events') {
-              return (
-                <Link
-                  key={item.label}
-                  href={publicSitePath(item.href, spanish)}
-                  className="site-header-link group relative font-serif text-[13px] font-semibold uppercase tracking-[0.22em] text-[#e5d2ac]/82 transition-colors hover:text-[#f1d27a]"
-                >
-                  {spanish ? item.labelEs : item.label}
-                  <motion.span
-                    className="absolute -bottom-2 left-0 h-px bg-[#caa24c]"
-                    initial={{ width: 0 }}
-                    whileHover={{ width: '100%' }}
-                    transition={{ duration: 0.3 }}
-                  />
-                </Link>
-              )
-            }
-
-            return (
-              <div
-                key={item.label}
+          <div
                 ref={eventsNavRef}
                 className="relative"
                 onMouseEnter={() => setEventsDropdownOpen(true)}
@@ -182,7 +157,7 @@ export const Header = () => {
                   aria-haspopup="menu"
                   className={`site-header-link group relative font-serif text-[13px] font-semibold uppercase tracking-[0.22em] transition-colors hover:text-[#f1d27a] ${eventsActive || eventsDropdownOpen ? 'text-[#f1d27a]' : 'text-[#e5d2ac]/82'}`}
                 >
-                  {spanish ? item.labelEs : item.label}
+                  {eventsNavLink.label}
                   <span
                     className={`absolute -bottom-2 left-0 h-px bg-[#caa24c] transition-all duration-300 motion-reduce:transition-none ${eventsActive || eventsDropdownOpen ? 'w-full' : 'w-0 group-hover:w-full'}`}
                   />
@@ -222,8 +197,21 @@ export const Header = () => {
                   ) : null}
                 </AnimatePresence>
               </div>
-            )
-          })}
+          {secondaryNavLinks.map((item) => (
+            <Link
+              key={item.key}
+              href={item.href}
+              className="site-header-link group relative font-serif text-[13px] font-semibold uppercase tracking-[0.22em] text-[#e5d2ac]/82 transition-colors hover:text-[#f1d27a]"
+            >
+              {item.label}
+              <motion.span
+                className="absolute -bottom-2 left-0 h-px bg-[#caa24c]"
+                initial={{ width: 0 }}
+                whileHover={{ width: '100%' }}
+                transition={{ duration: 0.3 }}
+              />
+            </Link>
+          ))}
         </nav>
 
         <div className="flex items-center gap-4">
@@ -422,16 +410,16 @@ export const Header = () => {
                   showDivider={false}
                 />
                 <nav className="flex flex-col gap-1" aria-label={spanish ? 'Menú principal' : 'Main menu'}>
-                  {navLinks.map((item, idx) => (
+                  {mobileNavLinks.map((item, idx) => (
                     <motion.div
-                      key={item.label}
+                      key={item.key}
                       initial={{ opacity: 0, y: 10 }}
                       animate={{ opacity: 1, y: 0 }}
                       exit={{ opacity: 0, y: 6 }}
                       transition={{ duration: 0.32, delay: idx * 0.04, ease: [0.23, 1, 0.32, 1] }}
                       className="border-b border-[#caa24c]/14 py-3"
                     >
-                      {item.label === 'Events' ? (
+                      {item.key === 'Events' ? (
                         <div>
                           <div className="flex items-center justify-between gap-3">
                             <Link
@@ -439,7 +427,7 @@ export const Header = () => {
                               onClick={() => setMobileMenuOpen(false)}
                               className="font-serif text-2xl tracking-[0.08em] text-[#241d17] transition-colors hover:text-[#8d672b] sm:text-[1.65rem]"
                             >
-                              {spanish ? item.labelEs : item.label}
+                              {item.label}
                             </Link>
                             <button
                               type="button"
@@ -490,11 +478,11 @@ export const Header = () => {
                         </div>
                       ) : (
                         <Link
-                          href={publicSitePath(item.href, spanish)}
+                          href={item.href}
                           onClick={() => setMobileMenuOpen(false)}
                           className="block font-serif text-2xl tracking-[0.08em] text-[#241d17] transition-colors hover:text-[#8d672b] sm:text-[1.65rem]"
                         >
-                          {spanish ? item.labelEs : item.label}
+                          {item.label}
                         </Link>
                       )}
                     </motion.div>

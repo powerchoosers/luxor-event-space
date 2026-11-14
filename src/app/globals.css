@@ -2239,6 +2239,20 @@ body[data-portal-theme='light'] .portal-search-dropdown {
   transition: opacity 0.32s cubic-bezier(0.23, 1, 0.32, 1), transform 0.32s cubic-bezier(0.23, 1, 0.32, 1);
 }
 
+@media (max-width: 639px) {
+  body[data-luxor-site][data-packages-mobile-sticky='true'] {
+    padding-bottom: calc(4rem + 4.25rem);
+  }
+}
+
+.gallery-filters-sticky {
+  top: 7rem;
+}
+
+body[data-header-scrolled='true'] .gallery-filters-sticky {
+  top: 4.5rem;
+}
+
 @media (max-width: 1023px) {
   body[data-mobile-menu-open='true'] .site-floating-action {
     opacity: 0 !important;

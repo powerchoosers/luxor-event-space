@@ -342,7 +342,12 @@ export default function GalleryPage() {
               <p className="max-w-md text-sm leading-6 text-[#665a4e]">Choose a category, then open a photo for a closer look.</p>
             </div>
 
-            <div className="mt-8 grid grid-cols-3 gap-1 border-b border-[#caa24c]/25 pb-3 sm:flex sm:flex-wrap sm:items-center sm:gap-x-2 sm:gap-y-1" role="group" aria-label="Gallery filters">
+            <div
+              className="gallery-filters-sticky sticky z-[80] -mx-5 mt-8 border-b border-[#caa24c]/20 bg-[#f7f3ec]/96 px-5 py-2 shadow-[0_10px_24px_-22px_rgba(61,43,23,0.45)] backdrop-blur-md supports-[backdrop-filter]:bg-[#f7f3ec]/88 lg:static lg:z-auto lg:mx-0 lg:bg-transparent lg:px-0 lg:py-0 lg:shadow-none lg:backdrop-blur-none"
+              role="group"
+              aria-label="Gallery filters"
+            >
+              <div className="grid grid-cols-3 gap-1 pb-1 sm:flex sm:flex-wrap sm:items-center sm:gap-x-2 sm:gap-y-1">
               {filters.map((filter) => (
                 <button
                   key={filter}
@@ -366,6 +371,7 @@ export default function GalleryPage() {
                   <span className="relative">{filter}</span>
                 </button>
               ))}
+              </div>
             </div>
           </div>
 
