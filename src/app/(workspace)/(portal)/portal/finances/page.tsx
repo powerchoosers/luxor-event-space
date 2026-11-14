@@ -492,7 +492,7 @@ type LuxorBookingExpense = {
   )
 
   return (
-    <PortalPageFrame className="min-h-0 flex-1 max-md:pt-4">
+    <PortalPageFrame className="min-h-0 flex-1 max-md:pt-4 px-4 sm:px-6 min-[1400px]:px-0">
       <PortalPageHeader
         icon={<CurrencyDollar size={18} weight="regular" />}
         title="Finances"
@@ -585,14 +585,14 @@ type LuxorBookingExpense = {
       <PortalTabTransition activeKey={financeWorkspaceKey} className={`flex min-h-0 flex-1 flex-col max-md:![transform:none] max-md:![filter:none] ${financesTableActive ? 'overflow-visible' : 'overflow-hidden'}`}>
       {(financeViewsReady || activeTab === 'revenue') && <motion.div initial={false} animate={{ opacity: activeTab === 'revenue' ? 1 : 0, filter: activeTab === 'revenue' || reduceMotion ? 'blur(0px)' : 'blur(10px)' }} transition={{ duration: reduceMotion ? 0 : 0.22 }} className={`flex-1 min-h-0 overflow-y-auto pb-6 portal-scrollbar ${activeTab === 'revenue' ? '' : 'hidden'}`}><RevenueCollectionsView view="revenue" actorEmail={null} embedded active={activeTab === 'revenue'} /></motion.div>}
       {(financeViewsReady || activeTab === 'books') && <motion.div initial={false} animate={{ opacity: activeTab === 'books' ? 1 : 0, filter: activeTab === 'books' || reduceMotion ? 'blur(0px)' : 'blur(10px)' }} transition={{ duration: reduceMotion ? 0 : 0.22 }} className={`flex-1 min-h-0 overflow-y-auto pb-6 portal-scrollbar ${activeTab === 'books' ? '' : 'hidden'}`}><BooksRecordsPage embedded active={activeTab === 'books'} /></motion.div>}
-      <div className={`min-h-0 flex-1 ${financesTableActive ? `flex flex-col max-lg:overflow-visible lg:overflow-hidden ${PORTAL_TABLE_LIST_BLEED_CLASS}` : 'overflow-hidden'} ${activeTab === 'revenue' || activeTab === 'books' ? 'hidden' : ''}`}>
+      <div className={`min-h-0 flex-1 ${financesTableActive ? `flex flex-col max-xl:overflow-visible xl:overflow-hidden ${PORTAL_TABLE_LIST_BLEED_CLASS}` : 'overflow-hidden'} ${activeTab === 'revenue' || activeTab === 'books' ? 'hidden' : ''}`}>
       {activeTab === 'expenses' && <ExpenseManagement view="dashboard" embedded onOpenBill={setPanelBillId} selectedRange={overviewRange} />}
-      {(activeTab === 'expense-recurring' || activeTab === 'bill-providers') && <div className="flex min-h-0 flex-1 flex-col max-lg:overflow-visible lg:overflow-hidden"><ExpenseManagement view="recurring" embedded onOpenBill={setPanelBillId} /></div>}
-      {activeTab === 'expense-business' && <div className="flex min-h-0 flex-1 flex-col max-lg:overflow-visible lg:overflow-hidden"><ExpenseManagement view="business" embedded onOpenBill={setPanelBillId} /></div>}
+      {(activeTab === 'expense-recurring' || activeTab === 'bill-providers') && <div className="flex min-h-0 flex-1 flex-col max-xl:overflow-visible xl:overflow-hidden"><ExpenseManagement view="recurring" embedded onOpenBill={setPanelBillId} /></div>}
+      {activeTab === 'expense-business' && <div className="flex min-h-0 flex-1 flex-col max-xl:overflow-visible xl:overflow-hidden"><ExpenseManagement view="business" embedded onOpenBill={setPanelBillId} /></div>}
       {activeTab === 'expense-events' && <ExpenseManagement view="events" embedded onOpenBill={setPanelBillId} />}
       {activeTab === 'expense-receipts' && <ExpenseManagement view="receipts" embedded onOpenBill={setPanelBillId} />}
       {activeTab === 'expense-detail' && <ExpenseManagement view="detail" expenseId={routeSearchParams.get('expense') || undefined} embedded onOpenBill={setPanelBillId} />}
-      {activeTab === 'bill-review' && <div className="flex min-h-0 flex-1 flex-col max-lg:overflow-visible lg:overflow-hidden"><OperationsPageContent embeddedBills /></div>}
+      {activeTab === 'bill-review' && <div className="flex min-h-0 flex-1 flex-col max-xl:overflow-visible xl:overflow-hidden"><OperationsPageContent embeddedBills /></div>}
       {/* DASHBOARD TAB */}
       {activeTab === 'dashboard' && (loading || (!error && testClassificationVerified)) && (
         <FinancialOverview

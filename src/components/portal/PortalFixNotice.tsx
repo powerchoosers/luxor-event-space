@@ -74,6 +74,19 @@ export function PortalFixNotice({ notice }: { notice: PortalFixNoticeData | null
   const bannerRef = useRef<HTMLButtonElement>(null)
   const focusBeforeOpenRef = useRef<HTMLElement | null>(null)
   const dismissedPersistRef = useRef(false)
+  const pendingDismissRef = useRef(false)
+  const bannerHydratedRef = useRef(false)
+  const [showBanner, setShowBanner] = useState(false)
+
+  useEffect(() => {
+    if (!dismissSnapshot.ready) return
+    if (!bannerHydratedRef.current) {
+      bannerHydratedRef.current = true
+      setShowBanner(!dismissSnapshot.dismissed)
+      return
+    }
+    if (dismissSnapshot.dismissed) setShowBanner(false)
+  }, [dismissSnapshot.ready, dismissSnapshot.dismissed])
 
   const closeModal = useCallback(() => {
     setOpen(false)
@@ -94,15 +107,22 @@ export function PortalFixNotice({ notice }: { notice: PortalFixNoticeData | null
     })
   }, [])
 
-  const handleDismissNotice = useCallback(() => {
-    if (!notice) return
-    dismissedPersistRef.current = true
+  const finishDismissAfterModal = useCallback(() => {
+    if (!notice || !pendingDismissRef.current) return
+    pendingDismissRef.current = false
     dismissPortalFixNotice(notice.id)
     publishPortalFixNoticeDismissSnapshot(notice.id, true)
     window.dispatchEvent(new Event(FIX_NOTICE_DISMISS_EVENT))
-    setOpen(false)
+    setShowBanner(false)
     restoreFocusAfterModal()
   }, [notice, restoreFocusAfterModal])
+
+  const handleDismissNotice = useCallback(() => {
+    if (!notice) return
+    dismissedPersistRef.current = true
+    pendingDismissRef.current = true
+    setOpen(false)
+  }, [notice])
 
   useEffect(() => {
     if (!open) return
@@ -122,37 +142,56 @@ export function PortalFixNotice({ notice }: { notice: PortalFixNoticeData | null
     }
   }, [open, closeModal, restoreFocusAfterModal])
 
-  if (!notice || !dismissSnapshot.ready || dismissSnapshot.dismissed) return null
+  if (!notice || !dismissSnapshot.ready) return null
+
+  const bannerTransition = reduceMotion ? { duration: 0 } : { type: 'spring' as const, stiffness: 420, damping: 34 }
 
   return (
     <>
-      <motion.button
-        ref={bannerRef}
-        type="button"
-        onClick={() => setOpen(true)}
-        initial={reduceMotion ? false : { opacity: 0, y: -18 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={reduceMotion ? { duration: 0 } : { type: 'spring', stiffness: 420, damping: 34 }}
-        className="relative mb-4 flex w-full min-w-0 items-center gap-3 overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-4 py-3 text-left shadow-[0_10px_30px_-18px_rgba(0,0,0,0.45)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/50"
-      >
-        {!reduceMotion ? <BorderBeam size={70} duration={8} colorFrom="#f1d27a" colorTo="#caa24c" /> : null}
-        <span className="luxor-gold-raised flex h-8 w-8 shrink-0 items-center justify-center rounded-full">
-          <Check size={15} aria-hidden="true" />
-        </span>
-        <span className="min-w-0 flex-1 overflow-hidden">
-          <span className="block truncate text-xs font-semibold text-[color:var(--portal-text)] sm:text-sm">{notice.bannerLabel}</span>
-          <span className="mt-0.5 block truncate text-sm font-bold text-[color:var(--portal-text)]">{notice.title}</span>
-        </span>
-        <span className="inline-flex shrink-0 items-center gap-1 text-xs font-semibold text-[color:var(--portal-text)]">
-          Read note
-          <ArrowRight size={14} aria-hidden="true" className="shrink-0" />
-        </span>
-      </motion.button>
+      <AnimatePresence initial={false}>
+        {showBanner ? (
+          <motion.div
+            key={notice.id}
+            initial={reduceMotion ? false : { opacity: 0, y: -14, marginBottom: 0 }}
+            animate={{ opacity: 1, y: 0, marginBottom: 16 }}
+            exit={reduceMotion ? { opacity: 0, marginBottom: 0 } : { opacity: 0, y: -12, marginBottom: 0, scale: 0.992 }}
+            transition={bannerTransition}
+          >
+            <button
+              ref={bannerRef}
+              type="button"
+              onClick={() => setOpen(true)}
+              className="relative flex w-full min-w-0 items-center gap-3 overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-4 py-3 text-left shadow-[0_10px_30px_-18px_rgba(0,0,0,0.45)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/50"
+            >
+              {!reduceMotion ? (
+                <BorderBeam size={70} duration={8} colorFrom="#f1d27a" colorTo="#caa24c" className="rounded-2xl" />
+              ) : null}
+              <span className="luxor-gold-raised flex h-8 w-8 shrink-0 items-center justify-center rounded-full">
+                <Check size={15} aria-hidden="true" />
+              </span>
+              <span className="min-w-0 flex-1 overflow-hidden">
+                <span className="block truncate text-xs font-semibold text-[color:var(--portal-text)] sm:text-sm">{notice.bannerLabel}</span>
+                <span className="mt-0.5 block truncate text-sm font-bold text-[color:var(--portal-text)]">{notice.title}</span>
+              </span>
+              <span className="inline-flex shrink-0 items-center gap-1 text-xs font-semibold text-[color:var(--portal-text)]">
+                Read note
+                <ArrowRight size={14} aria-hidden="true" className="shrink-0" />
+              </span>
+            </button>
+          </motion.div>
+        ) : null}
+      </AnimatePresence>
 
       {mounted ? createPortal(
-        <AnimatePresence>
+        <AnimatePresence
+          initial={false}
+          onExitComplete={() => {
+            finishDismissAfterModal()
+          }}
+        >
           {open ? (
             <motion.div
+              key="portal-fix-notice-modal"
               className="fixed inset-0 z-[200] flex h-[100dvh] w-screen items-stretch justify-center bg-black/55 p-2 sm:items-center sm:p-6 md:p-10"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}

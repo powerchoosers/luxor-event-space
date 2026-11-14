@@ -321,6 +321,7 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
     (!isDesktopViewport && isCustomWorkflowEditor) ||
     (pathname === '/portal/marketing' && ['contact-lists', 'emails', 'builder-automation', 'call-center'].includes(searchParams?.get('tab') || ''))
   const isEmailPage = pathname === '/portal/emails'
+  const isFinancesPage = pathname === '/portal/finances'
   const isCallsPage = pathname === '/portal/calls'
   const isMessagesPage = pathname === '/portal/messages'
   const closeViewportDiagnostics = useCallback(() => {
@@ -1844,7 +1845,7 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
 
         {/* The shell reserves the bottom bar; detail pages also reserve their action row. */}
         <div className="relative min-h-0 min-w-0 flex-1 flex flex-col overflow-hidden">
-          <div ref={contentScrollRef} className={`portal-scrollbar min-h-0 min-w-0 flex-1 bg-[color:var(--portal-bg)] transition-[border-radius] duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] lg:rounded-tl-[28px] ${usesInternalPaneScroll ? 'flex flex-col overflow-y-hidden' : 'overflow-y-auto'} overflow-x-hidden ${isCallsPage || isMessagesPage ? 'p-0 lg:p-8' : isCustomWorkflowEditor ? 'p-0 lg:p-8' : isEmailPage ? 'p-0 lg:p-8' : isLeadDetailPage ? 'px-4 pt-4 pb-44 sm:p-6 lg:px-8 lg:pt-8 lg:pb-0' : pathname === '/portal/leads' ? 'p-4 max-md:pt-0 max-md:pb-[calc(4rem+env(safe-area-inset-bottom))] sm:p-6 lg:p-8' : 'p-4 sm:p-6 lg:p-8'} ${
+          <div ref={contentScrollRef} className={`portal-scrollbar min-h-0 min-w-0 flex-1 bg-[color:var(--portal-bg)] transition-[border-radius] duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] lg:rounded-tl-[28px] ${usesInternalPaneScroll ? 'flex flex-col overflow-y-hidden' : 'overflow-y-auto'} overflow-x-hidden ${isCallsPage || isMessagesPage ? 'p-0 lg:p-8' : isCustomWorkflowEditor ? 'p-0 lg:p-8' : isEmailPage ? 'p-0 lg:p-8' : isLeadDetailPage ? 'px-4 pt-4 pb-44 sm:p-6 lg:px-8 lg:pt-8 lg:pb-0' : pathname === '/portal/leads' ? 'p-4 max-md:pt-0 max-md:pb-[calc(4rem+env(safe-area-inset-bottom))] sm:p-6 lg:p-8' : isFinancesPage ? 'px-0 py-4 sm:py-6 lg:py-8 min-[1400px]:p-8' : 'p-4 sm:p-6 lg:p-8'} ${
             portalTheme === 'light'
               ? 'bg-[image:radial-gradient(circle_at_78%_0%,rgba(189,101,117,0.06),transparent_24rem),radial-gradient(circle_at_8%_12%,rgba(202,162,76,0.08),transparent_22rem)]'
               : 'bg-[image:radial-gradient(circle_at_78%_0%,rgba(189,101,117,0.08),transparent_24rem),radial-gradient(circle_at_8%_12%,rgba(202,162,76,0.08),transparent_22rem)]'

@@ -827,18 +827,19 @@ export function PortalTableCard({
   stickyMobileControls?: boolean
 }) {
   const isStickyMobile = mobilePageScroll && stickyMobileControls
+  const tabletPageScroll = mobilePageScrollUntil === 'lg'
   const mobilePageScrollContainerClass = mobilePageScroll
-    ? mobilePageScrollUntil === 'lg' ? 'max-lg:flex-none' : 'max-md:flex-none'
+    ? tabletPageScroll ? 'max-xl:flex-none' : 'max-md:flex-none'
     : ''
   const mobilePageScrollContentClass = mobilePageScroll
-    ? mobilePageScrollUntil === 'lg' ? 'max-lg:flex-none max-lg:overflow-visible' : 'max-md:flex-none max-md:overflow-visible'
+    ? tabletPageScroll ? 'max-xl:flex-none max-xl:overflow-visible' : 'max-md:flex-none max-md:overflow-visible'
     : ''
   const mobileOverflowClass = mobilePageScroll
-    ? mobilePageScrollUntil === 'lg' ? 'max-lg:overflow-visible lg:overflow-hidden' : 'max-md:overflow-visible md:overflow-hidden'
+    ? tabletPageScroll ? 'max-xl:overflow-visible xl:overflow-hidden' : 'max-md:overflow-visible md:overflow-hidden'
     : 'overflow-hidden'
   const mobileStickyControlsClass = isStickyMobile
-    ? mobilePageScrollUntil === 'lg'
-      ? 'max-lg:sticky max-lg:top-0 max-lg:z-30 max-lg:bg-[#fffdf9]/85 max-lg:dark:bg-[#080706]/80 max-lg:backdrop-blur-2xl max-lg:shadow-sm'
+    ? tabletPageScroll
+      ? 'max-xl:sticky max-xl:top-0 max-xl:z-30 max-xl:bg-[#fffdf9]/85 max-xl:dark:bg-[#080706]/80 max-xl:backdrop-blur-2xl max-xl:shadow-sm'
       : 'max-md:sticky max-md:top-0 max-md:z-30 max-md:bg-[#fffdf9]/85 max-md:dark:bg-[#080706]/80 max-md:backdrop-blur-2xl max-md:shadow-sm'
     : ''
 
@@ -864,17 +865,17 @@ export function PortalTableCard({
 export const PORTAL_DATA_TABLE_HEAD_CLASS =
   'border-b border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/45 px-4 py-2 text-xs font-semibold text-[color:var(--portal-muted)] sm:px-6'
 
-/** Cancel portal shell padding so list tables run edge-to-edge through tablet (lg = desktop contained). */
-export const PORTAL_TABLE_LIST_BLEED_CLASS = '-mx-4 sm:-mx-6 lg:mx-0'
+/** Cancel page padding so list tables run edge-to-edge through iPad Air (13" landscape is 1366px). */
+export const PORTAL_TABLE_LIST_BLEED_CLASS = '-mx-4 sm:-mx-6 min-[1400px]:mx-0'
 
-/** Flat list-table chrome on phone and iPad; rounded contained card from lg up. */
+/** Flat list-table chrome on phone and iPad; rounded contained card from 1400px up. */
 export const PORTAL_TABLE_LIST_EDGE_CLASS =
-  'max-lg:!rounded-none max-lg:!border-0 max-lg:!shadow-none'
+  'max-[1399px]:!rounded-none max-[1399px]:!border-x-0 max-[1399px]:!shadow-none'
 
-/** List table card height: page-scroll on phone/tablet, contained flex fill on desktop. */
-export const PORTAL_TABLE_LIST_CARD_CLASS = 'min-h-0 flex-1 max-lg:h-auto max-lg:flex-none lg:h-full'
+/** List table card height: page-scroll on phone, contained flex fill from tablet up. */
+export const PORTAL_TABLE_LIST_CARD_CLASS = 'min-h-0 flex-1'
 
-/** Clear fixed pagination bar when list uses page scroll (phone/tablet). */
+/** Clear fixed pagination bar when list uses page scroll (phone). */
 export const PORTAL_TABLE_LIST_SCROLL_PAD_CLASS = 'max-lg:pb-[calc(4.3125rem+0.5rem)] lg:pb-0'
 
 export type PortalActiveFilter = {
