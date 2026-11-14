@@ -1,14 +1,14 @@
 import 'server-only'
 
 import { createHash, randomUUID } from 'node:crypto'
-import { luxorMailAddress, luxorMailDisplayName, luxorMailFrom } from './luxorMailConfig'
+import { luxorMailAddress, luxorMailDisplayName, luxorMailFrom, luxorMailSenders } from './luxorMailConfig'
 import { luxorResendApi } from './luxorResendApiServer'
 import { prepareLuxorOutbox, saveLuxorMailAttachment, updateLuxorMailRow } from './luxorMailboxServer'
 import { supabaseRest } from './supabaseRestServer'
 import { luxorEmailHtmlToPlainText } from './luxorConversationalEmailServer'
 
 export type LuxorSendMailInput = {
-  to: string; subject: string; content: string; from?: string; fromName?: string
+  to: string; subject: string; content: string; from?: string; fromName?: string; replyTo?: string
   text?: string; idempotencyKey?: string; threadId?: string; inReplyTo?: string; references?: string[]
   attachments?: Array<{ filename: string; content: Uint8Array; contentType?: string }>
   calendar?: { content: string; method: 'REQUEST' | 'CANCEL' | 'REPLY'; filename: string }
@@ -32,6 +32,9 @@ export async function sendLuxorResendEmail(input: LuxorSendMailInput) {
   if (!content) throw new Error('Please add an email message.')
   if (input.calendar && input.attachments?.length) throw new Error('Send calendar invitations separately from other attachments.')
   const fromName = luxorMailDisplayName(input.fromName)
+  const replyTo = input.replyTo ? luxorMailAddress(input.replyTo) : from
+  if (input.replyTo && !replyTo) throw new Error('Reply-To must be a valid Luxor email address.')
+  if (replyTo && !luxorMailSenders().includes(replyTo)) throw new Error('Reply-To is not approved for the Luxor mailbox.')
   const hasHtml = /<\/?[a-z][\s\S]*>/i.test(content)
   const html = hasHtml ? content : null
   const text = input.text ?? luxorEmailHtmlToPlainText(content)
@@ -95,7 +98,7 @@ export async function sendLuxorResendEmail(input: LuxorSendMailInput) {
       : null
     const result = await luxorResendApi<{ id: string }>('/emails', { method: 'POST',
       headers: { 'Idempotency-Key': idempotencyKey },
-      body: JSON.stringify({ from: `${fromName} <${from}>`, to: [to], reply_to: from, subject,
+      body: JSON.stringify({ from: `${fromName} <${from}>`, to: [to], reply_to: replyTo, subject,
         text, ...(html ? { html } : {}),
         headers: input.calendar
           ? { ...headers, 'Content-Class': 'urn:content-classes:calendarmessage',

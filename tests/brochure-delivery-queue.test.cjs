@@ -18,6 +18,45 @@ function harness(read) {
   return { service, queued: () => queued }
 }
 const inquiry = { id: 'inquiry', email: 'sample@example.invalid', full_name: 'Sample Guest', event_type: 'Wedding', guest_count: 80, source: 'homepage_brochure' }
+test('elena brochure queue uses conversational HTML and Elena delivery metadata', async () => {
+  const copy = { ...model.BROCHURE_DELIVERY_DEFAULT }
+  const elenaHtml = '<html><td class="luxor-signature-wrap">Elena</td></html>'
+  const h = harness(async () => ({ setting: { copy_override: copy } }))
+  const mocks = {
+    './luxorElenaEmailServer': {
+      buildElenaBrochureDeliveryEmail: async () => ({ html: elenaHtml, text: 'Brochure text' }),
+      elenaBrochureDeliveryMetadata: () => ({
+        elena_delivery: true,
+        sender_from: 'elena@luxoratlaspalmas.com',
+        sender_name: 'Elena | Luxor Events',
+        reply_to: 'booking@luxoratlaspalmas.com',
+      }),
+    },
+  }
+  const filename = path.resolve(__dirname, '../src/lib/luxorBrochureDeliveryQueue.ts')
+  const mod = new Module(filename, module)
+  mod.filename = filename
+  mod.paths = Module._nodeModulePaths(path.dirname(filename))
+  const actual = mod.require.bind(mod)
+  mod.require = (name) => {
+    if (Object.hasOwn(mocks, name)) return mocks[name]
+    return name === './luxorBrochureDeliveryCopy' ? model
+      : name === './luxorBrochureDeliveryCopyServer' ? { readBrochureDeliverySetting: async () => ({ setting: { copy_override: copy } }) }
+      : name === './luxorEmailJobsServer' ? {
+          buildBrochureDeliveryEmailHtml: () => 'system snapshot',
+          createLuxorEmailJob: async (job) => { h.queued = () => job; return { id: 'job' } },
+        }
+      : name === 'server-only' ? {}
+      : actual(name)
+  }
+  mod._compile(ts.transpileModule(fs.readFileSync(filename, 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText, filename)
+  await mod.exports.queueBrochureDelivery(inquiry, { elena: true })
+  assert.equal(h.queued().body, elenaHtml)
+  assert.equal(h.queued().metadata.sender_from, 'elena@luxoratlaspalmas.com')
+  assert.equal(h.queued().metadata.reply_to, 'booking@luxoratlaspalmas.com')
+  assert.equal(h.queued().metadata.elena_delivery, true)
+})
+
 test('queues saved brochure copy as a snapshot with the existing delivery identity', async () => {
   const copy = { ...model.BROCHURE_DELIVERY_DEFAULT, subject: 'Brochure for {{first_name}}' }
   const h = harness(async () => ({ setting: { copy_override: copy } }))

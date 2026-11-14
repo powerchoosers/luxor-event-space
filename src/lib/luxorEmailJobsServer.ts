@@ -1377,6 +1377,7 @@ export async function processLuxorEmailJobs(
       }
       const senderFrom = typeof metadata.sender_from === 'string' ? metadata.sender_from : 'booking@luxoratlaspalmas.com'
       const senderName = typeof metadata.sender_name === 'string' ? metadata.sender_name : 'Luxor Event Space'
+      const replyTo = typeof metadata.reply_to === 'string' ? metadata.reply_to : undefined
       const offerInvoiceId = typeof metadata.invoice_id === 'string' ? metadata.invoice_id : null
       if (typeof metadata.offer_expires_at === 'string' && offerInvoiceId) {
         if (await isOfferReminderIneligible(offerInvoiceId)) {
@@ -1543,7 +1544,7 @@ export async function processLuxorEmailJobs(
                 }]
               : undefined,
             sendProvider: ({ to, subject, body, from, fromName, attachments }) => sendLuxorZohoEmail({
-              to, subject, content: body, from, fromName, attachments, idempotencyKey: `email-job/${job.id}`,
+              to, subject, content: body, from, fromName, attachments, replyTo, idempotencyKey: `email-job/${job.id}`,
             }),
           }).then((result) => ({ messageId: result.providerMessageId }))
         : await sendLuxorZohoEmail({
@@ -1552,6 +1553,7 @@ export async function processLuxorEmailJobs(
             content: job.body,
             from: senderFrom,
             fromName: senderName,
+            replyTo,
             idempotencyKey: `email-job/${job.id}`,
           })
       providerAccepted = true

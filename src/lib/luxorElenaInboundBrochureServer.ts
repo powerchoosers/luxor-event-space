@@ -22,7 +22,7 @@ export async function queueElenaInboundBrochureDelivery(input: { callSid: string
     `luxor_email_jobs?select=id&inquiry_id=eq.${encodeURIComponent(inquiry.id)}&job_type=eq.booking_package&metadata->>flow_stage=eq.brochure_delivery&limit=1`,
   )
   if (existing.length) return { queued: true, duplicate: true, job_id: existing[0].id }
-  const job = await queueBrochureDelivery({ ...inquiry, source: inquiry.source || 'inbound_phone' })
+  const job = await queueBrochureDelivery({ ...inquiry, source: inquiry.source || 'inbound_phone' }, { elena: true })
   await supabaseRestStrict(`luxor_calls?twilio_call_sid=eq.${encodeURIComponent(input.callSid)}`, {
     method: 'PATCH',
     headers: { Prefer: 'return=minimal' },

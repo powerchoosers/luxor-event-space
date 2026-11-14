@@ -3,6 +3,7 @@ import 'server-only'
 import { randomUUID } from 'node:crypto'
 import { supabaseRestStrict } from './supabaseRestServer'
 import { sendLuxorResendEmail } from './luxorResendMailServer'
+import { prepareElenaOutboundEmail } from './luxorElenaEmailServer'
 import type { LuxorEmailJob } from './luxorInquiryTypes'
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
@@ -68,8 +69,18 @@ export async function deliverElenaCallEmail(job: LuxorEmailJob) {
   const snapshot = receipts?.[nonce]
   if (!row || row.metadata.scope !== 'elena_live_inbound' || row.inquiry_id !== job.inquiry_id || !snapshot
     || snapshot.job_id !== job.id || snapshot.recipient !== job.recipient_email || snapshot.subject !== job.subject || snapshot.body !== job.body) throw new Error('The approved email does not match its saved call snapshot.')
-  const escape = (value: string) => value.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;')
-  await sendLuxorResendEmail({to:job.recipient_email,subject:job.subject,content:`<p>${escape(job.body).replace(/\n/g,'<br />')}</p>`,text:job.body,from:'booking@luxoratlaspalmas.com',idempotencyKey:`email-job/${job.id}`,metadata:{elenaCall:true}})
+  const outbound = await prepareElenaOutboundEmail({ subject: job.subject, body: job.body })
+  await sendLuxorResendEmail({
+    to: job.recipient_email,
+    subject: job.subject,
+    content: outbound.html,
+    text: outbound.text,
+    from: outbound.from,
+    fromName: outbound.fromName,
+    replyTo: outbound.replyTo,
+    idempotencyKey: `email-job/${job.id}`,
+    metadata: { elenaCall: true },
+  })
   return {status:'sent' as const}
 }
 

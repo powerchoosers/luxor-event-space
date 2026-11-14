@@ -363,6 +363,7 @@ export async function sendLuxorZohoEmail(input: {
   content: string
   from?: string
   fromName?: string
+  replyTo?: string
   text?: string
   attachments?: Array<{ filename: string; content: Uint8Array; contentType?: string }>
   idempotencyKey?: string
