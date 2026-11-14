@@ -3,7 +3,7 @@
 import { Phone } from '@/lib/icons/phosphor-compat'
 import { useEffect, useState } from 'react'
 
-export function PublicPhoneLink({ compact = false, showIcon = true, className = '', label = 'Call Luxor', loadingLabel = 'Loading phone…' }: { compact?: boolean; showIcon?: boolean; className?: string; label?: string; loadingLabel?: string }) {
+export function PublicPhoneLink({ compact = false, iconOnly = false, showIcon = true, className = '', label = 'Call Luxor', loadingLabel = 'Loading phone…' }: { compact?: boolean; iconOnly?: boolean; showIcon?: boolean; className?: string; label?: string; loadingLabel?: string }) {
   const [phoneNumber, setPhoneNumber] = useState<string | null>(null)
 
   useEffect(() => {
@@ -16,16 +16,26 @@ export function PublicPhoneLink({ compact = false, showIcon = true, className = 
   }, [])
 
   if (!phoneNumber) {
-    return <span className={className} aria-label="Loading Luxor phone number">
-      {showIcon ? <Phone className={compact ? 'h-3.5 w-3.5' : 'h-4 w-4 shrink-0 text-[#caa24c]'} /> : null}
-      <span>{compact ? label : loadingLabel}</span>
-    </span>
+    return (
+      <span className={className} aria-label="Loading Luxor phone number">
+        {showIcon ? <Phone className={iconOnly ? 'h-4 w-4' : compact ? 'h-3.5 w-3.5' : 'h-4 w-4 shrink-0 text-[#caa24c]'} /> : null}
+        {iconOnly ? null : <span>{compact ? label : loadingLabel}</span>}
+      </span>
+    )
   }
 
-  return <a href={`tel:${phoneNumber}`} data-conversion="call_cta_click" data-conversion-label="Call Luxor" className={className} aria-label={`${label}: ${formatPhone(phoneNumber)}`}>
-    {showIcon ? <Phone className={compact ? 'h-3.5 w-3.5' : 'h-4 w-4 shrink-0 text-[#caa24c]'} /> : null}
-    <span>{compact ? label : formatPhone(phoneNumber)}</span>
-  </a>
+  return (
+    <a
+      href={`tel:${phoneNumber}`}
+      data-conversion="call_cta_click"
+      data-conversion-label="Call Luxor"
+      className={className}
+      aria-label={`${label}: ${formatPhone(phoneNumber)}`}
+    >
+      {showIcon ? <Phone className={iconOnly ? 'h-4 w-4' : compact ? 'h-3.5 w-3.5' : 'h-4 w-4 shrink-0 text-[#caa24c]'} /> : null}
+      {iconOnly ? null : <span>{compact ? label : formatPhone(phoneNumber)}</span>}
+    </a>
+  )
 }
 
 function formatPhone(value: string) {

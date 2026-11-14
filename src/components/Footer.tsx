@@ -7,6 +7,7 @@ import { usePathname } from 'next/navigation'
 import { CalendarDays, Mail, MapPin } from '@/lib/icons/phosphor-compat'
 import { LuxorAxisLockup } from '@/components/LuxorWordmark'
 import { PublicPhoneLink } from '@/components/PublicPhoneLink'
+import { publicSitePath } from '@/lib/publicSitePaths'
 
 const navLinks = [
   { label: 'Events', labelEs: 'Eventos', href: '/events' },
@@ -42,7 +43,7 @@ export const Footer = () => {
             <ul className="mt-6 space-y-4">
               {navLinks.map((link) => (
                 <li key={link.label}>
-                  <Link href={link.href} className="footer-text-link text-sm text-[#d7c29a]/62">
+                  <Link href={publicSitePath(link.href, spanish)} className="footer-text-link text-sm text-[#d7c29a]/62">
                     {spanish ? link.labelEs : link.label}
                   </Link>
                 </li>

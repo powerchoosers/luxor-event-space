@@ -3,10 +3,12 @@
 import React, { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { CalendarDays, Menu, X } from '@/lib/icons/phosphor-compat'
+import { CalendarDays, ChevronDown, Menu, X } from '@/lib/icons/phosphor-compat'
 import { LuxorAxisLockup, LuxorWordmark } from '@/components/LuxorWordmark'
-import { motion, AnimatePresence } from 'framer-motion'
+import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'
 import { PublicPhoneLink } from '@/components/PublicPhoneLink'
+import { LUXOR_EVENT_COLLECTIONS, eventCollectionHref } from '@/lib/luxorEventCollections'
+import { publicSiteEventsActive, publicSitePath } from '@/lib/publicSitePaths'
 
 const navLinks = [
   { label: 'Events', labelEs: 'Eventos', href: '/events' },
@@ -19,9 +21,42 @@ const navLinks = [
 export const Header = () => {
   const [isScrolled, setIsScrolled] = useState(false)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+  const [eventsDropdownOpen, setEventsDropdownOpen] = useState(false)
+  const [mobileEventsOpen, setMobileEventsOpen] = useState(false)
   const pathname = usePathname()
   const spanish = pathname.startsWith('/es')
   const mobileMenuButtonRef = useRef<HTMLButtonElement>(null)
+  const eventsNavRef = useRef<HTMLDivElement>(null)
+  const reduceMotion = useReducedMotion()
+  const eventsActive = publicSiteEventsActive(pathname)
+  const eventsHref = publicSitePath('/events', spanish)
+
+  function handleEventsMenuKeyDown(event: React.KeyboardEvent<HTMLDivElement>) {
+    const menu = eventsNavRef.current
+    if (!menu) return
+    const items = Array.from(menu.querySelectorAll<HTMLElement>('[role="menuitem"]'))
+    if (!items.length) return
+
+    const activeIndex = items.findIndex((element) => element === document.activeElement)
+
+    if (event.key === 'ArrowDown') {
+      event.preventDefault()
+      setEventsDropdownOpen(true)
+      items[activeIndex < 0 ? 0 : Math.min(activeIndex + 1, items.length - 1)]?.focus()
+    } else if (event.key === 'ArrowUp') {
+      event.preventDefault()
+      setEventsDropdownOpen(true)
+      items[activeIndex <= 0 ? 0 : activeIndex - 1]?.focus()
+    } else if (event.key === 'Home') {
+      event.preventDefault()
+      setEventsDropdownOpen(true)
+      items[0]?.focus()
+    } else if (event.key === 'End') {
+      event.preventDefault()
+      setEventsDropdownOpen(true)
+      items[items.length - 1]?.focus()
+    }
+  }
 
   useEffect(() => {
     const handleScroll = () => {
@@ -58,15 +93,33 @@ export const Header = () => {
     if (!mobileMenuOpen) return
 
     function handleKeyDown(event: KeyboardEvent) {
+      if (event.key !== 'Escape') return
+      if (mobileEventsOpen) {
+        setMobileEventsOpen(false)
+        return
+      }
+      setMobileMenuOpen(false)
+      window.requestAnimationFrame(() => mobileMenuButtonRef.current?.focus())
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [mobileMenuOpen, mobileEventsOpen])
+
+  useEffect(() => {
+    if (!eventsDropdownOpen) return
+
+    function handleKeyDown(event: KeyboardEvent) {
       if (event.key === 'Escape') {
-        setMobileMenuOpen(false)
-        window.requestAnimationFrame(() => mobileMenuButtonRef.current?.focus())
+        setEventsDropdownOpen(false)
+        const trigger = eventsNavRef.current?.querySelector<HTMLElement>('a, button')
+        window.requestAnimationFrame(() => trigger?.focus())
       }
     }
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [mobileMenuOpen])
+  }, [eventsDropdownOpen])
 
   useEffect(() => {
     document.documentElement.style.overflow = ''
@@ -89,23 +142,100 @@ export const Header = () => {
 
         {/* Desktop Nav */}
         <nav className="hidden items-center gap-8 lg:flex xl:gap-10">
-          {navLinks.map((item) => (
-            <Link
-              key={item.label}
-              href={item.href}
-              className="site-header-link group relative font-serif text-[13px] font-semibold uppercase tracking-[0.22em] text-[#e5d2ac]/82 transition-colors hover:text-[#f1d27a]"
-            >
-              {spanish ? item.labelEs : item.label}
-            </Link>
-          ))}
+          {navLinks.map((item) => {
+            if (item.label !== 'Events') {
+              return (
+                <Link
+                  key={item.label}
+                  href={publicSitePath(item.href, spanish)}
+                  className="site-header-link group relative font-serif text-[13px] font-semibold uppercase tracking-[0.22em] text-[#e5d2ac]/82 transition-colors hover:text-[#f1d27a]"
+                >
+                  {spanish ? item.labelEs : item.label}
+                  <motion.span
+                    className="absolute -bottom-2 left-0 h-px bg-[#caa24c]"
+                    initial={{ width: 0 }}
+                    whileHover={{ width: '100%' }}
+                    transition={{ duration: 0.3 }}
+                  />
+                </Link>
+              )
+            }
+
+            return (
+              <div
+                key={item.label}
+                ref={eventsNavRef}
+                className="relative"
+                onMouseEnter={() => setEventsDropdownOpen(true)}
+                onMouseLeave={() => setEventsDropdownOpen(false)}
+                onFocusCapture={() => setEventsDropdownOpen(true)}
+                onBlurCapture={(event) => {
+                  const next = event.relatedTarget
+                  if (next && eventsNavRef.current?.contains(next as Node)) return
+                  setEventsDropdownOpen(false)
+                }}
+                onKeyDown={handleEventsMenuKeyDown}
+              >
+                <Link
+                  href={eventsHref}
+                  aria-expanded={eventsDropdownOpen}
+                  aria-haspopup="menu"
+                  className={`site-header-link group relative font-serif text-[13px] font-semibold uppercase tracking-[0.22em] transition-colors hover:text-[#f1d27a] ${eventsActive || eventsDropdownOpen ? 'text-[#f1d27a]' : 'text-[#e5d2ac]/82'}`}
+                >
+                  {spanish ? item.labelEs : item.label}
+                  <span
+                    className={`absolute -bottom-2 left-0 h-px bg-[#caa24c] transition-all duration-300 motion-reduce:transition-none ${eventsActive || eventsDropdownOpen ? 'w-full' : 'w-0 group-hover:w-full'}`}
+                  />
+                </Link>
+
+                <AnimatePresence>
+                  {eventsDropdownOpen ? (
+                    <motion.div
+                      role="menu"
+                      aria-label={spanish ? 'Categorías de eventos' : 'Event categories'}
+                      initial={reduceMotion ? false : { opacity: 0, y: 8 }}
+                      animate={reduceMotion ? undefined : { opacity: 1, y: 0 }}
+                      exit={reduceMotion ? undefined : { opacity: 0, y: 6 }}
+                      transition={{ duration: 0.22, ease: [0.23, 1, 0.32, 1] }}
+                      className="absolute left-0 top-[calc(100%+0.55rem)] z-[120] min-w-[15.5rem] max-w-[19rem]"
+                    >
+                      <div className="overflow-hidden rounded-lg border border-[#caa24c]/28 bg-[#fffdf9] py-1.5 shadow-[0_18px_44px_-28px_rgba(30,22,12,0.38)]">
+                        <Link
+                          role="menuitem"
+                          href={eventsHref}
+                          className="block px-4 py-2.5 text-sm text-[#241d17] transition-colors hover:bg-[#f7f0e3]"
+                        >
+                          {spanish ? 'Todos los eventos →' : 'All events →'}
+                        </Link>
+                        {LUXOR_EVENT_COLLECTIONS.map((collection) => (
+                          <Link
+                            key={collection.href}
+                            role="menuitem"
+                            href={eventCollectionHref(collection, spanish)}
+                            className="block px-4 py-2.5 text-sm text-[#4f4338] transition-colors hover:bg-[#f7f0e3] hover:text-[#241d17]"
+                          >
+                            {spanish ? collection.titleEs : collection.title}
+                          </Link>
+                        ))}
+                      </div>
+                    </motion.div>
+                  ) : null}
+                </AnimatePresence>
+              </div>
+            )
+          })}
         </nav>
 
         <div className="flex items-center gap-4">
 
-          <PublicPhoneLink compact label={spanish ? 'Llamar a Luxor' : 'Call Luxor'} className="site-header-phone hidden items-center gap-2 rounded-md border border-[#caa24c]/25 px-3 py-2.5 text-[10px] font-bold uppercase tracking-[0.16em] text-[#d7c29a]/80 transition-colors hover:border-[#caa24c]/50 hover:text-[#f1d27a] md:inline-flex" />
+          <PublicPhoneLink
+            iconOnly
+            label={spanish ? 'Llamar a Luxor' : 'Call Luxor'}
+            className="site-header-phone hidden h-10 w-10 shrink-0 items-center justify-center rounded-full border border-[#caa24c]/30 text-[#d7c29a]/85 transition-colors hover:border-[#caa24c]/55 hover:text-[#f1d27a] lg:inline-flex"
+          />
 
           <Link
-            href={`${spanish ? '/es/visit' : '/visit'}#visit-booking`}
+            href={`${publicSitePath('/visit', spanish)}#visit-booking`}
             data-conversion="visit_cta_click"
             data-conversion-label="Header"
             className="luxor-gold-raised hidden rounded-md px-5 py-2.5 text-[10px] uppercase tracking-[0.22em] sm:inline-flex sm:items-center sm:gap-2"
@@ -284,45 +414,110 @@ export const Header = () => {
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: 16 }}
               transition={{ duration: 0.52, ease: [0.23, 1, 0.32, 1] }}
-              className="relative flex h-full translate-y-2 flex-col items-center justify-center gap-6 px-6 text-center"
+              className="relative flex h-full flex-col justify-between px-6 pb-10 pt-28 sm:px-10"
             >
-              <LuxorAxisLockup
-                className="w-full max-w-[250px] sm:max-w-[280px]"
-                showDivider={false}
-              />
-              {navLinks.map((item, idx) => (
-                <motion.div
-                  key={item.label}
-                  initial={{ opacity: 0, y: 14 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: 8 }}
-                  transition={{ duration: 0.32, delay: idx * 0.045, ease: [0.23, 1, 0.32, 1] }}
-                >
-                  <Link
-                    href={item.href}
-                    onClick={() => setMobileMenuOpen(false)}
-                    className="block font-serif text-4xl leading-none tracking-[0.16em] text-[#241d17] transition-colors hover:text-[#8d672b]"
-                  >
-                    {spanish ? item.labelEs : item.label}
-                  </Link>
-                </motion.div>
-              ))}
+              <div className="mx-auto w-full max-w-md">
+                <LuxorAxisLockup
+                  className="mb-10 w-full max-w-[220px]"
+                  showDivider={false}
+                />
+                <nav className="flex flex-col gap-1" aria-label={spanish ? 'Menú principal' : 'Main menu'}>
+                  {navLinks.map((item, idx) => (
+                    <motion.div
+                      key={item.label}
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: 6 }}
+                      transition={{ duration: 0.32, delay: idx * 0.04, ease: [0.23, 1, 0.32, 1] }}
+                      className="border-b border-[#caa24c]/14 py-3"
+                    >
+                      {item.label === 'Events' ? (
+                        <div>
+                          <div className="flex items-center justify-between gap-3">
+                            <Link
+                              href={eventsHref}
+                              onClick={() => setMobileMenuOpen(false)}
+                              className="font-serif text-2xl tracking-[0.08em] text-[#241d17] transition-colors hover:text-[#8d672b] sm:text-[1.65rem]"
+                            >
+                              {spanish ? item.labelEs : item.label}
+                            </Link>
+                            <button
+                              type="button"
+                              aria-expanded={mobileEventsOpen}
+                              aria-controls="mobile-events-collections"
+                              aria-label={
+                                spanish
+                                  ? mobileEventsOpen
+                                    ? 'Cerrar colecciones de eventos'
+                                    : 'Mostrar colecciones de eventos'
+                                  : mobileEventsOpen
+                                    ? 'Collapse event collections'
+                                    : 'Expand event collections'
+                              }
+                              onClick={() => setMobileEventsOpen((open) => !open)}
+                              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-[#8d672b] transition-colors hover:bg-[#caa24c]/10"
+                            >
+                              <ChevronDown
+                                size={20}
+                                aria-hidden
+                                className={`transition-transform duration-[420ms] ease-[cubic-bezier(0.4,0,0.2,1)] motion-reduce:transition-none ${mobileEventsOpen ? 'rotate-180' : ''}`}
+                              />
+                            </button>
+                          </div>
+                          <div
+                            id="mobile-events-collections"
+                            className="grid transition-[grid-template-rows] duration-[420ms] ease-[cubic-bezier(0.4,0,0.2,1)] motion-reduce:transition-none"
+                            style={{ gridTemplateRows: mobileEventsOpen ? '1fr' : '0fr' }}
+                            inert={!mobileEventsOpen}
+                            aria-hidden={!mobileEventsOpen}
+                          >
+                            <div className="overflow-hidden">
+                              <ul className="mt-2 space-y-0.5 pl-1 pt-2">
+                                {LUXOR_EVENT_COLLECTIONS.map((collection) => (
+                                  <li key={collection.href}>
+                                    <Link
+                                      href={eventCollectionHref(collection, spanish)}
+                                      onClick={() => setMobileMenuOpen(false)}
+                                      className="block py-2.5 pl-3 text-base text-[#4f4338] transition-colors hover:text-[#8d672b]"
+                                    >
+                                      {spanish ? collection.titleEs : collection.title}
+                                    </Link>
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                          </div>
+                        </div>
+                      ) : (
+                        <Link
+                          href={publicSitePath(item.href, spanish)}
+                          onClick={() => setMobileMenuOpen(false)}
+                          className="block font-serif text-2xl tracking-[0.08em] text-[#241d17] transition-colors hover:text-[#8d672b] sm:text-[1.65rem]"
+                        >
+                          {spanish ? item.labelEs : item.label}
+                        </Link>
+                      )}
+                    </motion.div>
+                  ))}
+                </nav>
+              </div>
               <motion.div
-                initial={{ opacity: 0, scale: 0.9 }}
-                animate={{ opacity: 1, scale: 1 }}
-                transition={{ delay: 0.3 }}
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.2 }}
+                className="mx-auto w-full max-w-md space-y-3"
               >
                 <Link
-                  href={`${spanish ? '/es/visit' : '/visit'}#visit-booking`}
+                  href={`${publicSitePath('/visit', spanish)}#visit-booking`}
                   data-conversion="visit_cta_click"
                   data-conversion-label="Mobile menu"
                   onClick={() => setMobileMenuOpen(false)}
-                  className="luxor-gold-raised mt-3 flex items-center justify-center gap-2 rounded-md px-8 py-3 text-sm uppercase tracking-[0.18em]"
+                  className="luxor-gold-raised flex min-h-12 items-center justify-center gap-2 rounded-md px-6 py-3 text-sm uppercase tracking-[0.16em]"
                 >
                   <CalendarDays size={18} />
                   {spanish ? 'Agendar una visita' : 'Schedule a Visit'}
                 </Link>
-                <PublicPhoneLink className="mt-3 flex items-center justify-center gap-2 rounded-md border border-[#caa24c]/45 px-8 py-3 text-sm font-bold uppercase tracking-[0.18em] text-[#241d17] transition-colors hover:border-[#8d672b] hover:text-[#8d672b]" />
+                <PublicPhoneLink className="flex min-h-12 items-center justify-center gap-2 rounded-md border border-[#caa24c]/40 px-6 py-3 text-sm font-semibold tracking-[0.12em] text-[#241d17] transition-colors hover:border-[#8d672b] hover:text-[#8d672b]" />
               </motion.div>
             </motion.div>
           </motion.div>
