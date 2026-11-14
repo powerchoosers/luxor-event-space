@@ -1,6 +1,7 @@
 import 'server-only'
 
 import { generateLuxorCallSummaryForCall } from './luxorCallSummaryServer'
+import { reconcileElenaInboundAfterSummary } from './luxorElenaInboundPostCallServer'
 import { supabaseRestStrict } from './supabaseRestServer'
 
 type LiveCall = { twilio_call_sid: string; answered_at: string | null; metadata: Record<string, unknown>; updated_at: string }
@@ -32,5 +33,16 @@ export async function syncElenaInboundAnsweredAt(callSid: string) {
 
 export async function finalizeElenaInboundCall(callSid: string) {
   await syncElenaInboundAnsweredAt(callSid).catch(() => undefined)
-  return generateLuxorCallSummaryForCall(callSid, { allowPartialTranscript: true })
+  const summary = await generateLuxorCallSummaryForCall(callSid, { allowPartialTranscript: true })
+  const reconcile = await reconcileElenaInboundAfterSummary(callSid).catch((error) => {
+    console.error('[Elena Inbound] Post-call reconcile crashed', {
+      callSid,
+      error: error instanceof Error ? error.message : error,
+    })
+    return { status: 'failed' as const }
+  })
+  if (reconcile.status === 'failed') {
+    console.error('[Elena Inbound] Post-call reconcile did not complete', { callSid, summaryStatus: summary.status })
+  }
+  return { ...summary, reconcile }
 }
