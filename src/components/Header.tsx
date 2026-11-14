@@ -30,6 +30,11 @@ export const Header = () => {
   const eventsActive = publicSiteEventsActive(pathname)
   const eventsHref = publicSitePath('/events', spanish)
 
+  function closeMobileMenu() {
+    setMobileEventsOpen(false)
+    setMobileMenuOpen(false)
+  }
+
   function isNavCurrent(href: string, key: string): boolean {
     if (key === 'Events') return eventsActive
     const current = pathname.replace(/\/$/, '') || '/'
@@ -152,7 +157,7 @@ export const Header = () => {
         setMobileEventsOpen(false)
         return
       }
-      setMobileMenuOpen(false)
+      closeMobileMenu()
       window.requestAnimationFrame(() => mobileMenuButtonRef.current?.focus())
     }
 
@@ -296,7 +301,7 @@ export const Header = () => {
           {/* Mobile Menu Toggle */}
           <button 
             ref={mobileMenuButtonRef}
-            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+            onClick={() => (mobileMenuOpen ? closeMobileMenu() : setMobileMenuOpen(true))}
             className="site-header-menu relative z-[120] flex min-h-11 min-w-11 items-center justify-center rounded-xl text-[#d7c29a]/80 transition-colors hover:text-[#f1d27a] lg:hidden"
             aria-label={mobileMenuOpen ? (spanish ? 'Cerrar menú de navegación' : 'Close navigation menu') : (spanish ? 'Abrir menú de navegación' : 'Open navigation menu')}
             aria-expanded={mobileMenuOpen}
@@ -310,123 +315,252 @@ export const Header = () => {
       {/* Mobile Menu Overlay */}
       <AnimatePresence>
         {mobileMenuOpen && (
-          <motion.div 
+          <motion.div
             id="mobile-navigation"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.48, ease: [0.23, 1, 0.32, 1] }}
-            className="fixed inset-0 z-[100] h-[100dvh] w-screen overflow-hidden bg-[#faf7f1] lg:hidden"
+            className="fixed inset-0 z-[100] h-[100dvh] w-screen overflow-hidden bg-[#f7f3ec] lg:hidden"
           >
+            <div className="absolute inset-0 luxor-noise opacity-20" />
+            <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_0%,rgba(202,162,76,0.16),transparent_26rem),radial-gradient(circle_at_50%_52%,rgba(202,162,76,0.12),transparent_22rem),linear-gradient(180deg,#fffdf9,#f1e9df_58%)]" />
+
+            {/* Animated Architectural Sunburst & Filigree Background Graphic */}
+            <div aria-hidden="true" className="pointer-events-none absolute inset-0 flex items-center justify-center overflow-hidden">
+              <motion.div
+                initial={{ opacity: 0, scale: 0.82 }}
+                animate={{ opacity: [0.35, 0.6, 0.35], scale: [0.94, 1.06, 0.94] }}
+                transition={{ duration: 7, repeat: Infinity, ease: 'easeInOut' }}
+                className="absolute h-[420px] w-[420px] rounded-full bg-[radial-gradient(circle,rgba(202,162,76,0.22)_0%,rgba(202,162,76,0.06)_48%,transparent_72%)] blur-2xl"
+              />
+
+              <motion.svg
+                viewBox="0 0 400 760"
+                fill="none"
+                className="absolute inset-4 mx-auto h-[calc(100%-2rem)] w-[calc(100%-2rem)] max-w-md text-[#caa24c]"
+                preserveAspectRatio="none"
+              >
+                <motion.path
+                  d="M 18 742 L 18 210 A 182 182 0 0 1 382 210 L 382 742 Z"
+                  stroke="currentColor"
+                  strokeOpacity="0.22"
+                  strokeWidth="1"
+                  initial={{ pathLength: 0, opacity: 0 }}
+                  animate={{ pathLength: 1, opacity: 1 }}
+                  transition={{ duration: 1.15, ease: [0.22, 1, 0.36, 1] }}
+                />
+                <motion.path
+                  d="M 28 732 L 28 214 A 172 172 0 0 1 372 214 L 372 732 Z"
+                  stroke="currentColor"
+                  strokeOpacity="0.12"
+                  strokeWidth="0.75"
+                  strokeDasharray="3 5"
+                  initial={{ pathLength: 0, opacity: 0 }}
+                  animate={{ pathLength: 1, opacity: 1 }}
+                  transition={{ duration: 1.35, delay: 0.1, ease: [0.22, 1, 0.36, 1] }}
+                />
+                <motion.polygon
+                  points="200,20 206,28 200,36 194,28"
+                  fill="currentColor"
+                  fillOpacity="0.28"
+                  initial={{ scale: 0, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  transition={{ delay: 0.45, duration: 0.5 }}
+                />
+                <motion.polygon
+                  points="200,724 205,732 200,740 195,732"
+                  fill="currentColor"
+                  fillOpacity="0.24"
+                  initial={{ scale: 0, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  transition={{ delay: 0.55, duration: 0.5 }}
+                />
+              </motion.svg>
+
+              <motion.svg
+                viewBox="0 0 520 520"
+                fill="none"
+                className="absolute h-[460px] w-[460px] text-[#b98a3d] sm:h-[520px] sm:w-[520px]"
+                initial={{ opacity: 0, scale: 0.86, rotate: -12 }}
+                animate={{ opacity: 1, scale: 1, rotate: 348 }}
+                transition={{
+                  opacity: { duration: 0.7, ease: 'easeOut' },
+                  scale: { duration: 0.85, ease: [0.22, 1, 0.36, 1] },
+                  rotate: { duration: 64, repeat: Infinity, ease: 'linear' },
+                }}
+              >
+                <circle cx="260" cy="260" r="236" stroke="currentColor" strokeOpacity="0.16" strokeWidth="0.9" />
+                <circle cx="260" cy="260" r="224" stroke="currentColor" strokeOpacity="0.22" strokeWidth="0.9" strokeDasharray="2 8" />
+                {Array.from({ length: 24 }).map((_, index) => {
+                  const angle = (index * 360) / 24
+                  const isMajor = index % 2 === 0
+                  return (
+                    <line
+                      key={angle}
+                      x1="260"
+                      y1={isMajor ? '16' : '32'}
+                      x2="260"
+                      y2={isMajor ? '64' : '54'}
+                      stroke="currentColor"
+                      strokeOpacity={isMajor ? '0.24' : '0.13'}
+                      strokeWidth={isMajor ? '1.1' : '0.75'}
+                      transform={`rotate(${angle} 260 260)`}
+                    />
+                  )
+                })}
+                {[0, 90, 180, 270].map((angle) => (
+                  <polygon
+                    key={angle}
+                    points="260,18 264,24 260,30 256,24"
+                    fill="currentColor"
+                    fillOpacity="0.34"
+                    transform={`rotate(${angle} 260 260)`}
+                  />
+                ))}
+              </motion.svg>
+
+              <motion.svg
+                viewBox="0 0 380 380"
+                fill="none"
+                className="absolute h-[320px] w-[320px] text-[#caa24c] sm:h-[360px] sm:w-[360px]"
+                initial={{ opacity: 0, scale: 0.9, rotate: 0 }}
+                animate={{ opacity: 1, scale: 1, rotate: -360 }}
+                transition={{
+                  opacity: { duration: 0.8, delay: 0.12 },
+                  scale: { duration: 0.85, delay: 0.12, ease: [0.22, 1, 0.36, 1] },
+                  rotate: { duration: 48, repeat: Infinity, ease: 'linear' },
+                }}
+              >
+                <circle cx="190" cy="190" r="168" stroke="currentColor" strokeOpacity="0.16" strokeWidth="0.85" />
+                <rect x="71" y="71" width="238" height="238" stroke="currentColor" strokeOpacity="0.11" strokeWidth="0.75" />
+                <rect
+                  x="71"
+                  y="71"
+                  width="238"
+                  height="238"
+                  stroke="currentColor"
+                  strokeOpacity="0.11"
+                  strokeWidth="0.75"
+                  transform="rotate(45 190 190)"
+                />
+                <circle cx="190" cy="190" r="118" stroke="currentColor" strokeOpacity="0.14" strokeWidth="0.75" strokeDasharray="4 6" />
+              </motion.svg>
+            </div>
+
             <motion.div
               initial={{ opacity: 0, y: 24 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: 16 }}
               transition={{ duration: 0.52, ease: [0.23, 1, 0.32, 1] }}
-              className="relative flex h-full flex-col justify-between px-6 pb-10 pt-28 sm:px-10"
+              className="relative flex h-full flex-col items-center justify-center overflow-y-auto px-6 py-16 text-center"
             >
-              <div className="mx-auto w-full max-w-md">
-                <LuxorAxisLockup
-                  className="mb-10 w-full max-w-[220px]"
-                  showDivider={false}
-                />
-                <nav className="flex flex-col gap-1" aria-label={spanish ? 'Menú principal' : 'Main menu'}>
-                  {mobileNavLinks.map((item, idx) => (
-                    <motion.div
-                      key={item.key}
-                      initial={{ opacity: 0, y: 10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, y: 6 }}
-                      transition={{ duration: 0.32, delay: idx * 0.04, ease: [0.23, 1, 0.32, 1] }}
-                      className="border-b border-[#caa24c]/14 py-3"
-                    >
-                      {item.key === 'Events' ? (
-                        <div>
-                          <div className="flex items-center justify-between gap-2">
+              <LuxorAxisLockup className="mb-8 w-full max-w-[250px] sm:max-w-[280px]" showDivider={false} />
+
+              <nav className="flex w-full max-w-md flex-col items-center gap-5" aria-label={spanish ? 'Menú principal' : 'Main menu'}>
+                {mobileNavLinks.map((item, idx) => (
+                  <motion.div
+                    key={item.key}
+                    initial={{ opacity: 0, y: 14 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: 8 }}
+                    transition={{ duration: 0.32, delay: idx * 0.045, ease: [0.23, 1, 0.32, 1] }}
+                    className="w-full"
+                  >
+                    {item.key === 'Events' ? (
+                      <div>
+                        <div className="flex items-center justify-center gap-2">
+                          <Link
+                            href={eventsHref}
+                            onClick={closeMobileMenu}
+                            className="font-serif text-4xl leading-none tracking-[0.16em] text-[#241d17] transition-colors hover:text-[#8d672b]"
+                          >
+                            {item.label}
+                          </Link>
+                          <button
+                            type="button"
+                            aria-expanded={mobileEventsOpen}
+                            aria-controls="mobile-events-collections"
+                            aria-label={
+                              spanish
+                                ? mobileEventsOpen
+                                  ? 'Cerrar colecciones de eventos'
+                                  : 'Mostrar colecciones de eventos'
+                                : mobileEventsOpen
+                                  ? 'Collapse event collections'
+                                  : 'Expand event collections'
+                            }
+                            onClick={() => setMobileEventsOpen((open) => !open)}
+                            className="flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-lg text-[#8d672b] transition-colors hover:bg-[#caa24c]/10"
+                          >
+                            <ChevronDown
+                              size={22}
+                              aria-hidden
+                              className={`transition-transform duration-[420ms] ease-[cubic-bezier(0.4,0,0.2,1)] motion-reduce:transition-none ${mobileEventsOpen ? 'rotate-180' : ''}`}
+                            />
+                          </button>
+                        </div>
+                        <div
+                          id="mobile-events-collections"
+                          className="grid transition-[grid-template-rows] duration-[420ms] ease-[cubic-bezier(0.4,0,0.2,1)] motion-reduce:transition-none"
+                          style={{ gridTemplateRows: mobileEventsOpen ? '1fr' : '0fr' }}
+                          inert={!mobileEventsOpen}
+                          aria-hidden={!mobileEventsOpen}
+                        >
+                          <div className="overflow-hidden">
+                            <ul className="mx-auto mt-3 max-w-xs divide-y divide-[#caa24c]/18">
+                              {LUXOR_EVENT_COLLECTIONS.map((collection) => (
+                                <li key={collection.href}>
+                                  <Link
+                                    href={eventCollectionHref(collection, spanish)}
+                                    onClick={closeMobileMenu}
+                                    className="block py-3 font-serif text-lg tracking-[0.06em] text-[#4f4338] transition-colors hover:text-[#8d672b]"
+                                  >
+                                    {spanish ? collection.titleEs : collection.title}
+                                  </Link>
+                                </li>
+                              ))}
+                            </ul>
                             <Link
                               href={eventsHref}
-                              onClick={() => setMobileMenuOpen(false)}
-                              className="flex min-h-11 flex-1 items-center font-serif text-2xl tracking-[0.08em] text-[#241d17] transition-colors hover:text-[#8d672b] sm:text-[1.65rem]"
+                              onClick={closeMobileMenu}
+                              className="mt-4 inline-block text-[10px] font-bold uppercase tracking-[0.24em] text-[#8d672b] transition-colors hover:text-[#6f5322]"
                             >
-                              {item.label}
+                              {spanish ? 'Ver todos los eventos' : 'View all events'}
                             </Link>
-                            <button
-                              type="button"
-                              aria-expanded={mobileEventsOpen}
-                              aria-controls="mobile-events-collections"
-                              aria-label={
-                                spanish
-                                  ? mobileEventsOpen
-                                    ? 'Cerrar colecciones de eventos'
-                                    : 'Mostrar colecciones de eventos'
-                                  : mobileEventsOpen
-                                    ? 'Collapse event collections'
-                                    : 'Expand event collections'
-                              }
-                              onClick={() => setMobileEventsOpen((open) => !open)}
-                              className="flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-lg text-[#8d672b] transition-colors hover:bg-[#caa24c]/10"
-                            >
-                              <ChevronDown
-                                size={20}
-                                aria-hidden
-                                className={`transition-transform duration-[420ms] ease-[cubic-bezier(0.4,0,0.2,1)] motion-reduce:transition-none ${mobileEventsOpen ? 'rotate-180' : ''}`}
-                              />
-                            </button>
-                          </div>
-                          <div
-                            id="mobile-events-collections"
-                            className="grid transition-[grid-template-rows] duration-[420ms] ease-[cubic-bezier(0.4,0,0.2,1)] motion-reduce:transition-none"
-                            style={{ gridTemplateRows: mobileEventsOpen ? '1fr' : '0fr' }}
-                            inert={!mobileEventsOpen}
-                            aria-hidden={!mobileEventsOpen}
-                          >
-                            <div className="overflow-hidden">
-                              <ul className="mt-2 space-y-0.5 pl-1 pt-2">
-                                {LUXOR_EVENT_COLLECTIONS.map((collection) => (
-                                  <li key={collection.href}>
-                                    <Link
-                                      href={eventCollectionHref(collection, spanish)}
-                                      onClick={() => setMobileMenuOpen(false)}
-                                      className="flex min-h-11 items-center py-1 pl-3 text-base text-[#4f4338] transition-colors hover:text-[#8d672b]"
-                                    >
-                                      {spanish ? collection.titleEs : collection.title}
-                                    </Link>
-                                  </li>
-                                ))}
-                              </ul>
-                            </div>
                           </div>
                         </div>
-                      ) : (
-                        <Link
-                          href={item.href}
-                          onClick={() => setMobileMenuOpen(false)}
-                          className="flex min-h-11 items-center font-serif text-2xl tracking-[0.08em] text-[#241d17] transition-colors hover:text-[#8d672b] sm:text-[1.65rem]"
-                        >
-                          {item.label}
-                        </Link>
-                      )}
-                    </motion.div>
-                  ))}
-                </nav>
-              </div>
+                      </div>
+                    ) : (
+                      <Link
+                        href={item.href}
+                        onClick={closeMobileMenu}
+                        className="block font-serif text-4xl leading-none tracking-[0.16em] text-[#241d17] transition-colors hover:text-[#8d672b]"
+                      >
+                        {item.label}
+                      </Link>
+                    )}
+                  </motion.div>
+                ))}
+              </nav>
+
               <motion.div
-                initial={{ opacity: 0, y: 8 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.2 }}
-                className="mx-auto w-full max-w-md space-y-3"
+                initial={{ opacity: 0, scale: 0.9 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ delay: 0.3 }}
+                className="mt-8 w-full max-w-xs space-y-3"
               >
                 <Link
                   href={`${publicSitePath('/visit', spanish)}#visit-booking`}
                   data-conversion="visit_cta_click"
                   data-conversion-label="Mobile menu"
-                  onClick={() => setMobileMenuOpen(false)}
-                  className="luxor-gold-raised flex min-h-12 items-center justify-center gap-2 rounded-md px-6 py-3 text-sm uppercase tracking-[0.16em]"
+                  onClick={closeMobileMenu}
+                  className="luxor-gold-raised flex min-h-12 items-center justify-center gap-2 rounded-full px-8 py-3 text-sm uppercase tracking-[0.18em]"
                 >
                   <CalendarDays size={18} />
                   {spanish ? 'Agendar una visita' : 'Schedule a Visit'}
                 </Link>
-                <PublicPhoneLink className="flex min-h-12 items-center justify-center gap-2 rounded-md border border-[#caa24c]/40 px-6 py-3 text-sm font-semibold tracking-[0.12em] text-[#241d17] transition-colors hover:border-[#8d672b] hover:text-[#8d672b]" />
+                <PublicPhoneLink className="flex min-h-12 items-center justify-center gap-2 rounded-full border border-[#caa24c]/45 px-8 py-3 text-sm font-bold uppercase tracking-[0.18em] text-[#241d17] transition-colors hover:border-[#8d672b] hover:text-[#8d672b]" />
               </motion.div>
             </motion.div>
           </motion.div>
