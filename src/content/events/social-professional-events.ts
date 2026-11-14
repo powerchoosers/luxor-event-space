@@ -19,26 +19,26 @@ const en: Omit<EventCategoryPageProps, 'spanish'> = {
   title: 'Social & Professional Events',
   subtitle:
     'A sophisticated space for corporate gatherings, holiday events, private celebrations, and community functions.',
-  heroImage: '/images/luxor-lounge/luxor-lounge-corporate.png',
-  heroImageAlt: 'Corporate dinner with chandeliers and banquet tables at Luxor',
+  heroImage: '/images/dining-hall/main-hall-corporate-cocktail.png',
+  heroImageAlt: 'Corporate cocktail reception setup in the Luxor main hall',
   introEyebrow: 'Gatherings at Luxor',
   introTitle: 'Bring People Together.',
   introBody:
     'From professional networking to meaningful community gatherings, Luxor provides a versatile setting for events that bring people together.',
   gallery: [
     {
-      src: '/images/luxor-lounge/luxor-lounge-corporate.png',
-      alt: 'Corporate event with banquet seating and chandeliers at Luxor',
+      src: '/images/dining-hall/main-hall-corporate-cocktail.png',
+      alt: 'Corporate cocktail reception with standing guests in the Luxor main hall',
       label: 'Corporate Events',
     },
     {
-      src: '/images/dining-hall/main-hall-reception-professional.png',
-      alt: 'Main hall set for a professional conference or presentation',
+      src: '/images/luxor-lounge/luxor-lounge-corporate.png',
+      alt: 'Luxor lounge arranged for a corporate conference or presentation',
       label: 'Conferences',
     },
     {
-      src: '/images/dining-hall/main-hall-corporate-cocktail.png',
-      alt: 'Cocktail-style networking setup in the Luxor ballroom',
+      src: '/images/luxor-lounge/luxor-lounge-cocktail-event.jpg',
+      alt: 'Networking reception with cocktail tables in the Luxor lounge',
       label: 'Networking Events',
     },
     {
@@ -52,13 +52,13 @@ const en: Omit<EventCategoryPageProps, 'spanish'> = {
       label: 'Fundraisers',
     },
     {
-      src: '/images/luxor-lounge/luxor-lounge-cocktail-event.jpg',
-      alt: 'Cocktail party with lounge seating and warm lighting',
+      src: '/images/luxor-lounge/luxor-lounge-empty.png',
+      alt: 'Cocktail party setup in the Luxor lounge with bar and seating',
       label: 'Cocktail Parties',
     },
     {
-      src: '/images/luxor-lounge/luxor-lounge-family.png',
-      alt: 'Private celebration with elegant table settings at Luxor',
+      src: '/images/dining-hall/main-hall-table-candid.png',
+      alt: 'Private celebration with guests seated at an elegant table in the Luxor main hall',
       label: 'Private Celebrations',
     },
   ],
@@ -76,26 +76,26 @@ const es: Omit<EventCategoryPageProps, 'spanish'> = {
   title: 'Eventos sociales y profesionales',
   subtitle:
     'Un espacio sofisticado para reuniones corporativas, fiestas navideñas, celebraciones privadas y eventos comunitarios.',
-  heroImage: '/images/luxor-lounge/luxor-lounge-corporate.png',
-  heroImageAlt: 'Cena corporativa con arañas y mesas banquete en Luxor',
+  heroImage: '/images/dining-hall/main-hall-corporate-cocktail.png',
+  heroImageAlt: 'Recepción corporativa estilo cóctel en el salón principal de Luxor',
   introEyebrow: 'Reuniones en Luxor',
   introTitle: 'Reúne a las personas.',
   introBody:
     'Desde el networking profesional hasta encuentros comunitarios con sentido, Luxor ofrece un entorno versátil para eventos que conectan.',
   gallery: [
     {
-      src: '/images/luxor-lounge/luxor-lounge-corporate.png',
-      alt: 'Evento corporativo con mesas banquete y arañas en Luxor',
+      src: '/images/dining-hall/main-hall-corporate-cocktail.png',
+      alt: 'Recepción corporativa con invitados de pie en el salón principal de Luxor',
       label: 'Eventos corporativos',
     },
     {
-      src: '/images/dining-hall/main-hall-reception-professional.png',
-      alt: 'Salón principal preparado para conferencia o presentación',
+      src: '/images/luxor-lounge/luxor-lounge-corporate.png',
+      alt: 'Lounge de Luxor preparado para una conferencia o presentación corporativa',
       label: 'Conferencias',
     },
     {
-      src: '/images/dining-hall/main-hall-corporate-cocktail.png',
-      alt: 'Montaje de networking estilo cóctel en el salón de Luxor',
+      src: '/images/luxor-lounge/luxor-lounge-cocktail-event.jpg',
+      alt: 'Recepción de networking con mesas de cóctel en el lounge de Luxor',
       label: 'Eventos de networking',
     },
     {
@@ -109,13 +109,13 @@ const es: Omit<EventCategoryPageProps, 'spanish'> = {
       label: 'Recaudaciones de fondos',
     },
     {
-      src: '/images/luxor-lounge/luxor-lounge-cocktail-event.jpg',
-      alt: 'Fiesta de cócteles con lounge y luz cálida',
+      src: '/images/luxor-lounge/luxor-lounge-empty.png',
+      alt: 'Montaje de fiesta de cócteles en el lounge de Luxor con barra y asientos',
       label: 'Fiestas de cócteles',
     },
     {
-      src: '/images/luxor-lounge/luxor-lounge-family.png',
-      alt: 'Celebración privada con mesas elegantes en Luxor',
+      src: '/images/dining-hall/main-hall-table-candid.png',
+      alt: 'Celebración privada con invitados en mesa elegante del salón de Luxor',
       label: 'Celebraciones privadas',
     },
   ],

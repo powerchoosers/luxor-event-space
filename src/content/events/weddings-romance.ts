@@ -18,8 +18,8 @@ const en: Omit<EventCategoryPageProps, 'spanish'> = {
   eyebrow: 'Event collection',
   title: 'Weddings & Romance',
   subtitle: 'Celebrate love in a modern, elegant setting designed for your most meaningful moments.',
-  heroImage: '/images/luxor-lounge/luxor-lounge-wedding.png',
-  heroImageAlt: 'Elegant wedding setup with romantic lighting and floral details at Luxor',
+  heroImage: '/images/dining-hall/main-hall-wedding-wide.png',
+  heroImageAlt: 'Wide view of the Luxor main hall prepared for a wedding reception',
   introEyebrow: 'In this collection',
   introTitle: 'Love stories worth celebrating.',
   introBody:
@@ -36,8 +36,8 @@ const en: Omit<EventCategoryPageProps, 'spanish'> = {
       label: 'Engagements',
     },
     {
-      src: '/images/luxor-lounge/luxor-lounge-family.png',
-      alt: 'Elegant lounge set for a bridal shower gathering',
+      src: '/images/luxor-lounge/luxor-lounge-wedding.png',
+      alt: 'Luxor lounge styled for a bridal shower with romantic table details',
       label: 'Bridal Showers',
     },
     {
@@ -68,8 +68,8 @@ const es: Omit<EventCategoryPageProps, 'spanish'> = {
   eyebrow: 'Colección de eventos',
   title: 'Bodas y romance',
   subtitle: 'Celebra el amor en un ambiente moderno y elegante, pensado para tus momentos más significativos.',
-  heroImage: '/images/luxor-lounge/luxor-lounge-wedding.png',
-  heroImageAlt: 'Montaje elegante de boda con iluminación romántica en Luxor',
+  heroImage: '/images/dining-hall/main-hall-wedding-wide.png',
+  heroImageAlt: 'Vista amplia del salón principal de Luxor preparado para una recepción de boda',
   introEyebrow: 'En esta colección',
   introTitle: 'Historias de amor que merecen celebrarse.',
   introBody:
@@ -86,8 +86,8 @@ const es: Omit<EventCategoryPageProps, 'spanish'> = {
       label: 'Compromisos',
     },
     {
-      src: '/images/luxor-lounge/luxor-lounge-family.png',
-      alt: 'Lounge elegante para un bridal shower en Luxor',
+      src: '/images/luxor-lounge/luxor-lounge-wedding.png',
+      alt: 'Lounge de Luxor ambientado para un bridal shower con mesas románticas',
       label: 'Bridal showers',
     },
     {

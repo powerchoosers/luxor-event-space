@@ -106,11 +106,14 @@ export function EventCategoryPage({
 
       <nav
         aria-label={spanish ? 'Ruta de navegación' : 'Breadcrumb'}
-        className="border-b border-[#caa24c]/20 bg-[#faf7f1]"
+        className="border-b border-[#caa24c]/20 bg-[#faf7f1] pt-28"
       >
         <ol className="mx-auto flex max-w-7xl flex-wrap items-center gap-x-2 gap-y-1 px-5 py-4 text-sm text-[#665a4e] sm:px-6 lg:px-8">
           <li>
-            <Link href={eventsHref} className="transition hover:text-[#241d17]">
+            <Link
+              href={eventsHref}
+              className="inline-flex min-h-11 items-center transition hover:text-[#241d17]"
+            >
               {spanish ? 'Eventos' : 'Events'}
             </Link>
           </li>
@@ -134,7 +137,7 @@ export function EventCategoryPage({
         />
         <div className="pointer-events-none absolute inset-0" style={HERO_SCRIM} aria-hidden />
 
-        <div className="relative z-10 mx-auto flex min-h-[78svh] w-full max-w-7xl flex-col items-start justify-end px-5 pb-14 pt-28 text-left sm:min-h-[82svh] sm:px-6 sm:pb-16 lg:px-8 lg:pb-20">
+        <div className="relative z-10 mx-auto flex min-h-[78svh] w-full max-w-7xl flex-col items-start justify-end px-5 pb-14 pt-6 text-left sm:min-h-[82svh] sm:px-6 sm:pb-16 lg:px-8 lg:pb-20">
           <p className="font-mono text-[11px] font-bold uppercase tracking-[0.28em]" style={PHOTO_EYEBROW}>
             {eyebrow}
           </p>
@@ -219,7 +222,10 @@ export function EventCategoryPage({
               {otherCollections.map((item, index) => (
                 <span key={item.href}>
                   {index > 0 ? (spanish ? ' · ' : ' · ') : null}
-                  <Link href={item.href} className="font-medium text-[#241d17] underline-offset-4 transition hover:text-[#8d672b] hover:underline">
+                  <Link
+                    href={item.href}
+                    className="inline-flex min-h-11 items-center font-medium text-[#241d17] underline-offset-4 transition hover:text-[#8d672b] hover:underline"
+                  >
                     {item.title}
                   </Link>
                 </span>
