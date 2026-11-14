@@ -56,6 +56,25 @@ test('segmentClipWindow pads and ends at the next segment start', () => {
   assert.ok(window.duration > 6)
 })
 
+test('buildCorrectedSnapshotSegments keeps every ordered row when corrections are partial', () => {
+  const maxSegments = 96
+  const ordered = Array.from({ length: maxSegments + 8 }, (_, index) => ({
+    id: `seg-${index}`,
+    track: index % 2 === 0 ? 'caller' : 'luxor_agent',
+    segment_text: `line ${index}`,
+    english_text: null,
+    spoken_languages: [],
+    translation_status: 'not_requested',
+    event_timestamp: `2026-01-01T00:00:${String(index).padStart(2, '0')}.000Z`,
+    segment_start_seconds: index,
+  }))
+  const corrections = new Map([['seg-0', 'line zero corrected']])
+  const snapshot = correction.buildCorrectedSnapshotSegments(ordered, corrections)
+  assert.equal(snapshot.length, ordered.length)
+  assert.equal(snapshot[0].text, 'line zero corrected')
+  assert.equal(snapshot[maxSegments + 7].text, `line ${maxSegments + 7}`)
+})
+
 test('buildCorrectedSnapshotSegments keeps twilio text unless corrected', () => {
   const rows = [{
     id: 'a', track: 'caller', segment_text: 'Hola', english_text: 'Hello', spoken_languages: ['Spanish'], translation_status: 'completed', event_timestamp: '2026-01-01T00:00:05.000Z', segment_start_seconds: 5,

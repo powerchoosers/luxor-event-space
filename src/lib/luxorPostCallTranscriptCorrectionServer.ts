@@ -130,6 +130,8 @@ async function transcribeOpenAiClip(wav: Buffer, model: string): Promise<{ text:
   form.append('file', new Blob([Uint8Array.from(wav)], { type: 'audio/wav' }), 'clip.wav')
   form.append('model', model)
   form.append('response_format', 'json')
+  // Documented on POST /v1/audio/transcriptions for gpt-transcribe:
+  // https://developers.openai.com/api/reference/resources/audio/subresources/transcriptions/methods/create
   form.append('prompt', luxorPostCallTranscriptionPrompt())
   for (const keyword of LUXOR_POST_CALL_TRANSCRIPT_KEYWORDS) form.append('keywords[]', keyword)
   form.append('languages[]', 'en')
@@ -142,11 +144,22 @@ async function transcribeOpenAiClip(wav: Buffer, model: string): Promise<{ text:
       signal: AbortSignal.timeout(45_000),
       cache: 'no-store',
     })
-    if (!response.ok) return { text: null, error: true }
+    if (!response.ok) {
+      const body = await response.text().catch(() => '')
+      console.warn('[Luxor] Post-call clip transcription failed', {
+        status: response.status,
+        body: body.slice(0, 500),
+      })
+      return { text: null, error: true }
+    }
     const payload = await response.json() as { text?: unknown }
     const text = typeof payload.text === 'string' ? payload.text.trim().slice(0, 4000) : ''
     return { text: text || null, error: false }
-  } catch {
+  } catch (error) {
+    console.warn('[Luxor] Post-call clip transcription failed', {
+      status: 'network',
+      body: error instanceof Error ? error.message.slice(0, 500) : 'request_failed',
+    })
     return { text: null, error: true }
   }
 }
@@ -172,6 +185,7 @@ type PostCallMeta = {
   at?: string
   corrected_count?: number
   kept_count?: number
+  error_count?: number
   error?: string
 }
 
@@ -214,20 +228,20 @@ export async function runLuxorPostCallTranscriptCorrection(callSid: string) {
   const maxSegments = Math.min(200, Math.max(1, Number.parseInt(process.env.LUXOR_POST_CALL_TRANSCRIPT_MAX_SEGMENTS || '96', 10) || 96))
   const concurrency = 4
 
-  call = await claimPostCallCorrection(call, model) ?? call
-  if (readPostCallMeta(call)?.status === 'completed') return { status: 'skipped' as const, reason: 'duplicate' }
-  if (readPostCallMeta(call)?.status !== 'processing') return { status: 'skipped' as const, reason: 'not_claimed' }
+  const claimed = await claimPostCallCorrection(call, model)
+  if (!claimed) return { status: 'skipped' as const, reason: 'not_claimed' }
+  call = claimed
 
   try {
     const ordered = await getLuxorTranscriptSegments(call.id)
     if (!ordered.length) {
-      await patchPostCallMeta(call, { status: 'skipped', model, at: new Date().toISOString(), corrected_count: 0, kept_count: 0 })
+      await patchPostCallMeta(callSid, { status: 'skipped', model, at: new Date().toISOString(), corrected_count: 0, kept_count: 0, error_count: 0 })
       return { status: 'skipped' as const, reason: 'no_segments' }
     }
     const work = ordered.slice(0, maxSegments)
     const storagePath = call.recording_storage_path
     if (!storagePath) {
-      await patchPostCallMeta(call, { status: 'skipped', model, at: new Date().toISOString(), corrected_count: 0, kept_count: 0, error: 'no_storage_path' })
+      await patchPostCallMeta(callSid, { status: 'skipped', model, at: new Date().toISOString(), corrected_count: 0, kept_count: 0, error_count: 0, error: 'no_storage_path' })
       return { status: 'skipped' as const, reason: 'no_recording' }
     }
     const audioBuffer = await downloadLuxorCallRecording(storagePath)
@@ -236,9 +250,10 @@ export async function runLuxorPostCallTranscriptCorrection(callSid: string) {
     const corrections = new Map<string, string>()
     let correctedCount = 0
     let keptCount = 0
+    let errorCount = 0
 
-    await runPool(work, concurrency, async (row, index) => {
-      const window = segmentClipWindow(work, index, recordingDuration)
+    await runPool(work, concurrency, async (row, workIndex) => {
+      const window = segmentClipWindow(ordered, workIndex, recordingDuration)
       const twilioText = row.segment_text
       if (!window) {
         keptCount += 1
@@ -247,6 +262,7 @@ export async function runLuxorPostCallTranscriptCorrection(callSid: string) {
       const channel = luxorDualChannelIndexForStorageTrack(row.track, call!.metadata)
       const wav = sliceChannelToWav(decoded, channel, window.start, window.end)
       const { text, error } = await transcribeOpenAiClip(wav, model)
+      if (error) errorCount += 1
       const keep = shouldKeepTwilioTranscript({
         clipDurationSeconds: window.duration,
         twilioText,
@@ -261,21 +277,21 @@ export async function runLuxorPostCallTranscriptCorrection(callSid: string) {
       correctedCount += 1
     })
 
-    const transcript_segments = buildCorrectedSnapshotSegments(work, corrections)
+    const transcript_segments = buildCorrectedSnapshotSegments(ordered, corrections)
 
-    const latest = await getLuxorCallBySid(callSid)
-    if (!latest || latest.metadata?.transcript_manually_corrected === true) {
+    const refreshed = await getLuxorCallBySid(callSid)
+    if (!refreshed || refreshed.metadata?.transcript_manually_corrected === true) {
       return { status: 'skipped' as const, reason: 'manual_correction' }
     }
 
-  const [saved] = await supabaseRest<LuxorCall[]>(`luxor_calls?select=*&id=eq.${encodeURIComponent(latest.id)}&metadata->post_call_transcript->>status=eq.processing`, {
+    const [saved] = await supabaseRest<LuxorCall[]>(`luxor_calls?select=*&id=eq.${encodeURIComponent(refreshed.id)}&metadata->post_call_transcript->>status=eq.processing`, {
       method: 'PATCH',
       headers: { Prefer: 'return=representation' },
       body: JSON.stringify({
         transcript_segments,
         updated_at: new Date().toISOString(),
         metadata: {
-          ...latest.metadata,
+          ...refreshed.metadata,
           transcript_source: 'post_call',
           post_call_transcript: {
             status: 'completed',
@@ -283,38 +299,41 @@ export async function runLuxorPostCallTranscriptCorrection(callSid: string) {
             at: new Date().toISOString(),
             corrected_count: correctedCount,
             kept_count: keptCount,
+            error_count: errorCount,
           },
         },
-        ...(correctedCount > 0 && latest.summary_status === 'completed'
+        ...(correctedCount > 0 && refreshed.summary_status === 'completed'
           ? { summary_status: 'not_generated', summary_text: null, summary_generated_at: null }
           : {}),
       }),
     })
     if (!saved) throw new Error('Post-call transcript snapshot could not be saved.')
-    return { status: 'completed' as const, correctedCount, keptCount }
+    return { status: 'completed' as const, correctedCount, keptCount, errorCount }
   } catch (error) {
     const message = error instanceof Error ? error.message : 'post_call_transcript_failed'
     console.error('[Luxor] Post-call transcript correction failed:', message)
-    const latest = await getLuxorCallBySid(callSid)
-    if (latest) {
-      await patchPostCallMeta(latest, {
-        status: 'failed',
-        model,
-        at: new Date().toISOString(),
-        error: message.slice(0, 500),
-      })
-    }
+    await patchPostCallMeta(callSid, {
+      status: 'failed',
+      model,
+      at: new Date().toISOString(),
+      error: message.slice(0, 500),
+    })
     return { status: 'failed' as const, error: message }
   }
 }
 
-async function patchPostCallMeta(call: LuxorCall, meta: PostCallMeta) {
-  await supabaseRest(`luxor_calls?id=eq.${encodeURIComponent(call.id)}`, {
+async function patchPostCallMeta(callSid: string, meta: PostCallMeta) {
+  const latest = await getLuxorCallBySid(callSid)
+  if (!latest) return
+  await supabaseRest(`luxor_calls?id=eq.${encodeURIComponent(latest.id)}`, {
     method: 'PATCH',
     headers: { Prefer: 'return=minimal' },
     body: JSON.stringify({
       updated_at: new Date().toISOString(),
-      metadata: { ...call.metadata, post_call_transcript: meta },
+      metadata: {
+        ...latest.metadata,
+        post_call_transcript: meta,
+      },
     }),
   })
 }
