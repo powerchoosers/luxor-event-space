@@ -1,6 +1,6 @@
 import 'server-only'
 
-import { LuxorCall, LuxorCallDirection, LuxorCallStatus, TERMINAL_LUXOR_CALL_STATUSES } from './luxorCallTypes'
+import { LuxorCall, LuxorCallDirection, LuxorCallStatus, TERMINAL_LUXOR_CALL_STATUSES, luxorTranscriptStorageTrack } from './luxorCallTypes'
 import { listLuxorInquiries } from './luxorInquiriesServer'
 import { supabaseRest } from './supabaseRestServer'
 
@@ -310,6 +310,37 @@ function providerAudioStart(value: string | undefined): number | null {
   }
 }
 
+async function syncLuxorCallTranscriptSnapshot(call: LuxorCall, sequenceId?: number) {
+  const rows = await getTranscriptRows(`call_id=eq.${encodeURIComponent(call.id)}`)
+  const ordered = transcriptRowsInAudioOrder(rows, call.recording_started_at)
+  const maxSequence = Math.max(
+    call.last_sequence_number ?? -1,
+    typeof sequenceId === 'number' ? sequenceId : -1,
+    rows.reduce((max, row) => Math.max(max, row.sequence_id), -1),
+  )
+  const transcript_segments = ordered.map((row) => ({
+    id: row.id,
+    text: row.english_text || row.segment_text,
+    originalText: row.segment_text,
+    spokenLanguages: row.spoken_languages || [],
+    translationStatus: row.translation_status,
+    track: row.track,
+    timestamp: row.event_timestamp || '',
+    final: true,
+    startSeconds: row.segment_start_seconds,
+  }))
+  const [updated] = await supabaseRest<LuxorCall[]>(`luxor_calls?select=*&id=eq.${encodeURIComponent(call.id)}&updated_at=eq.${encodeURIComponent(call.updated_at)}`, {
+    method: 'PATCH',
+    headers: { Prefer: 'return=representation' },
+    body: JSON.stringify({
+      transcript_segments,
+      last_sequence_number: maxSequence,
+      updated_at: new Date().toISOString(),
+    }),
+  })
+  return updated ?? call
+}
+
 export async function saveLuxorTranscriptEvent(input: {
   callSid: string; event: string; sequenceId: number; transcriptionSid: string; transcriptionData?: string; transcriptionProviderData?: string; track?: string; timestamp?: string; final?: string
 }) {
@@ -318,7 +349,7 @@ export async function saveLuxorTranscriptEvent(input: {
   const metadata = input.transcriptionData ? JSON.parse(input.transcriptionData) as Record<string, unknown> : {}
   const alternatives = Array.isArray(metadata.alternatives) ? metadata.alternatives as Array<Record<string, unknown>> : []
   const text = String(metadata.transcript || metadata.text || alternatives[0]?.transcript || '').trim().slice(0, 4000)
-  const track = String(metadata.track || input.track || 'both_tracks')
+  const track = luxorTranscriptStorageTrack(String(metadata.track || input.track || 'both_tracks'), call.metadata)
   const providerStartAt = providerAudioStart(input.transcriptionProviderData)
   // Twilio sends Final as a top-level form field, not inside TranscriptionData.
   // Our sessions request final results only; retain compatibility if the field is absent.
@@ -335,6 +366,9 @@ export async function saveLuxorTranscriptEvent(input: {
       body: JSON.stringify({ call_id: call.id, transcription_sid: input.transcriptionSid, sequence_id: input.sequenceId, track, segment_start_seconds: startSeconds, segment_audio_timestamp: providerStartAt == null ? null : new Date(providerStartAt).toISOString(), segment_text: text, translation_status: call.metadata?.scope === 'elena_live_inbound' ? 'pending' : 'not_requested', is_final: final, event_timestamp: eventTime }),
     })
     addedSegment = inserted.length > 0
+  }
+  if (addedSegment || input.sequenceId > (call.last_sequence_number ?? -1)) {
+    call = await syncLuxorCallTranscriptSnapshot(call, input.sequenceId)
   }
   if (addedSegment && (call.summary_status === 'completed' || call.summary_status === 'generating')) {
     const [invalidated] = await supabaseRest<LuxorCall[]>(`luxor_calls?select=*&id=eq.${encodeURIComponent(call.id)}&summary_status=in.(completed,generating)`, {

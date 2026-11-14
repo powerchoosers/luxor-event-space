@@ -20,7 +20,7 @@ export async function getLuxorAiVenueContext() {
 Today at Luxor (America/Chicago): ${new Intl.DateTimeFormat('en-US', { timeZone: 'America/Chicago', dateStyle: 'long' }).format(new Date())}.
 Venue: Luxor at Las Palmas Events (Luxor Event Space).
 Venue record used by portal Settings: ${LUXOR_VENUE_ADDRESS}.
-Primary contact: ${LUXOR_BOOKING_EMAIL}. Website: ${LUXOR_WEBSITE}.
+Primary contact: ${LUXOR_BOOKING_EMAIL}. Website: ${LUXOR_WEBSITE} (say "luxor at las palmas dot com" when reading the domain aloud).
 Public phone: ${phone || 'unavailable; do not guess'}.
 Maximum capacity: ${LUXOR_MAX_GUESTS} guests. The venue is fully indoors; do not invent gardens, outdoor amenities, suites, or services.
 Owner-published Elena knowledge${configuration ? ` (configuration ${configuration.version})` : ' is temporarily unavailable'}: ${JSON.stringify(knowledge)}
