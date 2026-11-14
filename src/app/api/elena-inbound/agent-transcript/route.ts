@@ -1,5 +1,4 @@
 import {
-  ELENA_INBOUND_AGENT_TRANSCRIPT_WORKER_MAX_MS,
   authorizeElenaInboundAgentTranscriptRequest,
   runElenaInboundAgentTranscriptSideband,
 } from '@/lib/luxorElenaInboundAgentTranscriptServer'
@@ -7,7 +6,8 @@ import { elenaLiveInboundReady } from '@/lib/luxorElenaInboundServer'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
-export const maxDuration = Math.ceil(ELENA_INBOUND_AGENT_TRANSCRIPT_WORKER_MAX_MS / 1000) + 90
+/** 11m worker socket + 90s flush; must be a route literal (see ELENA_INBOUND_AGENT_TRANSCRIPT_WORKER_MAX_MS). */
+export const maxDuration = 750
 
 const CALL_SID = /^CA[0-9a-f]{32}$/i
 const SESSION_ID = /^[A-Za-z0-9][A-Za-z0-9_-]{1,180}$/
