@@ -220,19 +220,52 @@ const PortalElenaChat = dynamic(
   }
 )
 
-const navItems = [
-  { href: '/portal', icon: <LayoutDashboard size={18} />, label: 'Overview', permission: 'overview' },
-  { href: '/portal/leads', icon: <Users size={18} />, label: 'Leads & Clients', permission: 'leads' },
-  { href: '/portal/planner', icon: <CalendarDays size={18} />, label: 'Planner', permission: 'planner' },
-  { href: '/portal/calls', icon: <Phone size={18} />, label: 'Phone', permission: 'calls' },
-  { href: '/portal/emails', icon: <Mail size={18} />, label: 'Emails', permission: 'emails' },
-  { href: '/portal/messages', icon: <MessageSquare size={18} />, label: 'Text', permission: 'messages' },
-  { href: '/portal/calendar', icon: <Calendar size={18} />, label: 'Calendar', permission: 'calendar' },
-  { href: '/portal/finances', icon: <DollarSign size={18} />, label: 'Finances', permission: 'finances' },
-  { href: '/portal/operations', icon: <SlidersHorizontal size={18} />, label: 'Operations', permission: 'operations' },
-  { href: '/portal/marketing', icon: <Megaphone size={18} />, label: 'Marketing', permission: 'marketing' },
-  { href: '/portal/reports', icon: <FileText size={18} />, label: 'Reports', permission: 'reports' },
+interface NavItemDef {
+  href: string
+  icon: React.ReactNode
+  label: string
+  permission: string
+}
+
+interface NavSectionDef {
+  id: string
+  title: string
+  items: NavItemDef[]
+}
+
+const navSections: NavSectionDef[] = [
+  {
+    id: 'main',
+    title: 'Workspace',
+    items: [
+      { href: '/portal', icon: <LayoutDashboard size={18} />, label: 'Overview', permission: 'overview' },
+      { href: '/portal/calendar', icon: <Calendar size={18} />, label: 'Calendar', permission: 'calendar' },
+    ],
+  },
+  {
+    id: 'clients',
+    title: 'Clients & Comms',
+    items: [
+      { href: '/portal/leads', icon: <Users size={18} />, label: 'Leads & Clients', permission: 'leads' },
+      { href: '/portal/planner', icon: <CalendarDays size={18} />, label: 'Planner', permission: 'planner' },
+      { href: '/portal/calls', icon: <Phone size={18} />, label: 'Phone', permission: 'calls' },
+      { href: '/portal/emails', icon: <Mail size={18} />, label: 'Emails', permission: 'emails' },
+      { href: '/portal/messages', icon: <MessageSquare size={18} />, label: 'Text', permission: 'messages' },
+    ],
+  },
+  {
+    id: 'business',
+    title: 'Operations',
+    items: [
+      { href: '/portal/finances', icon: <DollarSign size={18} />, label: 'Finances', permission: 'finances' },
+      { href: '/portal/operations', icon: <SlidersHorizontal size={18} />, label: 'Operations', permission: 'operations' },
+      { href: '/portal/marketing', icon: <Megaphone size={18} />, label: 'Marketing', permission: 'marketing' },
+      { href: '/portal/reports', icon: <FileText size={18} />, label: 'Reports', permission: 'reports' },
+    ],
+  },
 ]
+
+const navItems = navSections.flatMap((section) => section.items)
 
 const mobilePrimaryNavItems = [
   { href: '/portal', icon: <LayoutDashboard size={19} />, label: 'Home' },
@@ -905,10 +938,8 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
             : 'bg-[#050505]'
         } ${sidebarIsCollapsed ? 'w-16' : 'w-60'}`}
       >
-        <div className="flex flex-col h-full px-2 py-5 cursor-pointer">
-          <div className={`mb-5 flex items-center justify-between transition-[padding] duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] ${
-            sidebarIsCollapsed ? 'px-1.5' : 'px-1'
-          }`}>
+        <div className="flex flex-col h-full px-2 py-4 cursor-pointer">
+          <div className="mb-3 flex items-center justify-between px-1">
             <div className="group/logo relative flex min-w-0 items-center">
             <Link
               href="/portal"
@@ -965,37 +996,73 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
             </PortalGhostIconButton>
           </div>
 
-          <nav className="flex flex-col space-y-1">
-            {navItems.filter((item) => canAccess(item.permission as PortalPermission)).map((item) => {
-              const hasPendingTarget = Boolean(pendingNavigationHref)
-              const isItemPending = pendingNavigationHref
-                ? isActivePath(pendingNavigationHref.split('?')[0], item.href, searchParams)
-                : false
-              return (
-                <SidebarLink
-                  key={item.href}
-                  {...item}
-                  active={isActivePath(pathname, item.href, searchParams)}
-                  collapsed={sidebarIsCollapsed}
-                  pending={isItemPending}
-                  hasPendingTarget={hasPendingTarget}
-                  onNavigate={handleSidebarNavigate}
-                />
-              )
-            })}
-          </nav>
+          <div className={`flex min-h-0 flex-1 flex-col ${sidebarIsCollapsed ? 'overflow-visible' : 'overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden'}`}>
+            <nav className="flex flex-col">
+              {navSections.map((section, sIdx) => {
+                const allowedItems = section.items.filter((item) => canAccess(item.permission as PortalPermission))
+                if (allowedItems.length === 0) return null
 
-          {/* Invisible blank spot hit zone between nav items and bottom actions */}
-          <div
-            onClick={(event) => {
-              event.stopPropagation()
-              toggleSidebar()
-            }}
-            aria-hidden="true"
-            className="flex-1 min-h-[3.5rem] w-full cursor-pointer select-none"
-          />
+                return (
+                  <div key={section.id} className={sIdx > 0 ? 'mt-1' : ''}>
+                    {sIdx > 0 && (
+                      <div
+                        className={`my-1.5 h-px transition-[margin,background-color] duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] ${
+                          sidebarIsCollapsed
+                            ? 'mx-2.5 bg-[#caa24c]/20'
+                            : 'mx-2 bg-[color:var(--portal-border)]/50'
+                        }`}
+                        aria-hidden="true"
+                      />
+                    )}
+                    {section.title && (
+                      <div
+                        className={`overflow-hidden whitespace-nowrap transition-[max-height,opacity,margin] duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] ${
+                          sidebarIsCollapsed
+                            ? 'max-h-0 opacity-0 mb-0 pointer-events-none select-none'
+                            : 'max-h-5 opacity-100 mb-1 px-3 pt-0.5'
+                        }`}
+                      >
+                        <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-[color:var(--portal-muted)]/80 select-none">
+                          {section.title}
+                        </span>
+                      </div>
+                    )}
+                    <div className="flex flex-col space-y-0.5">
+                      {allowedItems.map((item) => {
+                        const hasPendingTarget = Boolean(pendingNavigationHref)
+                        const isItemPending = pendingNavigationHref
+                          ? isActivePath(pendingNavigationHref.split('?')[0], item.href, searchParams)
+                          : false
+                        return (
+                          <SidebarLink
+                            key={item.href}
+                            {...item}
+                            active={isActivePath(pathname, item.href, searchParams)}
+                            collapsed={sidebarIsCollapsed}
+                            pending={isItemPending}
+                            hasPendingTarget={hasPendingTarget}
+                            onNavigate={handleSidebarNavigate}
+                          />
+                        )
+                      })}
+                    </div>
+                  </div>
+                )
+              })}
+            </nav>
 
-          <div className="mt-auto space-y-1.5 border-t border-[#caa24c]/10 pt-4">
+            {/* Invisible blank spot hit zone between nav items and bottom actions */}
+            <div
+              onClick={(event) => {
+                event.stopPropagation()
+                toggleSidebar()
+              }}
+              aria-hidden="true"
+              className="flex-1 min-h-2 w-full cursor-pointer select-none"
+            />
+          </div>
+
+          <div className="mt-auto shrink-0 space-y-1.5 border-t border-[#caa24c]/10 pt-2.5">
             <div ref={accountContainerRef} className="relative">
               <AnimatePresence initial={false}>
                 {accountMenuOpen ? (
@@ -2128,9 +2195,7 @@ function SidebarLink({
       onFocus={() => setIsHovered(true)}
       onBlur={() => setIsHovered(false)}
       aria-label={label}
-      className={`group relative flex items-center rounded-xl border border-transparent py-2.5 text-sm font-medium transition-colors ${
-        collapsed ? 'mx-auto h-11 w-11 justify-center gap-0 p-0' : 'w-full gap-3 px-3'
-      } ${
+      className={`group relative flex h-10 w-full items-center justify-start rounded-xl border border-transparent px-3.5 text-sm font-medium transition-colors ${
         isSelected
           ? 'text-[#18130d] dark:text-[#f1d27a] font-semibold'
           : 'text-[color:var(--portal-muted)] hover:bg-[#caa24c]/[0.08] hover:text-[#18130d] dark:hover:bg-[#caa24c]/[0.06] dark:hover:text-[#f4f4f5]'
@@ -2170,7 +2235,7 @@ function SidebarLink({
             : 'max-w-[200px] opacity-100 translate-x-0'
         }`}
       >
-        {label}
+        <span className="block pl-3">{label}</span>
       </span>
       {pending && !active && !collapsed ? <PortalConstellationLoader size={16} className="relative z-10 ml-auto shrink-0" /> : null}
     </Link>
