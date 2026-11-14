@@ -70,7 +70,7 @@ export default function EventsPage() {
             </div>
           </div>
 
-          <div className="relative min-h-[30rem] overflow-hidden rounded-md border border-[#9b6f24]/25 bg-[#eee6da] shadow-[0_32px_80px_-48px_rgba(61,43,23,0.42)] sm:min-h-[38rem] lg:aspect-[3/2] lg:min-h-0">
+          <div className="relative min-h-[30rem] overflow-hidden rounded-2xl border border-[#9b6f24]/25 bg-[#eee6da] shadow-[0_32px_80px_-48px_rgba(61,43,23,0.42)] sm:min-h-[38rem] lg:aspect-[3/2] lg:min-h-0">
             <Image
               src="/images/dining-hall/main-hall-wedding-wide.png"
               alt="Luxor main hall prepared for guests"
