@@ -10,10 +10,11 @@ type EventsCollectionCardProps = {
   collection: LuxorEventCollection
   index: number
   title: string
+  eventTypesLine: string
   href: string
 }
 
-export function EventsCollectionCard({ collection, index, title, href }: EventsCollectionCardProps) {
+export function EventsCollectionCard({ collection, index, title, eventTypesLine, href }: EventsCollectionCardProps) {
   const reduceMotion = useReducedMotion()
 
   return (
@@ -34,6 +35,9 @@ export function EventsCollectionCard({ collection, index, title, href }: EventsC
           <h2 className="mt-3 font-serif text-3xl leading-[1.02] text-[#241d17] transition-colors group-hover:text-[#8d672b] sm:text-4xl">
             {title}
           </h2>
+          <p className="mt-3 font-sans text-xs leading-5 tracking-[0.02em] text-[#665a4e] sm:text-sm sm:leading-6">
+            {eventTypesLine}
+          </p>
         </div>
 
         <div className="relative min-h-[17rem] p-3 sm:min-h-[19rem] sm:p-4">

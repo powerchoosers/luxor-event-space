@@ -6,13 +6,14 @@ import { ArrowRight, CalendarDays } from '@/lib/icons/phosphor-compat'
 import { EventsCollectionCard } from '@/components/EventsCollectionCard'
 import { LUXOR_EVENT_COLLECTIONS, eventCollectionHref } from '@/lib/luxorEventCollections'
 import { publicSitePath } from '@/lib/publicSitePaths'
-import { motion, useReducedMotion } from 'framer-motion'
 import { usePathname } from 'next/navigation'
+
+const EVENTS_HERO_SCRIM =
+  'linear-gradient(105deg, rgba(0,0,0,0.78) 0%, rgba(0,0,0,0.52) 42%, rgba(0,0,0,0.18) 100%)'
 
 export default function EventsPage() {
   const pathname = usePathname()
   const spanish = pathname.startsWith('/es')
-  const reduceMotion = useReducedMotion()
 
   const visitHref = `${publicSitePath('/visit', spanish)}#visit-booking`
   const packagesHref = publicSitePath('/packages', spanish)
@@ -28,38 +29,51 @@ export default function EventsPage() {
           sizes="100vw"
           className="object-cover object-center"
         />
-        <div className="absolute inset-0 bg-[linear-gradient(105deg,rgba(5,5,5,0.78)_0%,rgba(5,5,5,0.52)_42%,rgba(5,5,5,0.18)_100%)]" />
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-0"
+          style={{ background: EVENTS_HERO_SCRIM }}
+        />
 
-        <motion.div
-          initial={reduceMotion ? false : { opacity: 0, y: 20 }}
-          animate={reduceMotion ? undefined : { opacity: 1, y: 0 }}
-          transition={{ duration: 0.55, ease: [0.23, 1, 0.32, 1] }}
-          className="relative z-10 mx-auto flex min-h-[88svh] max-w-7xl flex-col justify-end px-5 pb-14 pt-36 sm:min-h-[92svh] sm:px-6 sm:pb-20 sm:pt-40 lg:max-w-3xl lg:justify-center lg:px-8 lg:pb-0"
-        >
-          <p className="font-mono text-[11px] font-bold uppercase tracking-[0.28em] text-[#e6c77f]">
+        <div className="relative z-10 mx-auto flex min-h-[88svh] w-full max-w-7xl flex-col justify-end px-5 pb-14 pt-36 text-left sm:min-h-[92svh] sm:px-6 sm:pb-20 sm:pt-40 lg:px-8">
+          <p className="font-mono text-[11px] font-bold uppercase tracking-[0.28em]" style={{ color: '#e6c77f' }}>
             {spanish ? 'Celebraciones en Luxor' : 'Celebrations at Luxor'}
           </p>
-          <h1 className="mt-4 max-w-xl font-serif text-4xl leading-[0.95] text-[#f7efe3] sm:text-5xl lg:text-6xl">
+          <h1
+            className="mt-4 max-w-xl font-serif text-4xl leading-[0.95] sm:text-5xl lg:text-6xl"
+            style={{ color: '#fffaf3', textShadow: '0 2px 12px rgba(0,0,0,0.25)' }}
+          >
             {spanish ? 'Cada ocasión merece su momento.' : 'Every Occasion Deserves Its Moment.'}
           </h1>
+          <p className="mt-4 max-w-xl text-base leading-7 sm:text-lg" style={{ color: '#eadcc8' }}>
+            {spanish
+              ? 'Un entorno hermoso para los hitos de la vida, reuniones significativas y celebraciones inolvidables.'
+              : "A beautiful setting for life's milestones, meaningful gatherings, and unforgettable celebrations."}
+          </p>
           <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
             <Link
               href={packagesHref}
-              className="inline-flex min-h-12 items-center justify-center gap-2 rounded-md border border-[#caa24c]/40 bg-white/10 px-5 py-3 text-sm font-semibold uppercase tracking-[0.14em] text-[#f7efe3] backdrop-blur-sm transition hover:border-[#caa24c]/65 hover:bg-white/15"
+              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-md border px-5 py-3 text-sm font-semibold uppercase tracking-[0.14em] transition hover:border-[#caa24c]/75"
+              style={{
+                borderColor: 'rgba(202, 162, 76, 0.55)',
+                color: '#fffaf3',
+                backgroundColor: 'rgba(255, 250, 243, 0.06)',
+              }}
             >
-              {spanish ? 'Explorar paquetes' : 'Explore Packages'} <ArrowRight className="h-4 w-4" />
+              {spanish ? 'Explorar paquetes' : 'Explore Packages'}{' '}
+              <ArrowRight className="h-4 w-4" style={{ color: '#fffaf3' }} />
             </Link>
             <Link
               href={visitHref}
               data-conversion="visit_cta_click"
               data-conversion-label="Events hero"
-              className="luxor-gold-raised inline-flex min-h-12 items-center justify-center gap-2 rounded-md px-5 py-3 text-sm uppercase tracking-[0.14em]"
+              className="luxor-gold-raised inline-flex min-h-11 items-center justify-center gap-2 rounded-md px-5 py-3 text-sm uppercase tracking-[0.14em]"
             >
               <CalendarDays className="h-4 w-4" />
               {spanish ? 'Agendar una visita' : 'Schedule a Visit'}
             </Link>
           </div>
-        </motion.div>
+        </div>
       </section>
 
       <section className="relative py-20 sm:py-24 lg:py-28">
@@ -72,13 +86,18 @@ export default function EventsPage() {
           }}
         />
         <div className="relative mx-auto max-w-7xl px-5 sm:px-6 lg:px-8">
-          <div className="mx-auto max-w-2xl text-center">
+          <div className="max-w-2xl">
             <p className="font-mono text-[10px] font-bold uppercase tracking-[0.34em] text-[#8d672b]">
-              {spanish ? 'Tres colecciones' : 'Three collections'}
+              {spanish ? 'Encuentra tu celebración' : 'Find your celebration'}
             </p>
             <h2 className="mt-3 font-serif text-3xl leading-tight text-[#241d17] sm:text-4xl">
-              {spanish ? 'Encuentra tu celebración' : 'Find your celebration'}
+              {spanish ? 'Un espacio para cada celebración.' : 'A Space for Every Celebration.'}
             </h2>
+            <p className="mt-4 max-w-xl text-base leading-7 text-[#665a4e] sm:text-lg">
+              {spanish
+                ? 'Desde celebraciones únicas en la vida hasta hitos familiares y reuniones con sentido, Luxor ofrece un entorno versátil pensado para que cada ocasión sea memorable.'
+                : 'From once-in-a-lifetime celebrations to family milestones and meaningful gatherings, Luxor offers a versatile setting designed to make every occasion memorable.'}
+            </p>
           </div>
 
           <div className="mt-12 grid gap-10 lg:mt-16 lg:gap-12">
@@ -88,6 +107,7 @@ export default function EventsPage() {
                 collection={collection}
                 index={index}
                 title={spanish ? collection.titleEs : collection.title}
+                eventTypesLine={spanish ? collection.eventTypesLineEs : collection.eventTypesLine}
                 href={eventCollectionHref(collection, spanish)}
               />
             ))}
