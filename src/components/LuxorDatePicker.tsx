@@ -497,38 +497,32 @@ export function LuxorDatePicker({
       </button>
 
       {typeof document !== 'undefined' ? createPortal(
-        <AnimatePresence initial={false} onExitComplete={() => { if (returnFocusAfterCloseRef.current) { returnFocusAfterCloseRef.current = false; triggerRef.current?.focus() } }}>
-        {open ? (isPublicGlass ? (
-          <motion.div
-            key="calendar-pg-layer"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0, pointerEvents: 'none' }}
-            transition={{ duration: motionDuration }}
-            className="fixed inset-0"
+        isPublicGlass ? (
+          <div
+            className="pointer-events-none fixed inset-0"
             style={{ zIndex: LUXOR_PUBLIC_GLASS_LAYER_Z_INDEX }}
           >
-            <button type="button" tabIndex={-1} aria-label="Close calendar" onClick={closeAndReturnFocus} className="absolute inset-0 cursor-default bg-transparent" />
-            <motion.div
-              key="calendar-panel"
-              initial={prefersReducedMotion ? { opacity: 0 } : { opacity: 0, y: 8, scale: 0.985 }}
-              animate={prefersReducedMotion ? { opacity: 1 } : { opacity: 1, y: 0, scale: 1 }}
-              exit={prefersReducedMotion ? { opacity: 0 } : { opacity: 0, y: 6, scale: 0.99 }}
-              transition={{ duration: motionDuration }}
-              className="pointer-events-none fixed z-[1]"
-              style={{ top: coords.top, left: coords.left, width: coords.width }}
-            >
-          <div
-            ref={panelRef}
-            data-portal-popover="true"
-            role="dialog"
-            aria-label={`Choose ${label.toLowerCase()}`}
-            aria-modal="false"
-            tabIndex={-1}
-            onKeyDown={handleGridKeyDown}
-            className={`pointer-events-auto public-calendar-scroll relative w-full overflow-visible overscroll-contain rounded-2xl p-2.5 focus:outline-none sm:p-4 ${isPublicGlass ? `${LUXOR_PUBLIC_GLASS_POPOVER_SHELL} text-[#3b2b1d]` : `border shadow-[0_18px_48px_-24px_rgba(55,37,19,0.48)] ${isPortal ? 'z-[9981] border-[color:var(--portal-border,rgba(202,162,76,0.24))] bg-[color:var(--portal-bg,#100d0b)] text-[color:var(--portal-text,#f7efe3)]' : 'z-[9981] border-[#d8c4a4] bg-[#fffdfa] text-[#3b2b1d]'}`}`}
-            style={{ WebkitOverflowScrolling: 'touch' }}
-          >
+            {open ? (
+              <button type="button" tabIndex={-1} aria-label="Close calendar" onClick={closeAndReturnFocus} className="pointer-events-auto fixed inset-0 cursor-default bg-transparent" />
+            ) : null}
+            <AnimatePresence initial={false} onExitComplete={() => { if (returnFocusAfterCloseRef.current) { returnFocusAfterCloseRef.current = false; triggerRef.current?.focus() } }}>
+              {open ? (
+                <motion.div
+                  key="calendar-panel"
+                  ref={panelRef}
+                  data-portal-popover="true"
+                  role="dialog"
+                  aria-label={`Choose ${label.toLowerCase()}`}
+                  aria-modal="false"
+                  tabIndex={-1}
+                  onKeyDown={handleGridKeyDown}
+                  initial={prefersReducedMotion ? { opacity: 0 } : { opacity: 0, y: -6, scale: 0.985 }}
+                  animate={prefersReducedMotion ? { opacity: 1 } : { opacity: 1, y: 0, scale: 1 }}
+                  exit={prefersReducedMotion ? { opacity: 0, pointerEvents: 'none' } : { opacity: 0, y: -5, scale: 0.985, pointerEvents: 'none' }}
+                  transition={{ duration: motionDuration, ease: [0.22, 1, 0.36, 1] }}
+                  className={`pointer-events-auto public-calendar-scroll fixed z-[1] overflow-visible overscroll-contain rounded-2xl p-2.5 focus:outline-none sm:p-4 ${LUXOR_PUBLIC_GLASS_POPOVER_SHELL} text-[#3b2b1d]`}
+                  style={{ top: coords.top, left: coords.left, width: coords.width, transformOrigin: 'top center', WebkitOverflowScrolling: 'touch' }}
+                >
             <div className={`flex items-center justify-between gap-2 border-b pb-1.5 sm:pb-2.5 ${isPortal ? 'border-[color:var(--portal-border,rgba(202,162,76,0.24))]' : 'border-[#eadfce]'}`}>
               <button type="button" aria-label="Previous month" disabled={!previousSelectableMonth} onClick={() => moveMonth(-1)} className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-[#8d672b] transition hover:bg-[#f7efe3] disabled:cursor-not-allowed disabled:text-[#c8bcae] sm:h-10 sm:w-10">
                 <ChevronLeft aria-hidden="true" className="h-5 w-5" />
@@ -569,7 +563,7 @@ export function LuxorDatePicker({
                         onFocus={() => setFocusDate(date)}
                         onClick={() => selectDate(date)}
                         style={{ width: coords.daySize, height: coords.daySize }}
-                        className={`relative mx-auto flex items-center justify-center rounded-full text-sm tabular-nums transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8d672b] ${selected ? 'bg-[#caa24c] font-semibold text-white shadow-sm' : disabled ? (isPortal ? 'cursor-not-allowed text-[color:var(--portal-muted,#b9ad9f)] opacity-50' : isPublicGlass ? 'cursor-not-allowed text-[#4a433d]' : 'cursor-not-allowed text-[#9a8f84]') : isToday ? 'border border-[#caa24c] font-semibold text-[#6f4d1f]' : isPortal ? 'text-[color:var(--portal-text,#f7efe3)] hover:bg-[color:var(--portal-soft,rgba(255,255,255,0.06))]' : 'text-[#3b2b1d] hover:bg-[#f5ead8]'}`}
+                        className={`relative mx-auto flex items-center justify-center rounded-full text-sm tabular-nums transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8d672b] ${selected ? 'bg-[#caa24c] font-semibold text-white shadow-sm' : disabled ? (isPortal ? 'cursor-not-allowed text-[color:var(--portal-muted,#b9ad9f)] opacity-30' : 'cursor-not-allowed text-[#b5a797]/50 opacity-40') : isToday ? 'border border-[#caa24c] font-semibold text-[#6f4d1f]' : isPortal ? 'text-[color:var(--portal-text,#f7efe3)] hover:bg-[color:var(--portal-soft,rgba(255,255,255,0.06))]' : 'text-[#3b2b1d] hover:bg-[#f5ead8]'}`}
                       >{day}{available ? <span aria-hidden="true" className={`absolute bottom-0.5 h-1 w-1 rounded-full ${selected ? 'bg-white' : 'bg-emerald-600'}`} /> : null}</button>
                     </div>
                   )
@@ -578,35 +572,38 @@ export function LuxorDatePicker({
                 ))}
               </div>
             </div>
+                </motion.div>
+              ) : null}
+            </AnimatePresence>
+            {open && monthYearOpen ? (
+              <div className="pointer-events-auto fixed inset-0 z-[2] flex items-center justify-center bg-[#241d17]/45 p-4" onMouseDown={(event) => { if (event.target === event.currentTarget) { returnFocusToMonthYearRef.current = true; setMonthYearOpen(false) } }}>
+                <section ref={monthYearDialogRef} role="dialog" aria-modal="true" aria-label="Select Month & Year" tabIndex={-1} className={`flex max-h-[min(440px,calc(100dvh-2rem))] w-full max-w-[320px] flex-col overflow-hidden rounded-2xl p-4 ${LUXOR_PUBLIC_GLASS_POPOVER_SHELL} text-[#3b2b1d]`}>
+                  <h2 className={`text-center font-serif text-lg font-semibold ${isPortal ? 'text-[color:var(--portal-text,#f7efe3)]' : 'text-[#33291f]'}`}>Select Month &amp; Year</h2>
+                  <div className="mt-3 grid min-h-0 flex-1 grid-cols-2 gap-2 overflow-hidden">
+                    <div aria-label="Months" className={`public-calendar-scroll overflow-y-auto overscroll-contain rounded-xl border p-1 ${isPortal ? 'border-[color:var(--portal-border,rgba(202,162,76,0.24))]' : 'border-[#eadfce]'}`} style={{ WebkitOverflowScrolling: 'touch' }}>
+                      {localizedMonths.map((item, index) => {
+                        const disabled = !hasSelectableDateInMonth(new Date(draftYear, index, 1), today)
+                        return <button key={item} type="button" data-month={index} disabled={disabled} aria-pressed={draftMonth === index} onClick={() => setDraftMonth(index)} className={`w-full rounded-lg px-2 py-2.5 text-left text-sm transition ${disabled ? (isPortal ? 'cursor-not-allowed text-[color:var(--portal-muted,#b9ad9f)] opacity-50' : 'cursor-not-allowed text-[#c9c1b7]') : draftMonth === index ? 'bg-[#f0e7d9] font-semibold text-[#33291f]' : isPortal ? 'text-[color:var(--portal-text,#f7efe3)] hover:bg-[color:var(--portal-soft,rgba(255,255,255,0.06))]' : 'text-[#6f5f4f] hover:bg-[#f7efe3]'}`}>{item}</button>
+                      })}
+                    </div>
+                    <div aria-label="Years" className={`public-calendar-scroll overflow-y-auto overscroll-contain rounded-xl border p-1 ${isPortal ? 'border-[color:var(--portal-border,rgba(202,162,76,0.24))]' : 'border-[#eadfce]'}`} style={{ WebkitOverflowScrolling: 'touch' }}>
+                      {years.map((item) => {
+                        const disabled = !Array.from({ length: 12 }, (_, index) => new Date(item, index, 1)).some((monthDate) => hasSelectableDateInMonth(monthDate, today))
+                        return <button key={item} type="button" data-year={item} disabled={disabled} aria-pressed={draftYear === item} onClick={() => chooseDraftYear(item)} className={`w-full rounded-lg px-2 py-2.5 text-center text-sm tabular-nums transition disabled:cursor-not-allowed ${disabled ? (isPortal ? 'text-[color:var(--portal-muted,#b9ad9f)] opacity-50' : 'text-[#c9c1b7]') : draftYear === item ? 'bg-[#f0e7d9] font-semibold text-[#33291f]' : isPortal ? 'text-[color:var(--portal-text,#f7efe3)] hover:bg-[color:var(--portal-soft,rgba(255,255,255,0.06))]' : 'text-[#6f5f4f] hover:bg-[#f7efe3]'}`}>{item}</button>
+                      })}
+                    </div>
+                  </div>
+                  <div className="mt-3 flex items-center justify-between gap-3">
+                    <button type="button" onClick={resetCalendarView} className={`min-h-10 rounded-xl border px-4 text-sm font-medium text-[#6f4d1f] hover:bg-[#f7efe3] ${isPortal ? 'border-[color:var(--portal-border,rgba(202,162,76,0.24))] text-[color:var(--portal-muted,#d7c29a)] hover:bg-[color:var(--portal-soft,rgba(255,255,255,0.06))]' : 'border-[#d8c4a4]'}`}>Reset</button>
+                    <button type="button" disabled={!hasSelectableDateInMonth(new Date(draftYear, draftMonth, 1), today)} onClick={applyDraftMonthYear} className={`min-h-10 rounded-xl px-5 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-50 ${isPortal ? 'bg-[#caa24c] text-white hover:bg-[#b98a3d]' : 'luxor-gold-raised'}`}>Done</button>
+                  </div>
+                </section>
+              </div>
+            ) : null}
           </div>
-          </motion.div>
-          {monthYearOpen ? (
-            <div className="absolute inset-0 z-[2] flex items-center justify-center bg-[#241d17]/45 p-4" onMouseDown={(event) => { if (event.target === event.currentTarget) { returnFocusToMonthYearRef.current = true; setMonthYearOpen(false) } }}>
-              <section ref={monthYearDialogRef} role="dialog" aria-modal="true" aria-label="Select Month & Year" tabIndex={-1} className={`flex max-h-[min(440px,calc(100dvh-2rem))] w-full max-w-[320px] flex-col overflow-hidden rounded-2xl p-4 ${isPublicGlass ? `${LUXOR_PUBLIC_GLASS_POPOVER_SHELL} text-[#3b2b1d]` : `border shadow-2xl ${isPortal ? 'border-[color:var(--portal-border,rgba(202,162,76,0.24))] bg-[color:var(--portal-bg,#100d0b)] text-[color:var(--portal-text,#f7efe3)]' : 'border-[#e4d4bf] bg-[#fffdfa]'}`}`}>
-                <h2 className={`text-center font-serif text-lg font-semibold ${isPortal ? 'text-[color:var(--portal-text,#f7efe3)]' : 'text-[#33291f]'}`}>Select Month &amp; Year</h2>
-                <div className="mt-3 grid min-h-0 flex-1 grid-cols-2 gap-2 overflow-hidden">
-                  <div aria-label="Months" className={`public-calendar-scroll overflow-y-auto overscroll-contain rounded-xl border p-1 ${isPortal ? 'border-[color:var(--portal-border,rgba(202,162,76,0.24))]' : 'border-[#eadfce]'}`} style={{ WebkitOverflowScrolling: 'touch' }}>
-                    {localizedMonths.map((item, index) => {
-                      const disabled = !hasSelectableDateInMonth(new Date(draftYear, index, 1), today)
-                      return <button key={item} type="button" data-month={index} disabled={disabled} aria-pressed={draftMonth === index} onClick={() => setDraftMonth(index)} className={`w-full rounded-lg px-2 py-2.5 text-left text-sm transition ${disabled ? (isPortal ? 'cursor-not-allowed text-[color:var(--portal-muted,#b9ad9f)] opacity-50' : 'cursor-not-allowed text-[#c9c1b7]') : draftMonth === index ? 'bg-[#f0e7d9] font-semibold text-[#33291f]' : isPortal ? 'text-[color:var(--portal-text,#f7efe3)] hover:bg-[color:var(--portal-soft,rgba(255,255,255,0.06))]' : 'text-[#6f5f4f] hover:bg-[#f7efe3]'}`}>{item}</button>
-                    })}
-                  </div>
-                  <div aria-label="Years" className={`public-calendar-scroll overflow-y-auto overscroll-contain rounded-xl border p-1 ${isPortal ? 'border-[color:var(--portal-border,rgba(202,162,76,0.24))]' : 'border-[#eadfce]'}`} style={{ WebkitOverflowScrolling: 'touch' }}>
-                    {years.map((item) => {
-                      const disabled = !Array.from({ length: 12 }, (_, index) => new Date(item, index, 1)).some((monthDate) => hasSelectableDateInMonth(monthDate, today))
-                      return <button key={item} type="button" data-year={item} disabled={disabled} aria-pressed={draftYear === item} onClick={() => chooseDraftYear(item)} className={`w-full rounded-lg px-2 py-2.5 text-center text-sm tabular-nums transition disabled:cursor-not-allowed ${disabled ? (isPortal ? 'text-[color:var(--portal-muted,#b9ad9f)] opacity-50' : 'text-[#c9c1b7]') : draftYear === item ? 'bg-[#f0e7d9] font-semibold text-[#33291f]' : isPortal ? 'text-[color:var(--portal-text,#f7efe3)] hover:bg-[color:var(--portal-soft,rgba(255,255,255,0.06))]' : 'text-[#6f5f4f] hover:bg-[#f7efe3]'}`}>{item}</button>
-                    })}
-                  </div>
-                </div>
-                <div className="mt-3 flex items-center justify-between gap-3">
-                  <button type="button" onClick={resetCalendarView} className={`min-h-10 rounded-xl border px-4 text-sm font-medium text-[#6f4d1f] hover:bg-[#f7efe3] ${isPortal ? 'border-[color:var(--portal-border,rgba(202,162,76,0.24))] text-[color:var(--portal-muted,#d7c29a)] hover:bg-[color:var(--portal-soft,rgba(255,255,255,0.06))]' : 'border-[#d8c4a4]'}`}>Reset</button>
-                  <button type="button" disabled={!hasSelectableDateInMonth(new Date(draftYear, draftMonth, 1), today)} onClick={applyDraftMonthYear} className={`min-h-10 rounded-xl px-5 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-50 ${isPortal ? 'bg-[#caa24c] text-white hover:bg-[#b98a3d]' : 'luxor-gold-raised'}`}>Done</button>
-                </div>
-              </section>
-            </div>
-          ) : null}
-          </motion.div>
         ) : (
+        <AnimatePresence initial={false} onExitComplete={() => { if (returnFocusAfterCloseRef.current) { returnFocusAfterCloseRef.current = false; triggerRef.current?.focus() } }}>
+        {open ? (
           <>
           <motion.button key="calendar-backdrop" type="button" tabIndex={-1} aria-label="Close calendar" onClick={closeAndReturnFocus} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: motionDuration }} className="fixed inset-0 cursor-default bg-transparent" style={{ zIndex: 9980 }} />
           <motion.div key="calendar-panel-default" initial={prefersReducedMotion ? { opacity: 0 } : { opacity: 0, y: 8, scale: 0.985 }} animate={prefersReducedMotion ? { opacity: 1 } : { opacity: 1, y: 0, scale: 1 }} exit={prefersReducedMotion ? { opacity: 0 } : { opacity: 0, y: 6, scale: 0.99 }} transition={{ duration: motionDuration }} style={{ position: 'fixed', zIndex: 9981, top: coords.top, left: coords.left, width: coords.width }}>
@@ -660,7 +657,7 @@ export function LuxorDatePicker({
                         onFocus={() => setFocusDate(date)}
                         onClick={() => selectDate(date)}
                         style={{ width: coords.daySize, height: coords.daySize }}
-                        className={`relative mx-auto flex items-center justify-center rounded-full text-sm tabular-nums transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8d672b] ${selected ? 'bg-[#caa24c] font-semibold text-white shadow-sm' : disabled ? (isPortal ? 'cursor-not-allowed text-[color:var(--portal-muted,#b9ad9f)] opacity-50' : 'cursor-not-allowed text-[#9a8f84]') : isToday ? 'border border-[#caa24c] font-semibold text-[#6f4d1f]' : isPortal ? 'text-[color:var(--portal-text,#f7efe3)] hover:bg-[color:var(--portal-soft,rgba(255,255,255,0.06))]' : 'text-[#3b2b1d] hover:bg-[#f5ead8]'}`}
+                        className={`relative mx-auto flex items-center justify-center rounded-full text-sm tabular-nums transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8d672b] ${selected ? 'bg-[#caa24c] font-semibold text-white shadow-sm' : disabled ? (isPortal ? 'cursor-not-allowed text-[color:var(--portal-muted,#b9ad9f)] opacity-30' : 'cursor-not-allowed text-[#b5a797]/50 opacity-40') : isToday ? 'border border-[#caa24c] font-semibold text-[#6f4d1f]' : isPortal ? 'text-[color:var(--portal-text,#f7efe3)] hover:bg-[color:var(--portal-soft,rgba(255,255,255,0.06))]' : 'text-[#3b2b1d] hover:bg-[#f5ead8]'}`}
                       >{day}{available ? <span aria-hidden="true" className={`absolute bottom-0.5 h-1 w-1 rounded-full ${selected ? 'bg-white' : 'bg-emerald-600'}`} /> : null}</button>
                     </div>
                   )
@@ -697,8 +694,9 @@ export function LuxorDatePicker({
             </div>
           ) : null}
           </>
-        )) : null}
-        </AnimatePresence>,
+        ) : null}
+        </AnimatePresence>
+        ),
         document.body,
       ) : null}
     </div>

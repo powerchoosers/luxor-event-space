@@ -14,6 +14,10 @@ import { submitLuxorIdempotentForm } from '@/lib/luxorSubmissionIdempotency'
 import { getLuxorPublicSessionId } from '@/lib/luxorPublicAttribution'
 import type { PublicPackagesConfiguratorInput, PublicPackagesSummaryLine } from '@/lib/luxorPublicPackagesConfigurator'
 import { PackagesInquiryEventSummary } from '@/components/packages/PackagesInquiryEventSummary'
+import {
+  startPackagesSubmissionOverlay,
+  stopPackagesSubmissionOverlay,
+} from '@/components/packages/PackagesSubmissionOverlay'
 
 type DraftPayload = {
   configuratorInput?: PublicPackagesConfiguratorInput
@@ -121,6 +125,7 @@ export function PackagesInquiryForm({ locale = 'en', draftToken, draft }: Packag
     submitGuardRef.current = true
     setError(null)
     setSubmitting(true)
+    startPackagesSubmissionOverlay(locale)
     try {
       const response = await submitLuxorIdempotentForm('packages-inquiry', '/api/public/packages-inquiry/submit', {
         draftToken,
@@ -144,6 +149,7 @@ export function PackagesInquiryForm({ locale = 'en', draftToken, draft }: Packag
       router.push(inquiryId ? `${confirmPath}?inquiryId=${encodeURIComponent(inquiryId)}` : confirmPath)
     } catch (err) {
       submitGuardRef.current = false
+      stopPackagesSubmissionOverlay()
       setError(err instanceof Error ? err.message : 'Unable to submit your inquiry.')
       setSubmitting(false)
     }
@@ -151,7 +157,8 @@ export function PackagesInquiryForm({ locale = 'en', draftToken, draft }: Packag
 
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: 'smooth' })
-  }, [])
+    router.prefetch(locale === 'es' ? '/es/packages/confirmation' : '/packages/confirmation')
+  }, [locale, router])
 
   if (!configuratorInput) {
     return <p className="text-sm text-[#d7c29a]/80">Your configuration could not be loaded. Return to Packages and try again.</p>
@@ -183,23 +190,23 @@ export function PackagesInquiryForm({ locale = 'en', draftToken, draft }: Packag
 
         <section className="mt-8 space-y-4 border-t border-[#eadfcf] pt-6" aria-labelledby={`${preferencesId}-heading`}>
           <h2 id={`${preferencesId}-heading`} className="font-serif text-xl text-[#241d17]">{t.contactPreferences}</h2>
-          <label className="flex items-start gap-3 text-sm">
-            <input type="checkbox" checked={emailInquiryOptIn} onChange={(e) => setEmailInquiryOptIn(e.target.checked)} className="mt-1 accent-[#caa24c]" />
+          <label className="flex items-start gap-3 text-sm cursor-pointer">
+            <input type="checkbox" checked={emailInquiryOptIn} onChange={(e) => setEmailInquiryOptIn(e.target.checked)} className="luxor-public-checkbox mt-1 h-4 w-4 shrink-0 rounded border-2 border-[#caa24c]" />
             <span>{t.emailComms}</span>
           </label>
           <p className="ml-7 text-xs leading-5 text-[#827567]" lang="en">{LUXOR_INQUIRY_EMAIL_DISCLOSURE}</p>
-          <label className="flex items-start gap-3 text-sm">
-            <input type="checkbox" checked={smsOptIn} onChange={(e) => setSmsOptIn(e.target.checked)} className="mt-1 accent-[#caa24c]" />
+          <label className="flex items-start gap-3 text-sm cursor-pointer">
+            <input type="checkbox" checked={smsOptIn} onChange={(e) => setSmsOptIn(e.target.checked)} className="luxor-public-checkbox mt-1 h-4 w-4 shrink-0 rounded border-2 border-[#caa24c]" />
             <span>{t.smsComms}</span>
           </label>
           <p className="ml-7 text-xs leading-5 text-[#827567]" lang="en">{LUXOR_INQUIRY_SMS_DISCLOSURE}</p>
-          <label className="flex items-start gap-3 text-sm">
-            <input type="checkbox" checked={marketingOptIn} onChange={(e) => setMarketingOptIn(e.target.checked)} className="mt-1 accent-[#caa24c]" />
+          <label className="flex items-start gap-3 text-sm cursor-pointer">
+            <input type="checkbox" checked={marketingOptIn} onChange={(e) => setMarketingOptIn(e.target.checked)} className="luxor-public-checkbox mt-1 h-4 w-4 shrink-0 rounded border-2 border-[#caa24c]" />
             <span>{t.emailMarketing} <span className="text-[10px] font-semibold uppercase tracking-wide text-[#8d672b]">{t.optional}</span></span>
           </label>
           <p className="ml-7 text-xs leading-5 text-[#827567]" lang="en">{LUXOR_MARKETING_EMAIL_DISCLOSURE}</p>
-          <label className="flex items-start gap-3 text-sm">
-            <input type="checkbox" checked={smsMarketingOptIn} onChange={(e) => setSmsMarketingOptIn(e.target.checked)} className="mt-1 accent-[#caa24c]" />
+          <label className="flex items-start gap-3 text-sm cursor-pointer">
+            <input type="checkbox" checked={smsMarketingOptIn} onChange={(e) => setSmsMarketingOptIn(e.target.checked)} className="luxor-public-checkbox mt-1 h-4 w-4 shrink-0 rounded border-2 border-[#caa24c]" />
             <span>{t.smsMarketing} <span className="text-[10px] font-semibold uppercase tracking-wide text-[#8d672b]">{t.optional}</span></span>
           </label>
           <p className="ml-7 text-xs leading-5 text-[#827567]" lang="en">{LUXOR_MARKETING_SMS_DISCLOSURE}</p>

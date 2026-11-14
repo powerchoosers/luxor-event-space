@@ -78,9 +78,9 @@ export function PackagesPageContent({ locale = 'en', cards }: PackagesPageConten
         </div>
 
         <div className="relative z-10 mx-auto grid max-w-7xl gap-8 px-5 pb-12 pt-8 sm:px-0 sm:pb-0 sm:pt-0 lg:grid-cols-[.78fr_1.22fr] lg:items-center lg:gap-10">
-          <div className="order-2 min-w-0 max-w-2xl text-center lg:order-1 lg:text-left">
+          <div className="order-2 mx-auto min-w-0 max-w-2xl text-center lg:order-1 lg:mx-0">
             <p className="font-mono text-xs font-bold uppercase tracking-[0.28em] text-[#f1d27a]">{t.heroEyebrow}</p>
-            <h1 className="mx-auto mt-5 max-w-xl font-serif text-5xl leading-[0.9] sm:text-6xl lg:mx-0 lg:text-7xl">
+            <h1 className="mx-auto mt-5 max-w-xl font-serif text-5xl leading-[0.9] sm:text-6xl lg:text-7xl">
               {locale === 'es' ? (
                 <>
                   Crea tu experiencia <span className="italic text-[#f1d27a]">Luxor</span>
@@ -91,8 +91,8 @@ export function PackagesPageContent({ locale = 'en', cards }: PackagesPageConten
                 </>
               )}
             </h1>
-            <p className="mx-auto mt-7 max-w-xl text-base leading-7 text-[#d7c29a]/78 sm:text-lg lg:mx-0">{t.heroCopy}</p>
-            <div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row sm:items-center lg:justify-start">
+            <p className="mx-auto mt-7 max-w-xl text-base leading-7 text-[#d7c29a]/78 sm:text-lg">{t.heroCopy}</p>
+            <div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row sm:items-center">
               <a
                 href="#explore-packages"
                 className="luxor-gold-raised inline-flex min-h-12 items-center justify-center gap-2 rounded-md px-6 py-3 text-sm uppercase tracking-[0.14em]"

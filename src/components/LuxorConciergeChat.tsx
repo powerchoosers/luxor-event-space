@@ -564,7 +564,7 @@ export function LuxorConciergeChat() {
                   placeholder="Event notes, guest count, target month..."
                   className="min-h-20 resize-none rounded-md border border-[#caa24c]/18 bg-black/30 px-3 py-2.5 text-sm text-[#f7efe3] outline-none placeholder:text-[#d7c29a]/38 focus:border-[#f1d27a]/60"
                 />
-                {contactDetails.email ? <label className="flex items-start gap-2 rounded-md border border-[#caa24c]/16 bg-black/20 p-2.5 text-[11px] leading-4 text-[#d7c29a]/70"><input type="checkbox" checked={marketingOptIn} onChange={(event) => setMarketingOptIn(event.target.checked)} className="mt-0.5 accent-[#caa24c]" /><span>Email me occasional Luxor event ideas and offers. Optional.</span></label> : null}
+                {contactDetails.email ? <label className="flex cursor-pointer items-start gap-2 rounded-md border border-[#caa24c]/16 bg-black/20 p-2.5 text-[11px] leading-4 text-[#d7c29a]/70"><input type="checkbox" checked={marketingOptIn} onChange={(event) => setMarketingOptIn(event.target.checked)} className="luxor-public-checkbox mt-0.5 h-4 w-4 shrink-0 rounded border-2 border-[#caa24c]" /><span>Email me occasional Luxor event ideas and offers. Optional.</span></label> : null}
               </>
             ) : (
               <button
@@ -597,9 +597,11 @@ export function LuxorConciergeChat() {
     )
   }
 
+  if (packagesPage) return null
+
   return (
     <div
-      className={`site-floating-action fixed right-4 z-[130] sm:bottom-6 sm:right-6 ${packagesPage ? 'max-sm:bottom-[8.75rem]' : 'bottom-20'}`}
+      className="site-floating-action fixed right-4 z-[130] sm:bottom-6 sm:right-6 bottom-20"
     >
       <AnimatePresence initial={false}>
         {open ? (

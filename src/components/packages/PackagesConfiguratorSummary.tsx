@@ -1,6 +1,8 @@
 'use client'
 
-import { ArrowRight } from '@/lib/icons/phosphor-compat'
+import { useState } from 'react'
+import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
+import { ArrowRight, ChevronDown } from '@/lib/icons/phosphor-compat'
 import type { PublicPackagesSummaryLine } from '@/lib/luxorPublicPackagesConfigurator'
 import { AnimatedCurrencyTicker } from '@/components/packages/AnimatedCurrencyTicker'
 
@@ -30,6 +32,8 @@ const copy = {
     payments: 'Payment schedule',
     loading: 'Updating price…',
     empty: 'Choose your event details to see pricing.',
+    showBreakdown: 'View itemized breakdown',
+    hideBreakdown: 'Hide itemized breakdown',
   },
   es: {
     eyebrow: 'Total de tu evento',
@@ -40,6 +44,8 @@ const copy = {
     payments: 'Calendario de pagos',
     loading: 'Actualizando precio…',
     empty: 'Elige los detalles de tu evento para ver el precio.',
+    showBreakdown: 'Ver desglose detallado',
+    hideBreakdown: 'Ocultar desglose detallado',
   },
 } as const
 
@@ -90,6 +96,8 @@ export function PackagesConfiguratorSummary({
 }: PackagesConfiguratorSummaryProps) {
   const t = copy[locale]
   const dark = variant === 'dark'
+  const reduceMotion = useReducedMotion()
+  const [mobileExpanded, setMobileExpanded] = useState(false)
   const chargeLines = lines.filter((line) => CHARGE_CATEGORIES.has(line.category))
   const depositLine = lines.find((line) => line.category === 'deposit')
   const reserveLine = lines.find((line) => line.category === 'reserve')
@@ -106,12 +114,49 @@ export function PackagesConfiguratorSummary({
   const dividerClass = dark ? 'border-[#caa24c]/20' : 'border-[#eadfcf]'
   const totalValueClass = dark ? 'text-[#f1d27a]' : 'text-[#8d672b]'
 
+  const breakdownContent = (
+    <div className="space-y-5">
+      {renderLines(chargeLines, t.mandatory, t.optional)}
+      {summaryTail.length ? (
+        <div className={`space-y-3 border-t pt-4 ${dividerClass}`}>
+          {renderLines(summaryTail, t.mandatory, t.optional)}
+        </div>
+      ) : null}
+      {scheduleLines.length ? (
+        <div className={`space-y-3 border-t pt-4 ${dividerClass}`}>
+          <p className={`text-[10px] font-bold uppercase tracking-[0.16em] ${eyebrowClass}`}>{t.payments}</p>
+          {renderLines(scheduleLines, t.mandatory, t.optional)}
+        </div>
+      ) : null}
+    </div>
+  )
+
   return (
     <aside
       id={id}
       className={`min-w-0 scroll-mt-[calc(7rem+1.25rem)] rounded-2xl border p-5 sm:p-6 ${shellClass} ${compact ? '' : 'lg:sticky lg:top-[8.75rem] lg:scroll-mt-0 lg:max-xl:pb-5 xl:top-28 xl:pb-6 xl:pr-44'}`}
     >
-      <p className={`font-mono text-[11px] font-bold uppercase tracking-[0.22em] ${eyebrowClass}`}>{t.eyebrow}</p>
+      {/* Header: eyebrow label + on mobile, a toggle button */}
+      <div className="flex items-center justify-between gap-3">
+        <p className={`font-mono text-[11px] font-bold uppercase tracking-[0.22em] ${eyebrowClass}`}>{t.eyebrow}</p>
+        {lines.length ? (
+          <button
+            type="button"
+            onClick={() => setMobileExpanded((prev) => !prev)}
+            aria-expanded={mobileExpanded}
+            className={`flex items-center gap-1 rounded-md px-2 py-1 text-xs font-semibold transition hover:bg-[#caa24c]/10 sm:hidden ${eyebrowClass}`}
+          >
+            <span>{mobileExpanded ? t.hideBreakdown : t.showBreakdown}</span>
+            <ChevronDown
+              size={14}
+              className={`transition-transform duration-200 ${mobileExpanded ? 'rotate-180' : ''}`}
+              aria-hidden
+            />
+          </button>
+        ) : null}
+      </div>
+
+      {/* Main Breakdown Section: Desktop (sm+) is always visible; Mobile (<sm) expands/collapses with animation */}
       {loading ? (
         <p className={`mt-4 text-sm ${mutedClass}`}>{t.loading}</p>
       ) : error ? (
@@ -119,22 +164,48 @@ export function PackagesConfiguratorSummary({
       ) : !lines.length ? (
         <p className={`mt-4 text-sm leading-6 ${mutedClass}`}>{t.empty}</p>
       ) : (
-        <div className="mt-5 space-y-5">
-          {renderLines(chargeLines, t.mandatory, t.optional)}
-          {summaryTail.length ? (
-            <div className={`space-y-3 border-t pt-4 ${dividerClass}`}>
-              {renderLines(summaryTail, t.mandatory, t.optional)}
-            </div>
-          ) : null}
-          {scheduleLines.length ? (
-            <div className={`space-y-3 border-t pt-4 ${dividerClass}`}>
-              <p className={`text-[10px] font-bold uppercase tracking-[0.16em] ${eyebrowClass}`}>{t.payments}</p>
-              {renderLines(scheduleLines, t.mandatory, t.optional)}
-            </div>
-          ) : null}
-        </div>
+        <>
+          {/* Desktop view: always expanded */}
+          <div className="mt-5 hidden sm:block">
+            {breakdownContent}
+          </div>
+
+          {/* Mobile view: animated expand/collapse, collapsed by default */}
+          <div className="sm:hidden">
+            <AnimatePresence initial={false}>
+              {mobileExpanded ? (
+                <motion.div
+                  key="mobile-breakdown"
+                  initial={reduceMotion ? { opacity: 0 } : { opacity: 0, height: 0 }}
+                  animate={{
+                    opacity: 1,
+                    height: 'auto',
+                    transition: {
+                      height: { duration: reduceMotion ? 0.05 : 0.52, ease: [0.22, 1, 0.36, 1] },
+                      opacity: { duration: reduceMotion ? 0.05 : 0.38, delay: reduceMotion ? 0 : 0.08, ease: 'easeOut' },
+                    },
+                  }}
+                  exit={reduceMotion ? { opacity: 0 } : {
+                    opacity: 0,
+                    height: 0,
+                    transition: {
+                      height: { duration: reduceMotion ? 0.04 : 0.44, ease: [0.25, 0.1, 0.25, 1] },
+                      opacity: { duration: reduceMotion ? 0.04 : 0.24, ease: 'easeIn' },
+                    },
+                  }}
+                  className="overflow-hidden"
+                >
+                  <div className="mt-4 pt-1">
+                    {breakdownContent}
+                  </div>
+                </motion.div>
+              ) : null}
+            </AnimatePresence>
+          </div>
+        </>
       )}
 
+      {/* Total estimate and inquiry button: Always easily seen without having to scroll down on mobile */}
       <div className={`mt-5 border-t pt-4 ${dividerClass}`}>
         <div className="flex items-end justify-between gap-4">
           <p className="font-serif text-xl">{t.total}</p>

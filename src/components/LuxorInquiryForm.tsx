@@ -9,7 +9,7 @@ import { useLuxorTourSlots } from '@/hooks/useLuxorTourSlots'
 import type { LuxorInquiryInput } from '@/lib/luxorInquiryTypes'
 import { isGuestCountOverCapacity, LUXOR_GUEST_CAPACITY_MESSAGE, LUXOR_LEGACY_INQUIRY_EMAIL_DISCLOSURE, LUXOR_LEGACY_INQUIRY_SMS_DISCLOSURE, LUXOR_LEGACY_MARKETING_SMS_DISCLOSURE, LUXOR_MAX_GUESTS, normalizeLuxorEventType } from '@/lib/luxorInquiryTypes'
 import { getLuxorPublicAttribution, getLuxorPublicSessionId, trackLuxorPublicEvent } from '@/lib/luxorPublicAttribution'
-import { LUXOR_LEGACY_PACKAGE_NAMES, LUXOR_PACKAGE_INTEREST_OPTIONS } from '@/lib/luxorServiceCatalog'
+import { LUXOR_INQUIRY_PACKAGE_INTEREST_OPTIONS } from '@/lib/luxorInquiryTypes'
 import { submitLuxorIdempotentForm } from '@/lib/luxorSubmissionIdempotency'
 import { formatLocalDateKey, isLuxorDateSelectable } from '@/lib/publicEventDate'
 import { formatLuxorTourDate } from '@/lib/luxorTourMetrics'
@@ -137,10 +137,12 @@ export function LuxorInquiryForm({
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
-    const requestedPackage = params.get('package')
+    const requestedPackage = params.get('package')?.trim()
     const requestedEvent = params.get('event')
-    const normalizedPackage = requestedPackage ? (LUXOR_LEGACY_PACKAGE_NAMES[requestedPackage] || requestedPackage) : ''
-    if (normalizedPackage && LUXOR_PACKAGE_INTEREST_OPTIONS.some((option) => option.value === normalizedPackage)) setPackageInterest(normalizedPackage)
+    if (requestedPackage && LUXOR_INQUIRY_PACKAGE_INTEREST_OPTIONS.some((option) => option.value.toLowerCase() === requestedPackage.toLowerCase())) {
+      const match = LUXOR_INQUIRY_PACKAGE_INTEREST_OPTIONS.find((option) => option.value.toLowerCase() === requestedPackage.toLowerCase())
+      if (match) setPackageInterest(match.value)
+    }
     if (requestedEvent) {
       try {
         const normalizedEvent = normalizeLuxorEventType(requestedEvent)
@@ -152,8 +154,9 @@ export function LuxorInquiryForm({
   }, [])
 
   useEffect(() => {
-    if (initialPackageInterest && LUXOR_PACKAGE_INTEREST_OPTIONS.some((option) => option.value === initialPackageInterest)) {
-      setPackageInterest(initialPackageInterest)
+    if (initialPackageInterest && LUXOR_INQUIRY_PACKAGE_INTEREST_OPTIONS.some((option) => option.value.toLowerCase() === initialPackageInterest.toLowerCase())) {
+      const match = LUXOR_INQUIRY_PACKAGE_INTEREST_OPTIONS.find((option) => option.value.toLowerCase() === initialPackageInterest.toLowerCase())
+      if (match) setPackageInterest(match.value)
     }
   }, [initialPackageInterest])
 
@@ -359,7 +362,17 @@ export function LuxorInquiryForm({
                   <PortalSelect value={budget} onChange={setBudget} className="w-full" buttonClassName={PUBLIC_SELECT_BUTTON_CLASS} placeholder="Choose a range" options={BUDGET_OPTIONS} />
                 </FieldLabel>
                 <FieldLabel label="Which package fits best?">
-                  <PortalSelect value={packageInterest} onChange={setPackageInterest} className="w-full" buttonClassName={PUBLIC_SELECT_BUTTON_CLASS} placeholder="Choose a package" options={LUXOR_PACKAGE_INTEREST_OPTIONS} />
+                  <PortalSelect
+                    value={packageInterest}
+                    onChange={setPackageInterest}
+                    className="w-full"
+                    buttonClassName={PUBLIC_SELECT_BUTTON_CLASS}
+                    placeholder="Choose a package"
+                    options={[
+                      ...LUXOR_INQUIRY_PACKAGE_INTEREST_OPTIONS.map((opt) => ({ value: opt.value, label: opt.label })),
+                      { value: 'Not Sure', label: 'Help me choose' },
+                    ]}
+                  />
                 </FieldLabel>
               </div>
 
@@ -479,7 +492,7 @@ function TextField({ value, onChange, name, label, placeholder, type = 'text', r
 function ConsentRow({ checked, onChange, children }: { checked: boolean; onChange: (checked: boolean) => void; children: React.ReactNode }) {
   return (
     <label className="mt-4 flex cursor-pointer items-start gap-3 rounded-lg border border-[#caa24c]/16 bg-white/[0.02] p-4">
-      <input type="checkbox" checked={checked} onChange={(event) => onChange(event.target.checked)} className="mt-0.5 h-4 w-4 shrink-0 accent-[#caa24c]" />
+      <input type="checkbox" checked={checked} onChange={(event) => onChange(event.target.checked)} className="luxor-public-checkbox mt-0.5 h-4 w-4 shrink-0 rounded border-2 border-[#caa24c]" />
       <span className="text-xs leading-5 text-[#d7c29a]/72">{children}</span>
     </label>
   )
@@ -493,7 +506,7 @@ function SmsConsentRow({ checked, onChange }: { checked: boolean; onChange: (che
           type="checkbox"
           checked={checked}
           onChange={(event) => onChange(event.target.checked)}
-          className="mt-0.5 h-4 w-4 shrink-0 accent-[#caa24c]"
+          className="luxor-public-checkbox mt-0.5 h-4 w-4 shrink-0 rounded border-2 border-[#caa24c]"
         />
         <span className="text-xs leading-5 text-[#d7c29a]/72">
           {LUXOR_LEGACY_INQUIRY_SMS_DISCLOSURE}
@@ -510,7 +523,7 @@ function SmsMarketingConsentRow({ checked, onChange }: { checked: boolean; onCha
   return (
     <div className="mt-3 rounded-lg border border-[#caa24c]/16 bg-white/[0.02] p-4">
       <label className="flex cursor-pointer items-start gap-3">
-        <input type="checkbox" checked={checked} onChange={(event) => onChange(event.target.checked)} className="mt-0.5 h-4 w-4 shrink-0 accent-[#caa24c]" />
+        <input type="checkbox" checked={checked} onChange={(event) => onChange(event.target.checked)} className="luxor-public-checkbox mt-0.5 h-4 w-4 shrink-0 rounded border-2 border-[#caa24c]" />
         <span className="text-xs leading-5 text-[#d7c29a]/72">
           {LUXOR_LEGACY_MARKETING_SMS_DISCLOSURE}
         </span>

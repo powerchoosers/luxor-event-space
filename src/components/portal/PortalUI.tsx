@@ -2030,36 +2030,24 @@ export function PortalSelect({
         <ChevronDown size={14} className={`shrink-0 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''} ${isLight ? 'text-[#8d672b]' : 'text-[color:var(--portal-muted)]'}`} />
       </button>
       {typeof document !== 'undefined' ? createPortal(
-        <AnimatePresence initial={false}>
-          {isOpen ? (isPublicGlass ? (
-            <motion.div
-              key="portal-select-pg-layer"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0, pointerEvents: 'none' }}
-              transition={{ duration: reduceMotion ? 0.04 : 0.14, ease: PORTAL_MODAL_EXIT_EASE }}
-              className="fixed inset-0"
-              style={{ zIndex: LUXOR_PUBLIC_GLASS_LAYER_Z_INDEX }}
-            >
+        isPublicGlass ? (
+          <div
+            className="pointer-events-none fixed inset-0"
+            style={{ zIndex: LUXOR_PUBLIC_GLASS_LAYER_Z_INDEX }}
+          >
+            {isOpen ? (
               <button
                 type="button"
                 tabIndex={-1}
                 aria-hidden="true"
-                className="absolute inset-0 cursor-default bg-transparent"
+                className="pointer-events-auto fixed inset-0 cursor-default bg-transparent"
                 onClick={() => closeMenu(true)}
               />
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={menuMotionTransition}
-                exit={reduceMotion ? { opacity: 0, pointerEvents: 'none', transition: { duration: 0.04 } } : { opacity: 0, pointerEvents: 'none', transition: { duration: 0.12, ease: PORTAL_MODAL_EXIT_EASE } }}
-                className="pointer-events-none fixed z-[1]"
-                style={{
-                  top: `${coords.top}px`,
-                  left: `${coords.left}px`,
-                  width: `${coords.width}px`,
-                }}
-              >
-                <div
+            ) : null}
+            <AnimatePresence initial={false}>
+              {isOpen ? (
+                <motion.div
+                  key="portal-select-pg-menu"
                   ref={dropdownRef}
                   id={listboxId}
                   role="listbox"
@@ -2068,8 +2056,28 @@ export function PortalSelect({
                   data-portal-popover="true"
                   data-scroll-lock="true"
                   onKeyDown={handleListKeyDown}
-                  className={`pointer-events-auto ${popoverMenuClass}`}
-                  style={{ maxHeight: `${coords.maxHeight}px` }}
+                  initial={reduceMotion ? { opacity: 0 } : { opacity: 0, y: coords.opensAbove ? 6 : -6, scale: 0.985 }}
+                  animate={{
+                    opacity: 1,
+                    y: 0,
+                    scale: 1,
+                    transition: { duration: reduceMotion ? 0.05 : 0.16, ease: PORTAL_MODAL_EASE },
+                  }}
+                  exit={reduceMotion ? { opacity: 0, pointerEvents: 'none', transition: { duration: 0.04 } } : {
+                    opacity: 0,
+                    y: coords.opensAbove ? 5 : -5,
+                    scale: 0.985,
+                    pointerEvents: 'none',
+                    transition: { duration: 0.14, ease: PORTAL_MODAL_EXIT_EASE },
+                  }}
+                  className={`pointer-events-auto fixed z-[1] ${popoverMenuClass}`}
+                  style={{
+                    top: `${coords.top}px`,
+                    left: `${coords.left}px`,
+                    width: `${coords.width}px`,
+                    maxHeight: `${coords.maxHeight}px`,
+                    transformOrigin: coords.opensAbove ? 'bottom center' : 'top center',
+                  }}
                 >
                   <div className="space-y-0.5">
                     {options.map((opt, index) => {
@@ -2096,10 +2104,13 @@ export function PortalSelect({
                       )
                     })}
                   </div>
-                </div>
-              </motion.div>
-            </motion.div>
-          ) : (
+                </motion.div>
+              ) : null}
+            </AnimatePresence>
+          </div>
+        ) : (
+        <AnimatePresence initial={false}>
+          {isOpen ? (
             <>
               <motion.div
                 key="portal-select-backdrop"
@@ -2114,29 +2125,26 @@ export function PortalSelect({
               />
               <motion.div
                 key="portal-select-menu-shell"
+                ref={dropdownRef}
+                id={listboxId}
+                role="listbox"
+                tabIndex={-1}
+                aria-activedescendant={activeOptionId}
+                data-portal-popover="true"
+                data-scroll-lock="true"
+                onKeyDown={handleListKeyDown}
                 initial={{ opacity: 0 }}
                 animate={menuMotionTransition}
                 exit={reduceMotion ? { opacity: 0, pointerEvents: 'none', transition: { duration: 0.04 } } : { opacity: 0, pointerEvents: 'none', transition: { duration: 0.12, ease: PORTAL_MODAL_EXIT_EASE } }}
-                className="pointer-events-none fixed"
+                className={`pointer-events-auto fixed ${popoverMenuClass}`}
                 style={{
                   top: `${coords.top}px`,
                   left: `${coords.left}px`,
                   width: `${coords.width}px`,
+                  maxHeight: `${coords.maxHeight}px`,
                   zIndex: 9999,
                 }}
               >
-                <div
-                  ref={dropdownRef}
-                  id={listboxId}
-                  role="listbox"
-                  tabIndex={-1}
-                  aria-activedescendant={activeOptionId}
-                  data-portal-popover="true"
-                  data-scroll-lock="true"
-                  onKeyDown={handleListKeyDown}
-                  className={`pointer-events-auto ${popoverMenuClass}`}
-                  style={{ maxHeight: `${coords.maxHeight}px` }}
-                >
                   <div className="space-y-0.5">
                     {options.map((opt, index) => {
                       const isSelected = opt.value === value
@@ -2167,11 +2175,11 @@ export function PortalSelect({
                       )
                     })}
                   </div>
-                </div>
               </motion.div>
             </>
-          )) : null}
-        </AnimatePresence>,
+          ) : null}
+        </AnimatePresence>
+        ),
         document.body
       ) : null}
     </div>

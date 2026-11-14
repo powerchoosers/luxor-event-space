@@ -315,12 +315,19 @@ body[data-portal-theme='light'] input[type='checkbox'] {
 }
 
 input[type='checkbox']:checked,
-body[data-portal-theme='light'] input[type='checkbox']:checked {
-  background-color: #caa24c !important;
-  border-color: #caa24c !important;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23ffffff' stroke-width='3.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='20 6 9 17 4 12'%3E%3C/polyline%3E%3C/svg%3E") !important;
+body[data-portal-theme='light'] input[type='checkbox']:checked,
+body[data-portal-theme='dark'] input[type='checkbox']:checked {
+  border: 1px solid #b88d37 !important;
+  background-color: #ba8e35 !important;
+  background-image:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23ffffff' stroke-width='3.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='20 6 9 17 4 12'%3E%3C/polyline%3E%3C/svg%3E"),
+    linear-gradient(180deg, #d4af54 0%, #ba8e35 100%) !important;
   background-position: center !important;
   background-repeat: no-repeat !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.65),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.22),
+    0 1px 3px rgba(36, 24, 6, 0.18) !important;
 }
 
 input[type='checkbox']:hover:not(:checked) {
@@ -785,12 +792,19 @@ body[data-portal-theme] .portal-gold-btn:focus-visible,
    Invisible when idle (0 visual distraction), fades in smoothly on scroll/hover without clunky gray tracks. */
 @media (min-width: 1024px) and (hover: hover) and (pointer: fine) {
   body[data-portal-theme] * {
-    scrollbar-width: thin;
-    scrollbar-color: transparent transparent;
+    scrollbar-width: auto !important;
+    scrollbar-color: auto !important;
   }
 
-  body[data-portal-theme] *:hover {
-    scrollbar-color: rgba(212, 175, 84, 0.5) transparent;
+  @supports not selector(::-webkit-scrollbar) {
+    body[data-portal-theme] * {
+      scrollbar-width: thin;
+      scrollbar-color: transparent transparent;
+    }
+
+    body[data-portal-theme] *:hover {
+      scrollbar-color: rgba(212, 175, 84, 0.5) transparent;
+    }
   }
 
   body[data-portal-theme] *::-webkit-scrollbar,
@@ -870,46 +884,63 @@ body[data-portal-theme] .portal-gold-btn:focus-visible,
 }
 
 /* Public Luxor site: restrained gold hardware against the dark venue palette. */
+/* Hide native root scrollbar on the public site; SiteFloatingScrollbar renders below the fixed header. */
 html:has(body[data-luxor-site]),
 body[data-luxor-site] {
-  scrollbar-color: rgba(202, 162, 76, 0.8) #ffffff;
-  scrollbar-width: thin;
+  scrollbar-width: none !important;
+  -ms-overflow-style: none !important;
 }
 
 html:has(body[data-luxor-site])::-webkit-scrollbar,
 body[data-luxor-site]::-webkit-scrollbar {
-  width: 0.62rem;
-  height: 0.62rem;
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
 }
 
-html:has(body[data-luxor-site])::-webkit-scrollbar-track,
-body[data-luxor-site]::-webkit-scrollbar-track {
+/* Apply the signature public site gold pill scrollbar to all scrollable dropdowns, cards, and containers.
+   Resetting scrollbar-width/scrollbar-color to auto ensures Chromium uses ::-webkit-scrollbar instead of OS arrow scrollbars. */
+body[data-luxor-site] * {
+  scrollbar-width: auto !important;
+  scrollbar-color: auto !important;
+}
+
+@supports not selector(::-webkit-scrollbar) {
+  body[data-luxor-site] * {
+    scrollbar-color: rgba(202, 162, 76, 0.8) #ffffff !important;
+    scrollbar-width: thin !important;
+  }
+}
+
+body[data-luxor-site] *::-webkit-scrollbar {
+  width: 0.56rem !important;
+  height: 0.56rem !important;
+}
+
+body[data-luxor-site] *::-webkit-scrollbar-button {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+}
+
+body[data-luxor-site] *::-webkit-scrollbar-track {
   background:
     linear-gradient(180deg, rgba(202, 162, 76, 0.06), transparent 26%),
-    #ffffff;
-  border-left: 1px solid rgba(202, 162, 76, 0.09);
+    #ffffff !important;
+  border-left: 1px solid rgba(202, 162, 76, 0.09) !important;
+  border-radius: 999px !important;
 }
 
-html:has(body[data-luxor-site])::-webkit-scrollbar-thumb,
-body[data-luxor-site]::-webkit-scrollbar-thumb {
-  min-height: 3.5rem;
-  border: 0.15rem solid #ffffff;
-  border-radius: 999px;
-  background: linear-gradient(180deg, #e7c36f 0%, #b27d2b 100%);
-  box-shadow: inset 0 0 0 1px rgba(255, 240, 190, 0.18);
+body[data-luxor-site] *::-webkit-scrollbar-thumb {
+  min-height: 2.5rem !important;
+  border: 0.14rem solid #ffffff !important;
+  border-radius: 999px !important;
+  background: linear-gradient(180deg, #e7c36f 0%, #b27d2b 100%) !important;
+  box-shadow: inset 0 0 0 1px rgba(255, 240, 190, 0.18) !important;
 }
 
-html:has(body[data-luxor-site])::-webkit-scrollbar-thumb:hover,
-body[data-luxor-site]::-webkit-scrollbar-thumb:hover {
-  background: linear-gradient(180deg, #f1d27a 0%, #caa24c 100%);
-}
-
-@media (max-width: 640px) {
-  html:has(body[data-luxor-site])::-webkit-scrollbar,
-  body[data-luxor-site]::-webkit-scrollbar {
-    width: 0.45rem;
-    height: 0.45rem;
-  }
+body[data-luxor-site] *::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(180deg, #f1d27a 0%, #caa24c 100%) !important;
 }
 
 ::selection {
@@ -1298,13 +1329,12 @@ body[data-luxor-site]::-webkit-scrollbar-thumb:hover {
     border-color: rgba(202, 162, 76, 0.18);
   }
 
-  .luxor-scrollbar {
-    scrollbar-color: rgba(202, 162, 76, 0.72) rgba(5, 5, 5, 0.72);
-    scrollbar-width: thin;
-  }
-
   .luxor-scrollbar::-webkit-scrollbar {
     width: 0.55rem;
+  }
+
+  .luxor-scrollbar::-webkit-scrollbar-button {
+    display: none;
   }
 
   .luxor-scrollbar::-webkit-scrollbar-track {
@@ -1319,15 +1349,17 @@ body[data-luxor-site]::-webkit-scrollbar-thumb:hover {
   }
 
   .public-calendar-scroll {
-    scrollbar-color: #c8a85f transparent;
-    scrollbar-width: thin;
     -webkit-overflow-scrolling: touch;
     overscroll-behavior: contain;
   }
 
   .public-calendar-scroll::-webkit-scrollbar {
-    width: 0.35rem;
-    height: 0.35rem;
+    width: 0.45rem;
+    height: 0.45rem;
+  }
+
+  .public-calendar-scroll::-webkit-scrollbar-button {
+    display: none;
   }
 
   .public-calendar-scroll::-webkit-scrollbar-track {
@@ -1336,7 +1368,7 @@ body[data-luxor-site]::-webkit-scrollbar-thumb:hover {
 
   .public-calendar-scroll::-webkit-scrollbar-thumb {
     border-radius: 999px;
-    background: #c8a85f;
+    background: linear-gradient(180deg, #e7c36f 0%, #b27d2b 100%);
   }
 
   .portal-scrollbar {
@@ -1455,13 +1487,15 @@ body[data-luxor-site]::-webkit-scrollbar-thumb:hover {
 /* Public date and time popovers stay light even when global scrollbars are dark. */
 body[data-luxor-site] .public-calendar-scroll {
   color-scheme: light;
-  scrollbar-color: #c8a85f transparent;
-  scrollbar-width: thin;
 }
 
 body[data-luxor-site] .public-calendar-scroll::-webkit-scrollbar {
-  width: 0.35rem;
-  height: 0.35rem;
+  width: 0.45rem;
+  height: 0.45rem;
+}
+
+body[data-luxor-site] .public-calendar-scroll::-webkit-scrollbar-button {
+  display: none !important;
 }
 
 body[data-luxor-site] .public-calendar-scroll::-webkit-scrollbar-track {
@@ -1472,19 +1506,21 @@ body[data-luxor-site] .public-calendar-scroll::-webkit-scrollbar-track {
 body[data-luxor-site] .public-calendar-scroll::-webkit-scrollbar-thumb {
   border: 0;
   border-radius: 999px;
-  background: #c8a85f;
-  box-shadow: none;
+  background: linear-gradient(180deg, #e7c36f 0%, #b27d2b 100%);
+  box-shadow: inset 0 0 0 1px rgba(255, 240, 190, 0.18);
 }
 
 body[data-luxor-site] .luxor-public-time-scroll {
   color-scheme: light !important;
-  scrollbar-color: #c8a85f transparent !important;
-  scrollbar-width: thin !important;
 }
 
 body[data-luxor-site] .luxor-public-time-scroll::-webkit-scrollbar {
-  width: 0.35rem !important;
-  height: 0.35rem !important;
+  width: 0.45rem !important;
+  height: 0.45rem !important;
+}
+
+body[data-luxor-site] .luxor-public-time-scroll::-webkit-scrollbar-button {
+  display: none !important;
 }
 
 body[data-luxor-site] .luxor-public-time-scroll::-webkit-scrollbar-track {
@@ -1495,8 +1531,8 @@ body[data-luxor-site] .luxor-public-time-scroll::-webkit-scrollbar-track {
 body[data-luxor-site] .luxor-public-time-scroll::-webkit-scrollbar-thumb {
   border: 0 !important;
   border-radius: 999px !important;
-  background: #c8a85f !important;
-  box-shadow: none !important;
+  background: linear-gradient(180deg, #e7c36f 0%, #b27d2b 100%) !important;
+  box-shadow: inset 0 0 0 1px rgba(255, 240, 190, 0.18) !important;
 }
 
 @keyframes luxor-ambient {
@@ -1832,18 +1868,44 @@ body[data-luxor-site] main textarea::placeholder {
   color: #827567 !important;
 }
 
-/* Keep checkboxes visible when the public-site input reset is active. */
+/* Keep checkboxes visible and styled with the golden container & white checkmark. */
+body[data-luxor-site] input[type='checkbox'],
+body[data-luxor-site] main input[type='checkbox'],
 body[data-luxor-site] main input[type='checkbox'].luxor-public-checkbox {
   appearance: none !important;
   -webkit-appearance: none !important;
   border: 2px solid #9b6f24 !important;
+  border-radius: 0.35rem !important;
   background-color: #fffdfa !important;
   box-shadow: inset 0 0 0 1px rgba(155, 111, 36, 0.12);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: all 150ms ease;
+  vertical-align: middle;
 }
 
-body[data-luxor-site] main input[type='checkbox'].luxor-public-checkbox:checked {
-  background-color: #caa24c !important;
+body[data-luxor-site] input[type='checkbox']:hover:not(:checked),
+body[data-luxor-site] main input[type='checkbox']:hover:not(:checked) {
   border-color: #caa24c !important;
+}
+
+body[data-luxor-site] input[type='checkbox']:checked,
+body[data-luxor-site] main input[type='checkbox']:checked,
+body[data-luxor-site] main input[type='checkbox'].luxor-public-checkbox:checked {
+  border: 1px solid #b88d37 !important;
+  background-color: #ba8e35 !important;
+  background-image:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23ffffff' stroke-width='3.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='20 6 9 17 4 12'%3E%3C/polyline%3E%3C/svg%3E"),
+    linear-gradient(180deg, #d4af54 0%, #ba8e35 100%) !important;
+  background-position: center !important;
+  background-repeat: no-repeat !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.65),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.22),
+    0 1px 3px rgba(36, 24, 6, 0.18) !important;
 }
 
 body[data-luxor-site] footer {

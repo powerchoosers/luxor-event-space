@@ -131,7 +131,7 @@ import {
 import { EventLayoutDesigner, type EventLayoutDocument } from '@/components/portal/EventLayoutDesigner'
 import { LayoutReviewPanel } from '@/components/portal/LayoutReviewPanel'
 import { PortalSmsConsentBadge, type SmsConsentState } from '@/components/portal/PortalSmsConsentBadge'
-import { catalogItemToLineItem, LUXOR_PACKAGE_INTEREST_OPTIONS, LUXOR_SERVICE_CATALOG } from '@/lib/luxorServiceCatalog'
+import { catalogItemToLineItem, LUXOR_SERVICE_CATALOG } from '@/lib/luxorServiceCatalog'
 import { PortalPdfViewer } from '@/components/portal/PortalPdfViewer'
 import { ProposalDeliveryPreview } from '@/components/portal/ProposalDeliveryPreview'
 import { ProposalPaymentSchedule } from '@/components/portal/ProposalPaymentSchedule'
@@ -9249,7 +9249,7 @@ export default function LeadDetailPage({
             </div>
             <div className="sm:col-span-2">
               <label className="mb-1.5 block text-[9px] font-black uppercase tracking-[0.16em] text-[color:var(--portal-muted)]">Package interest</label>
-              <PortalSelect value={newEventPackage} onChange={setNewEventPackage} options={[{ value: '', label: 'Not decided yet' }, ...LUXOR_PACKAGE_INTEREST_OPTIONS]} className="w-full" />
+              <PortalSelect value={newEventPackage} onChange={setNewEventPackage} options={[{ value: '', label: 'Not decided yet' }, ...LUXOR_INQUIRY_PACKAGE_INTEREST_OPTIONS.map((opt) => ({ value: opt.value, label: opt.label }))]} className="w-full" />
             </div>
             <div className="sm:col-span-2">
               <label className="mb-1.5 block text-[9px] font-black uppercase tracking-[0.16em] text-[color:var(--portal-muted)]">Notes</label>

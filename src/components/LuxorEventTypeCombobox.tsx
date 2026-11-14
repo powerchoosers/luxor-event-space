@@ -180,6 +180,35 @@ export function LuxorEventTypeCombobox({
     inputRef.current?.blur()
   }
 
+  const suggestionItems = suggestions.map((suggestion, index) => {
+    const isActive = activeIndex === index
+    const isSelected = value === suggestion.value
+    return (
+      <li
+        id={`${listId}-option-${index}`}
+        key={suggestion.value}
+        role="option"
+        aria-selected={isSelected}
+        data-selected={isPublicGlass && isSelected ? 'true' : undefined}
+        onPointerDown={() => { pointerSelectionRef.current = true }}
+        onPointerCancel={() => { pointerSelectionRef.current = false }}
+        onPointerLeave={() => { pointerSelectionRef.current = false }}
+        onMouseEnter={() => setActiveIndex(index)}
+        onClick={() => {
+          pointerSelectionRef.current = false
+          selectSuggestion(suggestion.value)
+        }}
+        className={
+          isPublicGlass
+            ? `${LUXOR_PUBLIC_GLASS_OPTION_BASE} luxor-public-glass-option ${isActive || isSelected ? 'bg-[#f5efe5]' : ''}`
+            : `flex min-h-11 cursor-pointer items-center rounded-lg px-3 text-sm transition-colors ${isActive ? variant === 'portal' ? 'bg-[color:var(--portal-soft)]' : variant === 'public-dark' ? 'bg-white/10' : 'bg-[#f5efe5]' : variant === 'portal' ? 'hover:bg-[color:var(--portal-soft)]' : variant === 'public-dark' ? 'hover:bg-white/10' : 'hover:bg-[#f5efe5]'}`
+        }
+      >
+        {suggestion.label}
+      </li>
+    )
+  })
+
   const listMarkup = (
     <ul
       ref={listRef}
@@ -187,43 +216,9 @@ export function LuxorEventTypeCombobox({
       role="listbox"
       aria-label={`${label} suggestions`}
       data-portal-popover="true"
-      className={
-        isPublicGlass
-          ? `${LUXOR_PUBLIC_GLASS_POPOVER_MENU} pointer-events-auto max-h-64 ${listClassName}`
-          : `${suggestionLayout === 'flow' ? 'relative mt-2' : 'absolute left-0 top-full z-50 mt-1'} max-h-64 w-full overflow-y-auto rounded-xl border p-1 shadow-xl ${LIST_STYLES[variant]} ${listClassName}`
-      }
-      style={isPublicGlass ? {
-        maxHeight: coords.maxHeight,
-      } : undefined}
+      className={`${suggestionLayout === 'flow' ? 'relative mt-2' : 'absolute left-0 top-full z-50 mt-1'} max-h-64 w-full overflow-y-auto rounded-xl border p-1 shadow-xl ${LIST_STYLES[variant]} ${listClassName}`}
     >
-      {suggestions.map((suggestion, index) => {
-        const isActive = activeIndex === index
-        const isSelected = value === suggestion.value
-        return (
-          <li
-            id={`${listId}-option-${index}`}
-            key={suggestion.value}
-            role="option"
-            aria-selected={isSelected}
-            data-selected={isPublicGlass && isSelected ? 'true' : undefined}
-            onPointerDown={() => { pointerSelectionRef.current = true }}
-            onPointerCancel={() => { pointerSelectionRef.current = false }}
-            onPointerLeave={() => { pointerSelectionRef.current = false }}
-            onMouseEnter={() => setActiveIndex(index)}
-            onClick={() => {
-              pointerSelectionRef.current = false
-              selectSuggestion(suggestion.value)
-            }}
-            className={
-              isPublicGlass
-                ? `${LUXOR_PUBLIC_GLASS_OPTION_BASE} luxor-public-glass-option ${isActive || isSelected ? 'bg-[#f5efe5]' : ''}`
-                : `flex min-h-11 cursor-pointer items-center rounded-lg px-3 text-sm transition-colors ${isActive ? variant === 'portal' ? 'bg-[color:var(--portal-soft)]' : variant === 'public-dark' ? 'bg-white/10' : 'bg-[#f5efe5]' : variant === 'portal' ? 'hover:bg-[color:var(--portal-soft)]' : variant === 'public-dark' ? 'hover:bg-white/10' : 'hover:bg-[#f5efe5]'}`
-            }
-          >
-            {suggestion.label}
-          </li>
-        )
-      })}
+      {suggestionItems}
     </ul>
   )
 
@@ -292,40 +287,56 @@ export function LuxorEventTypeCombobox({
       </div>
 
       {isPublicGlass && typeof document !== 'undefined' ? createPortal(
-        <AnimatePresence initial={false}>
+        <div
+          className="pointer-events-none fixed inset-0"
+          style={{ zIndex: LUXOR_PUBLIC_GLASS_LAYER_Z_INDEX }}
+        >
           {showSuggestions ? (
-            <motion.div
-              key="event-type-pg-layer"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0, pointerEvents: 'none' }}
-              transition={{ duration: reduceMotion ? 0.04 : 0.14, ease: PORTAL_MODAL_EXIT_EASE }}
-              className="fixed inset-0"
-              style={{ zIndex: LUXOR_PUBLIC_GLASS_LAYER_Z_INDEX }}
-            >
-              <button
-                type="button"
-                tabIndex={-1}
-                aria-hidden="true"
-                className="absolute inset-0 cursor-default bg-transparent"
-                onClick={closeSuggestions}
-              />
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1, transition: { duration: reduceMotion ? 0.04 : 0.16, ease: PORTAL_MODAL_EASE } }}
-                exit={{ opacity: 0, pointerEvents: 'none', transition: { duration: reduceMotion ? 0.04 : 0.12, ease: PORTAL_MODAL_EXIT_EASE } }}
-                className="pointer-events-none fixed z-[1]"
+            <button
+              type="button"
+              tabIndex={-1}
+              aria-hidden="true"
+              className="pointer-events-auto fixed inset-0 cursor-default bg-transparent"
+              onClick={closeSuggestions}
+            />
+          ) : null}
+          <AnimatePresence initial={false}>
+            {showSuggestions ? (
+              <motion.ul
+                key="event-type-pg-menu"
+                ref={listRef}
+                id={listId}
+                role="listbox"
+                aria-label={`${label} suggestions`}
+                data-portal-popover="true"
+                initial={reduceMotion ? { opacity: 0 } : { opacity: 0, y: -6, scale: 0.985 }}
+                animate={{
+                  opacity: 1,
+                  y: 0,
+                  scale: 1,
+                  transition: { duration: reduceMotion ? 0.04 : 0.16, ease: PORTAL_MODAL_EASE },
+                }}
+                exit={reduceMotion ? { opacity: 0, pointerEvents: 'none', transition: { duration: 0.04 } } : {
+                  opacity: 0,
+                  y: -5,
+                  scale: 0.985,
+                  pointerEvents: 'none',
+                  transition: { duration: 0.14, ease: PORTAL_MODAL_EXIT_EASE },
+                }}
+                className={`${LUXOR_PUBLIC_GLASS_POPOVER_MENU} pointer-events-auto fixed z-[1] max-h-64 ${listClassName}`}
                 style={{
                   top: coords.top,
                   left: coords.left,
                   width: coords.width,
+                  maxHeight: coords.maxHeight,
+                  transformOrigin: 'top center',
                 }}
               >
-                {listMarkup}
-              </motion.div>
-            </motion.div>
-          ) : null}
-        </AnimatePresence>,
+                {suggestionItems}
+              </motion.ul>
+            ) : null}
+          </AnimatePresence>
+        </div>,
         document.body,
       ) : showSuggestions ? listMarkup : null}
     </div>

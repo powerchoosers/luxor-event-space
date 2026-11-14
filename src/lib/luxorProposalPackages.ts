@@ -264,12 +264,12 @@ export function packageLimitationsForPublicDisplay(
       const tierCopy = option.price_tiers
         .map((tier) => `${tier.min_guests}–${tier.max_guests} guests: $${tier.amount.toLocaleString('en-US')}`)
         .join('; ')
-      limits.push(`Package fee varies by guest count (${tierCopy}). Venue rental, cleaning, security, and taxes are priced separately in the proposal builder.`)
+      limits.push(`Package fee varies by guest count (${tierCopy}). Venue rental, cleaning, security, and taxes are calculated as you build your event.`)
     } else {
-      limits.push('Package fee varies by guest count. Venue rental, cleaning, security, and taxes are priced separately in the proposal builder.')
+      limits.push('Package fee varies by guest count. Venue rental, cleaning, security, and taxes are calculated as you build your event.')
     }
   } else {
-    limits.push('Venue rental, cleaning, security, and taxes are priced separately in the proposal builder.')
+    limits.push('Venue rental, cleaning, security, and taxes are calculated as you build your event.')
   }
   return limits
 }

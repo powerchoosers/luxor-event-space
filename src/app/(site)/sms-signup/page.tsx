@@ -80,14 +80,14 @@ export default function SmsSignupPage() {
               </label>
               <div className="rounded-lg border border-[#caa24c]/16 bg-white/[0.02] p-4">
                 <label className="flex cursor-pointer items-start gap-3">
-                  <input type="checkbox" checked={customerCareAgreed} onChange={(event) => setCustomerCareAgreed(event.target.checked)} className="mt-0.5 h-4 w-4 shrink-0 accent-[#caa24c]" />
+                  <input type="checkbox" checked={customerCareAgreed} onChange={(event) => setCustomerCareAgreed(event.target.checked)} className="luxor-public-checkbox mt-0.5 h-4 w-4 shrink-0 rounded border-2 border-[#caa24c]" />
                   <span className="text-xs leading-5 text-[#d7c29a]/75">{LUXOR_SMS_SIGNUP_CUSTOMER_CARE_DISCLOSURE}</span>
                 </label>
                 <p className="ml-7 mt-2 text-xs leading-5 text-[#d7c29a]/58">Read the <Link href="/privacy" className="text-[#f1d27a] underline underline-offset-4">Privacy Policy</Link> and <Link href="/terms" className="text-[#f1d27a] underline underline-offset-4">Terms</Link>.</p>
               </div>
               <div className="rounded-lg border border-[#caa24c]/16 bg-white/[0.02] p-4">
                 <label className="flex cursor-pointer items-start gap-3">
-                  <input type="checkbox" checked={marketingAgreed} onChange={(event) => setMarketingAgreed(event.target.checked)} className="mt-0.5 h-4 w-4 shrink-0 accent-[#caa24c]" />
+                  <input type="checkbox" checked={marketingAgreed} onChange={(event) => setMarketingAgreed(event.target.checked)} className="luxor-public-checkbox mt-0.5 h-4 w-4 shrink-0 rounded border-2 border-[#caa24c]" />
                   <span className="text-xs leading-5 text-[#d7c29a]/75">{LUXOR_SMS_SIGNUP_MARKETING_DISCLOSURE}</span>
                 </label>
                 <p className="ml-7 mt-2 text-xs leading-5 text-[#d7c29a]/58">This optional marketing consent is separate from customer-care messages. Read the <Link href="/privacy" className="text-[#f1d27a] underline underline-offset-4">Privacy Policy</Link> and <Link href="/terms" className="text-[#f1d27a] underline underline-offset-4">Terms</Link>.</p>

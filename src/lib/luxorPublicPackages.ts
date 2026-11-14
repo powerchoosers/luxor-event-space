@@ -43,7 +43,7 @@ const DISPLAY_NAMES: Record<LuxorPublicPackageTierId, { en: string; es: string }
   luxor: { en: 'Luxor', es: 'Luxor' },
 }
 
-const DEFAULT_RENTAL_HOURS = 8
+const DEFAULT_RENTAL_HOURS = 6
 const PREVIEW_INCLUSION_COUNT = 5
 
 const PUBLIC_CARD_BACK_EXCLUDED_INCLUSION = /^(cleaning|required security)\b/i

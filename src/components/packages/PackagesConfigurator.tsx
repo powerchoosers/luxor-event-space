@@ -69,7 +69,8 @@ export function PackagesConfigurator({ locale = 'en', defaultPackageTier = 'sign
       guestCount: 'Guest count',
       rentalPeriod: 'Rental period',
       packageLevel: 'Package level',
-      enhancements: 'Add enhancements (optional)',
+      enhancements: 'Add enhancements',
+      optional: 'Optional',
       chooseDate: 'Choose a date',
       guestPlaceholder: 'For example, 120',
       guestInvalid: 'Enter a whole guest count between 1 and 180.',
@@ -80,7 +81,8 @@ export function PackagesConfigurator({ locale = 'en', defaultPackageTier = 'sign
       guestCount: 'Invitados',
       rentalPeriod: 'Periodo de renta',
       packageLevel: 'Nivel de paquete',
-      enhancements: 'Agrega mejoras (opcional)',
+      enhancements: 'Agrega mejoras',
+      optional: 'Opcional',
       chooseDate: 'Elige una fecha',
       guestPlaceholder: 'Por ejemplo, 120',
       guestInvalid: 'Ingresa un número de invitados entre 1 y 180.',
@@ -282,31 +284,31 @@ export function PackagesConfigurator({ locale = 'en', defaultPackageTier = 'sign
 
           {enhancementOptions?.length ? (
             <div className="mt-8">
-              <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-[#8d672b]">{labels.enhancements}</p>
+              <div className="flex items-center gap-2">
+                <span className="text-[11px] font-bold uppercase tracking-[0.16em] text-[#8d672b]">{labels.enhancements}</span>
+                <span className="inline-flex items-center rounded-full bg-[#f3ebd9] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-[#8d672b]">
+                  {labels.optional}
+                </span>
+              </div>
               <ul className="mt-3 grid gap-2 sm:grid-cols-2">
                 {enhancementOptions.filter((item) => !item.includedWithPackage).map((item) => {
                   const checked = Boolean(enhancementQuantities[item.id])
                   return (
                     <li key={item.id}>
                       <label className={`group flex cursor-pointer items-start gap-3 rounded-xl border p-3.5 text-sm transition-all duration-150 ${checked ? 'border-[#caa24c] bg-[#caa24c]/10 text-[#241d17]' : 'border-[#d8c4a4]/80 bg-white text-[#241d17] hover:border-[#caa24c]/60'}`}>
-                        <span className="relative mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center">
-                          <input
-                            type="checkbox"
-                            checked={checked}
-                            onChange={(event) => {
-                              setEnhancementQuantities((current) => {
-                                const next = { ...current }
-                                if (event.target.checked) next[item.id] = item.minimumQuantity
-                                else delete next[item.id]
-                                return next
-                              })
-                            }}
-                            className="peer sr-only"
-                          />
-                          <span className={`flex h-5 w-5 items-center justify-center rounded-md border transition-colors ${checked ? 'border-[#caa24c] bg-[#caa24c] text-white shadow-xs' : 'border-[#b98a3d]/70 bg-[#fffdfa] group-hover:border-[#caa24c]'}`}>
-                            {checked ? <Check className="h-3.5 w-3.5 stroke-[3] text-white" aria-hidden /> : null}
-                          </span>
-                        </span>
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={(event) => {
+                            setEnhancementQuantities((current) => {
+                              const next = { ...current }
+                              if (event.target.checked) next[item.id] = item.minimumQuantity
+                              else delete next[item.id]
+                              return next
+                            })
+                          }}
+                          className="luxor-public-checkbox mt-0.5 h-5 w-5 shrink-0 rounded-md border-2 border-[#caa24c] cursor-pointer"
+                        />
                         <span className="min-w-0 flex-1">
                           <span className="font-medium leading-snug">{item.name}</span>
                           <span className="mt-0.5 block text-xs tabular-nums text-[#8d672b]">

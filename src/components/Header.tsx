@@ -25,10 +25,20 @@ export const Header = () => {
 
   useEffect(() => {
     const handleScroll = () => {
-      setIsScrolled(window.scrollY > 50)
+      const scrolled = window.scrollY > 50
+      setIsScrolled(scrolled)
+      if (scrolled) {
+        document.body.setAttribute('data-header-scrolled', 'true')
+      } else {
+        document.body.removeAttribute('data-header-scrolled')
+      }
     }
-    window.addEventListener('scroll', handleScroll)
-    return () => window.removeEventListener('scroll', handleScroll)
+    handleScroll()
+    window.addEventListener('scroll', handleScroll, { passive: true })
+    return () => {
+      window.removeEventListener('scroll', handleScroll)
+      document.body.removeAttribute('data-header-scrolled')
+    }
   }, [])
 
   useEffect(() => {
@@ -133,10 +143,148 @@ export const Header = () => {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.48, ease: [0.23, 1, 0.32, 1] }}
-            className="fixed inset-0 z-[100] h-[100dvh] w-screen bg-[#f7f3ec] lg:hidden"
+            className="fixed inset-0 z-[100] h-[100dvh] w-screen overflow-hidden bg-[#f7f3ec] lg:hidden"
           >
             <div className="absolute inset-0 luxor-noise opacity-20" />
-            <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_0%,rgba(202,162,76,0.14),transparent_24rem),linear-gradient(180deg,#fffdf9,#f1e9df_58%)]" />
+            <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_0%,rgba(202,162,76,0.16),transparent_26rem),radial-gradient(circle_at_50%_52%,rgba(202,162,76,0.12),transparent_22rem),linear-gradient(180deg,#fffdf9,#f1e9df_58%)]" />
+
+            {/* Animated Architectural Sunburst & Filigree Background Graphic */}
+            <div aria-hidden="true" className="pointer-events-none absolute inset-0 flex items-center justify-center overflow-hidden">
+              {/* Soft breathing ambient gold aura */}
+              <motion.div
+                initial={{ opacity: 0, scale: 0.82 }}
+                animate={{ opacity: [0.35, 0.6, 0.35], scale: [0.94, 1.06, 0.94] }}
+                transition={{ duration: 7, repeat: Infinity, ease: 'easeInOut' }}
+                className="absolute h-[420px] w-[420px] rounded-full bg-[radial-gradient(circle,rgba(202,162,76,0.22)_0%,rgba(202,162,76,0.06)_48%,transparent_72%)] blur-2xl"
+              />
+
+              {/* Architectural Cathedral Arch Frame */}
+              <motion.svg
+                viewBox="0 0 400 760"
+                fill="none"
+                className="absolute inset-4 h-[calc(100%-2rem)] w-[calc(100%-2rem)] max-w-md mx-auto text-[#caa24c]"
+                preserveAspectRatio="none"
+              >
+                <motion.path
+                  d="M 18 742 L 18 210 A 182 182 0 0 1 382 210 L 382 742 Z"
+                  stroke="currentColor"
+                  strokeOpacity="0.22"
+                  strokeWidth="1"
+                  initial={{ pathLength: 0, opacity: 0 }}
+                  animate={{ pathLength: 1, opacity: 1 }}
+                  transition={{ duration: 1.15, ease: [0.22, 1, 0.36, 1] }}
+                />
+                <motion.path
+                  d="M 28 732 L 28 214 A 172 172 0 0 1 372 214 L 372 732 Z"
+                  stroke="currentColor"
+                  strokeOpacity="0.12"
+                  strokeWidth="0.75"
+                  strokeDasharray="3 5"
+                  initial={{ pathLength: 0, opacity: 0 }}
+                  animate={{ pathLength: 1, opacity: 1 }}
+                  transition={{ duration: 1.35, delay: 0.1, ease: [0.22, 1, 0.36, 1] }}
+                />
+                {/* Top Keystone Diamond */}
+                <motion.polygon
+                  points="200,20 206,28 200,36 194,28"
+                  fill="currentColor"
+                  fillOpacity="0.28"
+                  initial={{ scale: 0, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  transition={{ delay: 0.45, duration: 0.5 }}
+                />
+                {/* Bottom Keystone Diamond */}
+                <motion.polygon
+                  points="200,724 205,732 200,740 195,732"
+                  fill="currentColor"
+                  fillOpacity="0.24"
+                  initial={{ scale: 0, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  transition={{ delay: 0.55, duration: 0.5 }}
+                />
+              </motion.svg>
+
+              {/* Outer Slowly Rotating Celestial Ring & Sunburst Rays */}
+              <motion.svg
+                viewBox="0 0 520 520"
+                fill="none"
+                className="absolute h-[460px] w-[460px] sm:h-[520px] sm:w-[520px] text-[#b98a3d]"
+                initial={{ opacity: 0, scale: 0.86, rotate: -12 }}
+                animate={{ opacity: 1, scale: 1, rotate: 348 }}
+                transition={{
+                  opacity: { duration: 0.7, ease: 'easeOut' },
+                  scale: { duration: 0.85, ease: [0.22, 1, 0.36, 1] },
+                  rotate: { duration: 64, repeat: Infinity, ease: 'linear' },
+                }}
+              >
+                <circle cx="260" cy="260" r="236" stroke="currentColor" strokeOpacity="0.16" strokeWidth="0.9" />
+                <circle cx="260" cy="260" r="224" stroke="currentColor" strokeOpacity="0.22" strokeWidth="0.9" strokeDasharray="2 8" />
+                {/* 24 fine radiating Las Palmas sunburst rays */}
+                {Array.from({ length: 24 }).map((_, index) => {
+                  const angle = (index * 360) / 24
+                  const isMajor = index % 2 === 0
+                  return (
+                    <line
+                      key={angle}
+                      x1="260"
+                      y1={isMajor ? '16' : '32'}
+                      x2="260"
+                      y2={isMajor ? '64' : '54'}
+                      stroke="currentColor"
+                      strokeOpacity={isMajor ? '0.24' : '0.13'}
+                      strokeWidth={isMajor ? '1.1' : '0.75'}
+                      transform={`rotate(${angle} 260 260)`}
+                    />
+                  )
+                })}
+                {/* Cardinal Diamond Accents on Ring */}
+                {[0, 90, 180, 270].map((angle) => (
+                  <polygon
+                    key={angle}
+                    points="260,18 264,24 260,30 256,24"
+                    fill="currentColor"
+                    fillOpacity="0.34"
+                    transform={`rotate(${angle} 260 260)`}
+                  />
+                ))}
+              </motion.svg>
+
+              {/* Inner Counter-Rotating Geometric Filigree */}
+              <motion.svg
+                viewBox="0 0 380 380"
+                fill="none"
+                className="absolute h-[320px] w-[320px] sm:h-[360px] sm:w-[360px] text-[#caa24c]"
+                initial={{ opacity: 0, scale: 0.9, rotate: 0 }}
+                animate={{ opacity: 1, scale: 1, rotate: -360 }}
+                transition={{
+                  opacity: { duration: 0.8, delay: 0.12 },
+                  scale: { duration: 0.85, delay: 0.12, ease: [0.22, 1, 0.36, 1] },
+                  rotate: { duration: 48, repeat: Infinity, ease: 'linear' },
+                }}
+              >
+                <circle cx="190" cy="190" r="168" stroke="currentColor" strokeOpacity="0.16" strokeWidth="0.85" />
+                <rect
+                  x="71"
+                  y="71"
+                  width="238"
+                  height="238"
+                  stroke="currentColor"
+                  strokeOpacity="0.11"
+                  strokeWidth="0.75"
+                />
+                <rect
+                  x="71"
+                  y="71"
+                  width="238"
+                  height="238"
+                  stroke="currentColor"
+                  strokeOpacity="0.11"
+                  strokeWidth="0.75"
+                  transform="rotate(45 190 190)"
+                />
+                <circle cx="190" cy="190" r="118" stroke="currentColor" strokeOpacity="0.14" strokeWidth="0.75" strokeDasharray="4 6" />
+              </motion.svg>
+            </div>
             <motion.div
               initial={{ opacity: 0, y: 24 }}
               animate={{ opacity: 1, y: 0 }}
@@ -175,7 +323,7 @@ export const Header = () => {
                   data-conversion="visit_cta_click"
                   data-conversion-label="Mobile menu"
                   onClick={() => setMobileMenuOpen(false)}
-                  className="luxor-gold-raised mt-3 flex items-center justify-center gap-2 rounded-md px-8 py-4 text-sm uppercase tracking-[0.18em]"
+                  className="luxor-gold-raised mt-3 flex items-center justify-center gap-2 rounded-md px-8 py-3 text-sm uppercase tracking-[0.18em]"
                 >
                   <CalendarDays size={18} />
                   {spanish ? 'Agendar una visita' : 'Schedule a Visit'}

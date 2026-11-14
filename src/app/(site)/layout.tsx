@@ -11,6 +11,8 @@ import { RouteTransition } from '@/components/RouteTransition'
 import { PublicConversionTracker } from '@/components/PublicConversionTracker'
 import { PublicMobileActions } from '@/components/PublicMobileActions'
 import { SmoothScroll } from '@/components/SmoothScroll'
+import { SiteFloatingScrollbar } from '@/components/SiteFloatingScrollbar'
+import { PackagesSubmissionOverlay } from '@/components/packages/PackagesSubmissionOverlay'
 import { MetaPixelTracker } from '@/components/MetaPixelTracker'
 
 const manrope = Manrope({
@@ -136,6 +138,8 @@ export default function RootLayout({
         <SiteScrollGuard />
         <PublicConversionTracker />
         <Header />
+        <SiteFloatingScrollbar />
+        <PackagesSubmissionOverlay />
         <main className="flex-grow">
           <RouteTransition surface="site">{children}</RouteTransition>
         </main>

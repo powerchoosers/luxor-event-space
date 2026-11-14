@@ -27,6 +27,7 @@ const copy = {
     included: 'What’s included',
     details: 'Details and limitations',
     notIncluded: 'Not included',
+    buildPackageLink: 'Build your Luxor package ↓',
   },
   es: {
     weekendFromLabel: 'Vie–Dom desde',
@@ -35,6 +36,7 @@ const copy = {
     included: 'Qué incluye',
     details: 'Detalles y limitaciones',
     notIncluded: 'No incluido',
+    buildPackageLink: 'Diseña tu paquete Luxor ↓',
   },
 } as const
 
@@ -85,15 +87,48 @@ export function PackageFlipCard({ data, locale = 'en' }: PackageFlipCardProps) {
     if (!scrollEl) return
 
     const onWheel = (event: WheelEvent) => {
-      event.preventDefault()
-      event.stopPropagation()
+      if (event.deltaY === 0) return
       const maxScroll = Math.max(0, scrollEl.scrollHeight - scrollEl.clientHeight)
-      scrollEl.scrollTop = Math.max(0, Math.min(maxScroll, scrollEl.scrollTop + event.deltaY))
+
+      // On desktop (3-column layout, >= 1024px / lg), prevent chaining so the card
+      // scroll is isolated and never moves the outer page when mouse is over it.
+      // On narrow mobile/single-column screens (< 1024px), allow page scroll to continue
+      // once reaching the boundaries.
+      const isDesktop3Col = window.innerWidth >= 1024
+
+      if (isDesktop3Col) {
+        event.preventDefault()
+        event.stopPropagation()
+        if (maxScroll > 0) {
+          scrollEl.scrollTop = Math.max(0, Math.min(maxScroll, scrollEl.scrollTop + event.deltaY))
+        }
+        return
+      }
+
+      if (maxScroll <= 1) return
+
+      const previousTop = scrollEl.scrollTop
+      const atTop = previousTop <= 1
+      const atBottom = previousTop >= maxScroll - 2
+
+      if ((event.deltaY < 0 && atTop) || (event.deltaY > 0 && atBottom)) {
+        return
+      }
+
+      scrollEl.scrollTop = Math.max(0, Math.min(maxScroll, previousTop + event.deltaY))
+      const consumed = scrollEl.scrollTop - previousTop
+      const nowAtTop = scrollEl.scrollTop <= 1
+      const nowAtBottom = scrollEl.scrollTop >= maxScroll - 2
+
+      if (Math.abs(consumed) > 0.5 && !((event.deltaY < 0 && nowAtTop) || (event.deltaY > 0 && nowAtBottom))) {
+        event.preventDefault()
+        event.stopPropagation()
+      }
     }
 
     scrollEl.addEventListener('wheel', onWheel, { passive: false })
     return () => scrollEl.removeEventListener('wheel', onWheel)
-  }, [allow3dFlip, flipped, showSwapLayout])
+  }, [allow3dFlip, flipped, showSwapLayout, data.id])
 
   const renderFront = (options?: { hidden?: boolean; sizeFromContent?: boolean }) => (
     <div className={`flex flex-col ${options?.sizeFromContent ? 'w-full' : 'h-full min-h-0'}`} hidden={options?.hidden}>
@@ -123,7 +158,7 @@ export function PackageFlipCard({ data, locale = 'en' }: PackageFlipCardProps) {
         ) : null}
         <ul className={`grid gap-3 ${data.showStartingPrice ? 'mt-6' : 'mt-5'}`}>
           {data.previewInclusions.map((item) => (
-            <li key={item} className="flex items-start gap-2.5 text-sm text-[#d7c29a]/78">
+            <li key={item} className="flex items-center gap-2.5 text-sm leading-5 text-[#d7c29a]/78">
               <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#f5ead8] text-[#8d672b]">
                 <Check className="h-3 w-3 stroke-[2.5]" aria-hidden />
               </span>
@@ -160,7 +195,7 @@ export function PackageFlipCard({ data, locale = 'en' }: PackageFlipCardProps) {
       <div
         ref={options?.scrollBody ? backScrollRef : undefined}
         data-luxor-package-back-scroll={options?.scrollBody ? 'true' : undefined}
-        className={`flex min-h-0 flex-col px-6 pt-6 sm:px-7 sm:pt-7 max-lg:scroll-mt-28 max-lg:pt-8 ${options?.scrollBody ? 'min-h-0 flex-1 touch-pan-y overflow-y-auto overscroll-contain [-webkit-overflow-scrolling:touch]' : ''}`}
+        className={`flex min-h-0 flex-col px-6 pb-6 pt-6 sm:px-7 sm:pb-7 sm:pt-7 max-lg:scroll-mt-28 max-lg:pt-8 ${options?.scrollBody ? 'min-h-0 flex-1 touch-pan-y overflow-y-auto overscroll-y-auto lg:overscroll-y-none [-webkit-overflow-scrolling:touch]' : ''}`}
       >
         <p className="font-mono text-[10px] uppercase tracking-[0.28em] text-[#caa24c]">{data.displayName}</p>
         <h3
@@ -169,9 +204,9 @@ export function PackageFlipCard({ data, locale = 'en' }: PackageFlipCardProps) {
         >
           {t.included}
         </h3>
-        <ul className="mt-4 space-y-2.5 text-sm text-[#d7c29a]/85">
+        <ul className="mt-4 space-y-2.5 text-sm leading-5 text-[#d7c29a]/85">
           {data.fullInclusions.map((item) => (
-            <li key={item} className="flex items-start gap-2.5">
+            <li key={item} className="flex items-center gap-2.5">
               <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#f5ead8] text-[#8d672b]">
                 <Check className="h-3 w-3 stroke-[2.5]" aria-hidden />
               </span>
@@ -181,18 +216,38 @@ export function PackageFlipCard({ data, locale = 'en' }: PackageFlipCardProps) {
         </ul>
         <h3 className="mt-5 font-serif text-2xl leading-none text-[#f7efe3]">{t.details}</h3>
         {limitNotes.length > 0 ? (
-          <div className="mt-3 space-y-1 rounded-md border border-[#caa24c]/25 bg-[#caa24c]/8 px-3 py-2 text-sm leading-6 text-[#d7c29a]/85">
-            {limitNotes.map((item) => (
-              <p key={item}>{item}</p>
+          <div className="mt-3 space-y-2 rounded-md border border-[#caa24c]/25 bg-[#caa24c]/8 px-3.5 py-3 text-sm leading-6 text-[#d7c29a]/85">
+            {limitNotes.map((item, index) => (
+              <p key={item}>
+                {item}
+                {index === limitNotes.length - 1 ? (
+                  <span className="mt-2 block">
+                    <a
+                      href="#build-your-experience"
+                      onClick={(e) => {
+                        const target = document.getElementById('build-your-experience')
+                        if (target) {
+                          e.preventDefault()
+                          target.scrollIntoView({ behavior: 'smooth' })
+                          window.history.pushState(null, '', '#build-your-experience')
+                        }
+                      }}
+                      className="inline-flex items-center gap-1 font-semibold text-[#8d672b] underline underline-offset-4 transition-colors hover:text-[#b98a3d] dark:text-[#f1d27a] dark:hover:text-[#f7e09e]"
+                    >
+                      {t.buildPackageLink}
+                    </a>
+                  </span>
+                ) : null}
+              </p>
             ))}
           </div>
         ) : null}
         {limitExcluded.length > 0 ? (
           <>
             <p className="mt-4 font-mono text-[10px] uppercase tracking-[0.22em] text-[#caa24c]">{t.notIncluded}</p>
-            <ul className="mt-2 space-y-2.5 pb-2 text-sm leading-6 text-[#d7c29a]/72">
+            <ul className="mt-2 space-y-2.5 pb-2 text-sm leading-5 text-[#d7c29a]/72">
               {limitExcluded.map((item) => (
-                <li key={item} className="flex items-start gap-2.5">
+                <li key={item} className="flex items-center gap-2.5">
                   <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#fae8e6] text-[#b85450]">
                     <X className="h-3 w-3 stroke-[2.5]" aria-hidden />
                   </span>

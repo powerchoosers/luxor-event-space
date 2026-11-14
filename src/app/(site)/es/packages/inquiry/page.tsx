@@ -18,7 +18,7 @@ export default async function PackagesInquiryPageEs({ searchParams }: PageProps)
   const draft = await getPackagesInquiryDraft(decoded.draftId)
   if (!draft) redirect('/es/packages#build-your-experience')
   return (
-    <main className="bg-[#050505] px-5 py-24 text-[#f7efe3] sm:px-6 lg:px-8">
+    <main className="bg-[#050505] px-5 pb-28 pt-32 text-[#f7efe3] sm:px-6 sm:pb-24 sm:pt-36 lg:px-8 lg:pt-40">
       <div className="mx-auto max-w-6xl">
         <PackagesInquiryForm
           locale="es"
