@@ -2293,7 +2293,7 @@ body[data-luxor-site] .luxor-launcher-clearance-inset {
 
   body[data-luxor-site] .luxor-events-landing-collections.luxor-launcher-clearance-scroll,
   body[data-luxor-site] .luxor-events-landing-collections.luxor-launcher-clearance-last {
-    padding-bottom: 0;
+    padding-bottom: 3rem;
   }
 }
 
