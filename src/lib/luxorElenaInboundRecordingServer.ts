@@ -7,7 +7,7 @@ import { supabaseRestStrict } from './supabaseRestServer'
 
 const BASE = 'https://www.luxoratlaspalmas.com'
 const SID = /^CA[0-9a-f]{32}$/i
-const ELENA_TRANSCRIPTION_HINTS = 'quinceañera, quince, XV, sweet fifteen, boda, wedding, Luxor at Las Palmas, Las Palmas, San Antonio'
+const ELENA_TRANSCRIPTION_HINTS = 'Luxor, Las Palmas, Luxor at Las Palmas, quinceañera, quince, Signature Package, Luxor Package, Essentials Package, luxoratlaspalmas.com, XV, sweet fifteen, boda, wedding, San Antonio'
 type Call = { twilio_call_sid: string; direction: string; to_number: string; status: string; recording_consent_status: string; metadata: Record<string, unknown>; updated_at: string }
 
 async function readBoundCall(callSid: string, sessionId: string) {
