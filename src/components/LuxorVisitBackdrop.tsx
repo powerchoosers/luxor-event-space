@@ -2,7 +2,7 @@
 
 import { motion, useReducedMotion } from 'framer-motion'
 
-export function LuxorVisitBackdrop() {
+export function LuxorVisitBackdrop({ login = false }: { login?: boolean }) {
   const reduceMotion = useReducedMotion()
   return (
         <div className="pointer-events-none absolute inset-0 -z-10 flex items-center justify-center overflow-hidden" aria-hidden>
@@ -14,7 +14,7 @@ export function LuxorVisitBackdrop() {
           />
           <motion.svg
             viewBox="0 0 640 640"
-            className="absolute h-[36rem] w-[36rem] text-[#caa24c]/30 sm:h-[48rem] sm:w-[48rem]"
+            className={`absolute ${login ? 'h-[48rem] w-[48rem] text-[#caa24c]/50 sm:text-[#caa24c]/30' : 'h-[36rem] w-[36rem] text-[#caa24c]/30'} sm:h-[48rem] sm:w-[48rem]`}
             animate={reduceMotion ? undefined : { rotate: 360 }}
             transition={{ duration: 64, repeat: Infinity, ease: 'linear' }}
           >
