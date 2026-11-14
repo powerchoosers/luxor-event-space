@@ -1,4 +1,4 @@
-import type { Metadata } from 'next'
+import type { Metadata, Viewport } from 'next'
 import { Alex_Brush, Cormorant_Garamond, Manrope } from 'next/font/google'
 import type { ReactNode } from 'react'
 import '../../app/globals.css'
@@ -23,6 +23,13 @@ const signature = Alex_Brush({
   weight: '400',
   display: 'swap',
 })
+
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  viewportFit: 'cover',
+  themeColor: '#050505',
+}
 
 export const metadata: Metadata = {
   title: 'Review your agreement | Luxor Event Space',

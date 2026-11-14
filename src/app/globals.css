@@ -139,6 +139,41 @@ html {
   /* Lenis manages smooth scrolling when active */
   scrollbar-color: rgba(160, 160, 170, 0.56) rgba(5, 5, 5, 0.76);
   scrollbar-width: thin;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+/* ==========================================================================
+   iOS Safari Input Focus Auto-Zoom Prevention
+   ==========================================================================
+   iOS Safari automatically zooms the viewport in whenever focusing an <input>,
+   <textarea>, or <select> with a computed font-size under 16px (1rem).
+   Because iOS does not auto-zoom back out on blur, users are left with an
+   awkwardly enlarged, off-center viewport and have to manually pinch-zoom out.
+   
+   Setting 16px (1rem) on iOS WebKit (-webkit-touch-callout: none) and mobile
+   touch screens (pointer: coarse) completely stops Safari from auto-zooming
+   across all public site and portal forms, while keeping desktop styling intact
+   and preserving full accessibility/pinch-to-zoom.
+   ========================================================================== */
+@supports (-webkit-touch-callout: none) {
+  :is(
+    input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='button']):not([type='submit']):not([type='file']):not([type='color']),
+    textarea,
+    select
+  ) {
+    font-size: 16px !important;
+  }
+}
+
+@media (pointer: coarse) and (max-width: 1024px) {
+  :is(
+    input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='button']):not([type='submit']):not([type='file']):not([type='color']),
+    textarea,
+    select
+  ) {
+    font-size: 16px !important;
+  }
 }
 
 /* Lenis owns page-level easing while marked panels keep native scrolling. */
@@ -1562,12 +1597,41 @@ body:not([data-portal-theme]) :where(a, button, input, textarea, summary, [tabin
 
 .venue-film { position: relative; min-width: 0; overflow: hidden; border-radius: 6px; background: #141210; color: #f7efe3; }
 .venue-film video { display: block; width: 100%; aspect-ratio: 16 / 9; object-fit: contain; }
-.venue-film-controls { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 14px; }
-.venue-film-caption { font-size: 12px; letter-spacing: .06em; }
+.venue-film-controls {
+  position: absolute;
+  inset: auto 0 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.72) 0%, rgba(0, 0, 0, 0.35) 60%, transparent 100%);
+  pointer-events: none;
+}
+.venue-film-caption { font-size: 12px; letter-spacing: .06em; text-shadow: 0 1px 4px rgba(0, 0, 0, 0.6); }
 .venue-film-caption span { color: #c4b7a5; }
-.venue-film-buttons { display: flex; gap: 4px; }
-body[data-luxor-site] .venue-film-buttons button { display: inline-flex; min-width: 44px; min-height: 44px; align-items: center; justify-content: center; gap: 9px; border-radius: 1rem; padding: 0 10px; font-size: 12px; color: #f7efe3; }
-.venue-film-buttons button:hover { background: #302a23; }
+.venue-film-buttons { display: flex; gap: 4px; pointer-events: auto; }
+body[data-luxor-site] .venue-film-buttons button {
+  display: inline-flex;
+  min-width: 44px;
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  border-radius: 1rem;
+  padding: 0 10px;
+  font-size: 12px;
+  color: #fffaf3;
+  background: rgba(0, 0, 0, 0.38) !important;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  transition: all 150ms ease;
+}
+.venue-film-buttons button:hover {
+  background: rgba(0, 0, 0, 0.65) !important;
+  border-color: rgba(241, 210, 122, 0.6);
+}
 .venue-film-error { padding: 12px 18px; font-size: 14px; }
 .venue-film-error a { text-decoration: underline; }
 @media (max-width: 639px) { .venue-film-caption span { display: none; } .venue-film-controls { padding: 6px 8px 6px 14px; } }
@@ -1578,8 +1642,8 @@ body[data-luxor-site] .venue-film-buttons button { display: inline-flex; min-wid
 .venue-film-heading { position: absolute; inset: 0; display: flex; align-items: flex-end; padding: 28px 28px 96px; pointer-events: none; background: linear-gradient(to top, rgba(0,0,0,.8), rgba(0,0,0,.22) 48%, transparent 75%); }
 .venue-film-heading h1 { margin: 0; max-width: 13ch; font-family: var(--font-cormorant), Georgia, serif; font-size: clamp(2.6rem, 7vw, 5.5rem); font-weight: 400; line-height: .98; letter-spacing: -.025em; color: #fffaf3; text-wrap: balance; text-shadow: 0 2px 12px rgba(0,0,0,.25); }
 .venue-film--hero .venue-film-controls { position: absolute; inset: auto 0 0; padding: 12px 20px max(12px, env(safe-area-inset-bottom)); color: #fffaf3; }
-.venue-film--hero .venue-film-buttons button { background: rgba(0,0,0,.2); }
-.venue-film--hero .venue-film-buttons button:hover { background: rgba(0,0,0,.55); }
+.venue-film--hero .venue-film-buttons button { background: rgba(0, 0, 0, 0.38) !important; border: 1px solid rgba(255, 255, 255, 0.22); }
+.venue-film--hero .venue-film-buttons button:hover { background: rgba(0, 0, 0, 0.65) !important; border-color: rgba(241, 210, 122, 0.6); }
 .venue-film--hero .venue-film-error { position: absolute; inset: 0 0 auto; background: #141210; }
 .venue-film[data-fullscreen] .venue-film-heading,
 .venue-film[data-fullscreen] .venue-film-controls { visibility: hidden; }

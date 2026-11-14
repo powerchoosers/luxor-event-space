@@ -123,8 +123,10 @@ export function PackageFlipCard({ data, locale = 'en' }: PackageFlipCardProps) {
         ) : null}
         <ul className={`grid gap-3 ${data.showStartingPrice ? 'mt-6' : 'mt-5'}`}>
           {data.previewInclusions.map((item) => (
-            <li key={item} className="flex items-start gap-3 text-sm text-[#d7c29a]/78">
-              <Check className="mt-0.5 h-4 w-4 shrink-0 text-[#caa24c]" aria-hidden />
+            <li key={item} className="flex items-start gap-2.5 text-sm text-[#d7c29a]/78">
+              <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#f5ead8] text-[#8d672b]">
+                <Check className="h-3 w-3 stroke-[2.5]" aria-hidden />
+              </span>
               <span>{item}</span>
             </li>
           ))}
@@ -167,10 +169,12 @@ export function PackageFlipCard({ data, locale = 'en' }: PackageFlipCardProps) {
         >
           {t.included}
         </h3>
-        <ul className="mt-4 space-y-2 text-sm text-[#d7c29a]/85">
+        <ul className="mt-4 space-y-2.5 text-sm text-[#d7c29a]/85">
           {data.fullInclusions.map((item) => (
-            <li key={item} className="flex items-start gap-2">
-              <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#caa24c]" aria-hidden />
+            <li key={item} className="flex items-start gap-2.5">
+              <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#f5ead8] text-[#8d672b]">
+                <Check className="h-3 w-3 stroke-[2.5]" aria-hidden />
+              </span>
               <span>{item}</span>
             </li>
           ))}
@@ -186,10 +190,12 @@ export function PackageFlipCard({ data, locale = 'en' }: PackageFlipCardProps) {
         {limitExcluded.length > 0 ? (
           <>
             <p className="mt-4 font-mono text-[10px] uppercase tracking-[0.22em] text-[#caa24c]">{t.notIncluded}</p>
-            <ul className="mt-2 space-y-2 pb-2 text-sm leading-6 text-[#d7c29a]/72">
+            <ul className="mt-2 space-y-2.5 pb-2 text-sm leading-6 text-[#d7c29a]/72">
               {limitExcluded.map((item) => (
-                <li key={item} className="flex items-start gap-2">
-                  <X className="mt-1 h-3.5 w-3.5 shrink-0 text-[#e8928f]" aria-hidden />
+                <li key={item} className="flex items-start gap-2.5">
+                  <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#fae8e6] text-[#b85450]">
+                    <X className="h-3 w-3 stroke-[2.5]" aria-hidden />
+                  </span>
                   <span>{item}</span>
                 </li>
               ))}

@@ -1,4 +1,4 @@
-import type { Metadata } from 'next'
+import type { Metadata, Viewport } from 'next'
 import { Cormorant_Garamond, Manrope } from 'next/font/google'
 import type { ReactNode } from 'react'
 import '../globals.css'
@@ -15,6 +15,13 @@ const cormorant = Cormorant_Garamond({
   weight: ['400', '500', '600', '700'],
   display: 'swap',
 })
+
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  viewportFit: 'cover',
+  themeColor: '#050505',
+}
 
 export const metadata: Metadata = {
   title: 'Your Event Proposal | Luxor Event Space',
