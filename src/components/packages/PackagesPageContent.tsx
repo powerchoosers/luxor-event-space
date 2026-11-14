@@ -117,7 +117,7 @@ export function PackagesPageContent({ locale = 'en', cards }: PackagesPageConten
             <h2 className="font-serif text-4xl leading-[0.95] sm:text-5xl lg:text-6xl">{t.exploreTitle}</h2>
             <p className="mt-5 text-base leading-7 text-[#d7c29a]/72">{t.exploreCopy}</p>
           </Reveal>
-          <StaggerCards className="mt-12 grid gap-6 lg:grid-cols-3" stagger={0.08}>
+          <StaggerCards className="mt-12 grid items-stretch gap-6 lg:grid-cols-3" stagger={0.08}>
             {cards.map((card) => (
               <StaggerCard key={card.id} className="h-full">
                 <PackageFlipCard data={card} locale={locale} />

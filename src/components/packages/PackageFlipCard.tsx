@@ -109,7 +109,7 @@ export function PackageFlipCard({ data, locale = 'en' }: PackageFlipCardProps) {
   }, [allow3dFlip, flipped, showSwapLayout])
 
   const renderFront = (options?: { hidden?: boolean; sizeFromContent?: boolean }) => (
-    <div className={`flex flex-col ${options?.sizeFromContent ? 'w-full' : 'h-full'}`} hidden={options?.hidden}>
+    <div className={`flex flex-col ${options?.sizeFromContent ? 'w-full' : 'h-full min-h-0'}`} hidden={options?.hidden}>
       <div className={imageShellClass}>
         <Image
           src={data.image}
@@ -125,7 +125,7 @@ export function PackageFlipCard({ data, locale = 'en' }: PackageFlipCardProps) {
           </p>
         ) : null}
       </div>
-      <div className="flex min-h-0 flex-1 flex-col p-6 sm:p-7">
+      <div className={`flex flex-col p-6 sm:p-7 ${options?.sizeFromContent ? '' : 'min-h-0 flex-1'}`}>
         <h3 className="font-serif text-4xl leading-none text-[#f7efe3]">{data.displayName}</h3>
         <p className="mt-4 text-sm leading-6 text-[#d7c29a]/72 sm:text-base">{data.shortDescription}</p>
         {data.showStartingPrice && data.startingPrice !== null ? (
@@ -134,7 +134,7 @@ export function PackageFlipCard({ data, locale = 'en' }: PackageFlipCardProps) {
             <p className="mt-1 font-serif text-4xl leading-none text-[#f1d27a]">{formatPrice(data.startingPrice)}</p>
           </div>
         ) : null}
-        <ul className={`grid shrink-0 gap-3 ${data.showStartingPrice ? 'mt-6' : 'mt-5'}`}>
+        <ul className={`grid gap-3 ${data.showStartingPrice ? 'mt-6' : 'mt-5'}`}>
           {data.previewInclusions.map((item) => (
             <li key={item} className="flex items-start gap-3 text-sm text-[#d7c29a]/78">
               <Check className="mt-0.5 h-4 w-4 shrink-0 text-[#caa24c]" aria-hidden />
@@ -142,17 +142,18 @@ export function PackageFlipCard({ data, locale = 'en' }: PackageFlipCardProps) {
             </li>
           ))}
         </ul>
-        <div className="mt-auto min-h-6 w-full shrink-0" aria-hidden />
+        <div className="mt-auto w-full pt-6">
         <button
           ref={frontControlRef}
           type="button"
           onClick={flipToBack}
           aria-expanded={flipped}
           aria-controls={`${faceId}-back`}
-          className="luxor-gold-raised shrink-0 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-md px-4 py-3 text-[11px] uppercase tracking-[0.14em]"
+          className="luxor-gold-raised inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-md px-4 py-3 text-[11px] uppercase tracking-[0.14em]"
         >
           {t.viewPackage(data.displayName)} <ArrowRight className="h-4 w-4" aria-hidden />
         </button>
+        </div>
       </div>
     </div>
   )
@@ -227,7 +228,7 @@ export function PackageFlipCard({ data, locale = 'en' }: PackageFlipCardProps) {
     const showBack = activeFace === 'back'
     return (
       <article
-        className={`${shellClass} ${shellClipClass} relative flex h-full min-h-[560px] flex-col`}
+        className={`${shellClass} ${shellClipClass} relative flex h-full flex-col`}
         aria-labelledby={`${faceId}-title`}
       >
         <span id={`${faceId}-title`} className="sr-only">
