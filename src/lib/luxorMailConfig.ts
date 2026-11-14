@@ -2,6 +2,10 @@ export type LuxorMailProvider = 'zoho' | 'resend'
 
 const LUXOR_MAIL_DISPLAY_NAME = 'Luxor at Las Palmas Events'
 const LEGACY_LUXOR_MAIL_DISPLAY_NAME = 'Luxor Event Space'
+export const LUXOR_ELENA_MAIL_ADDRESS = 'elena@luxoratlaspalmas.com'
+export const LUXOR_ELENA_MAIL_DISPLAY_NAME = 'Elena | Luxor Events'
+const LUXOR_ELENA_MAIL_DEFAULT =
+  process.env.LUXOR_ELENA_MAIL_ADDRESS?.trim().toLowerCase() || LUXOR_ELENA_MAIL_ADDRESS
 
 export function luxorMailProvider(): LuxorMailProvider {
   const provider = (process.env.LUXOR_MAIL_PROVIDER || 'resend').trim().toLowerCase()
@@ -19,8 +23,28 @@ export function luxorMailSenders() {
   const configured = process.env.LUXOR_MAIL_ALLOWED_SENDERS ?? process.env.LUXOR_ZOHO_ALLOWED_SENDERS
   return Array.from(new Set([
     process.env.LUXOR_MAIL_FROM || process.env.LUXOR_ZOHO_LOGIN_EMAIL || 'booking@luxoratlaspalmas.com',
-    ...(configured === undefined ? ['booking@luxoratlaspalmas.com', 'hello@luxoratlaspalmas.com'] : configured.split(',')),
+    ...(configured === undefined
+      ? ['booking@luxoratlaspalmas.com', 'hello@luxoratlaspalmas.com', LUXOR_ELENA_MAIL_DEFAULT]
+      : configured.split(',')),
+    LUXOR_ELENA_MAIL_DEFAULT,
   ].map(luxorMailAddress).filter(Boolean)))
+}
+
+/** Approved Elena sender for automated concierge email. */
+export function luxorElenaMailFrom() {
+  const from = luxorMailAddress(process.env.LUXOR_ELENA_MAIL_ADDRESS || LUXOR_ELENA_MAIL_ADDRESS)
+  if (!from || !luxorMailSenders().includes(from)) throw new Error('The Elena sender is not approved for the Luxor mailbox.')
+  return from
+}
+
+export function luxorElenaMailDisplayName() {
+  const requested = process.env.LUXOR_ELENA_MAIL_DISPLAY_NAME?.trim() || LUXOR_ELENA_MAIL_DISPLAY_NAME
+  return luxorMailDisplayName(requested)
+}
+
+/** Replies to Elena should reach the monitored booking inbox. */
+export function luxorElenaMailReplyTo() {
+  return luxorMailFrom('booking@luxoratlaspalmas.com')
 }
 
 export function luxorMailFrom(value?: string) {

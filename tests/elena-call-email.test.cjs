@@ -15,7 +15,8 @@ function service(stubs) {
   const code=ts.transpileModule(fs.readFileSync(filename,'utf8'),{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.CommonJS,esModuleInterop:true}}).outputText
   const loaded=new Module(filename,module); loaded.filename=filename; loaded.paths=Module._nodeModulePaths(path.dirname(filename))
   const original=loaded.require.bind(loaded)
-  loaded.require=(name)=>Object.hasOwn(stubs,name)?stubs[name]:original(name)
+  const defaults={'./luxorElenaEmailServer':{prepareElenaOutboundEmail:async(input)=>({from:'elena@luxoratlaspalmas.com',fromName:'Elena | Luxor Events',replyTo:'booking@luxoratlaspalmas.com',html:`<html><p>${input.body}</p></html>`,text:input.body})}}
+  loaded.require=(name)=>Object.hasOwn(stubs,name)?stubs[name]:Object.hasOwn(defaults,name)?defaults[name]:original(name)
   loaded._compile(code,filename)
   return loaded.exports
 }
@@ -25,10 +26,15 @@ test('delivery requires the exact approved snapshot and preserves the queue idem
   const job={id,inquiry_id:inquiry,job_type:'elena_call_email',recipient_email:'caller@example.invalid',subject:'Venue details',body:'Thanks for asking <today>.',metadata:{elena_call_sid:sid,elena_email_nonce:nonce,caller_approved:true}}
   const row={inquiry_id:inquiry,metadata:{scope:'elena_live_inbound',email_receipts:{[nonce]:{job_id:id,recipient:job.recipient_email,subject:job.subject,body:job.body}}}}
   const sent=[]
-  const api=service({'server-only':{},'./supabaseRestServer':{supabaseRestStrict:async()=>[row]},'./luxorResendMailServer':{sendLuxorResendEmail:async(input)=>sent.push(input)}})
+  const elenaOutbound={from:'elena@luxoratlaspalmas.com',fromName:'Elena | Luxor Events',replyTo:'booking@luxoratlaspalmas.com',html:'<html class="luxor-call"><p>Thanks for asking &lt;today&gt;.</p><td class="luxor-signature-wrap">Elena</td></html>',text:'Thanks for asking <today>.'}
+  const api=service({'server-only':{},'./supabaseRestServer':{supabaseRestStrict:async()=>[row]},'./luxorElenaEmailServer':{prepareElenaOutboundEmail:async()=>elenaOutbound},'./luxorResendMailServer':{sendLuxorResendEmail:async(input)=>sent.push(input)}})
   await api.deliverElenaCallEmail(job)
   assert.equal(sent.length,1)
   assert.equal(sent[0].idempotencyKey,`email-job/${id}`)
+  assert.equal(sent[0].from,elenaOutbound.from)
+  assert.equal(sent[0].fromName,elenaOutbound.fromName)
+  assert.equal(sent[0].replyTo,elenaOutbound.replyTo)
+  assert.match(sent[0].content,/luxor-signature-wrap/)
   assert.match(sent[0].content,/&lt;today&gt;/)
   await assert.rejects(api.deliverElenaCallEmail({...job,recipient_email:'other@example.invalid'}),/does not match/)
   assert.equal(sent.length,1)

@@ -18,6 +18,8 @@ export interface ConversationalEmailParams {
   senderEmail?: string
   senderPhone?: string | null
   senderImageUrl?: string | null
+  organizationName?: string
+  signatureWebsite?: string | null
 }
 
 function sanitizeRichEmailHtml(html: string) {
@@ -98,6 +100,8 @@ export function buildConversationalEmailHtml(params: ConversationalEmailParams):
     senderEmail = 'booking@luxoratlaspalmas.com',
     senderPhone = null,
     senderImageUrl,
+    organizationName = 'Luxor Event Space',
+    signatureWebsite,
   } = params
 
   const initials = senderName
@@ -187,10 +191,11 @@ export function buildConversationalEmailHtml(params: ConversationalEmailParams):
                         <td style="padding:0 12px 0 0;vertical-align:top;">${avatarHtml}</td>
                         <td style="vertical-align:middle;">
                           <p style="margin:0;font-family:Arial,'Helvetica Neue',sans-serif;font-size:14px;font-weight:700;color:#332c24;line-height:1.35;">${escapeHtml(senderName)}</p>
-                          <p style="margin:2px 0 0;font-family:Arial,'Helvetica Neue',sans-serif;font-size:12px;color:#756b60;line-height:1.45;">${escapeHtml(senderRole)} · Luxor Event Space</p>
+                          <p style="margin:2px 0 0;font-family:Arial,'Helvetica Neue',sans-serif;font-size:12px;color:#756b60;line-height:1.45;">${escapeHtml(senderRole)} · ${escapeHtml(organizationName)}</p>
                           <p style="margin:5px 0 0;font-family:Arial,'Helvetica Neue',sans-serif;font-size:12px;color:#756b60;line-height:1.5;">
                             ${senderPhoneDisplay ? `<a href="tel:${escapeHtml(senderPhoneHref)}" style="color:#756b60;text-decoration:none;">${escapeHtml(senderPhoneDisplay)}</a><span style="color:#c3b9ac;"> &nbsp;|&nbsp; </span>` : ''}<a href="mailto:${escapeHtml(senderEmail)}" style="color:#756b60;text-decoration:none;">${escapeHtml(senderEmail)}</a>
                           </p>
+                          ${signatureWebsite ? `<p style="margin:4px 0 0;font-family:Arial,'Helvetica Neue',sans-serif;font-size:12px;line-height:1.5;"><a href="${escapeHtml(signatureWebsite.startsWith('http') ? signatureWebsite : `https://${signatureWebsite}`)}" style="color:#756b60;text-decoration:none;">${escapeHtml(signatureWebsite.replace(/^https?:\/\/(www\.)?/i, ''))}</a></p>` : ''}
                         </td>
                       </tr>
                     </table>
