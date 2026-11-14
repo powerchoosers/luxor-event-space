@@ -27,11 +27,6 @@ export function luxorTranscriptSpeaker(track: string, options: { elenaSipBridge?
   }
 }
 
-export function luxorCallTranscriptManuallyCorrected(metadata: Record<string, unknown> | null | undefined) {
-  const value = metadata?.transcript_manually_corrected
-  return value === true || value === 'true'
-}
-
 export function luxorTranscriptStorageTrack(track: string, metadata: Record<string, unknown> | null | undefined) {
   if (!luxorElenaLiveInboundTranscriptUsesSipBridge(metadata)) return track
   const lower = track.toLowerCase()
