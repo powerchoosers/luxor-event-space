@@ -1170,6 +1170,23 @@ body[data-luxor-site] *::-webkit-scrollbar-thumb:hover {
     color: #8d672b;
   }
 
+  .site-header-link::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: -8px;
+    height: 0.5px;
+    background: #caa24c;
+    transform: scaleX(0);
+    transform-origin: left;
+    transition: transform 240ms ease;
+  }
+
+  .site-header-link:is(:hover, :focus-visible)::after {
+    transform: scaleX(1);
+  }
+
   .site-header--light .site-header-phone {
     color: #5b4632;
     border-color: rgba(141, 103, 43, 0.3);
@@ -2411,7 +2428,7 @@ body[data-luxor-site] footer.site-footer--light a.footer-contact-link > span::af
   left: 0;
   right: 0;
   bottom: -4px;
-  height: 1px;
+  height: 0.5px;
   background: #caa24c;
   transform: scaleX(0);
   transform-origin: left;
@@ -2438,6 +2455,7 @@ body[data-luxor-site] main :is(.packages-visit-secondary, .package-tier-option):
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .site-header-link::after,
   body[data-luxor-site] footer.site-footer--light .footer-text-link::after,
   body[data-luxor-site] footer.site-footer--light a.footer-contact-link > span::after {
     transition: none;

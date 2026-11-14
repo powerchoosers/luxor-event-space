@@ -96,12 +96,6 @@ export const Header = () => {
               className="site-header-link group relative font-serif text-[13px] font-semibold uppercase tracking-[0.22em] text-[#e5d2ac]/82 transition-colors hover:text-[#f1d27a]"
             >
               {spanish ? item.labelEs : item.label}
-              <motion.span 
-                className="absolute -bottom-2 left-0 h-px bg-[#caa24c]" 
-                initial={{ width: 0 }}
-                whileHover={{ width: '100%' }}
-                transition={{ duration: 0.3 }}
-              />
             </Link>
           ))}
         </nav>
