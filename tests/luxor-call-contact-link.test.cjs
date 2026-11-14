@@ -58,6 +58,24 @@ test('linked display name prefers saved inquiry or vendor over generic placehold
   }), 'Jordan')
 })
 
+test('linked display name ignores contact names that are only phone numbers', () => {
+  assert.equal(link.luxorCallLinkedContactName({
+    linkedInquiryName: null,
+    linkedVendorName: null,
+    contactName: '+12103760811',
+  }), null)
+  assert.equal(link.luxorCallLinkedContactName({
+    linkedInquiryName: null,
+    linkedVendorName: null,
+    contactName: '(210) 376-0811',
+  }), null)
+  assert.equal(link.luxorCallLinkedContactName({
+    linkedInquiryName: '2103760811',
+    linkedVendorName: null,
+    contactName: null,
+  }), null)
+})
+
 test('normalization matches US numbers to E.164', () => {
   assert.equal(link.normalizeLuxorPhoneNumber('2103760811'), '+12103760811')
   assert.equal(link.normalizeLuxorPhoneNumber('+1 210-376-0811'), '+12103760811')
