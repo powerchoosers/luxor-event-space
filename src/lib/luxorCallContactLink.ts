@@ -50,9 +50,13 @@ export function luxorCallLinkedContactName(input: {
   contactName?: string | null
 }) {
   const linked = input.linkedInquiryName?.trim() || input.linkedVendorName?.trim() || null
-  if (linked && !isGenericLuxorCallContactName(linked, null)) return linked
+  if (linked && !isGenericLuxorCallContactName(linked, null) && normalizeLuxorPhoneNumber(linked) === null) {
+    return linked
+  }
 
   const contact = input.contactName?.trim() || null
-  if (contact && !isGenericLuxorCallContactName(contact, null)) return contact
+  if (contact && !isGenericLuxorCallContactName(contact, null) && normalizeLuxorPhoneNumber(contact) === null) {
+    return contact
+  }
   return null
 }
