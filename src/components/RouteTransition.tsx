@@ -140,7 +140,7 @@ export function RouteTransition({
       scale: 1,
       filter: 'blur(0px)',
       transition: {
-        duration: 0.38,
+        duration: 0.65,
         ease: LUXOR_EASE,
       },
     },

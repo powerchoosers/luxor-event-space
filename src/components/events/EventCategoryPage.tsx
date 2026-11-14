@@ -3,9 +3,9 @@
 import type { CSSProperties } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
+import { Reveal } from '@/components/Reveal'
 import { ArrowRight } from '@/lib/icons/phosphor-compat'
 import { publicSitePath } from '@/lib/publicSitePaths'
-import { motion, useReducedMotion } from 'framer-motion'
 
 export type EventCategoryGalleryItem = {
   src: string
@@ -76,7 +76,6 @@ export function EventCategoryPage({
   closingImageAlt,
   otherCollections,
 }: EventCategoryPageProps) {
-  const reduceMotion = useReducedMotion()
   const packagesHref = publicSitePath('/packages', spanish)
   const eventsHref = publicSitePath('/events', spanish)
   const collectionPath = publicSitePath(`/events/${slug}`, spanish)
@@ -162,19 +161,13 @@ export function EventCategoryPage({
       </section>
 
       <section className="py-16 pb-24 sm:py-20 sm:pb-28 lg:py-24 lg:pb-24">
-        <motion.div
-          initial={reduceMotion ? false : { opacity: 0, y: 16 }}
-          whileInView={reduceMotion ? undefined : { opacity: 1, y: 0 }}
-          viewport={{ once: true, margin: '-40px' }}
-          transition={{ duration: 0.45, ease: [0.23, 1, 0.32, 1] }}
-          className="mx-auto max-w-2xl scroll-mt-28 px-5 text-center sm:px-6 lg:scroll-mt-0 lg:px-8"
-        >
+        <Reveal className="mx-auto max-w-2xl scroll-mt-28 px-5 text-center sm:px-6 lg:scroll-mt-0 lg:px-8">
           <p className="font-mono text-[10px] font-bold uppercase tracking-[0.34em] text-[#8d672b]">{introEyebrow}</p>
           <h2 className="mt-3 font-serif text-3xl leading-tight text-[#241d17] sm:text-4xl">
             {introAccent && introTitle.endsWith(introAccent) ? <>{introTitle.slice(0, -introAccent.length)}<span className="italic text-[#8d672b]">{introAccent}</span></> : introTitle}
           </h2>
           <p className="mt-5 text-base leading-7 text-[#665a4e] sm:text-lg">{introBody}</p>
-        </motion.div>
+        </Reveal>
       </section>
 
       <section className="luxor-launcher-clearance-scroll pb-16 sm:pb-20 lg:pb-24">
@@ -183,35 +176,30 @@ export function EventCategoryPage({
             {gallery.map((item, index) => {
               const isLastOdd = galleryOdd && index === gallery.length - 1
               return (
-                <motion.li
-                  key={`${item.src}-${item.label ?? index}`}
-                  initial={reduceMotion ? false : { opacity: 0, y: 20 }}
-                  whileInView={reduceMotion ? undefined : { opacity: 1, y: 0 }}
-                  viewport={{ once: true, margin: '-32px' }}
-                  transition={{ duration: 0.45, delay: index * 0.05, ease: [0.23, 1, 0.32, 1] }}
-                  className={isLastOdd ? 'col-span-2 lg:col-span-1' : undefined}
-                >
-                  <article className="relative aspect-[4/5] overflow-hidden rounded-2xl border border-[#caa24c]/25 sm:aspect-[3/4] lg:aspect-[4/5]">
-                    <Image
-                      src={item.src}
-                      alt={item.alt}
-                      fill
-                      sizes="(min-width: 1024px) 33vw, 50vw"
-                      className="object-cover transition duration-500 hover:scale-[1.02] motion-reduce:transition-none motion-reduce:hover:scale-100"
-                    />
-                    {item.label ? (
-                      <div className="pointer-events-none absolute inset-0" style={CARD_LABEL_SCRIM} aria-hidden />
-                    ) : null}
-                    {item.label ? (
-                      <p
-                        className="absolute bottom-0 left-0 right-0 px-4 pb-4 font-serif text-2xl leading-tight sm:px-5 sm:pb-5 sm:text-3xl"
-                        style={PHOTO_HEADING}
-                      >
-                        {item.label}
-                      </p>
-                    ) : null}
-                  </article>
-                </motion.li>
+                <li key={`${item.src}-${item.label ?? index}`} className={isLastOdd ? 'col-span-2 lg:col-span-1' : undefined}>
+                  <Reveal delay={index * 50} className="h-full">
+                    <article className="relative aspect-[4/5] overflow-hidden rounded-2xl border border-[#caa24c]/25 sm:aspect-[3/4] lg:aspect-[4/5]">
+                      <Image
+                        src={item.src}
+                        alt={item.alt}
+                        fill
+                        sizes="(min-width: 1024px) 33vw, 50vw"
+                        className="object-cover transition duration-500 hover:scale-[1.02] motion-reduce:transition-none motion-reduce:hover:scale-100"
+                      />
+                      {item.label ? (
+                        <div className="pointer-events-none absolute inset-0" style={CARD_LABEL_SCRIM} aria-hidden />
+                      ) : null}
+                      {item.label ? (
+                        <p
+                          className="absolute bottom-0 left-0 right-0 px-4 pb-4 font-serif text-2xl leading-tight sm:px-5 sm:pb-5 sm:text-3xl"
+                          style={PHOTO_HEADING}
+                        >
+                          {item.label}
+                        </p>
+                      ) : null}
+                    </article>
+                  </Reveal>
+                </li>
               )
             })}
           </ul>
@@ -243,13 +231,7 @@ export function EventCategoryPage({
         <Image src={closingImage} alt={closingImageAlt} fill sizes="100vw" className="object-cover object-center" />
         <div className="pointer-events-none absolute inset-0" style={CLOSING_SCRIM} aria-hidden />
 
-        <motion.div
-          initial={reduceMotion ? false : { opacity: 0, y: 16 }}
-          whileInView={reduceMotion ? undefined : { opacity: 1, y: 0 }}
-          viewport={{ once: true, margin: '-48px' }}
-          transition={{ duration: 0.5, ease: [0.23, 1, 0.32, 1] }}
-          className="relative z-10 mx-auto flex min-h-[22rem] w-full max-w-7xl flex-col items-start justify-center px-5 py-16 text-left sm:min-h-[26rem] sm:px-6 sm:py-20 lg:px-8"
-        >
+        <Reveal className="relative z-10 mx-auto flex min-h-[22rem] w-full max-w-7xl flex-col items-start justify-center px-5 py-16 text-left sm:min-h-[26rem] sm:px-6 sm:py-20 lg:px-8">
           <h2 className="max-w-xl font-serif text-3xl leading-tight sm:text-4xl lg:text-5xl" style={PHOTO_HEADING}>
             {closingTitle}
           </h2>
@@ -264,7 +246,7 @@ export function EventCategoryPage({
               {spanish ? 'Explorar paquetes' : 'Explore Packages'} <ArrowRight className="h-4 w-4" />
             </Link>
           </div>
-        </motion.div>
+        </Reveal>
       </section>
     </main>
   )

@@ -3,7 +3,7 @@
 import React, { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { CalendarDays, ChevronDown, Menu, X } from '@/lib/icons/phosphor-compat'
+import { ArrowRight, CalendarDays, ChevronDown, Menu, X } from '@/lib/icons/phosphor-compat'
 import { LuxorAxisLockup, LuxorWordmark } from '@/components/LuxorWordmark'
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'
 import { PublicPhoneLink } from '@/components/PublicPhoneLink'
@@ -250,22 +250,24 @@ export const Header = () => {
                       animate={reduceMotion ? undefined : { opacity: 1, y: 0 }}
                       exit={reduceMotion ? undefined : { opacity: 0, y: 6 }}
                       transition={{ duration: 0.22, ease: [0.23, 1, 0.32, 1] }}
-                      className="absolute left-0 top-[calc(100%+0.55rem)] z-[120] min-w-[15.5rem] max-w-[19rem]"
+                      className="absolute left-0 top-full z-[120] w-[19rem] pt-3"
                     >
-                      <div className="overflow-hidden rounded-lg border border-[#caa24c]/28 bg-[#fffdf9] py-1.5 shadow-[0_18px_44px_-28px_rgba(30,22,12,0.38)]">
+                      <div className="rounded-2xl border border-[#e8d8bf] bg-[#fffdf9] p-2 shadow-[0_18px_45px_-20px_rgba(45,32,18,0.35)]">
                         <Link
                           role="menuitem"
                           href={eventsHref}
-                          className="block px-4 py-2.5 text-sm text-[#241d17] transition-colors hover:bg-[#f7f0e3]"
+                          className="group flex min-h-11 items-center justify-between rounded-xl px-3 text-sm font-semibold text-[#241d17] transition-colors hover:bg-[#f7f0e3] focus-visible:bg-[#f7f0e3] focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[#caa24c]"
                         >
-                          {spanish ? 'Todos los eventos →' : 'All events →'}
+                          {spanish ? 'Todos los eventos' : 'All events'}
+                          <ArrowRight aria-hidden="true" className="h-4 w-4 text-[#a47a32] transition-transform group-hover:translate-x-1 motion-reduce:transition-none" />
                         </Link>
+                        <div aria-hidden="true" className="mx-3 my-1 border-t border-[#eadfce]" />
                         {LUXOR_EVENT_COLLECTIONS.map((collection) => (
                           <Link
                             key={collection.href}
                             role="menuitem"
                             href={eventCollectionHref(collection, spanish)}
-                            className="block px-4 py-2.5 text-sm text-[#4f4338] transition-colors hover:bg-[#f7f0e3] hover:text-[#241d17]"
+                            className="flex min-h-11 items-center rounded-xl px-3 py-2 text-sm leading-snug text-[#4f4338] transition-colors hover:bg-[#f7f0e3] hover:text-[#241d17] focus-visible:bg-[#f7f0e3] focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[#caa24c]"
                           >
                             {spanish ? collection.titleEs : collection.title}
                           </Link>
@@ -290,9 +292,9 @@ export const Header = () => {
         <div className="flex items-center gap-4">
 
           <PublicPhoneLink
-            iconOnly
+            compact
             label={spanish ? 'Llamar a Luxor' : 'Call Luxor'}
-            className="site-header-phone hidden min-h-11 min-w-11 shrink-0 items-center justify-center rounded-full border border-[#caa24c]/30 text-[#d7c29a]/85 transition-colors hover:border-[#caa24c]/55 hover:text-[#f1d27a] lg:inline-flex"
+            className="site-header-phone hidden min-h-11 shrink-0 items-center justify-center gap-2 rounded-md border border-[#caa24c]/30 bg-white/50 px-4 text-[10px] font-bold uppercase tracking-[0.14em] text-[#5b4632] transition-colors hover:border-[#8d672b]/60 hover:bg-[#faf6ef] hover:text-[#8d672b] lg:inline-flex"
           />
 
           <Link

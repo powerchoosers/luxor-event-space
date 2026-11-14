@@ -72,9 +72,9 @@ export function TourPageContent({
         <div className="mx-auto max-w-7xl">
           <TourGallery locale={locale} />
 
-          <div className="mt-8 grid gap-8 lg:mt-10 lg:grid-cols-[0.85fr_1.15fr] lg:gap-12 lg:items-start">
-            {/* Left Column on Desktop / First on Mobile */}
-            <div className="max-w-xl space-y-5">
+          <div className="mt-8 grid gap-8 lg:mt-10 lg:grid-cols-[0.85fr_1.15fr] lg:gap-x-12 lg:gap-y-5 lg:items-start">
+            {/* Visit introduction */}
+            <div className="max-w-xl space-y-5 lg:col-start-1 lg:row-start-1">
               {/* Eyebrow & Corner Language Switcher (Mockup style) */}
               <div className="flex items-center justify-between gap-4">
                 <p className="font-mono text-[10px] font-bold uppercase tracking-[0.3em] text-[#8d672b]">
@@ -90,7 +90,7 @@ export function TourPageContent({
                 </Link>
               </div>
 
-              <h1 className="font-serif text-5xl leading-[0.92] text-[#241d17] sm:text-6xl lg:text-7xl">
+              <h1 className="text-center font-serif text-5xl leading-[0.92] text-[#241d17] sm:text-6xl lg:text-7xl">
                 {locale === 'es' ? (
                   <>
                     Conoce el espacio. <span className="italic text-[#8d672b]">Imagina</span> tu día.
@@ -101,32 +101,32 @@ export function TourPageContent({
                   </>
                 )}
               </h1>
-              <p className="max-w-lg text-base leading-7 text-[#665a4e] sm:text-lg">{text.intro}</p>
+              <p className="mx-auto max-w-lg text-center text-base leading-7 text-[#665a4e] sm:text-lg">{text.intro}</p>
 
-              <div className="inline-flex items-center gap-2 rounded-full border border-[#b98a3d]/25 bg-[#faf6ef] px-3.5 py-1 text-xs font-medium text-[#8d672b]">
+              <div className="mx-auto flex w-fit items-center gap-2 rounded-full border border-[#b98a3d]/25 bg-[#faf6ef] px-3.5 py-1 text-xs font-medium text-[#8d672b]">
                 <Calendar size={13} />
                 <span>{text.pill}</span>
               </div>
 
-              {/* Desktop Map (moved up directly beneath the intro text) */}
-              <div className="hidden pt-3 lg:block">
-                {mapCard}
-              </div>
             </div>
 
-            {/* Right Column on Desktop (Form + Under-form section) / Second on Mobile */}
-            <div className="space-y-6">
+            {/* Booking form */}
+            <div className="space-y-6 lg:col-start-2 lg:row-span-3 lg:row-start-1">
               <TourRequestForm
                 locale={locale}
                 packagesInquiryId={packagesInquiryId}
                 packagesInquirySource={packagesInquirySource}
               />
-              <TourPageActions locale={locale} />
+            </div>
 
-              {/* Mobile Map (under the form & contact actions) */}
-              <div className="pt-2 lg:hidden">
-                {mapCard}
-              </div>
+            {/* Contact cards remain beneath booking on mobile and move below the map on desktop. */}
+            <div className="lg:col-start-1 lg:row-start-3">
+              <TourPageActions locale={locale} />
+            </div>
+
+            {/* Map follows the contact cards on mobile and sits between intro and contacts on desktop. */}
+            <div className="lg:col-start-1 lg:row-start-2">
+              {mapCard}
             </div>
           </div>
         </div>
