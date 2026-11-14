@@ -31,7 +31,6 @@ const publicMarketingPaths = new Set([
   '/events',
   '/gallery',
   '/grand-opening-rsvp',
-  '/spaces',
   '/tour',
   '/visit',
 ])

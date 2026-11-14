@@ -1137,7 +1137,7 @@ export function PortalSettingsManager({
               </div>
 
               <div className="divide-y divide-[color:var(--portal-border)] overflow-hidden rounded-xl border border-[color:var(--portal-border)]">
-                {['home', 'events', 'gallery', 'spaces', 'visit'].map((pageName) => (
+                {['home', 'events', 'gallery', 'visit'].map((pageName) => (
                   <div
                     key={pageName}
                     className="flex flex-col gap-3 bg-[color:var(--portal-soft)]/35 p-4 sm:flex-row sm:items-center sm:justify-between"

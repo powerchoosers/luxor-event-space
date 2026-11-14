@@ -25,7 +25,6 @@ export const PUBLIC_DEVELOPER_SUPPORT_PAGES: DeveloperSupportPageOption[] = [
   { path: '/', label: 'Home', description: 'Main marketing page' },
   { path: '/events', label: 'Events', description: 'Event types overview' },
   { path: '/packages', label: 'Packages', description: 'Event package cards and pricing' },
-  { path: '/spaces', label: 'Spaces', description: 'Venue spaces' },
   { path: '/gallery', label: 'Gallery', description: 'Photo gallery' },
   { path: '/visit', label: 'Visit', description: 'Tour and visit page' },
   { path: '/tour', label: 'Tour', description: 'Tour booking flow' },

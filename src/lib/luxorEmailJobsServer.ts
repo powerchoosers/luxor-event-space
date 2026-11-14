@@ -154,7 +154,7 @@ export function buildTourRequestReceivedEmailHtml(inquiry: LuxorInquiry, token: 
       { label: 'Guests', value: escapeHtml(inquiry.guest_count ? String(inquiry.guest_count) : 'Open') },
     ],
     actions: [
-      { label: 'Explore our spaces', url: absoluteUrl('/spaces') },
+      { label: 'View the gallery', url: absoluteUrl('/gallery') },
       { label: 'Schedule a visit', url: absoluteUrl('/visit'), tone: 'secondary' },
     ],
     note: copy ? `${escapeHtml(copy.note).replace(/\r?\n/g, '<br />')} Reference: ${escapeHtml(token.slice(0, 8).toUpperCase())}.` : `Reference: ${escapeHtml(token.slice(0, 8).toUpperCase())}. Reply to this email if you need to adjust your request.`,
@@ -251,7 +251,7 @@ export function buildTourRequestReceivedEmailHtmlLegacy(inquiry: LuxorInquiry, t
   const firstName = inquiry.full_name.split(' ')[0] || inquiry.full_name
   const websiteUrl = absoluteUrl('/')
   const pricingUrl = absoluteUrl('/visit')
-  const spacesUrl = absoluteUrl('/spaces')
+  const galleryUrl = absoluteUrl('/gallery')
 
   const dateLine = inquiry.preferred_tour_date || 'Requested date pending'
   const timeLine = inquiry.preferred_tour_time || 'Requested time pending'
@@ -344,7 +344,7 @@ export function buildTourRequestReceivedEmailHtmlLegacy(inquiry: LuxorInquiry, t
           </tr>
           <tr>
             <td align="center" style="padding:10px 48px 34px;">
-              <a href="${spacesUrl}" target="_blank" style="display:inline-block;background-color:#caa24c;color:#050505;font-size:11px;font-weight:800;letter-spacing:0.2em;text-transform:uppercase;text-decoration:none;padding:14px 32px;border-radius:3px;border:1px solid rgba(241,210,122,0.5);margin:0 6px 12px;">Explore Our Spaces</a>
+              <a href="${galleryUrl}" target="_blank" style="display:inline-block;background-color:#caa24c;color:#050505;font-size:11px;font-weight:800;letter-spacing:0.2em;text-transform:uppercase;text-decoration:none;padding:14px 32px;border-radius:3px;border:1px solid rgba(241,210,122,0.5);margin:0 6px 12px;">View the Gallery</a>
               <a href="${pricingUrl}" target="_blank" style="display:inline-block;background-color:#0f0c09;color:#f7efe3;font-size:11px;font-weight:800;letter-spacing:0.2em;text-transform:uppercase;text-decoration:none;padding:14px 32px;border-radius:3px;border:1px solid rgba(202,162,76,0.28);margin:0 6px 12px;">View Pricing</a>
             </td>
           </tr>
