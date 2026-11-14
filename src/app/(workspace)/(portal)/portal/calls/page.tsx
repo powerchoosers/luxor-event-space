@@ -44,6 +44,7 @@ import {
 import { PortalAudioPlayer } from '@/components/portal/PortalAudioPlayer'
 import { usePortalVoice } from '@/components/portal/PortalVoiceProvider'
 import { useToast } from '@/components/portal/ToastProvider'
+import { luxorCallLinkedContactName } from '@/lib/luxorCallContactLink'
 import { luxorElenaLiveInboundTranscriptUsesSipBridge, luxorTranscriptSpeaker, type LuxorCall } from '@/lib/luxorCallTypes'
 import {
   formatPhoneDisplay,
@@ -201,6 +202,8 @@ export default function CallsPage() {
       if (!query) return true
       return [
         call.contact_name,
+        call.linked_inquiry_name,
+        call.linked_vendor_name,
         call.caller_number,
         call.callee_number,
         call.outcome,
@@ -225,11 +228,11 @@ export default function CallsPage() {
     if (!e164) return null
     const match = calls.find((c) => {
       const other = c.direction === 'inbound' ? c.caller_number : c.callee_number
-      return toUsE164(other) === e164 && c.contact_name
+      return toUsE164(other) === e164 && getLuxorCallDisplayName(c)
     })
     if (!match) return null
     return {
-      name: match.contact_name!,
+      name: getLuxorCallDisplayName(match)!,
       inquiryId: match.inquiry_id,
       phoneNumber: e164,
     }
@@ -722,7 +725,7 @@ export default function CallsPage() {
                   const unreadInbound = !call.is_read && call.direction === 'inbound'
                   const phoneNum =
                     call.direction === 'inbound' ? call.caller_number : call.callee_number
-                  const namedContact = getNamedContact(call.contact_name)
+                  const namedContact = getLuxorCallDisplayName(call)
                   const displayName = namedContact || formatPhoneDisplay(phoneNum)
                   const isVoicemailExpanded =
                     activeTab === 'voicemail' && expandedVoicemailId === call.id
@@ -871,7 +874,7 @@ export default function CallsPage() {
                             <button
                               type="button"
                               onClick={() =>
-                                handleCallNumber(phoneNum, call.contact_name, call.inquiry_id)
+                                handleCallNumber(phoneNum, getLuxorCallDisplayName(call), call.inquiry_id)
                               }
                               className="flex-1 flex items-center justify-center gap-1.5 rounded-xl bg-[#caa24c] py-2 text-xs font-semibold text-white cursor-pointer"
                             >
@@ -989,22 +992,34 @@ export default function CallsPage() {
               {/* 1. Calm Contact Poster Header */}
               <div className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 sm:p-6">
                 <div className="flex flex-row items-start gap-3 sm:items-center sm:gap-4">
-                  {getNamedContact(selectedCall.contact_name) ? (
+                  {getLuxorCallDisplayName(selectedCall) ? (
                     selectedCall.inquiry_id ? (
                       <Link
                         href={`/portal/leads/${selectedCall.inquiry_id}?from=/portal/calls`}
                         className="shrink-0 no-underline"
-                        aria-label={`Open ${getNamedContact(selectedCall.contact_name)} lead profile`}
+                        aria-label={`Open ${getLuxorCallDisplayName(selectedCall)} lead profile`}
                       >
                         <PortalContactAvatar
-                          name={getNamedContact(selectedCall.contact_name)!}
+                          name={getLuxorCallDisplayName(selectedCall)!}
+                          size="lg"
+                          className="shrink-0"
+                        />
+                      </Link>
+                    ) : selectedCall.vendor_id ? (
+                      <Link
+                        href="/portal/operations?tab=vendors"
+                        className="shrink-0 no-underline"
+                        aria-label={`Open ${getLuxorCallDisplayName(selectedCall)} vendor`}
+                      >
+                        <PortalContactAvatar
+                          name={getLuxorCallDisplayName(selectedCall)!}
                           size="lg"
                           className="shrink-0"
                         />
                       </Link>
                     ) : (
                       <PortalContactAvatar
-                        name={getNamedContact(selectedCall.contact_name)!}
+                        name={getLuxorCallDisplayName(selectedCall)!}
                         size="lg"
                         className="shrink-0"
                       />
@@ -1021,11 +1036,18 @@ export default function CallsPage() {
                           href={`/portal/leads/${selectedCall.inquiry_id}?from=/portal/calls`}
                           className="text-xl sm:text-2xl font-semibold tracking-tight text-[color:var(--portal-text)] truncate no-underline transition-colors hover:text-[#a8792f] dark:hover:text-[#f1d27a]"
                         >
-                          {getNamedContact(selectedCall.contact_name) || formatPhoneDisplay(targetPhoneNumber)}
+                          {getLuxorCallDisplayName(selectedCall) || formatPhoneDisplay(targetPhoneNumber)}
+                        </Link>
+                      ) : selectedCall.vendor_id ? (
+                        <Link
+                          href="/portal/operations?tab=vendors"
+                          className="text-xl sm:text-2xl font-semibold tracking-tight text-[color:var(--portal-text)] truncate no-underline transition-colors hover:text-[#a8792f] dark:hover:text-[#f1d27a]"
+                        >
+                          {getLuxorCallDisplayName(selectedCall) || formatPhoneDisplay(targetPhoneNumber)}
                         </Link>
                       ) : (
                         <h2 className="text-xl sm:text-2xl font-semibold tracking-tight text-[color:var(--portal-text)] truncate">
-                          {getNamedContact(selectedCall.contact_name) || formatPhoneDisplay(targetPhoneNumber)}
+                          {getLuxorCallDisplayName(selectedCall) || formatPhoneDisplay(targetPhoneNumber)}
                         </h2>
                       )}
                       <span
@@ -1047,7 +1069,7 @@ export default function CallsPage() {
                       </span>
                     </div>
 
-                    {getNamedContact(selectedCall.contact_name) && (
+                    {getLuxorCallDisplayName(selectedCall) && (
                       <p className="mt-0.5 text-sm tabular-nums text-[color:var(--portal-muted)]">
                         {formatPhoneDisplay(targetPhoneNumber)}
                       </p>
@@ -1068,7 +1090,7 @@ export default function CallsPage() {
                     onClick={() =>
                       handleCallNumber(
                         targetPhoneNumber,
-                        selectedCall.contact_name,
+                        getLuxorCallDisplayName(selectedCall),
                         selectedCall.inquiry_id,
                       )
                     }
@@ -1619,6 +1641,14 @@ function formatCallLeadTime(value: string | null) {
   const minute = Number(match[2])
   if (hour > 23 || minute > 59) return value
   return `${hour % 12 || 12}:${match[2]} ${hour < 12 ? 'AM' : 'PM'}`
+}
+
+function getLuxorCallDisplayName(call: LuxorCall) {
+  return luxorCallLinkedContactName({
+    linkedInquiryName: call.linked_inquiry_name,
+    linkedVendorName: call.linked_vendor_name,
+    contactName: call.contact_name,
+  })
 }
 
 function getNamedContact(name: string | null | undefined): string | null {

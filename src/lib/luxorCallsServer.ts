@@ -1,7 +1,13 @@
 import 'server-only'
 
-import { LuxorCall, LuxorCallDirection, LuxorCallStatus, TERMINAL_LUXOR_CALL_STATUSES, luxorTranscriptStorageTrack } from './luxorCallTypes'
-import { listLuxorInquiries } from './luxorInquiriesServer'
+import {
+  LuxorCall,
+  LuxorCallDirection,
+  LuxorCallStatus,
+  TERMINAL_LUXOR_CALL_STATUSES,
+  luxorTranscriptStorageTrack,
+} from './luxorCallTypes'
+import { getLuxorInquiry, listLuxorInquiries } from './luxorInquiriesServer'
 import { supabaseRest } from './supabaseRestServer'
 
 type CreateCallInput = {
@@ -12,6 +18,7 @@ type CreateCallInput = {
   callerNumber: string
   calleeNumber: string
   inquiryId?: string | null
+  vendorId?: string | null
   contactName?: string | null
   ownerEmail?: string | null
   status?: LuxorCallStatus
@@ -76,12 +83,40 @@ export function assertAllowedOutboundNumber(value: string | null | undefined) {
   return normalized
 }
 
-export async function findLuxorInquiryByPhone(value: string | null | undefined) {
-  const normalized = normalizePhoneNumber(value)
-  if (!normalized) return null
+type CallContactMatchRow = {
+  inquiry_id: string | null
+  vendor_id: string | null
+  contact_name: string | null
+  match_count: number
+}
 
-  const inquiries = await listLuxorInquiries(2000)
-  return inquiries.find((inquiry) => normalizePhoneNumber(inquiry.phone) === normalized) ?? null
+export async function resolveLuxorCallContactByPhone(value: string | null | undefined): Promise<CallContactMatchRow> {
+  const normalized = normalizePhoneNumber(value)
+  if (!normalized) {
+    return { inquiry_id: null, vendor_id: null, contact_name: null, match_count: 0 }
+  }
+
+  try {
+    const rows = await supabaseRest<CallContactMatchRow[]>('rpc/luxor_resolve_call_contact_by_phone', {
+      method: 'POST',
+      body: JSON.stringify({ p_phone: normalized }),
+    })
+    return rows[0] ?? { inquiry_id: null, vendor_id: null, contact_name: null, match_count: 0 }
+  } catch {
+    const inquiries = await listLuxorInquiries(2000)
+    const inquiryMatches = inquiries.filter((inquiry) => normalizePhoneNumber(inquiry.phone) === normalized)
+    if (inquiryMatches.length === 1) {
+      const match = inquiryMatches[0]!
+      return { inquiry_id: match.id, vendor_id: null, contact_name: match.full_name, match_count: 1 }
+    }
+    return { inquiry_id: null, vendor_id: null, contact_name: null, match_count: inquiryMatches.length }
+  }
+}
+
+export async function findLuxorInquiryByPhone(value: string | null | undefined) {
+  const match = await resolveLuxorCallContactByPhone(value)
+  if (match.match_count !== 1 || !match.inquiry_id) return null
+  return getLuxorInquiry(match.inquiry_id)
 }
 
 export async function createOrUpdateLuxorCall(input: CreateCallInput) {
@@ -95,6 +130,7 @@ export async function createOrUpdateLuxorCall(input: CreateCallInput) {
     caller_number: input.callerNumber,
     callee_number: input.calleeNumber,
     inquiry_id: input.inquiryId ?? null,
+    vendor_id: input.vendorId ?? null,
     contact_name: input.contactName ?? null,
     owner_email: input.ownerEmail ?? null,
     started_at: timestamp,
@@ -511,13 +547,18 @@ function transcriptRowsInAudioOrder(rows: TranscriptRow[], recordingStartedAt: s
   })
 }
 
+type LuxorCallListRow = LuxorCall & {
+  luxor_inquiries?: { full_name: string } | null
+  luxor_vendors?: { name: string } | null
+}
+
 export async function listLuxorCalls(options: {
   limit?: number
   inquiryId?: string | null
   unreadOnly?: boolean
 } = {}) {
   const params = new URLSearchParams({
-    select: '*',
+    select: '*,luxor_inquiries(full_name),luxor_vendors(name)',
     order: 'created_at.desc',
     limit: String(Math.min(Math.max(options.limit ?? 200, 1), 1000)),
   })
@@ -528,9 +569,17 @@ export async function listLuxorCalls(options: {
     params.set('is_read', 'eq.false')
   }
 
-  const calls = await supabaseRest<LuxorCall[]>(`luxor_calls?${params.toString()}`)
-  if (!calls.length) return calls
-  const callIds = calls.map((call) => call.id)
+  const calls = await supabaseRest<LuxorCallListRow[]>(`luxor_calls?${params.toString()}`)
+  const enriched = calls.map((call) => {
+    const { luxor_inquiries: inquiry, luxor_vendors: vendor, ...rest } = call
+    return {
+      ...rest,
+      linked_inquiry_name: inquiry?.full_name ?? null,
+      linked_vendor_name: vendor?.name ?? null,
+    }
+  })
+  if (!enriched.length) return enriched
+  const callIds = enriched.map((call) => call.id)
   const rows = await getTranscriptRows(`call_id=in.(${callIds.join(',')})`)
   const rowsByCall = new Map<string, TranscriptRow[]>()
   for (const row of rows) {
@@ -538,10 +587,23 @@ export async function listLuxorCalls(options: {
     callRows.push(row)
     rowsByCall.set(row.call_id, callRows)
   }
-  return calls.map((call) => {
+  return enriched.map((call) => {
     if (isTranscriptManuallyCorrected(call)) return call
-    return { ...call, transcript_segments: transcriptRowsInAudioOrder(rowsByCall.get(call.id) ?? [], call.recording_started_at)
-      .map((row) => ({ id: row.id, text: row.english_text || row.segment_text, originalText: row.segment_text, spokenLanguages: row.spoken_languages || [], translationStatus: row.translation_status, track: row.track, timestamp: row.event_timestamp || '', final: true, startSeconds: row.segment_start_seconds })) }
+    return {
+      ...call,
+      transcript_segments: transcriptRowsInAudioOrder(rowsByCall.get(call.id) ?? [], call.recording_started_at)
+        .map((row) => ({
+          id: row.id,
+          text: row.english_text || row.segment_text,
+          originalText: row.segment_text,
+          spokenLanguages: row.spoken_languages || [],
+          translationStatus: row.translation_status,
+          track: row.track,
+          timestamp: row.event_timestamp || '',
+          final: true,
+          startSeconds: row.segment_start_seconds,
+        })),
+    }
   })
 }
 
