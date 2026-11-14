@@ -1,5 +1,5 @@
 import { after } from 'next/server'
-import { createOrUpdateLuxorCall, findLuxorInquiryByPhone, normalizePhoneNumber } from '@/lib/luxorCallsServer'
+import { createOrUpdateLuxorCall, normalizePhoneNumber, resolveLuxorCallContactByPhone } from '@/lib/luxorCallsServer'
 import {
   buildTwilioCallbackUrl,
   createTwilioVoiceResponse,
@@ -39,8 +39,9 @@ export async function POST(request: Request) {
   try {
     const config = getLuxorTwilioConfig()
     const callerNumber = normalizePhoneNumber(params.From) || params.From || 'anonymous'
-    const inquiry = await findLuxorInquiryByPhone(callerNumber)
-    const callerName = inquiry?.full_name || (callerNumber === 'anonymous' ? 'Anonymous caller' : 'Unknown caller')
+    const match = await resolveLuxorCallContactByPhone(callerNumber)
+    const callerName = match.contact_name
+      || (callerNumber === 'anonymous' ? 'Anonymous caller' : 'Unknown caller')
 
     await createOrUpdateLuxorCall({
       twilioCallSid: params.CallSid,
@@ -50,7 +51,8 @@ export async function POST(request: Request) {
       toNumber: params.To || config.phoneNumber,
       callerNumber,
       calleeNumber: params.To || config.phoneNumber,
-      inquiryId: inquiry?.id ?? null,
+      inquiryId: match.inquiry_id,
+      vendorId: match.vendor_id,
       contactName: callerName,
       isRead: false,
       metadata: {
@@ -102,7 +104,7 @@ export async function POST(request: Request) {
       }, config.clientIdentity)
       client.parameter({ name: 'CallerName', value: callerName })
       client.parameter({ name: 'CallerNumber', value: callerNumber })
-      client.parameter({ name: 'InquiryId', value: inquiry?.id || '' })
+      client.parameter({ name: 'InquiryId', value: match.inquiry_id || '' })
       client.parameter({ name: 'ParentCallSid', value: params.CallSid })
       client.parameter({ name: 'Direction', value: 'inbound' })
     }

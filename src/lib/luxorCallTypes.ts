@@ -41,7 +41,10 @@ export type LuxorCall = {
   caller_number: string
   callee_number: string
   inquiry_id: string | null
+  vendor_id?: string | null
   contact_name: string | null
+  linked_inquiry_name?: string | null
+  linked_vendor_name?: string | null
   owner_email: string | null
   started_at: string
   answered_at: string | null
