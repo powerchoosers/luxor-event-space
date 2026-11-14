@@ -79,7 +79,7 @@ export default function EventsPage() {
         </div>
       </section>
 
-      <section className="luxor-launcher-clearance-last luxor-launcher-clearance-scroll relative py-20 sm:py-24 lg:py-28">
+      <section className="luxor-events-landing-collections luxor-launcher-clearance-scroll luxor-launcher-clearance-last relative py-20 sm:py-24 lg:py-28">
         <div
           aria-hidden
           className="pointer-events-none absolute inset-0 opacity-40"

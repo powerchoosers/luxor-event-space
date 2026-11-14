@@ -123,7 +123,7 @@ export const Footer = () => {
           </div>
         </div>
 
-        <div className="mt-10 flex flex-col items-center justify-between gap-6 border-t border-[#caa24c]/18 pt-8 sm:flex-row">
+        <div className="site-footer-legal-row mt-10 flex flex-col items-center justify-between gap-6 border-t border-[#caa24c]/18 pt-8 sm:flex-row">
           <p className="text-xs text-[#d7c29a]/60">
             &copy; {new Date().getFullYear()} Luxor Event Space. {spanish ? 'Creado con elegancia en San Antonio.' : 'Built with Elegance in San Antonio.'}
           </p>

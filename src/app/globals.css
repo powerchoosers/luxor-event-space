@@ -2283,6 +2283,18 @@ body[data-luxor-site] .luxor-launcher-clearance-inset {
   body[data-luxor-site] .luxor-launcher-clearance-inset {
     padding-right: calc(3.75rem + var(--luxor-launcher-inset-end));
   }
+
+  body[data-luxor-site] .site-footer-legal-row {
+    padding-bottom: calc(
+      var(--luxor-launcher-inset-bottom) + var(--luxor-launcher-chip-height) + 0.75rem +
+        env(safe-area-inset-bottom, 0px)
+    );
+  }
+
+  body[data-luxor-site] .luxor-events-landing-collections.luxor-launcher-clearance-scroll,
+  body[data-luxor-site] .luxor-events-landing-collections.luxor-launcher-clearance-last {
+    padding-bottom: 0;
+  }
 }
 
 @media (max-width: 639px) {
