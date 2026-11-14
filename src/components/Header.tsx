@@ -476,11 +476,11 @@ export const Header = () => {
                   >
                     {item.key === 'Events' ? (
                       <div>
-                        <div className="flex items-center justify-center gap-2">
+                        <div className="grid grid-cols-[1fr_auto_1fr] items-center">
                           <Link
                             href={eventsHref}
                             onClick={closeMobileMenu}
-                            className="font-serif text-4xl leading-none tracking-[0.16em] text-[#241d17] transition-colors hover:text-[#8d672b]"
+                            className="col-start-2 font-serif text-4xl leading-none tracking-[0.16em] text-[#241d17] transition-colors hover:text-[#8d672b]"
                           >
                             {item.label}
                           </Link>
@@ -498,7 +498,7 @@ export const Header = () => {
                                   : 'Expand event collections'
                             }
                             onClick={() => setMobileEventsOpen((open) => !open)}
-                            className="flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-lg text-[#8d672b] transition-colors hover:bg-[#caa24c]/10"
+                            className="col-start-3 flex min-h-11 min-w-11 shrink-0 items-center justify-center justify-self-start rounded-lg text-[#8d672b] transition-colors hover:bg-[#caa24c]/10"
                           >
                             <ChevronDown
                               size={22}

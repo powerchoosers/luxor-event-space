@@ -88,15 +88,15 @@ export default function EventsPage() {
               'radial-gradient(circle at 0% 0%, rgba(202,162,76,0.12), transparent 28%), radial-gradient(circle at 100% 100%, rgba(202,162,76,0.1), transparent 24%)',
           }}
         />
-        <div className="luxor-launcher-clearance-inset relative mx-auto max-w-7xl px-5 sm:px-6 lg:px-8">
-          <div className="max-w-2xl">
-            <p className="font-mono text-[10px] font-bold uppercase tracking-[0.34em] text-[#8d672b]">
+        <div className="relative mx-auto max-w-7xl px-5 sm:px-6 lg:px-8">
+          <div className="mx-auto max-w-3xl text-center">
+            <p className="font-mono text-[10px] font-bold uppercase tracking-[0.34em] text-[#8d672b] sm:text-xs">
               {spanish ? 'Encuentra tu celebración' : 'Find your celebration'}
             </p>
-            <h2 className="mt-3 font-serif text-3xl leading-tight text-[#241d17] sm:text-4xl">
-              {spanish ? 'Un espacio para cada celebración.' : 'A Space for Every Celebration.'}
+            <h2 className="mt-5 font-serif text-5xl leading-[0.92] text-[#241d17] sm:text-6xl lg:text-7xl">
+              {spanish ? <>Un espacio para <span className="italic text-[#8d672b]">cada celebración.</span></> : <>A Space for <span className="italic text-[#8d672b]">Every Celebration.</span></>}
             </h2>
-            <p className="mt-4 max-w-xl text-base leading-7 text-[#665a4e] sm:text-lg">
+            <p className="mx-auto mt-7 max-w-2xl text-base leading-7 text-[#665a4e] sm:text-lg">
               {spanish
                 ? 'Desde celebraciones únicas en la vida hasta hitos familiares y reuniones con sentido, Luxor ofrece un entorno versátil pensado para que cada ocasión sea memorable.'
                 : 'From once-in-a-lifetime celebrations to family milestones and meaningful gatherings, Luxor offers a versatile setting designed to make every occasion memorable.'}
