@@ -86,7 +86,7 @@ Lewis has these connections available while working in Cursor. Use them for the 
 
 ## Public site and portal
 
-- Public header links are `/events`, `/gallery`, `/visit`, and `/contact`, with Spanish copies under `/es`. Other real public routes include `/`, `/spaces`, `/tour`, `/terms`, `/privacy`, `/sms-signup`, and `/grand-opening-rsvp`. Point navigation at real pages. There is no `/pricing` route.
+- Public header links are `/events`, `/gallery`, `/visit`, and `/contact`, with Spanish copies under `/es`. Other real public routes include `/`, `/tour`, `/terms`, `/privacy`, `/sms-signup`, and `/grand-opening-rsvp`. Legacy `/spaces` and `/es/spaces` URLs permanently redirect to `/visit`. Point navigation at real pages. There is no `/pricing` route.
 - Do not put portal login inside the `(site)` group. That layout adds the public header, footer, and the public Elena concierge.
 - Desktop heroes use the centered Luxor axis lockup with centered headline, copy, and CTAs unless the page is an intentional split hero. Do not wrap above-the-fold hero content in scroll-triggered `Reveal`.
 - Use `Quinceañera` and `Quinceañeras` with `ñ` everywhere user-facing.

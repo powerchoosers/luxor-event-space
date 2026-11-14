@@ -187,7 +187,7 @@ export const EMAIL_TEMPLATES: EmailTemplate[] = [
         headline: 'Designed for unforgettable moments',
         body: 'From intimate gatherings to grand celebrations, our versatile spaces are designed to bring your vision to life.',
         ctaLabel: 'Explore Our Spaces',
-        ctaUrl: 'https://www.luxoratlaspalmas.com/spaces',
+        ctaUrl: 'https://www.luxoratlaspalmas.com/visit',
       },
       { ...defaultFooter, id: 'open-house-footer' },
     ],
@@ -243,7 +243,7 @@ export const EMAIL_TEMPLATES: EmailTemplate[] = [
         overlayOpacity: 0.55,
         textAlign: 'center',
         ctaLabel: 'Explore Our Spaces',
-        ctaUrl: 'https://www.luxoratlaspalmas.com/spaces',
+        ctaUrl: 'https://www.luxoratlaspalmas.com/visit',
         ctaVisible: true,
       },
       {

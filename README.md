@@ -6,7 +6,7 @@ Next.js site for the Luxor at Las Palmas public pages and the private owner port
 
 ## What it is
 
-- Public site: home, events, gallery, visit, contact, spaces, and tour. Spanish pages live under `/es`. Header links are Events, Gallery, Visit, and Contact.
+- Public site: home, events, gallery, visit, contact, and tour. Spanish pages live under `/es`. Header links are Events, Gallery, Visit, and Contact. Legacy `/spaces` redirects to `/visit`.
 - Owner portal at `/portal`: leads, calendar, planner, calls, texts, email, marketing, finances, invoices, operations, reports, and settings.
 - Client links outside the portal shell: proposal review, agreement signing, tour response, layout review, and planner review.
 - Records live in Supabase. Card payments go through Stripe. Calls and texts go through Twilio. Mail is moving to Resend and is not finished.

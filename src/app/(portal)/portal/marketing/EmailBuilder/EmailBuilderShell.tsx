@@ -22,11 +22,11 @@ function createBlock(type: BlockType): EmailBlock {
   const id = nanoid()
   switch (type) {
     case 'hero':
-      return { id, type, headline: 'An Unforgettable Event at Luxor', subheadline: 'Add a short, inviting message that gives readers a reason to keep exploring.', backgroundImage: '/images/dining-hall/main-hall-wedding-wide.png', overlayOpacity: 0.58, textAlign: 'center', ctaLabel: 'Explore Luxor', ctaUrl: 'https://www.luxoratlaspalmas.com/spaces', ctaVisible: true }
+      return { id, type, headline: 'An Unforgettable Event at Luxor', subheadline: 'Add a short, inviting message that gives readers a reason to keep exploring.', backgroundImage: '/images/dining-hall/main-hall-wedding-wide.png', overlayOpacity: 0.58, textAlign: 'center', ctaLabel: 'Explore Luxor', ctaUrl: 'https://www.luxoratlaspalmas.com/visit', ctaVisible: true }
     case 'text':
       return { id, type, content: 'Write your message here. You can edit this text directly on the canvas.', fontSize: 15, textAlign: 'left', color: 'rgba(215,194,154,0.78)' }
     case 'image_text':
-      return { id, type, imageUrl: '/images/luxor-lounge/luxor-lounge-wedding.png', imageAlt: 'Luxor Event Space', imagePosition: 'left', headline: 'Designed for unforgettable moments', body: 'Supporting copy that describes this section. Keep it concise, useful, and compelling.', ctaLabel: 'Explore Our Spaces', ctaUrl: 'https://www.luxoratlaspalmas.com/spaces' }
+      return { id, type, imageUrl: '/images/luxor-lounge/luxor-lounge-wedding.png', imageAlt: 'Luxor Event Space', imagePosition: 'left', headline: 'Designed for unforgettable moments', body: 'Supporting copy that describes this section. Keep it concise, useful, and compelling.', ctaLabel: 'Explore Our Spaces', ctaUrl: 'https://www.luxoratlaspalmas.com/visit' }
     case 'button':
       return { id, type, label: 'Call to Action', url: 'https://luxoratlaspalmas.com', align: 'center', bgColor: '#b8924a', textColor: '#ffffff' }
     case 'two_column':

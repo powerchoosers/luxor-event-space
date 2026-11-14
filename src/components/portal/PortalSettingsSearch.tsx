@@ -54,7 +54,7 @@ export const SETTINGS_SEARCH_ITEMS: SettingsSearchItem[] = [
   { tab: 'branding', section: 'Branding', title: 'Theme & sidebar layout', description: 'Switch light or dark mode and expanded or compact sidebar.', keywords: 'appearance color theme dark light sidebar compact expanded navigation layout' },
   { tab: 'branding', section: 'Branding', title: 'Venue brochure', description: 'Upload or update the downloadable venue brochure PDF.', keywords: 'brochure pdf packet upload document flyer' },
   { tab: 'branding', section: 'Branding', title: 'Brand assets', description: 'Upload and manage logos, banners, and email images.', keywords: 'image logo banner signature upload photo branding assets' },
-  { tab: 'content', section: 'Site content', title: 'Website content', description: 'Edit saved content records for public Luxor pages.', keywords: 'site pages home events gallery pricing spaces visit copy text json' },
+  { tab: 'content', section: 'Site content', title: 'Website content', description: 'Edit saved content records for public Luxor pages.', keywords: 'site pages home events gallery pricing visit copy text json' },
 ]
 
 export const SETTINGS_TAB_ICONS: Record<SettingsTab, typeof Bell> = {

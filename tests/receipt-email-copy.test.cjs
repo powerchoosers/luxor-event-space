@@ -16,7 +16,7 @@ test('receipt overrides escape copy and retain tour details, links, reference an
   const copy = { ...model.INQUIRY_EMAIL_DEFAULT, body: 'Hello <script>bad</script> {{first_name}}' }
   const tour = emails.buildTourRequestReceivedEmailHtml(inquiry, '12345678token', copy)
   assert.match(tour, /Hello &lt;script&gt;bad&lt;\/script&gt; Sample/)
-  assert.match(tour, /12345678/); assert.match(tour, /2099-12-10/); assert.match(tour, /\/spaces/); assert.match(tour, /\/visit/)
+  assert.match(tour, /12345678/); assert.match(tour, /2099-12-10/); assert.match(tour, /\/gallery/); assert.match(tour, /\/visit/)
   const newsletter = emails.buildNewsletterConfirmationEmailHtml(inquiry, copy)
   assert.match(newsletter, /You can unsubscribe from any marketing email/); assert.match(newsletter, /\/visit/)
   assert.doesNotMatch(newsletter, /<script>bad<\/script>/)

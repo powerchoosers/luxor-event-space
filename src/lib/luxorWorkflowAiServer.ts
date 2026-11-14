@@ -43,7 +43,7 @@ two_column: {id,type:"two_column",leftHeadline,leftBody,rightHeadline,rightBody}
 divider: {id,type:"divider",color:"#dfd3c0",thickness:1,style:"solid"}
 spacer: {id,type:"spacer",height:24}
 footer: {id,type:"footer",companyName,address,phone,website,unsubscribeUrl,showSocial,instagramUrl,facebookUrl,tiktokUrl?}. You may revise its wording and placement when requested. Keep approved Luxor identification and current venue facts; never invent contact details or remove the unsubscribe option. The server supplies the working unsubscribe link.
-Never emit raw HTML, scripts, CSS, forms or external tracking. Text copy is plain text with paragraph breaks. Image URLs must exactly reuse a supplied template image URL or be empty; never invent a file path, stock image URL or placeholder. You may move, remove, or reuse those image elements and change their placement. CTA links must be canonical https://www.luxoratlaspalmas.com pages; use /tour, /gallery, /pricing, /visit, /events or /spaces. Do not invent proposal/payment links. No fake placeholders or unsupported merge fields.`
+Never emit raw HTML, scripts, CSS, forms or external tracking. Text copy is plain text with paragraph breaks. Image URLs must exactly reuse a supplied template image URL or be empty; never invent a file path, stock image URL or placeholder. You may move, remove, or reuse those image elements and change their placement. CTA links must be canonical https://www.luxoratlaspalmas.com pages; use /tour, /gallery, /pricing, /visit, or /events. Do not invent proposal/payment links. No fake placeholders or unsupported merge fields.`
 
 export async function generateWorkflowMessage(
   step: WorkflowMessageStep,

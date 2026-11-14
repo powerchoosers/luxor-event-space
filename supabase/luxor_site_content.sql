@@ -58,7 +58,7 @@ VALUES (
     "tourPrepCards": [
       { "title": "Review pricing & packages", "href": "/pricing", "label": "See details" },
       { "title": "Browse gallery", "href": "/gallery", "label": "View gallery" },
-      { "title": "Spaces & capacity", "href": "/spaces", "label": "Explore spaces" }
+      { "title": "Plan your visit", "href": "/visit", "label": "Visit Luxor" }
     ],
     "faqs": [
       ["How many guests can Luxor accommodate?", "Capacity depends on your layout needs, including tables, dance floor, and head table size. Reach out with your estimated guest count so we can advise on a comfortable fit."],

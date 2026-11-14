@@ -65,6 +65,16 @@ const nextConfig: NextConfig = {
         destination: '/es/visit',
         permanent: true,
       },
+      {
+        source: '/spaces',
+        destination: '/visit',
+        permanent: true,
+      },
+      {
+        source: '/es/spaces',
+        destination: '/es/visit',
+        permanent: true,
+      },
     ];
   },
 };
