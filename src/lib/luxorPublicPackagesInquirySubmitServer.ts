@@ -112,11 +112,12 @@ export async function submitPublicPackagesInquiry(input: {
   }
 
   const inquiry = await createLuxorInquiry(payload, input.userAgent, bookingOptions)
-  if (inquiry?.id) await attachPackagesDraftToInquiry(draft.id, inquiry.id)
+  const replayed = Boolean(bookingOptions.replayed)
+  if (inquiry?.id && !replayed) await attachPackagesDraftToInquiry(draft.id, inquiry.id)
 
   return {
     inquiry,
-    replayed: Boolean(bookingOptions.replayed),
+    replayed,
     quote,
   }
 }

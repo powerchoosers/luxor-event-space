@@ -170,6 +170,159 @@ test('findRecentDuplicateLuxorInquiry prefers metadata idempotency key', async (
   assert.match(calls[0], /idempotencyKey/)
 })
 
+test('createLuxorInquiry replays on metadata idempotency unique violation without re-notifying', async () => {
+  const inquiryTypes = loadTypeScript('src/lib/luxorInquiryTypes.ts')
+  const winner = {
+    id: 'inq-idempotency-winner',
+    email: 'lead@example.invalid',
+    flow: 'packages_event_inquiry',
+    full_name: 'Aria Test',
+    phone: '2105550100',
+    status: 'new',
+    metadata: { idempotencyKey: 'packages-concurrent-key-abcdef12' },
+  }
+  let insertAttempts = 0
+  class SupabaseRestError extends Error {
+    constructor(message, status, code) {
+      super(message)
+      this.status = status
+      this.code = code
+    }
+  }
+  const { createLuxorInquiry, LUXOR_INQUIRIES_METADATA_IDEMPOTENCY_UNIQUE_INDEX } = loadTypeScript('src/lib/luxorInquiriesServer.ts', {
+    'server-only': {},
+    './luxorInquiryTypes': inquiryTypes,
+    './luxorEmailJobsServer': {
+      buildTourEmail: () => ({}),
+      createLuxorEmailJob: async () => ({ id: 'email-job' }),
+      createPublicToken: () => 'token',
+      assertEmailHasNoUnresolvedPlaceholders: () => {},
+      buildStandardInquiryEmailHtml: () => '<p>ok</p>',
+      buildNewsletterConfirmationEmailHtml: () => '<p>ok</p>',
+      listQueuedLuxorEmailJobsByIds: async () => [],
+      processLuxorEmailJobs: async () => {},
+    },
+    './supabaseRestServer': {
+      SupabaseRestError,
+      supabaseRest: async (path, init) => {
+        if (init?.method === 'POST' && String(path).startsWith('luxor_inquiries')) {
+          insertAttempts += 1
+          if (insertAttempts > 1) {
+            throw new SupabaseRestError(
+              `duplicate key value violates unique constraint "${LUXOR_INQUIRIES_METADATA_IDEMPOTENCY_UNIQUE_INDEX}"`,
+              409,
+              '23505',
+            )
+          }
+          return [winner]
+        }
+        if (String(path).includes('idempotencyKey')) return [winner]
+        return []
+      },
+    },
+    './luxorInquiryDuplicateMatch': { findRecentLuxorInquiryMatch: () => null },
+    './luxorTourMetrics': { compareLuxorScheduledTours: () => 0, getLuxorInquiryPageRequest: () => ({ path: '', headers: {} }), loadLuxorPages: async () => [] },
+    './luxorTextAutomationsServer': { recordLuxorWebsiteSmsConsent: async () => null },
+    './luxorTourSlotsServer': {},
+    './luxorTourSlots': { formatTourSlotTime: (v) => v },
+    './luxorCalendarServer': { normalizedState: (v) => v },
+    './luxorTourPlanningServer': {},
+    './luxorPhoneNumbersServer': { getActiveLuxorPhoneNumber: async () => null },
+  })
+
+  const input = {
+    fullName: 'Aria Test',
+    email: 'lead@example.invalid',
+    phone: '2105550100',
+    eventType: 'Wedding',
+    message: 'Website packages configurator inquiry.',
+    source: 'website_packages',
+    flow: 'packages_event_inquiry',
+    emailInquiryOptIn: true,
+    metadata: { idempotencyKey: 'packages-concurrent-key-abcdef12' },
+  }
+  const firstOptions = { idempotencyKey: 'packages-concurrent-key-abcdef12' }
+  const secondOptions = { idempotencyKey: 'packages-concurrent-key-abcdef12' }
+  const first = await createLuxorInquiry(input, 'fixture-agent', firstOptions)
+  const second = await createLuxorInquiry(input, 'fixture-agent', secondOptions)
+  assert.equal(first.id, winner.id)
+  assert.equal(second.id, winner.id)
+  assert.equal(secondOptions.replayed, true)
+  assert.equal(insertAttempts, 2)
+})
+
+test('concurrent packages submit with same idempotency key replays without duplicate attach', async () => {
+  const quoteTotals = { totalEstimate: 4825, amountToReserve: 1200, refundableSecurityDeposit: 500 }
+  let createCalls = 0
+  let attachCalls = 0
+  const sharedKey = 'packages-parallel-key-abcdef12'
+  const { submitPublicPackagesInquiry } = loadTypeScript('src/lib/luxorPublicPackagesInquirySubmitServer.ts', {
+    'server-only': {},
+    '@/lib/luxorPublicPackagesInquiryDraftServer': {
+      decodePackagesDraftToken: () => ({ draftId: 'draft-1' }),
+      getPackagesInquiryDraft: async () => ({
+        id: 'draft-1',
+        locale: 'en',
+        configurator_input: {
+          eventDate: '2027-06-12',
+          guestCount: 120,
+          rentalPeriod: 'evening',
+          packageTierId: 'signature',
+          eventType: 'Wedding',
+          decorAddOnQuantities: {},
+        },
+      }),
+      attachPackagesDraftToInquiry: async () => {
+        attachCalls += 1
+      },
+    },
+    '@/lib/luxorPublicPackagesConfigurator': {
+      calculatePublicPackagesQuote: () => ({
+        errors: [],
+        totals: quoteTotals,
+        summaryLines: [],
+        selection: {},
+      }),
+      publicPackagesSelectionForProposalConversion: () => ({ schema_version: 1, totals: quoteTotals }),
+    },
+    '@/lib/luxorProposalPricingServer': {
+      getDefaultLuxorProposalPricing: async () => ({ config: {}, version: 4 }),
+    },
+    '@/lib/luxorInquiriesServer': {
+      findRecentDuplicateLuxorInquiry: async () => null,
+      createLuxorInquiry: async (_payload, _ua, options) => {
+        createCalls += 1
+        if (createCalls === 1) {
+          await new Promise((resolve) => setTimeout(resolve, 25))
+          return { id: 'inq-parallel-winner', email: 'lead@example.invalid' }
+        }
+        if (options) options.replayed = true
+        return { id: 'inq-parallel-winner', email: 'lead@example.invalid' }
+      },
+    },
+    '@/lib/luxorInquiryTypes': loadTypeScript('src/lib/luxorInquiryTypes.ts'),
+    '@/lib/luxorPublicEventsServer': { hashPublicRequestIp: () => 'hash' },
+  })
+
+  const base = {
+    draftToken: 'token',
+    firstName: 'Aria',
+    lastName: 'Test',
+    email: 'lead@example.invalid',
+    phone: '(210) 555-0100',
+    emailInquiryOptIn: true,
+    idempotencyKey: sharedKey,
+  }
+  const [first, second] = await Promise.all([
+    submitPublicPackagesInquiry(base),
+    submitPublicPackagesInquiry(base),
+  ])
+  assert.equal(createCalls, 2)
+  assert.equal(attachCalls, 1)
+  assert.equal(first.replayed || second.replayed, true)
+  assert.notEqual(first.replayed && second.replayed, true)
+})
+
 const packagesConfigurator = loadTypeScript('src/lib/luxorPublicPackagesConfigurator.ts', { 'server-only': {} })
 
 function weekendTestConfig() {

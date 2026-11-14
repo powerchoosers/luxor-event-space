@@ -10,7 +10,9 @@ import { assertEmailHasNoUnresolvedPlaceholders, getTourResponseLinks } from './
 
 import { compactText, getLuxorConsentFormProfile, LuxorInquiry, LuxorInquiryInput, LuxorPipelineStage, LuxorInquiryStatus, isLuxorEventTypeRequiredFlow, normalizeLuxorEventType, parseGuestCount, LUXOR_INQUIRY_EMAIL_DISCLOSURE, LUXOR_INQUIRY_EMAIL_DISCLOSURE_VERSION } from './luxorInquiryTypes'
 import { buildTourEmail, createLuxorEmailJob, createPublicToken } from './luxorEmailJobsServer'
-import { supabaseRest } from './supabaseRestServer'
+import { SupabaseRestError, supabaseRest } from './supabaseRestServer'
+
+export const LUXOR_INQUIRIES_METADATA_IDEMPOTENCY_UNIQUE_INDEX = 'luxor_inquiries_metadata_idempotency_key_uidx'
 import { findRecentLuxorInquiryMatch } from './luxorInquiryDuplicateMatch'
 import { compareLuxorScheduledTours, getLuxorInquiryPageRequest, loadLuxorPages } from './luxorTourMetrics'
 import { recordLuxorWebsiteSmsConsent } from './luxorTextAutomationsServer'
@@ -169,12 +171,38 @@ export function normalizeInquiry(input: LuxorInquiryInput, userAgent?: string) {
   }
 }
 
+export async function findLuxorInquiryByIdempotencyKey(idempotencyKey: string) {
+  const key = idempotencyKey.trim()
+  if (key.length < 8) return null
+  const [match] = await supabaseRest<LuxorInquiry[]>(
+    `luxor_inquiries?select=*&metadata->>idempotencyKey=eq.${encodeURIComponent(key)}&order=created_at.asc&limit=1`,
+  )
+  return match ?? null
+}
+
+function isLuxorInquiryIdempotencyUniqueViolation(error: unknown) {
+  if (!(error instanceof SupabaseRestError)) return false
+  if (error.code !== '23505' && error.status !== 409) return false
+  const detail = error.message.toLowerCase()
+  return detail.includes(LUXOR_INQUIRIES_METADATA_IDEMPOTENCY_UNIQUE_INDEX)
+    || detail.includes('metadata->>idempotencykey')
+    || detail.includes('metadata->>\'idempotencykey\'')
+}
+
+async function loadInquiryIdempotencyReplay(error: unknown, idempotencyKey: string) {
+  if (!isLuxorInquiryIdempotencyUniqueViolation(error)) return null
+  let existing = await findLuxorInquiryByIdempotencyKey(idempotencyKey)
+  if (!existing) {
+    await new Promise((resolve) => setTimeout(resolve, 30))
+    existing = await findLuxorInquiryByIdempotencyKey(idempotencyKey)
+  }
+  return existing
+}
+
 export async function findRecentDuplicateLuxorInquiry(input: LuxorInquiryInput, minutes = 10) {
   const idempotencyKey = typeof input.metadata?.idempotencyKey === 'string' ? input.metadata.idempotencyKey.trim() : ''
   if (idempotencyKey.length >= 8) {
-    const [match] = await supabaseRest<LuxorInquiry[]>(
-      `luxor_inquiries?select=*&metadata->>idempotencyKey=eq.${encodeURIComponent(idempotencyKey)}&order=created_at.desc&limit=1`,
-    )
+    const match = await findLuxorInquiryByIdempotencyKey(idempotencyKey)
     if (match) return match
   }
 
@@ -268,7 +296,20 @@ export async function createLuxorInquiry(input: LuxorInquiryInput, userAgent?: s
       return created
     }
   } else {
-    ;[created] = await insertLuxorInquiryRow(insertPayload)
+    const idempotencyKey = options?.idempotencyKey?.trim()
+      || (typeof row.metadata?.idempotencyKey === 'string' ? row.metadata.idempotencyKey.trim() : '')
+    try {
+      ;[created] = await insertLuxorInquiryRow(insertPayload)
+    } catch (error) {
+      if (idempotencyKey.length >= 8) {
+        const replay = await loadInquiryIdempotencyReplay(error, idempotencyKey)
+        if (replay) {
+          if (options) options.replayed = true
+          return replay
+        }
+      }
+      throw error
+    }
   }
 
   const smsConsent = row.metadata?.smsConsent as { source?: string; scopes?: string[]; disclosureVersion?: string; disclosures?: string[] } | undefined

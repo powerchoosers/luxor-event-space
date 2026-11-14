@@ -1,6 +1,6 @@
 'use client'
 
-import { FormEvent, useEffect, useId, useState } from 'react'
+import { FormEvent, useEffect, useId, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { ArrowRight, Loader2 } from '@/lib/icons/phosphor-compat'
@@ -101,6 +101,7 @@ export function PackagesInquiryForm({ locale = 'en', draftToken, draft }: Packag
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [startedAt] = useState(Date.now())
+  const submitGuardRef = useRef(false)
 
   const configuratorInput = readConfiguratorInput(draft.configuratorInput)
   const summaryLines = draft.quote?.summaryLines || draft.quote?.summary_lines || []
@@ -116,6 +117,8 @@ export function PackagesInquiryForm({ locale = 'en', draftToken, draft }: Packag
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault()
+    if (submitGuardRef.current) return
+    submitGuardRef.current = true
     setError(null)
     setSubmitting(true)
     try {
@@ -140,8 +143,8 @@ export function PackagesInquiryForm({ locale = 'en', draftToken, draft }: Packag
       const confirmPath = locale === 'es' ? '/es/packages/confirmation' : '/packages/confirmation'
       router.push(inquiryId ? `${confirmPath}?inquiryId=${encodeURIComponent(inquiryId)}` : confirmPath)
     } catch (err) {
+      submitGuardRef.current = false
       setError(err instanceof Error ? err.message : 'Unable to submit your inquiry.')
-    } finally {
       setSubmitting(false)
     }
   }
@@ -203,7 +206,7 @@ export function PackagesInquiryForm({ locale = 'en', draftToken, draft }: Packag
         </section>
 
         {error ? <p role="alert" className="mt-4 text-sm text-rose-700">{error}</p> : null}
-        <button type="submit" disabled={submitting} className="luxor-gold-raised mt-8 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-md px-5 text-xs font-semibold uppercase tracking-[0.16em] disabled:opacity-50">
+        <button type="submit" disabled={submitting} aria-busy={submitting} className="luxor-gold-raised mt-8 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-md px-5 text-xs font-semibold uppercase tracking-[0.16em] disabled:opacity-50">
           {submitting ? <><Loader2 className="h-4 w-4 animate-spin" /> {t.submit}</> : <>{t.submit} <ArrowRight className="h-4 w-4" /></>}
         </button>
         <p className="mt-4 text-xs leading-5 text-[#827567]">
