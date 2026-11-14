@@ -14,6 +14,7 @@ import { SmoothScroll } from '@/components/SmoothScroll'
 import { SiteFloatingScrollbar } from '@/components/SiteFloatingScrollbar'
 import { PackagesSubmissionOverlay } from '@/components/packages/PackagesSubmissionOverlay'
 import { MetaPixelTracker } from '@/components/MetaPixelTracker'
+import { SiteDocumentLang } from '@/components/SiteDocumentLang'
 
 const manrope = Manrope({
   variable: '--font-manrope',
@@ -136,6 +137,7 @@ export default function RootLayout({
           dangerouslySetInnerHTML={{ __html: JSON.stringify(venueStructuredData) }}
         />
         <SiteScrollGuard />
+        <SiteDocumentLang />
         <PublicConversionTracker />
         <Header />
         <SiteFloatingScrollbar />

@@ -10,11 +10,13 @@ export default function sitemap(): MetadataRoute.Sitemap {
     '/events/baby-showers',
     '/events/corporate-events',
     '/gallery',
+    '/packages',
     '/visit',
     '/contact',
     '/privacy',
     '/terms',
     '/es',
+    '/es/packages',
     '/es/visit',
     '/es/contact',
   ]

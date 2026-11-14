@@ -7,20 +7,14 @@ import { CalendarDays, Menu, X } from '@/lib/icons/phosphor-compat'
 import { LuxorAxisLockup, LuxorWordmark } from '@/components/LuxorWordmark'
 import { motion, AnimatePresence } from 'framer-motion'
 import { PublicPhoneLink } from '@/components/PublicPhoneLink'
-
-const navLinks = [
-  { label: 'Events', labelEs: 'Eventos', href: '/events' },
-  { label: 'Packages', labelEs: 'Paquetes', href: '/packages' },
-  { label: 'Gallery', labelEs: 'Galería', href: '/gallery' },
-  { label: 'Visit', labelEs: 'Visita', href: '/visit' },
-  { label: 'Contact', labelEs: 'Contacto', href: '/contact' },
-]
+import { getPublicNavLinks } from '@/lib/luxorPublicNavLinks'
 
 export const Header = () => {
   const [isScrolled, setIsScrolled] = useState(false)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const pathname = usePathname()
   const spanish = pathname.startsWith('/es')
+  const navLinks = getPublicNavLinks(spanish)
   const mobileMenuButtonRef = useRef<HTMLButtonElement>(null)
 
   useEffect(() => {
@@ -91,11 +85,17 @@ export const Header = () => {
         <nav className="hidden items-center gap-8 lg:flex xl:gap-10">
           {navLinks.map((item) => (
             <Link
-              key={item.label}
+              key={item.key}
               href={item.href}
               className="site-header-link group relative font-serif text-[13px] font-semibold uppercase tracking-[0.22em] text-[#e5d2ac]/82 transition-colors hover:text-[#f1d27a]"
             >
-              {spanish ? item.labelEs : item.label}
+              {item.label}
+              <motion.span
+                className="absolute -bottom-2 left-0 h-px bg-[#caa24c]"
+                initial={{ width: 0 }}
+                whileHover={{ width: '100%' }}
+                transition={{ duration: 0.3 }}
+              />
             </Link>
           ))}
         </nav>
@@ -292,7 +292,7 @@ export const Header = () => {
               />
               {navLinks.map((item, idx) => (
                 <motion.div
-                  key={item.label}
+                  key={item.key}
                   initial={{ opacity: 0, y: 14 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: 8 }}
@@ -303,7 +303,7 @@ export const Header = () => {
                     onClick={() => setMobileMenuOpen(false)}
                     className="block font-serif text-4xl leading-none tracking-[0.16em] text-[#241d17] transition-colors hover:text-[#8d672b]"
                   >
-                    {spanish ? item.labelEs : item.label}
+                    {item.label}
                   </Link>
                 </motion.div>
               ))}
