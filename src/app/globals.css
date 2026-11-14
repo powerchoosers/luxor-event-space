@@ -70,28 +70,6 @@ body[data-portal-theme='dark'] .elena-slash-command-popover {
   background-color: color-mix(in srgb, #0e0d0b 78%, transparent);
 }
 
-@media (prefers-color-scheme: dark) {
-  body[data-luxor-site] .luxor-public-glass-popover {
-    background-color: color-mix(in srgb, #0e0d0b 78%, transparent);
-    color: #f7efe3;
-  }
-
-  body[data-luxor-site] .luxor-public-glass-popover .luxor-public-glass-option {
-    color: #f7efe3;
-  }
-
-  body[data-luxor-site] .luxor-public-glass-popover .luxor-public-glass-option:hover {
-    background-color: rgba(255, 255, 255, 0.1);
-    color: #fffaf3;
-  }
-
-  body[data-luxor-site] .luxor-public-glass-popover .luxor-public-glass-option[data-selected='true'] {
-    border-color: rgba(202, 162, 76, 0.35);
-    background-color: rgba(202, 162, 76, 0.16);
-    color: #f1d27a;
-  }
-}
-
 /* Inside elevated surfaces in dark mode, adjust nested card tokens so nested elements aren't see-through */
 body[data-portal-theme='dark'] .portal-overlay-surface,
 body[data-portal-theme='dark'] .portal-sheet,

@@ -1,6 +1,7 @@
 /**
  * Frosted public-site popover shell (pairs with `.luxor-public-glass-popover` in globals.css).
  * Matches the Elena slash-command glass recipe without pulling portal theme tokens.
+ * The marketing site is light-only (`body[data-luxor-site]`); do not add OS-dark overrides here.
  */
 export const LUXOR_PUBLIC_GLASS_POPOVER_Z_INDEX = 150
 
