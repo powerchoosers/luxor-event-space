@@ -35,6 +35,20 @@ export function luxorTranscriptStorageTrack(track: string, metadata: Record<stri
   return track
 }
 
+/** Twilio dual-channel stereo index (0=inbound, 1=outbound) for stored track labels. */
+export function luxorDualChannelIndexForStorageTrack(track: string, metadata: Record<string, unknown> | null | undefined): 0 | 1 {
+  const sip = luxorElenaLiveInboundTranscriptUsesSipBridge(metadata)
+  const lower = track.toLowerCase()
+  if (sip) {
+    if (lower === 'luxor_agent') return 0
+    if (lower === 'caller') return 1
+  } else {
+    if (lower === 'caller') return 0
+    if (lower === 'luxor_agent') return 1
+  }
+  return 0
+}
+
 export type LuxorCallStatus =
   | 'queued'
   | 'initiated'

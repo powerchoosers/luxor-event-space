@@ -32,3 +32,11 @@ test('standard calls keep twilio track mapping', () => {
   assert.equal(types.luxorTranscriptSpeaker('inbound_track'), 'caller')
   assert.equal(types.luxorTranscriptSpeaker('outbound_track'), 'luxor')
 })
+
+test('dual channel index follows storage track labels', () => {
+  const elena = { scope: 'elena_live_inbound' }
+  assert.equal(types.luxorDualChannelIndexForStorageTrack('luxor_agent', elena), 0)
+  assert.equal(types.luxorDualChannelIndexForStorageTrack('caller', elena), 1)
+  assert.equal(types.luxorDualChannelIndexForStorageTrack('caller', {}), 0)
+  assert.equal(types.luxorDualChannelIndexForStorageTrack('luxor_agent', {}), 1)
+})

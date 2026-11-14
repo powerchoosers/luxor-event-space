@@ -54,6 +54,54 @@ test('raw transcript queries only request final segments', async () => {
   assert.ok(queries.some((query) => query.includes('luxor_call_transcript_segments') && query.includes('is_final=eq.true')))
 })
 
+test('list and detail views keep post-call transcript snapshots', async () => {
+  const postCall = [
+    { id: 'pc-1', text: 'Corrected live line', originalText: 'Live line', track: 'caller', timestamp: '2026-11-14T12:00:05.000Z', final: true, startSeconds: 5 },
+  ]
+  const postCallCall = {
+    id: callId,
+    twilio_call_sid: 'CA' + '3'.repeat(32),
+    direction: 'inbound',
+    status: 'completed',
+    recording_consent_status: 'automatic',
+    recording_started_at: '2026-11-14T12:00:00.000Z',
+    transcription_status: 'completed',
+    transcript_segments: postCall,
+    metadata: { scope: 'elena_live_inbound', transcript_source: 'post_call' },
+    created_at: '2026-11-14T12:00:00.000Z',
+    updated_at: '2026-11-14T12:00:00.000Z',
+    last_sequence_number: 0,
+  }
+  let transcriptSnapshotPatchCount = 0
+  const server = loadServer({
+    supabaseRest: async (query, init = {}) => {
+      if (query.startsWith('luxor_call_transcript_segments')) {
+        return [{ id: 'live-1', call_id: callId, sequence_id: 1, track: 'caller', segment_text: 'Live line', english_text: null, spoken_languages: [], translation_status: 'not_requested', event_timestamp: '2026-11-14T12:00:01.000Z', segment_audio_timestamp: null, segment_start_seconds: 1 }]
+      }
+      if (query.startsWith('luxor_calls?') && init.method === 'PATCH') {
+        const body = JSON.parse(init.body)
+        if (Object.hasOwn(body, 'transcript_segments')) transcriptSnapshotPatchCount += 1
+        Object.assign(postCallCall, body)
+        return [structuredClone(postCallCall)]
+      }
+      if (query.startsWith('luxor_calls?')) return [structuredClone(postCallCall)]
+      return []
+    },
+  })
+
+  const listed = await server.listLuxorCalls({ limit: 10 })
+  assert.deepEqual(listed[0].transcript_segments, postCall)
+  await server.saveLuxorTranscriptEvent({
+    callSid: 'CA' + '3'.repeat(32),
+    event: 'transcription-content',
+    sequenceId: 2,
+    transcriptionSid: 'GT' + '3'.repeat(32),
+    transcriptionData: JSON.stringify({ transcript: 'New live', track: 'caller' }),
+    final: 'true',
+  })
+  assert.equal(transcriptSnapshotPatchCount, 0)
+})
+
 test('list and detail views keep manually corrected transcript snapshots', async () => {
   const corrected = [
     { id: 'edited-1', text: 'Corrected line', track: 'caller', timestamp: '2026-11-14T12:00:05.000Z', final: true, startSeconds: 5 },
