@@ -310,7 +310,33 @@ function providerAudioStart(value: string | undefined): number | null {
   }
 }
 
+type TranscriptRow = {
+  id: string; call_id: string; sequence_id: number; track: string; segment_text: string; english_text: string | null; spoken_languages: string[]; translation_status: string
+  event_timestamp: string | null; segment_audio_timestamp: string | null; segment_start_seconds: number | null
+}
+
+function isTranscriptManuallyCorrected(call: LuxorCall) {
+  return call.metadata?.transcript_manually_corrected === true
+}
+
+function transcriptSegmentsFromCallSnapshot(call: LuxorCall): TranscriptRow[] {
+  return (call.transcript_segments ?? []).map((segment, index) => ({
+    id: segment.id,
+    call_id: call.id,
+    sequence_id: index,
+    track: segment.track,
+    segment_text: segment.originalText || segment.text,
+    english_text: segment.originalText && segment.text !== segment.originalText ? segment.text : null,
+    spoken_languages: segment.spokenLanguages ?? [],
+    translation_status: segment.translationStatus ?? 'not_requested',
+    event_timestamp: segment.timestamp || null,
+    segment_audio_timestamp: null,
+    segment_start_seconds: segment.startSeconds ?? null,
+  }))
+}
+
 async function syncLuxorCallTranscriptSnapshot(call: LuxorCall, sequenceId?: number) {
+  if (isTranscriptManuallyCorrected(call)) return call
   const rows = await getTranscriptRows(`call_id=eq.${encodeURIComponent(call.id)}`)
   const ordered = transcriptRowsInAudioOrder(rows, call.recording_started_at)
   const maxSequence = Math.max(
@@ -452,11 +478,6 @@ export async function saveLuxorRecordingCopy(input: { callSid: string; recording
   throw new Error('Recording metadata changed while saving. Retry the signed callback.')
 }
 
-type TranscriptRow = {
-  id: string; call_id: string; sequence_id: number; track: string; segment_text: string; english_text: string | null; spoken_languages: string[]; translation_status: string
-  event_timestamp: string | null; segment_audio_timestamp: string | null; segment_start_seconds: number | null
-}
-
 async function getTranscriptRows(callFilter: string) {
   const pageSize = 500
   const rows: TranscriptRow[] = []
@@ -464,7 +485,7 @@ async function getTranscriptRows(callFilter: string) {
   // and lists of many calls do not silently lose turns.
   for (let offset = 0; ; offset += pageSize) {
     const page = await supabaseRest<TranscriptRow[]>(
-      `luxor_call_transcript_segments?select=id,call_id,sequence_id,track,segment_text,english_text,spoken_languages,translation_status,event_timestamp,segment_audio_timestamp,segment_start_seconds&${callFilter}&order=created_at.asc,id.asc&limit=${pageSize}&offset=${offset}`,
+      `luxor_call_transcript_segments?select=id,call_id,sequence_id,track,segment_text,english_text,spoken_languages,translation_status,event_timestamp,segment_audio_timestamp,segment_start_seconds&${callFilter}&is_final=eq.true&order=created_at.asc,id.asc&limit=${pageSize}&offset=${offset}`,
     )
     rows.push(...page)
     if (page.length < pageSize) return rows
@@ -517,15 +538,19 @@ export async function listLuxorCalls(options: {
     callRows.push(row)
     rowsByCall.set(row.call_id, callRows)
   }
-  return calls.map((call) => ({ ...call, transcript_segments: transcriptRowsInAudioOrder(rowsByCall.get(call.id) ?? [], call.recording_started_at)
-    .map((row) => ({ id: row.id, text: row.english_text || row.segment_text, originalText: row.segment_text, spokenLanguages: row.spoken_languages || [], translationStatus: row.translation_status, track: row.track, timestamp: row.event_timestamp || '', final: true, startSeconds: row.segment_start_seconds })) }))
+  return calls.map((call) => {
+    if (isTranscriptManuallyCorrected(call)) return call
+    return { ...call, transcript_segments: transcriptRowsInAudioOrder(rowsByCall.get(call.id) ?? [], call.recording_started_at)
+      .map((row) => ({ id: row.id, text: row.english_text || row.segment_text, originalText: row.segment_text, spokenLanguages: row.spoken_languages || [], translationStatus: row.translation_status, track: row.track, timestamp: row.event_timestamp || '', final: true, startSeconds: row.segment_start_seconds })) }
+  })
 }
 
 export async function getLuxorTranscriptSegments(callId: string) {
-  const [rows, call] = await Promise.all([
-    getTranscriptRows(`call_id=eq.${encodeURIComponent(callId)}`),
-    getLuxorCallById(callId),
-  ])
+  const call = await getLuxorCallById(callId)
+  if (call && isTranscriptManuallyCorrected(call)) {
+    return transcriptRowsInAudioOrder(transcriptSegmentsFromCallSnapshot(call), call.recording_started_at)
+  }
+  const rows = await getTranscriptRows(`call_id=eq.${encodeURIComponent(callId)}`)
   return transcriptRowsInAudioOrder(rows, call?.recording_started_at)
 }
 
