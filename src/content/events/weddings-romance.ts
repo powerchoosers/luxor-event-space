@@ -22,6 +22,7 @@ const en: Omit<EventCategoryPageProps, 'spanish'> = {
   heroImageAlt: 'Wide view of the Luxor main hall prepared for a wedding reception',
   introEyebrow: 'In this collection',
   introTitle: 'Love stories worth celebrating.',
+  introAccent: 'worth celebrating.',
   introBody:
     'From vows and first dances to intimate dinners with everyone you love, Luxor gives weddings and romantic gatherings a polished ballroom setting with room to shape every detail.',
   gallery: [
@@ -72,6 +73,7 @@ const es: Omit<EventCategoryPageProps, 'spanish'> = {
   heroImageAlt: 'Vista amplia del salón principal de Luxor preparado para una recepción de boda',
   introEyebrow: 'En esta colección',
   introTitle: 'Historias de amor que merecen celebrarse.',
+  introAccent: 'merecen celebrarse.',
   introBody:
     'Desde los votos y el primer baile hasta cenas íntimas con quienes más importan, Luxor ofrece un salón refinado con espacio para personalizar cada detalle.',
   gallery: [

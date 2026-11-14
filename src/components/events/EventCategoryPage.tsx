@@ -28,6 +28,7 @@ export type EventCategoryPageProps = {
   heroImageAlt: string
   introEyebrow: string
   introTitle: string
+  introAccent: string
   introBody: string
   gallery: EventCategoryGalleryItem[]
   closingTitle: string
@@ -66,6 +67,7 @@ export function EventCategoryPage({
   heroImageAlt,
   introEyebrow,
   introTitle,
+  introAccent,
   introBody,
   gallery,
   closingTitle,
@@ -168,13 +170,15 @@ export function EventCategoryPage({
           className="mx-auto max-w-2xl scroll-mt-28 px-5 text-center sm:px-6 lg:scroll-mt-0 lg:px-8"
         >
           <p className="font-mono text-[10px] font-bold uppercase tracking-[0.34em] text-[#8d672b]">{introEyebrow}</p>
-          <h2 className="mt-3 font-serif text-3xl leading-tight text-[#241d17] sm:text-4xl">{introTitle}</h2>
+          <h2 className="mt-3 font-serif text-3xl leading-tight text-[#241d17] sm:text-4xl">
+            {introAccent && introTitle.endsWith(introAccent) ? <>{introTitle.slice(0, -introAccent.length)}<span className="italic text-[#8d672b]">{introAccent}</span></> : introTitle}
+          </h2>
           <p className="mt-5 text-base leading-7 text-[#665a4e] sm:text-lg">{introBody}</p>
         </motion.div>
       </section>
 
       <section className="luxor-launcher-clearance-scroll pb-16 sm:pb-20 lg:pb-24">
-        <div className="luxor-launcher-clearance-inset mx-auto max-w-7xl px-5 sm:px-6 lg:px-8">
+        <div className="mx-auto max-w-7xl px-5 sm:px-6 lg:px-8">
           <ul className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-3 lg:gap-5">
             {gallery.map((item, index) => {
               const isLastOdd = galleryOdd && index === gallery.length - 1

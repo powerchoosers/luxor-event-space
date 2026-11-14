@@ -23,6 +23,7 @@ const en: Omit<EventCategoryPageProps, 'spanish'> = {
   heroImageAlt: 'Corporate cocktail reception setup in the Luxor main hall',
   introEyebrow: 'Gatherings at Luxor',
   introTitle: 'Bring People Together.',
+  introAccent: 'Together.',
   introBody:
     'From professional networking to meaningful community gatherings, Luxor provides a versatile setting for events that bring people together.',
   gallery: [
@@ -80,6 +81,7 @@ const es: Omit<EventCategoryPageProps, 'spanish'> = {
   heroImageAlt: 'Recepción corporativa estilo cóctel en el salón principal de Luxor',
   introEyebrow: 'Reuniones en Luxor',
   introTitle: 'Reúne a las personas.',
+  introAccent: 'las personas.',
   introBody:
     'Desde el networking profesional hasta encuentros comunitarios con sentido, Luxor ofrece un entorno versátil para eventos que conectan.',
   gallery: [

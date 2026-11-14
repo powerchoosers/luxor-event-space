@@ -22,6 +22,7 @@ const en: Omit<EventCategoryPageProps, 'spanish'> = {
   heroImageAlt: 'Quinceañera ballroom with grand floral arch and elegant lighting at Luxor',
   introEyebrow: 'Family celebrations',
   introTitle: 'Celebrate Life’s Special Moments.',
+  introAccent: 'Special Moments.',
   introBody:
     'From milestone birthdays to joyful family gatherings, Luxor provides a beautiful and versatile setting for the moments that matter most.',
   gallery: [
@@ -73,6 +74,7 @@ const es: Omit<EventCategoryPageProps, 'spanish'> = {
   heroImageAlt: 'Salón de quinceañera con arco floral e iluminación elegante en Luxor',
   introEyebrow: 'Celebraciones familiares',
   introTitle: 'Celebra los momentos especiales de la vida.',
+  introAccent: 'momentos especiales de la vida.',
   introBody:
     'Desde cumpleaños importantes hasta reuniones alegres en familia, Luxor ofrece un ambiente hermoso y versátil para los momentos que más importan.',
   gallery: [
