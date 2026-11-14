@@ -13,6 +13,7 @@ import { OFFICIAL_DECOR_SERVICES, getOfficialDecorService } from './luxorDecorCa
 import {
   includedLuxorDecorQuantity,
   LUXOR_DECOR_CATALOG_KEY,
+  resolveOfficialDecorCatalogItemId,
   luxorDecorUnitLabel,
   readLuxorDecorCatalog,
   type LuxorDecorCatalogItem,
@@ -1485,8 +1486,15 @@ function officialDecorSelectionV4(
   const configured = new Map(catalog.map((item) => [item.id, item]))
   const requested = record(rawQuantities) || {}
   const quantities: Record<string, number> = {}
-  for (const [id, value] of Object.entries(requested)) {
-    const item = configured.get(id)
+  for (const [requestedId, value] of Object.entries(requested)) {
+    const resolvedId = configured.has(requestedId)
+      ? requestedId
+      : resolveOfficialDecorCatalogItemId(requestedId, config)
+    if (!resolvedId) {
+      errors.push('Choose only active decor add-ons from the saved catalog.')
+      continue
+    }
+    const item = configured.get(resolvedId)
     if (!item || !item.active) {
       errors.push('Choose only active decor add-ons from the saved catalog.')
       continue
@@ -1496,7 +1504,7 @@ function officialDecorSelectionV4(
       errors.push(item.name + ' requires a whole quantity of at least ' + item.minimum_quantity + ', or zero to remove it.')
       continue
     }
-    if (value > 0) quantities[id] = value
+    if (value > 0) quantities[resolvedId] = value
   }
 
   const activeItems = catalog.filter((item) => item.active)
@@ -1743,9 +1751,14 @@ function calculatePreferredVendorProposal(selection: LuxorProposalSelection, con
         proposalPricingPolicyVersion >= 4 ? optionDecor.catalog : undefined,
         Boolean(optionDecor.quantities.tablecloths),
       )
+      const tierDecorLines = proposalPricingPolicyVersion >= 4
+        ? optionDecor.items.map((item) => ({ ...item }))
+        : option.id === 'customized'
+          ? optionDecor.items.map((item) => ({ ...item }))
+          : []
       const lines = [
         ...packageBaseLines.map((item) => ({ ...item })),
-        ...(option.id === 'customized' ? optionDecor.items.map((item) => ({ ...item })) : []),
+        ...tierDecorLines,
         ...(proposalPricingPolicyVersion >= 4 && option.id === 'customized'
           ? confirmedCustom.map((item) => ({ ...item }))
           : []),

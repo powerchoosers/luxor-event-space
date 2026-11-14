@@ -7,6 +7,7 @@ import { isGuestCountOverCapacity, LUXOR_GUEST_CAPACITY_MESSAGE, LUXOR_GUEST_CAP
 import { PortalSelect } from '@/components/portal/PortalUI'
 import { LuxorEventTypeCombobox } from '@/components/LuxorEventTypeCombobox'
 import { PublicEventDatePicker } from '@/components/PublicEventDatePicker'
+import { PackagesConfiguratorMobileSticky } from '@/components/packages/PackagesConfiguratorMobileSticky'
 import { PackagesConfiguratorSummary } from '@/components/packages/PackagesConfiguratorSummary'
 import type { PublicPackagesSummaryLine } from '@/lib/luxorPublicPackagesConfigurator'
 import type { LuxorPublicPackageTierId } from '@/lib/luxorProposalPackages'
@@ -192,10 +193,10 @@ export function PackagesConfigurator({ locale = 'en', defaultPackageTier = 'sign
   return (
     <>
       <div className="grid gap-8 lg:grid-cols-[minmax(0,1.15fr)_minmax(280px,0.85fr)] lg:items-start">
-        <div className="rounded-md border border-[#caa24c]/20 bg-black/24 p-5 sm:p-6 lg:p-8">
+        <div className="rounded-md border border-[#caa24c]/22 bg-white/85 p-5 text-[#241d17] sm:p-6 lg:p-8">
           <div className="grid gap-4 sm:grid-cols-2">
             <label className="block sm:col-span-1">
-              <span className="mb-2 flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.16em] text-[#d7c29a]/78">
+              <span className="mb-2 flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.16em] text-[#8d672b]">
                 <CalendarDays className="h-4 w-4 text-[#caa24c]" aria-hidden /> {labels.eventDate}
               </span>
               <PublicEventDatePicker
@@ -211,11 +212,11 @@ export function PackagesConfigurator({ locale = 'en', defaultPackageTier = 'sign
               value={eventType}
               onChange={setEventType}
               className="block sm:col-span-1"
-              labelClassName="mb-2 flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.16em] text-[#d7c29a]/78"
-              inputClassName="h-12 rounded-md border border-[#caa24c]/24 bg-black/35 px-4 text-sm text-[#f7efe3]"
+              labelClassName="mb-2 flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.16em] text-[#8d672b]"
+              inputClassName="h-12 rounded-md border border-[#d8c4a4] bg-white px-4 text-sm text-[#241d17]"
             />
             <label className="block sm:col-span-1">
-              <span className="mb-2 flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.16em] text-[#d7c29a]/78">
+              <span className="mb-2 flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.16em] text-[#8d672b]">
                 <Users className="h-4 w-4 text-[#caa24c]" aria-hidden /> {labels.guestCount}
               </span>
               <input
@@ -228,7 +229,7 @@ export function PackagesConfigurator({ locale = 'en', defaultPackageTier = 'sign
                 onChange={(event) => setGuestCount(event.target.value)}
                 disabled={optionsLoading}
                 placeholder={labels.guestPlaceholder}
-                className="min-h-12 w-full rounded-md border border-[#caa24c]/24 bg-black/35 px-4 text-sm text-[#f7efe3] outline-none placeholder:text-[#d7c29a]/45 focus:border-[#caa24c]"
+                className="min-h-12 w-full rounded-md border border-[#d8c4a4] bg-white px-4 text-sm text-[#241d17] outline-none placeholder:text-[#a0907e] focus:border-[#b98a3d]"
               />
               {guestInvalid ? (
                 <p role="alert" className="mt-2 text-xs leading-5 text-[#f1d27a]">
@@ -239,7 +240,7 @@ export function PackagesConfigurator({ locale = 'en', defaultPackageTier = 'sign
               ) : null}
             </label>
             <label className="block sm:col-span-1">
-              <span className="mb-2 flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.16em] text-[#d7c29a]/78">
+              <span className="mb-2 flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.16em] text-[#8d672b]">
                 <Clock className="h-4 w-4 text-[#caa24c]" aria-hidden /> {labels.rentalPeriod}
               </span>
               <PortalSelect
@@ -253,7 +254,7 @@ export function PackagesConfigurator({ locale = 'en', defaultPackageTier = 'sign
           </div>
 
           <div className="mt-8">
-            <p className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.16em] text-[#d7c29a]/78">
+            <p className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.16em] text-[#8d672b]">
               <Tag className="h-4 w-4 text-[#caa24c]" aria-hidden /> {labels.packageLevel}
             </p>
             <div className="mt-3 grid gap-2 sm:grid-cols-3">
@@ -264,7 +265,7 @@ export function PackagesConfigurator({ locale = 'en', defaultPackageTier = 'sign
                     key={tier}
                     type="button"
                     onClick={() => setPackageTierId(tier)}
-                    className={`min-h-12 rounded-md border px-3 py-2 text-sm font-semibold transition ${active ? 'border-[#caa24c] bg-[#caa24c]/16 text-[#f7efe3]' : 'border-[#caa24c]/22 bg-black/20 text-[#d7c29a]/82 hover:border-[#caa24c]/45'}`}
+                    className={`min-h-12 rounded-md border px-3 py-2 text-sm font-semibold transition ${active ? 'border-[#caa24c] bg-[#caa24c]/16 text-[#241d17]' : 'border-[#d8c4a4] bg-white text-[#665a4e] hover:border-[#caa24c]/45'}`}
                   >
                     {tierCopy[locale][tier]}
                   </button>
@@ -275,20 +276,20 @@ export function PackagesConfigurator({ locale = 'en', defaultPackageTier = 'sign
 
           {enhancementOptions?.length ? (
             <div className="mt-8">
-              <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-[#d7c29a]/78">{labels.enhancements}</p>
+              <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-[#8d672b]">{labels.enhancements}</p>
               <ul className="mt-3 grid gap-2 sm:grid-cols-2">
                 {enhancementOptions.filter((item) => !item.includedWithPackage).map((item) => {
                   const checked = Boolean(enhancementQuantities[item.id])
                   return (
                     <li key={item.id}>
-                      <label className="flex cursor-pointer items-start gap-3 rounded-md border border-[#caa24c]/18 bg-black/20 px-3 py-3 text-sm text-[#f7efe3]">
+                      <label className="flex cursor-pointer items-start gap-3 rounded-md border border-[#eadfcf] bg-[#fffdfa] px-3 py-3 text-sm text-[#241d17]">
                         <input
                           type="checkbox"
                           checked={checked}
                           onChange={(event) => {
                             setEnhancementQuantities((current) => {
                               const next = { ...current }
-                              if (event.target.checked) next[item.id] = Math.max(item.minimumQuantity, 1)
+                              if (event.target.checked) next[item.id] = item.minimumQuantity
                               else delete next[item.id]
                               return next
                             })
@@ -297,7 +298,7 @@ export function PackagesConfigurator({ locale = 'en', defaultPackageTier = 'sign
                         />
                         <span>
                           <span className="font-medium">{item.name}</span>
-                          <span className="mt-0.5 block text-xs tabular-nums text-[#d7c29a]/70">
+                          <span className="mt-0.5 block text-xs tabular-nums text-[#8d672b]">
                             +{new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(item.amount)}
                           </span>
                         </span>
@@ -312,7 +313,6 @@ export function PackagesConfigurator({ locale = 'en', defaultPackageTier = 'sign
 
         <PackagesConfiguratorSummary
           locale={locale}
-          variant="dark"
           lines={summaryLines}
           total={total}
           loading={loading}
@@ -322,21 +322,7 @@ export function PackagesConfigurator({ locale = 'en', defaultPackageTier = 'sign
         />
       </div>
 
-      <div className="pointer-events-none fixed inset-x-0 bottom-[calc(4.25rem+env(safe-area-inset-bottom,0px))] z-[125] border-t border-[#caa24c]/20 bg-[#080706]/95 p-3 backdrop-blur md:hidden">
-        <div className="pointer-events-auto mx-auto flex max-w-lg items-center justify-between gap-3">
-          <div>
-            <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[#d7c29a]/70">
-              {locale === 'es' ? 'Total estimado' : 'Running total'}
-            </p>
-            <p className="font-mono text-lg font-bold tabular-nums text-[#f7efe3]">
-              {total !== null ? new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(total) : '—'}
-            </p>
-          </div>
-          <a href="#packages-summary" className="luxor-gold-raised inline-flex min-h-10 items-center justify-center rounded-md px-4 text-[10px] font-semibold uppercase tracking-[0.14em]">
-            {locale === 'es' ? 'Ver resumen' : 'View summary'}
-          </a>
-        </div>
-      </div>
+      <PackagesConfiguratorMobileSticky locale={locale} total={total} />
     </>
   )
 }

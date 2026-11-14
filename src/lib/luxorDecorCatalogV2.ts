@@ -36,6 +36,49 @@ function luxorCostsFrom(config: unknown) {
   return asRecord(outer.luxor_costs) || outer
 }
 
+/** Legacy proposal-builder ids and informal public keys mapped to catalog v2 ids. */
+const OFFICIAL_DECOR_CATALOG_ID_ALIASES: Record<string, string> = {
+  'decor-photoboard': 'custom_photo_board',
+  'decor-marquee-letters': 'marquee_letters_4ft',
+  'decor-balloon-arch': 'balloon_arch_21ft',
+  photo_board: 'custom_photo_board',
+  'photo-board': 'custom_photo_board',
+  marquee_letters: 'marquee_letters_4ft',
+}
+
+export function resolveOfficialDecorCatalogItemId(requestedId: string, config: unknown): string | null {
+  const trimmed = requestedId.trim()
+  if (!trimmed) return null
+  const catalog = readLuxorDecorCatalog(config, true)
+  const byId = new Map(catalog.map((item) => [item.id, item]))
+  if (byId.has(trimmed)) return trimmed
+  const alias = OFFICIAL_DECOR_CATALOG_ID_ALIASES[trimmed]
+  if (alias && byId.has(alias)) return alias
+  const normalized = trimmed.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '')
+  if (byId.has(normalized)) return normalized
+  const match = catalog.find((item) => item.name.trim().toLowerCase() === trimmed.toLowerCase())
+  return match?.id || null
+}
+
+export function normalizePublicDecorAddOnQuantities(
+  raw: Record<string, number> | undefined,
+  config: unknown,
+): Record<string, number> {
+  const catalog = readLuxorDecorCatalog(config, true)
+  const byId = new Map(catalog.map((item) => [item.id, item]))
+  const result: Record<string, number> = {}
+  for (const [key, rawQuantity] of Object.entries(raw || {})) {
+    const id = resolveOfficialDecorCatalogItemId(key, config)
+    if (!id) continue
+    const item = byId.get(id)
+    if (!item || !Number.isInteger(rawQuantity) || rawQuantity <= 0) continue
+    const quantity = Math.max(item.minimum_quantity, rawQuantity)
+    if (item.pricing_unit === 'order' && quantity !== 1) continue
+    result[id] = quantity
+  }
+  return result
+}
+
 export function readLuxorDecorCatalog(config: unknown, includeInactive = false): LuxorDecorCatalogItem[] {
   const saved = asRecord(luxorCostsFrom(config)[LUXOR_DECOR_CATALOG_KEY])
   if (Number(saved?.schema_version) !== LUXOR_DECOR_CATALOG_SCHEMA_VERSION || !Array.isArray(saved?.items)) return []

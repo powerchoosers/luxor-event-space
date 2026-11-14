@@ -12,7 +12,7 @@ import {
   normalizeLuxorProposalPackageTierId,
   type LuxorPublicPackageTierId,
 } from '@/lib/luxorProposalPackages'
-import { readLuxorDecorCatalog, type LuxorDecorCatalogItem } from '@/lib/luxorDecorCatalogV2'
+import { normalizePublicDecorAddOnQuantities, readLuxorDecorCatalog, type LuxorDecorCatalogItem } from '@/lib/luxorDecorCatalogV2'
 import { calculateLuxorPaymentSchedule } from '@/lib/luxorPaymentSchedule'
 import { RENTAL_WINDOWS } from '@/lib/luxorProposalTerms'
 import { LUXOR_MAX_GUESTS } from '@/lib/luxorInquiryTypes'
@@ -233,9 +233,7 @@ export function buildLuxorProposalSelectionFromPublicInput(
   }
   const window = RENTAL_WINDOWS[input.rentalPeriod]
   const paymentPlan = defaultPublicPackagesPaymentPlan(config)
-  const quantities = Object.fromEntries(
-    Object.entries(input.decorAddOnQuantities || {}).filter(([, quantity]) => Number.isInteger(quantity) && quantity > 0),
-  )
+  const quantities = normalizePublicDecorAddOnQuantities(input.decorAddOnQuantities, config)
   return withLuxorProposalPricingPolicyVersion({
     packageTierId: tier,
     package_tier_id: tier,

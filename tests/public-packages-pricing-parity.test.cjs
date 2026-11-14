@@ -79,18 +79,32 @@ function weekendTestConfig() {
       package_selection_v1: packages.DEFAULT_LUXOR_PROPOSAL_PACKAGE_SETTINGS,
       [decor.LUXOR_DECOR_CATALOG_KEY]: {
         schema_version: decor.LUXOR_DECOR_CATALOG_SCHEMA_VERSION,
-        items: [{
-          id: 'tablecloths',
-          name: 'Tablecloths',
-          description: 'Tablecloths',
-          category: 'premium_add_ons',
-          amount: 250,
-          pricing_unit: 'order',
-          minimum_quantity: 1,
-          active: true,
-          included_in_packages: [],
-          display_order: 1,
-        }],
+        items: [
+          {
+            id: 'custom_photo_board',
+            name: 'Custom Photo Board',
+            description: 'Custom Photo Board',
+            category: 'premium_add_ons',
+            amount: 250,
+            pricing_unit: 'each',
+            minimum_quantity: 1,
+            active: true,
+            included_in_packages: [],
+            display_order: 1,
+          },
+          {
+            id: 'marquee_letters_4ft',
+            name: '4-ft Marquee Letters',
+            description: 'Marquee Letters',
+            category: 'premium_add_ons',
+            amount: 40,
+            pricing_unit: 'letter',
+            minimum_quantity: 2,
+            active: true,
+            included_in_packages: [],
+            display_order: 2,
+          },
+        ],
       },
     },
   }
@@ -136,6 +150,29 @@ const scenarios = [
     },
   },
 ]
+
+test('luxor tier prices premium decor add-ons with catalog ids and minimum quantities', () => {
+  const baseInput = {
+    eventDate: '2026-10-25',
+    eventType: 'Wedding Reception',
+    guestCount: 150,
+    rentalPeriod: 'full_day',
+    packageTierId: 'luxor',
+    decorAddOnQuantities: {},
+  }
+  const withoutDecor = configurator.calculatePublicPackagesQuote(baseInput, config, 1)
+  const withDecor = configurator.calculatePublicPackagesQuote({
+    ...baseInput,
+    decorAddOnQuantities: {
+      custom_photo_board: 1,
+      marquee_letters_4ft: 2,
+    },
+  }, config, 1)
+  assert.ok(withoutDecor.totals.totalEstimate !== null)
+  assert.ok(withDecor.totals.totalEstimate !== null)
+  assert.ok(withDecor.totals.totalEstimate > withoutDecor.totals.totalEstimate)
+  assert.ok(withDecor.summaryLines.some((line) => line.category === 'enhancement'))
+})
 
 for (const scenario of scenarios) {
   test(`website total matches proposal builder for ${scenario.name}`, () => {

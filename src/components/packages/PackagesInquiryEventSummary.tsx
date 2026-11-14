@@ -50,7 +50,10 @@ export function PackagesInquiryEventSummary({
   const rentalLabel = listPublicPackageRentalPeriodOptions(locale).find((option) => option.value === input.rentalPeriod)?.label
     || input.rentalPeriod.replace('_', ' ')
   const packageLabel = tierCopy[locale][input.packageTierId as LuxorPublicPackageTierId] || input.packageTierId
-  const enhancements = summaryLines.filter((line) => line.category === 'enhancement').map((line) => line.label)
+  const enhancementsFromLines = summaryLines.filter((line) => line.category === 'enhancement').map((line) => line.label)
+  const enhancements = enhancementsFromLines.length
+    ? enhancementsFromLines
+    : Object.keys(input.decorAddOnQuantities || {}).filter((id) => (input.decorAddOnQuantities?.[id] || 0) > 0)
 
   return (
     <div className="space-y-4">
