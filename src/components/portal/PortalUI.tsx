@@ -18,6 +18,9 @@ import {
 } from '@/lib/luxorPublicGlassPopover'
 
 const LUXOR_PORTAL_EASE = [0.22, 1, 0.36, 1] as const
+const subscribeToClientMount = () => () => undefined
+const clientMountedSnapshot = () => true
+const serverMountedSnapshot = () => false
 /** Shared modal open/close curves and durations across PortalModal, sheets, and PortalSettingsModal. */
 export const PORTAL_MODAL_EASE = LUXOR_PORTAL_EASE
 export const PORTAL_MODAL_EXIT_EASE = [0.25, 0.1, 0.25, 1] as const
@@ -1849,6 +1852,7 @@ export function PortalSelect({
   const isLight = theme === 'light' || popoverSurface === 'public-glass'
   const isPublicGlass = popoverSurface === 'public-glass'
   const reduceMotion = useReducedMotion()
+  const mounted = React.useSyncExternalStore(subscribeToClientMount, clientMountedSnapshot, serverMountedSnapshot)
 
   const closeMenu = React.useCallback((returnFocus = true) => {
     setIsOpen(false)
@@ -2029,7 +2033,7 @@ export function PortalSelect({
         <span className="truncate">{selectedOption ? selectedOption.label : placeholder}</span>
         <ChevronDown size={14} className={`shrink-0 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''} ${isLight ? 'text-[#8d672b]' : 'text-[color:var(--portal-muted)]'}`} />
       </button>
-      {typeof document !== 'undefined' ? createPortal(
+      {mounted ? createPortal(
         isPublicGlass ? (
           <div
             className="pointer-events-none fixed inset-0"

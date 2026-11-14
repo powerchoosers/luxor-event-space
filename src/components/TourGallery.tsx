@@ -4,8 +4,9 @@ import Image from 'next/image'
 import Link from 'next/link'
 import { createPortal } from 'react-dom'
 import { ArrowDown, ChevronLeft, ChevronRight, X } from '@/lib/icons/phosphor-compat'
-import { AnimatePresence, animate, motion, type PanInfo, useMotionValue } from 'framer-motion'
-import { useEffect, useRef, useState } from 'react'
+import { AnimatePresence, animate, motion, type PanInfo, useMotionValue, useReducedMotion } from 'framer-motion'
+import { useEffect, useRef, useState, type MouseEvent } from 'react'
+import { getLuxorLenis } from '@/components/SmoothScroll'
 
 type Locale = 'en' | 'es'
 
@@ -34,6 +35,19 @@ const carouselSpring = { type: 'spring' as const, stiffness: 280, damping: 30, m
 export function TourGallery({ locale = 'en' }: { locale?: Locale }) {
   const gallerySlides = slides[locale]
   const text = galleryCopy[locale]
+  const reduceMotion = useReducedMotion()
+  function scrollToBooking(event: MouseEvent<HTMLAnchorElement>) {
+    if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
+    const target = document.getElementById('visit-booking')
+    if (!target) return
+    event.preventDefault()
+    if (window.location.hash !== '#visit-booking') window.history.pushState(null, '', '#visit-booking')
+    const offset = (document.getElementById('shared-header')?.getBoundingClientRect().height ?? 80) + 20
+    const top = window.scrollY + target.getBoundingClientRect().top - offset
+    const lenis = getLuxorLenis()
+    if (lenis) lenis.scrollTo(top, { immediate: !!reduceMotion, duration: 0.9 })
+    else window.scrollTo({ top, behavior: reduceMotion ? 'auto' : 'smooth' })
+  }
   const [active, setActive] = useState(0)
   const [slideWidth, setSlideWidth] = useState(0)
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null)
@@ -140,13 +154,13 @@ export function TourGallery({ locale = 'en' }: { locale?: Locale }) {
       <div aria-hidden="true" className="pointer-events-none absolute inset-x-0 top-0 z-10 h-28 bg-gradient-to-b from-black/55 via-black/20 to-transparent sm:h-36" />
       <div className="pointer-events-none absolute inset-x-5 top-5 z-20 flex items-start justify-between gap-5 sm:inset-x-8 sm:top-8 lg:inset-x-10">
         <h2 id="tour-gallery-title" className="font-serif text-2xl leading-none !text-white drop-shadow-[0_2px_10px_rgba(0,0,0,0.95)] sm:text-4xl">{text.title}</h2>
-        <Link href="#visit-booking" data-conversion="visit_cta_click" data-conversion-label="Visit gallery" className="luxor-gold-raised pointer-events-auto hidden min-h-11 shrink-0 items-center justify-center gap-3 rounded-lg px-5 py-3 text-xs uppercase tracking-[0.16em] sm:inline-flex">{text.book} <ArrowDown size={15} /></Link>
+        <Link href="#visit-booking" onClick={scrollToBooking} data-conversion="visit_cta_click" data-conversion-label="Visit gallery" className="pointer-events-auto hidden min-h-11 shrink-0 items-center justify-center gap-3 rounded-lg border !border-white/80 bg-transparent px-5 py-3 text-xs font-bold uppercase tracking-[0.16em] !text-white drop-shadow-[0_1px_4px_rgba(0,0,0,0.9)] transition-colors hover:bg-white/15 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white sm:inline-flex">{text.book} <ArrowDown size={15} /></Link>
       </div>
       <button type="button" aria-label={text.previous} onClick={showPrevious} disabled={active === 0} className="absolute left-4 top-1/2 hidden rounded-full border border-white/30 bg-black/20 p-2 text-white backdrop-blur transition hover:bg-black/50 disabled:cursor-default disabled:opacity-35 sm:block"><ChevronLeft size={20} /></button>
       <button type="button" aria-label={text.next} onClick={showNext} disabled={active === gallerySlides.length - 1} className="absolute right-4 top-1/2 hidden rounded-full border border-white/30 bg-black/20 p-2 text-white backdrop-blur transition hover:bg-black/50 disabled:cursor-default disabled:opacity-35 sm:block"><ChevronRight size={20} /></button>
       <div className="absolute bottom-5 left-1/2 flex -translate-x-1/2 gap-2 sm:bottom-10 sm:left-auto sm:right-10 sm:translate-x-0">{gallerySlides.map((slide, index) => <button key={slide.title} type="button" aria-label={`${text.show} ${slide.title}`} aria-current={index === active} onClick={() => snapTo(index)} className={`h-2.5 rounded-full transition-all ${index === active ? 'w-8 bg-[#e3bb6a]' : 'w-2.5 bg-white/60 hover:bg-white'}`} />)}</div>
     </div>
-    <Link href="#visit-booking" data-conversion="visit_cta_click" data-conversion-label="Visit gallery mobile" className="luxor-gold-raised mt-5 inline-flex min-h-12 w-full items-center justify-center gap-3 rounded-lg px-5 py-3 text-xs uppercase tracking-[0.16em] sm:hidden">{text.book} <ArrowDown size={15} /></Link>
+    <Link href="#visit-booking" onClick={scrollToBooking} data-conversion="visit_cta_click" data-conversion-label="Visit gallery mobile" className="luxor-gold-raised mt-5 inline-flex min-h-12 w-full items-center justify-center gap-3 rounded-lg px-5 py-3 text-xs uppercase tracking-[0.16em] sm:hidden">{text.book} <ArrowDown size={15} /></Link>
   </section>
   {typeof document !== 'undefined' ? createPortal(<AnimatePresence>
     {lightboxSlide ? <motion.div role="dialog" aria-modal="true" aria-label={`${text.dialog}: ${lightboxSlide.title}`} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }} className="fixed inset-0 z-[200] flex items-center justify-center bg-[rgba(0,0,0,0.95)] p-3 sm:p-8">

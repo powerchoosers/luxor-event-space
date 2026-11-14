@@ -98,7 +98,7 @@ export default function Home() {
           <StaggerCards className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4" stagger={0.09}>
             {curatedPhotos.map((photo) => (
               <StaggerCard key={photo.src}>
-                <div className="home-gallery-photo group relative aspect-[4/5] overflow-hidden rounded-xl border border-[#caa24c] bg-[#0f0c0a] shadow-lg transition-transform duration-300 hover:scale-[1.02]">
+                <div className="home-gallery-photo group relative aspect-[4/5] overflow-hidden rounded-2xl border border-[#caa24c] bg-[#0f0c0a] shadow-lg transition-transform duration-300 hover:scale-[1.02]">
                   <Image
                     src={photo.src}
                     alt={photo.alt}

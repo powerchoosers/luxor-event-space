@@ -18,14 +18,14 @@ export default function ContactPage() {
     <main className="min-h-screen bg-[#faf7f2] pt-28 text-[#241d17]">
       <div className="mx-auto max-w-7xl px-5 py-12 sm:px-6 sm:py-16 lg:px-8 lg:py-20">
         {/* Eyebrow and Page Heading */}
-        <div className="max-w-3xl">
+        <div className="mx-auto max-w-5xl text-center">
           <p className="font-mono text-[10px] font-bold uppercase tracking-[0.32em] text-[#8d672b]">
             Get In Touch
           </p>
           <h1 className="mt-3 font-serif text-5xl leading-[0.92] text-[#241d17] sm:text-6xl lg:text-7xl">
             We’d Love to Hear <span className="italic text-[#8d672b]">From You</span>
           </h1>
-          <p className="mt-4 text-base sm:text-lg text-[#665a4e] leading-relaxed">
+          <p className="mx-auto mt-4 max-w-3xl text-base sm:text-lg text-[#665a4e] leading-relaxed">
             Whether you have questions about venue capacity, catering options, or are planning a celebration, our team is here to assist.
           </p>
         </div>

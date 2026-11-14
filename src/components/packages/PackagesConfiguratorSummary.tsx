@@ -30,7 +30,7 @@ const copy = {
     optional: 'Optional',
     inquire: 'Inquire about this event',
     payments: 'Payment schedule',
-    loading: 'Updating price…',
+    loading: 'Building your estimate…',
     empty: 'Choose your event details to see pricing.',
     showBreakdown: 'View itemized breakdown',
     hideBreakdown: 'Hide itemized breakdown',
@@ -42,7 +42,7 @@ const copy = {
     optional: 'Opcional',
     inquire: 'Consultar sobre este evento',
     payments: 'Calendario de pagos',
-    loading: 'Actualizando precio…',
+    loading: 'Preparando tu estimado…',
     empty: 'Elige los detalles de tu evento para ver el precio.',
     showBreakdown: 'Ver desglose detallado',
     hideBreakdown: 'Ocultar desglose detallado',
@@ -59,15 +59,22 @@ const CHARGE_CATEGORIES = new Set<PublicPackagesSummaryLine['category']>([
   'tax',
 ])
 
-function renderLines(lines: PublicPackagesSummaryLine[], mandatoryLabel: string, optionalLabel: string) {
+function renderLines(lines: PublicPackagesSummaryLine[], mandatoryLabel: string, optionalLabel: string, reduceMotion: boolean | null) {
   if (!lines.length) return null
   return (
-    <ul className="space-y-3">
+    <ul>
+      <AnimatePresence initial={false}>
       {lines.map((line) => (
-        <li key={line.id} className="flex items-start justify-between gap-4 text-sm">
+        <motion.li key={line.id} layout={!reduceMotion} initial={reduceMotion ? false : { opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={reduceMotion ? { opacity: 0 } : { opacity: 0, height: 0 }} transition={{ duration: reduceMotion ? 0 : 0.3, ease: 'easeInOut' }} className="overflow-hidden text-sm">
+          <motion.div
+            initial={line.category === 'enhancement' && !reduceMotion ? { outlineColor: 'rgba(185,138,61,0.7)' } : false}
+            animate={{ outlineColor: 'rgba(185,138,61,0)' }}
+            transition={{ duration: 2, delay: 0.25 }}
+            className="-outline-offset-1 flex items-start justify-between gap-4 rounded-lg px-3 py-2 outline outline-1 outline-dashed outline-transparent"
+          >
           <div className="min-w-0">
-            <p className="font-medium">{line.label}</p>
-            {line.detail ? <p className="mt-0.5 text-xs leading-5 opacity-80">{line.detail}</p> : null}
+            <p className="font-semibold leading-5">{line.label}</p>
+            {line.detail ? <p className="mt-1 text-xs leading-5 opacity-75">{line.detail}</p> : null}
             <p className="mt-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] opacity-65">
               {line.obligation === 'mandatory' ? mandatoryLabel : optionalLabel}
             </p>
@@ -75,8 +82,10 @@ function renderLines(lines: PublicPackagesSummaryLine[], mandatoryLabel: string,
           <p className="shrink-0 font-mono text-sm font-semibold tabular-nums">
             {money.format(line.amount)}
           </p>
-        </li>
+          </motion.div>
+        </motion.li>
       ))}
+      </AnimatePresence>
     </ul>
   )
 }
@@ -105,6 +114,7 @@ export function PackagesConfiguratorSummary({
   const scheduleLines = lines.filter((line) => line.category === 'schedule')
   const totalLine = lines.find((line) => line.category === 'total')
   const summaryTail = [depositLine, reserveLine, balanceLine].filter(Boolean) as PublicPackagesSummaryLine[]
+  const empty = !error && !lines.length
 
   const shellClass = dark
     ? 'border-[#caa24c]/22 bg-black/30 text-[#f7efe3] shadow-[0_24px_64px_-48px_rgba(0,0,0,0.55)]'
@@ -116,25 +126,27 @@ export function PackagesConfiguratorSummary({
 
   const breakdownContent = (
     <div className="space-y-5">
-      {renderLines(chargeLines, t.mandatory, t.optional)}
+      {renderLines(chargeLines, t.mandatory, t.optional, reduceMotion)}
       {summaryTail.length ? (
         <div className={`space-y-3 border-t pt-4 ${dividerClass}`}>
-          {renderLines(summaryTail, t.mandatory, t.optional)}
+          {renderLines(summaryTail, t.mandatory, t.optional, reduceMotion)}
         </div>
       ) : null}
       {scheduleLines.length ? (
         <div className={`space-y-3 border-t pt-4 ${dividerClass}`}>
           <p className={`text-[10px] font-bold uppercase tracking-[0.16em] ${eyebrowClass}`}>{t.payments}</p>
-          {renderLines(scheduleLines, t.mandatory, t.optional)}
+          {renderLines(scheduleLines, t.mandatory, t.optional, reduceMotion)}
         </div>
       ) : null}
     </div>
   )
 
   return (
-    <aside
+    <motion.aside
       id={id}
-      className={`min-w-0 scroll-mt-[calc(7rem+1.25rem)] rounded-2xl border p-5 sm:p-6 ${shellClass} ${compact ? '' : 'lg:sticky lg:top-[8.75rem] lg:scroll-mt-0 lg:max-xl:pb-5 xl:top-28 xl:pb-6 xl:pr-44'}`}
+      layout={reduceMotion ? false : 'size'}
+      transition={{ layout: { duration: reduceMotion ? 0 : 0.4, ease: [0.22, 1, 0.36, 1] } }}
+      className={`min-w-0 scroll-mt-[calc(7rem+1.25rem)] rounded-2xl border p-5 sm:p-6 ${shellClass} ${compact ? '' : `lg:sticky lg:top-[8.75rem] lg:scroll-mt-0 lg:max-xl:pb-5 xl:top-28 xl:pb-6 ${empty ? 'lg:flex lg:flex-col lg:self-stretch' : ''}`}`}
     >
       {/* Header: eyebrow label + on mobile, a toggle button */}
       <div className="flex items-center justify-between gap-3">
@@ -157,18 +169,42 @@ export function PackagesConfiguratorSummary({
       </div>
 
       {/* Main Breakdown Section: Desktop (sm+) is always visible; Mobile (<sm) expands/collapses with animation */}
-      {loading ? (
-        <p className={`mt-4 text-sm ${mutedClass}`}>{t.loading}</p>
-      ) : error ? (
+      {error ? (
         <p role="alert" className="mt-4 text-sm text-rose-700">{error}</p>
       ) : !lines.length ? (
-        <p className={`mt-4 text-sm leading-6 ${mutedClass}`}>{t.empty}</p>
+        <div>
+          <div className="relative mt-4 h-6 text-sm leading-6" aria-live="polite">
+            <AnimatePresence initial={false} mode="wait">
+              {loading ? (
+                <motion.p
+                  key="building"
+                  initial={{ opacity: 0 }}
+                  animate={reduceMotion ? { opacity: 1 } : { opacity: 1, backgroundPosition: ['200% 0', '-200% 0'] }}
+                  exit={{ opacity: 0 }}
+                  transition={reduceMotion ? { duration: 0 } : { opacity: { duration: 0.15 }, backgroundPosition: { duration: 1.8, repeat: Infinity, ease: 'linear' } }}
+                  className="font-medium text-[#8d672b]"
+                  style={reduceMotion ? undefined : { backgroundImage: 'linear-gradient(100deg, #8d672b 20%, #e8cc8c 45%, #8d672b 70%)', backgroundSize: '200% 100%', backgroundClip: 'text', WebkitTextFillColor: 'transparent' }}
+                >{t.loading}</motion.p>
+              ) : (
+                <motion.p key="empty" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: reduceMotion ? 0 : 0.12 }} className={mutedClass}>{t.empty}</motion.p>
+              )}
+            </AnimatePresence>
+          </div>
+          <div aria-hidden="true" className="mt-4 space-y-3">
+            {[0, 1].map((row) => (
+              <div key={row} className="flex items-center justify-between gap-4">
+                <span className={`h-2.5 rounded-full ${row === 0 ? 'w-28' : 'w-20'} ${dark ? 'bg-white/10' : 'bg-[#eadfcf]'}`} />
+                <span className={`h-2.5 w-12 rounded-full ${dark ? 'bg-white/10' : 'bg-[#eadfcf]'}`} />
+              </div>
+            ))}
+          </div>
+        </div>
       ) : (
         <>
           {/* Desktop view: always expanded */}
-          <div className="mt-5 hidden sm:block">
+          <motion.div initial={reduceMotion ? false : { opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: reduceMotion ? 0 : 0.3 }} className="mt-5 hidden sm:block">
             {breakdownContent}
-          </div>
+          </motion.div>
 
           {/* Mobile view: animated expand/collapse, collapsed by default */}
           <div className="sm:hidden">
@@ -206,7 +242,7 @@ export function PackagesConfiguratorSummary({
       )}
 
       {/* Total estimate and inquiry button: Always easily seen without having to scroll down on mobile */}
-      <div className={`mt-5 border-t pt-4 ${dividerClass}`}>
+      <div className={`mt-5 border-t pt-4 ${empty && !compact ? 'lg:mt-auto' : ''} ${dividerClass}`}>
         <div className="flex items-end justify-between gap-4">
           <p className="font-serif text-xl">{t.total}</p>
           <p className={`font-mono text-2xl font-bold tabular-nums ${totalValueClass}`}>
@@ -225,6 +261,6 @@ export function PackagesConfiguratorSummary({
           {submitLabel || t.inquire} <ArrowRight className="h-4 w-4" />
         </button>
       ) : null}
-    </aside>
+    </motion.aside>
   )
 }

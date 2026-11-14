@@ -2,13 +2,16 @@
 
 import Image from 'next/image'
 import Link from 'next/link'
-import { motion, useReducedMotion } from 'framer-motion'
-import { ArrowRight, CalendarCheck2, ShieldCheck, SlidersHorizontal, Sparkles } from '@/lib/icons/phosphor-compat'
+import type { MouseEvent } from 'react'
+import { useReducedMotion } from 'framer-motion'
+import { ArrowRight, CalendarCheck2, ShieldCheck, SlidersHorizontal, Users } from '@/lib/icons/phosphor-compat'
 import { Reveal } from '@/components/Reveal'
 import { StaggerCard, StaggerCards } from '@/components/StaggerCards'
 import { PackageFlipCard } from '@/components/packages/PackageFlipCard'
 import { PackagesConfigurator } from '@/components/packages/PackagesConfigurator'
 import { VenueFilm } from '@/components/VenueFilm'
+import { LuxorVisitBackdrop } from '@/components/LuxorVisitBackdrop'
+import { getLuxorLenis } from '@/components/SmoothScroll'
 import type { PublicPackageCardData } from '@/lib/luxorPublicPackages'
 type PackagesPageContentProps = {
   locale?: 'en' | 'es'
@@ -29,7 +32,7 @@ const content = {
       ['Real pricing', 'See your exact cost instantly.', CalendarCheck2],
       ['Flexible options', 'Customize to fit your vision.', SlidersHorizontal],
       ['Full transparency', 'All required fees included.', ShieldCheck],
-      ['Personalized support', 'Our team is here to help.', Sparkles],
+      ['Personalized support', 'Our team is here to help.', Users],
     ] as const,
     visitEyebrow: 'Ready to see it in person?',
     visitTitle: 'Schedule a Visit',
@@ -50,7 +53,7 @@ const content = {
       ['Precios reales', 'Mira el costo exacto al instante.', CalendarCheck2],
       ['Opciones flexibles', 'Personaliza según tu visión.', SlidersHorizontal],
       ['Transparencia total', 'Todos los cargos requeridos incluidos.', ShieldCheck],
-      ['Apoyo personalizado', 'Nuestro equipo está para ayudarte.', Sparkles],
+      ['Apoyo personalizado', 'Nuestro equipo está para ayudarte.', Users],
     ] as const,
     visitEyebrow: '¿Listo para conocerlo en persona?',
     visitTitle: 'Agenda una visita',
@@ -64,20 +67,36 @@ export function PackagesPageContent({ locale = 'en', cards }: PackagesPageConten
   const t = content[locale]
   const reduceMotion = useReducedMotion()
 
+  function scrollToPackages(event: MouseEvent<HTMLAnchorElement>) {
+    if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
+    const target = document.getElementById('explore-packages')
+    if (!target) return
+    event.preventDefault()
+    if (window.location.hash !== '#explore-packages') window.history.pushState(null, '', '#explore-packages')
+    const offset = (document.getElementById('shared-header')?.getBoundingClientRect().height ?? 80) + 20
+    const top = window.scrollY + target.getBoundingClientRect().top - offset
+    const lenis = getLuxorLenis()
+    if (lenis) {
+      lenis.scrollTo(top, { immediate: !!reduceMotion, duration: 0.9 })
+    } else {
+      window.scrollTo({ top, behavior: reduceMotion ? 'auto' : 'smooth' })
+    }
+  }
+
   return (
     <main className="overflow-x-hidden bg-[#050505] text-[#f7efe3]">
-      <section className="relative isolate overflow-hidden pt-28 sm:px-6 sm:pb-14 sm:pt-32 lg:px-8 lg:pb-20 lg:pt-40">
+      <section className="relative isolate overflow-hidden pt-28 lg:px-8 lg:pb-20 lg:pt-40">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_18%,rgba(202,162,76,0.14),transparent_22rem),radial-gradient(circle_at_88%_12%,rgba(189,101,117,0.16),transparent_20rem),linear-gradient(180deg,#120d0c,#050505)]" />
         <div className="absolute inset-0 luxor-noise opacity-[0.16]" />
         
-        {/* On mobile (< 640px): completely unrounded edge-to-edge video directly under header */}
-        <div className="sm:hidden">
+        {/* Mobile and tablet use the edge-to-edge film above the introduction. */}
+        <div className="relative z-10 lg:hidden">
           <div className="w-full overflow-hidden [&_.venue-film]:!rounded-none [&_.venue-film_video]:!rounded-none">
             <VenueFilm autoPlay />
           </div>
         </div>
 
-        <div className="relative z-10 mx-auto grid max-w-7xl gap-8 px-5 pb-12 pt-8 sm:px-0 sm:pb-0 sm:pt-0 lg:grid-cols-[.78fr_1.22fr] lg:items-center lg:gap-10">
+        <div className="relative z-10 mx-auto grid max-w-7xl gap-8 px-5 pb-12 pt-8 sm:px-6 lg:grid-cols-[.78fr_1.22fr] lg:items-center lg:gap-10 lg:px-0 lg:pb-0 lg:pt-0">
           <div className="order-2 mx-auto min-w-0 max-w-2xl text-center lg:order-1 lg:mx-0">
             <p className="font-mono text-[10px] sm:text-xs font-bold uppercase tracking-[0.38em] text-[#8d672b]">{t.heroEyebrow}</p>
             <h1 className="mx-auto mt-5 max-w-xl font-serif text-5xl leading-[0.92] text-[#fffaf3] sm:text-6xl lg:text-7xl">
@@ -95,6 +114,7 @@ export function PackagesPageContent({ locale = 'en', cards }: PackagesPageConten
             <div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row sm:items-center">
               <a
                 href="#explore-packages"
+                onClick={scrollToPackages}
                 className="luxor-gold-raised inline-flex min-h-12 items-center justify-center gap-2 rounded-md px-6 py-3 text-sm uppercase tracking-[0.14em]"
               >
                 {t.exploreEyebrow} <ArrowRight className="h-4 w-4" />
@@ -109,15 +129,14 @@ export function PackagesPageContent({ locale = 'en', cards }: PackagesPageConten
               </Link>
             </div>
           </div>
-          {/* On tablet (iPad sm to lg): keeps rounded corners and sits ABOVE the hero text. On desktop (lg+): sits on the right column. */}
-          <div className="order-1 hidden min-w-0 sm:block lg:order-2">
+          <div className="order-1 hidden min-w-0 lg:order-2 lg:block [&_.venue-film]:!rounded-2xl">
             <VenueFilm autoPlay />
           </div>
         </div>
       </section>
 
-      <section id="explore-packages" className="scroll-mt-28 bg-[#080706] py-16 sm:py-24 lg:py-28">
-        <div className="mx-auto max-w-7xl px-5 sm:px-6 lg:px-8">
+      <section className="bg-[#080706] py-16 sm:py-24 lg:py-28">
+        <div id="explore-packages" className="mx-auto max-w-7xl scroll-mt-28 px-5 sm:px-6 lg:px-8">
           <Reveal className="max-w-3xl">
             <h2 className="font-serif text-4xl leading-[0.95] sm:text-5xl lg:text-6xl">{t.exploreTitle}</h2>
             <p className="mt-5 text-base leading-7 text-[#d7c29a]/72">{t.exploreCopy}</p>
@@ -152,10 +171,12 @@ export function PackagesPageContent({ locale = 'en', cards }: PackagesPageConten
           <StaggerCards className="mt-10 grid gap-3 sm:grid-cols-2 lg:grid-cols-4" stagger={0.07}>
             {t.benefits.map(([title, copy, Icon]) => (
               <StaggerCard key={title} className="h-full">
-                <article className="h-full rounded-md border border-[#caa24c]/18 bg-black/24 p-5">
-                  <Icon className="h-5 w-5 text-[#caa24c]" aria-hidden />
-                  <h3 className="mt-4 font-serif text-2xl leading-none text-[#f7efe3]">{title}</h3>
-                  <p className="mt-3 text-sm leading-6 text-[#d7c29a]/68">{copy}</p>
+                <article className="flex h-full items-start gap-4 rounded-2xl border border-[#caa24c]/18 bg-black/24 p-5">
+                  <Icon className="mt-0.5 h-5 w-5 shrink-0 text-[#caa24c]" aria-hidden />
+                  <div className="min-w-0">
+                    <h3 className="font-serif text-2xl leading-none text-[#f7efe3]">{title}</h3>
+                    <p className="mt-3 text-sm leading-6 text-[#d7c29a]/68">{copy}</p>
+                  </div>
                 </article>
               </StaggerCard>
             ))}
@@ -164,45 +185,7 @@ export function PackagesPageContent({ locale = 'en', cards }: PackagesPageConten
       </section>
 
       <section className="relative isolate overflow-hidden py-16 sm:py-24">
-        <div className="pointer-events-none absolute inset-0 -z-10 flex items-center justify-center overflow-hidden" aria-hidden>
-          <motion.div
-            animate={reduceMotion ? undefined : { scale: [1, 1.07, 1], opacity: [0.22, 0.34, 0.22] }}
-            transition={{ duration: 9, repeat: Infinity, ease: 'easeInOut' }}
-            className="h-[34rem] w-[34rem] rounded-full blur-3xl sm:h-[44rem] sm:w-[44rem]"
-            style={{ background: 'radial-gradient(circle, rgba(202, 162, 76, 0.36) 0%, rgba(185, 138, 61, 0.12) 48%, transparent 72%)' }}
-          />
-          <motion.svg
-            viewBox="0 0 640 640"
-            className="absolute h-[36rem] w-[36rem] text-[#caa24c]/30 sm:h-[48rem] sm:w-[48rem]"
-            animate={reduceMotion ? undefined : { rotate: 360 }}
-            transition={{ duration: 64, repeat: Infinity, ease: 'linear' }}
-          >
-            <circle cx="320" cy="320" r="290" fill="none" stroke="currentColor" strokeWidth="1" strokeDasharray="3 9" />
-            <circle cx="320" cy="320" r="245" fill="none" stroke="currentColor" strokeWidth="0.9" opacity="0.7" />
-            <circle cx="320" cy="320" r="195" fill="none" stroke="currentColor" strokeWidth="1" strokeDasharray="12 18" opacity="0.65" />
-            <g stroke="currentColor" strokeWidth="0.9" opacity="0.55">
-              {Array.from({ length: 24 }, (_, index) => {
-                const angle = (index * 15 * Math.PI) / 180
-                const x1 = 320 + Math.cos(angle) * 145
-                const y1 = 320 + Math.sin(angle) * 145
-                const x2 = 320 + Math.cos(angle) * 290
-                const y2 = 320 + Math.sin(angle) * 290
-                return <line key={index} x1={x1} y1={y1} x2={x2} y2={y2} />
-              })}
-            </g>
-            <rect x="175" y="175" width="290" height="290" fill="none" stroke="currentColor" strokeWidth="0.85" opacity="0.4" transform="rotate(45 320 320)" />
-            <rect x="175" y="175" width="290" height="290" fill="none" stroke="currentColor" strokeWidth="0.85" opacity="0.3" />
-          </motion.svg>
-          <motion.svg
-            viewBox="0 0 420 420"
-            className="absolute h-[23rem] w-[23rem] text-[#9b6f24]/28 sm:h-[30rem] sm:w-[30rem]"
-            animate={reduceMotion ? undefined : { rotate: -360 }}
-            transition={{ duration: 48, repeat: Infinity, ease: 'linear' }}
-          >
-            <circle cx="210" cy="210" r="180" fill="none" stroke="currentColor" strokeWidth="1.1" strokeDasharray="6 14" />
-            <polygon points="210,18 228,192 402,210 228,228 210,402 192,228 18,210 192,192" fill="none" stroke="currentColor" strokeWidth="0.95" opacity="0.6" />
-          </motion.svg>
-        </div>
+        <LuxorVisitBackdrop />
 
         <div className="relative mx-auto max-w-7xl px-5 sm:px-6 lg:px-8">
           <Reveal>

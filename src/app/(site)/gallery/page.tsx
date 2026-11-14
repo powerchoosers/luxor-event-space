@@ -4,8 +4,8 @@ import { createPortal } from 'react-dom'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
-import { AnimatePresence, animate, motion, type PanInfo, useMotionValue } from 'framer-motion'
-import { ArrowRight, ChevronLeft, ChevronRight, Maximize2, X } from '@/lib/icons/phosphor-compat'
+import { AnimatePresence, animate, motion, type PanInfo, useMotionValue, useReducedMotion } from 'framer-motion'
+import { ArrowRight, ChevronLeft, ChevronRight, X } from '@/lib/icons/phosphor-compat'
 import { Reveal } from '@/components/Reveal'
 import { StaggerCards, StaggerCard } from '@/components/StaggerCards'
 import { VenueFilm } from '@/components/VenueFilm'
@@ -156,7 +156,7 @@ function GalleryCard({ item, onOpen, priority = false, mobile = false, className
       data-conversion="gallery_open"
       data-conversion-label={item.title}
       aria-label={`Open ${item.title}`}
-      className={`group relative block overflow-hidden rounded-md border border-[#caa24c]/22 bg-[#0a0807] text-left shadow-[0_34px_90px_-62px_rgba(0,0,0,1)] outline-none transition hover:-translate-y-1 hover:border-[#f1d27a]/45 focus-visible:border-[#f1d27a] focus-visible:ring-2 focus-visible:ring-[#caa24c]/40 ${className}`}
+      className={`group relative block overflow-hidden rounded-2xl border border-[#caa24c]/22 bg-[#0a0807] text-left shadow-[0_34px_90px_-62px_rgba(0,0,0,1)] outline-none transition hover:-translate-y-1 hover:border-[#f1d27a]/45 focus-visible:border-[#f1d27a] focus-visible:ring-2 focus-visible:ring-[#caa24c]/40 ${className}`}
     >
       <Image
         src={item.src}
@@ -177,16 +177,15 @@ function GalleryCard({ item, onOpen, priority = false, mobile = false, className
           <p className="font-mono text-[9px] font-bold uppercase tracking-[0.28em] !text-[#f1d27a] drop-shadow-[0_2px_8px_rgba(0,0,0,1)]">{item.category}</p>
           <h2 className="mt-2 font-serif text-3xl leading-[0.92] !text-white drop-shadow-[0_3px_14px_rgba(0,0,0,1)] sm:text-4xl">{item.title}</h2>
           <p className="mt-2 max-w-lg text-sm leading-5 !text-white/85 drop-shadow-[0_2px_8px_rgba(0,0,0,1)] sm:text-[15px] sm:leading-6">{item.caption}</p>
+          <span aria-hidden="true" className="mt-3 inline-flex items-center gap-1.5 text-xs font-semibold !text-white drop-shadow-[0_2px_8px_rgba(0,0,0,1)]">View photo <ArrowRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-1" /></span>
         </div>
-        <span className="hidden h-10 w-10 shrink-0 items-center justify-center rounded-full border border-white/30 bg-black/20 text-white/90 backdrop-blur-sm transition group-hover:border-[#f1d27a]/70 group-hover:bg-[#caa24c] group-hover:text-white sm:flex">
-          <Maximize2 className="h-4 w-4" />
-        </span>
       </div>
     </button>
   )
 }
 
 export default function GalleryPage() {
+  const reduceMotion = useReducedMotion()
   const [activeFilter, setActiveFilter] = useState<GalleryCategory>('All')
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null)
   const [desktopPage, setDesktopPage] = useState(0)
@@ -313,11 +312,14 @@ export default function GalleryPage() {
 
   return (
     <main className="overflow-x-hidden bg-[#050505] text-[#f7efe3]">
-      <section className="relative isolate overflow-hidden px-5 pb-14 pt-32 sm:px-6 lg:px-8 lg:pb-20 lg:pt-40">
+      <section className="relative isolate overflow-hidden pt-28 lg:px-8 lg:pb-20 lg:pt-40">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_18%,rgba(202,162,76,0.14),transparent_22rem),radial-gradient(circle_at_88%_12%,rgba(189,101,117,0.16),transparent_20rem),linear-gradient(180deg,#120d0c,#050505)]" />
         <div className="absolute inset-0 luxor-noise opacity-[0.16]" />
-        <div className="relative z-10 mx-auto grid max-w-7xl gap-10 lg:grid-cols-[.78fr_1.22fr] lg:items-center">
-          <div className="max-w-2xl">
+        <div className="relative z-10 lg:hidden [&_.venue-film]:!rounded-none [&_.venue-film_video]:!rounded-none">
+          <VenueFilm autoPlay />
+        </div>
+        <div className="relative z-10 mx-auto grid max-w-7xl gap-10 px-5 pb-14 pt-8 sm:px-6 lg:grid-cols-[.78fr_1.22fr] lg:items-center lg:px-0 lg:pb-0 lg:pt-0">
+          <div className="order-2 mx-auto max-w-2xl text-center lg:order-1">
             <p className="font-mono text-xs font-bold uppercase tracking-[0.28em] text-[#f1d27a]">Inside Luxor</p>
             <h1 className="mt-5 font-serif text-5xl leading-[0.92] text-[#f7efe3] sm:text-6xl lg:text-7xl">
               See the room <span className="italic text-[#f1d27a]">before</span> you visit.
@@ -325,25 +327,27 @@ export default function GalleryPage() {
             <p className="mt-7 max-w-xl text-base leading-7 text-[#d7c29a]/78 sm:text-lg">Watch our venue film, captured inside Luxor. Then explore the collection and visit to picture your celebration here.</p>
             <Link href="/visit#visit-booking" data-conversion="visit_cta_click" data-conversion-label="Gallery hero" className="luxor-gold-raised mt-8 inline-flex min-h-12 items-center justify-center gap-2 rounded-md px-6 py-3 text-sm uppercase tracking-[.14em]">Schedule a Visit <ArrowRight className="h-4 w-4" /></Link>
           </div>
-          <VenueFilm autoPlay />
+          <div className="order-1 hidden min-w-0 lg:order-2 lg:block [&_.venue-film]:!rounded-2xl">
+            <VenueFilm autoPlay />
+          </div>
         </div>
       </section>
 
       <section className="bg-[#080706] py-8 sm:py-14 lg:py-16">
         <div className="mx-auto max-w-7xl px-5 sm:px-6 lg:px-8">
-          <div className="flex flex-col gap-6 border-y border-[#caa24c]/18 py-5 lg:flex-row lg:items-center lg:justify-between">
-            <div>
-              <p className="font-mono text-[10px] uppercase tracking-[0.34em] text-[#caa24c]">Photo collection</p>
-              <p className="mt-2 max-w-2xl text-sm leading-6 text-[#d7c29a]/68">
-                Filter by event style, then open any image for a closer look at the room, decor, and guest flow.
-              </p>
+          <div>
+            <p className="text-center font-mono text-[10px] font-bold uppercase tracking-[0.28em] text-[#9b6f24] sm:text-left">Photo collection</p>
+            <div className="mt-3 flex flex-col gap-3 text-center sm:flex-row sm:items-end sm:justify-between sm:text-left">
+              <h2 className="font-serif text-4xl leading-none text-[#241d17] sm:text-5xl">Explore the space</h2>
+              <p className="max-w-md text-sm leading-6 text-[#665a4e]">Choose a category, then open a photo for a closer look.</p>
             </div>
 
-            <div className="flex flex-wrap gap-2" aria-label="Gallery filters">
+            <div className="mt-8 grid grid-cols-3 gap-1 border-b border-[#caa24c]/25 pb-3 sm:flex sm:flex-wrap sm:items-center sm:gap-x-2 sm:gap-y-1" role="group" aria-label="Gallery filters">
               {filters.map((filter) => (
                 <button
                   key={filter}
                   type="button"
+                  aria-pressed={activeFilter === filter}
                   onClick={() => {
                     setActiveFilter(filter)
                     setSelectedIndex(null)
@@ -352,20 +356,29 @@ export default function GalleryPage() {
                     mobileX.stop()
                     mobileX.set(0)
                   }}
-                  className={`inline-flex min-h-10 items-center justify-center rounded-md border px-4 py-2 text-[10px] font-bold uppercase tracking-[0.2em] transition ${
+                  className={`relative inline-flex min-h-11 min-w-0 items-center justify-center rounded-xl px-1 py-2 text-[13px] font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#9b6f24] sm:px-4 sm:text-sm ${
                     activeFilter === filter
-                      ? 'border-[#f1d27a]/50 bg-[#caa24c] text-white'
-                      : 'border-[#caa24c]/24 bg-black/25 text-[#d7c29a]/78 hover:border-[#f1d27a]/50 hover:text-[#f7efe3]'
+                      ? '!text-white'
+                      : 'text-[#665a4e] hover:bg-[#f4ede3] hover:text-[#241d17]'
                   }`}
                 >
-                  {filter}
+                  {activeFilter === filter ? <motion.span aria-hidden="true" layoutId={reduceMotion ? undefined : 'gallery-filter-selection'} className="luxor-gold-indicator pointer-events-none absolute inset-0 rounded-xl" transition={{ duration: 0.32, ease: [0.22, 1, 0.36, 1] }} /> : null}
+                  <span className="relative">{filter}</span>
                 </button>
               ))}
             </div>
           </div>
 
           <div className="mt-6 lg:hidden">
-            <div ref={mobileGalleryRef} className="relative aspect-[4/5] touch-pan-y overflow-hidden rounded-md bg-[#0a0807] sm:aspect-[16/10]" aria-label={`${activeFilter} photo gallery`} aria-roledescription="carousel">
+            <div ref={mobileGalleryRef} className="relative aspect-[4/5] touch-pan-y overflow-hidden rounded-2xl bg-[#0a0807] sm:aspect-[16/10]" aria-label={`${activeFilter} photo gallery`} aria-roledescription="carousel">
+              <AnimatePresence initial={false}>
+              <motion.div
+                key={activeFilter}
+                initial={reduceMotion ? false : { opacity: 0.55, filter: 'blur(8px)' }}
+                animate={{ opacity: 1, filter: 'blur(0px)' }}
+                transition={{ duration: reduceMotion ? 0 : 0.35, ease: [0.22, 1, 0.36, 1] }}
+                className="relative h-full w-full"
+              >
               <motion.div
                 className="flex h-full cursor-grab transform-gpu will-change-transform active:cursor-grabbing"
                 style={{ x: mobileX }}
@@ -406,12 +419,14 @@ export default function GalleryPage() {
                   />
                 ))}
               </div>
+              </motion.div>
+              </AnimatePresence>
             </div>
           </div>
 
           <StaggerCards
             key={`${activeFilter}-${desktopPage}`}
-            className="mt-6 hidden gap-4 lg:grid lg:auto-rows-[18rem] lg:grid-cols-12"
+            className="mt-6 hidden gap-5 lg:grid lg:grid-cols-3"
             stagger={0.06}
           >
             {desktopGallery.map((item, index) => {
@@ -419,7 +434,7 @@ export default function GalleryPage() {
               return (
                 <StaggerCard
                   key={`${item.src}-${item.title}`}
-                  className={activeFilter === 'All' ? `${item.span} ${item.aspect}` : 'aspect-[4/3] lg:col-span-6 lg:h-full'}
+                  className="aspect-[4/3] min-w-0"
                 >
                   <GalleryCard
                     item={item}
@@ -442,7 +457,7 @@ export default function GalleryPage() {
                 onClick={() => setDesktopPage((page) => Math.max(0, page - 1))}
                 disabled={desktopPage === 0}
                 aria-label="Previous gallery page"
-                className="flex h-10 w-10 items-center justify-center rounded-full border border-[#caa24c]/28 text-[#f7efe3] transition hover:border-[#f1d27a]/55 hover:bg-[#caa24c] hover:text-white disabled:cursor-default disabled:opacity-30"
+                className="gallery-pagination-arrow flex h-10 w-10 items-center justify-center rounded-full border border-[#caa24c]/28 text-[#f7efe3] transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#9b6f24] disabled:cursor-default disabled:opacity-30"
               >
                 <ChevronLeft className="h-5 w-5" />
               </button>
@@ -461,7 +476,7 @@ export default function GalleryPage() {
                 onClick={() => setDesktopPage((page) => Math.min(desktopPageCount - 1, page + 1))}
                 disabled={desktopPage === desktopPageCount - 1}
                 aria-label="Next gallery page"
-                className="flex h-10 w-10 items-center justify-center rounded-full border border-[#caa24c]/28 text-[#f7efe3] transition hover:border-[#f1d27a]/55 hover:bg-[#caa24c] hover:text-white disabled:cursor-default disabled:opacity-30"
+                className="gallery-pagination-arrow flex h-10 w-10 items-center justify-center rounded-full border border-[#caa24c]/28 text-[#f7efe3] transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#9b6f24] disabled:cursor-default disabled:opacity-30"
               >
                 <ChevronRight className="h-5 w-5" />
               </button>
@@ -527,7 +542,7 @@ export default function GalleryPage() {
                     animate={{ opacity: 1, scale: 1, x: 0, y: 0 }}
                     exit={{ opacity: 0, scale: 0.96, y: 16 }}
                     transition={{ duration: 0.28, ease: [0.23, 1, 0.32, 1] }}
-                    className="relative h-full w-full cursor-grab touch-pan-y overflow-hidden bg-black active:cursor-grabbing sm:h-[min(84dvh,52rem)] sm:max-w-6xl sm:rounded-md sm:border sm:border-[#caa24c]/24 sm:shadow-[0_40px_120px_-40px_rgba(0,0,0,1)]"
+                    className="relative h-full w-full cursor-grab touch-pan-y overflow-hidden bg-black active:cursor-grabbing sm:h-[min(84dvh,52rem)] sm:max-w-6xl sm:rounded-2xl sm:border sm:border-[#caa24c]/24 sm:shadow-[0_40px_120px_-40px_rgba(0,0,0,1)]"
                   >
                     <div aria-hidden="true" className="pointer-events-none absolute inset-0 opacity-0">
                       {filteredGallery.map((item) => (
@@ -602,10 +617,12 @@ export default function GalleryPage() {
           <StaggerCards className="mt-10 grid gap-4 md:grid-cols-3" stagger={0.08}>
             {photoUses.map(([title, copy], index) => (
               <StaggerCard key={title} className="h-full">
-                <article className="h-full rounded-md border border-[#caa24c]/20 bg-black/24 p-6">
-                  <span className="font-serif text-3xl text-[#caa24c]">{String(index + 1).padStart(2, '0')}</span>
-                  <h3 className="mt-5 font-serif text-3xl text-[#f7efe3]">{title}</h3>
-                  <p className="mt-3 text-sm leading-6 text-[#d7c29a]/70">{copy}</p>
+                <article className="flex h-full items-start gap-4 rounded-2xl border border-[#caa24c]/20 bg-black/24 p-6">
+                  <span className="shrink-0 font-serif text-3xl leading-none text-[#caa24c]">{String(index + 1).padStart(2, '0')}</span>
+                  <div className="min-w-0">
+                    <h3 className="font-serif text-3xl leading-none text-[#f7efe3]">{title}</h3>
+                    <p className="mt-3 text-sm leading-6 text-[#d7c29a]/70">{copy}</p>
+                  </div>
                 </article>
               </StaggerCard>
             ))}

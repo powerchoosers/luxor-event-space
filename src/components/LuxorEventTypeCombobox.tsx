@@ -1,10 +1,11 @@
 'use client'
 
-import { useCallback, useEffect, useId, useRef, useState, type KeyboardEvent } from 'react'
+import { useCallback, useEffect, useId, useRef, useState, useSyncExternalStore, type KeyboardEvent, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import { X } from '@/lib/icons/phosphor-compat'
 import { LUXOR_EVENT_TYPE_MAX_LENGTH, suggestLuxorEventTypes } from '@/lib/luxorInquiryTypes'
+
 import {
   LUXOR_PUBLIC_GLASS_LAYER_Z_INDEX,
   LUXOR_PUBLIC_GLASS_OPTION_BASE,
@@ -12,10 +13,15 @@ import {
 } from '@/lib/luxorPublicGlassPopover'
 import { PORTAL_MODAL_EASE, PORTAL_MODAL_EXIT_EASE } from '@/components/portal/PortalUI'
 
+const subscribeToMount = () => () => undefined
+const clientMounted = () => true
+const serverMounted = () => false
+
 type LuxorEventTypeComboboxProps = {
   value: string
   onChange: (value: string) => void
   label: string
+  labelIcon?: ReactNode
   placeholder?: string
   required?: boolean
   disabled?: boolean
@@ -57,6 +63,7 @@ export function LuxorEventTypeCombobox({
   value,
   onChange,
   label,
+  labelIcon,
   placeholder = 'Search or enter an event type...',
   required = false,
   disabled = false,
@@ -85,6 +92,7 @@ export function LuxorEventTypeCombobox({
   const [activeIndex, setActiveIndex] = useState(-1)
   const [coords, setCoords] = useState({ top: 0, left: 0, width: 0, maxHeight: 256 })
   const isPublicGlass = popoverSurface === 'public-glass'
+  const mounted = useSyncExternalStore(subscribeToMount, clientMounted, serverMounted)
   const reduceMotion = useReducedMotion()
   const suggestions = suggestLuxorEventTypes(value, locale)
   const activeSuggestion = suggestions[activeIndex]
@@ -225,7 +233,7 @@ export function LuxorEventTypeCombobox({
   return (
     <div ref={rootRef} className={`relative min-w-0 ${className}`}>
       <label htmlFor={inputId} className={`${hideLabel ? 'sr-only' : variant === 'portal' ? 'mb-1.5 block text-xs font-medium' : 'mb-1.5 block text-[10px] font-bold uppercase tracking-[0.16em]'} ${LABEL_STYLES[variant]} ${labelClassName}`}>
-        {label}{required ? ' *' : ''}
+        {labelIcon}{label}{required ? ' *' : ''}
       </label>
       <div className="relative">
         <input
@@ -286,7 +294,7 @@ export function LuxorEventTypeCombobox({
         ) : null}
       </div>
 
-      {isPublicGlass && typeof document !== 'undefined' ? createPortal(
+      {isPublicGlass && mounted ? createPortal(
         <div
           className="pointer-events-none fixed inset-0"
           style={{ zIndex: LUXOR_PUBLIC_GLASS_LAYER_Z_INDEX }}

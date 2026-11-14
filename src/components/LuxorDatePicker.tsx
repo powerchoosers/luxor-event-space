@@ -1,11 +1,15 @@
 'use client'
 
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type KeyboardEvent as ReactKeyboardEvent } from 'react'
 import { createPortal } from 'react-dom'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import { CalendarDays, ChevronDown, ChevronLeft, ChevronRight } from '@/lib/icons/phosphor-compat'
 import { addCalendarMonthsDateKey, formatLocalDateKey, getDateKeyInTimeZone } from '@/lib/publicEventDate'
 import { LUXOR_PUBLIC_GLASS_LAYER_Z_INDEX, LUXOR_PUBLIC_GLASS_POPOVER_SHELL } from '@/lib/luxorPublicGlassPopover'
+
+const subscribeToMount = () => () => undefined
+const clientMounted = () => true
+const serverMounted = () => false
 
 function parseDateKey(value: string) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return null
@@ -78,6 +82,7 @@ export function LuxorDatePicker({
   const returnFocusAfterCloseRef = useRef(false)
   const safeAreaInsetsRef = useRef<{ top: number; right: number; bottom: number; left: number } | null>(null)
   const prefersReducedMotion = useReducedMotion()
+  const mounted = useSyncExternalStore(subscribeToMount, clientMounted, serverMounted)
   const isPortal = theme === 'portal'
   const isPublicGlass = popoverSurface === 'public-glass'
   const motionDuration = prefersReducedMotion ? 0 : 0.18
@@ -496,7 +501,7 @@ export function LuxorDatePicker({
         <CalendarDays aria-hidden="true" className={`h-4 w-4 shrink-0 text-[#8d672b] ${triggerPrefix ? 'ml-auto' : ''}`}  />
       </button>
 
-      {typeof document !== 'undefined' ? createPortal(
+      {mounted ? createPortal(
         isPublicGlass ? (
           <div
             className="pointer-events-none fixed inset-0"

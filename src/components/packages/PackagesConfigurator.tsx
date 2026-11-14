@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { CalendarDays, Check, Clock, Tag, Users } from '@/lib/icons/phosphor-compat'
+import { CalendarDays, Check, Clock, PartyPopper, Tag, Users } from '@/lib/icons/phosphor-compat'
 import { isGuestCountOverCapacity, LUXOR_GUEST_CAPACITY_MESSAGE, LUXOR_GUEST_CAPACITY_MESSAGE_ES, LUXOR_MAX_GUESTS } from '@/lib/luxorInquiryTypes'
 import { PortalSelect } from '@/components/portal/PortalUI'
 import { LuxorEventTypeCombobox } from '@/components/LuxorEventTypeCombobox'
@@ -113,9 +113,11 @@ export function PackagesConfigurator({ locale = 'en', defaultPackageTier = 'sign
 
   const recalculate = useCallback(async () => {
     if (!eventDate || !guestCount || guestInvalid || !rentalPeriod || !packageTierId) {
+      requestId.current += 1
       setSummaryLines([])
       setTotal(null)
       setError(null)
+      setLoading(false)
       return
     }
     const current = ++requestId.current
@@ -211,6 +213,7 @@ export function PackagesConfigurator({ locale = 'en', defaultPackageTier = 'sign
             </label>
             <LuxorEventTypeCombobox
               label={labels.eventType}
+              labelIcon={<PartyPopper className="h-4 w-4 text-[#caa24c]" aria-hidden />}
               variant="public-light"
               locale={locale}
               popoverSurface="public-glass"
