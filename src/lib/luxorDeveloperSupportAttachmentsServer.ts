@@ -27,7 +27,7 @@ const MAX_ATTACHMENTS = 5
 const MAX_PDF_BYTES = 8 * 1024 * 1024
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024
 const MAX_TEXT_CHARS = 12_000
-const SIGNED_URL_SECONDS = 7 * 24 * 60 * 60
+export const DEVELOPER_SUPPORT_SIGNED_URL_SECONDS = 60 * 60 * 24 * 3
 
 function safeFileName(value: string) {
   const basename = value.split(/[\\/]/).pop() || 'attachment'
@@ -231,22 +231,72 @@ export async function storeDeveloperSupportAttachments(
   return stored
 }
 
+export type DeveloperSupportSignedAttachment = DeveloperSupportStoredAttachment & {
+  signed_url: string | null
+  expires_at: string | null
+}
+
+export type DeveloperSupportWebhookAttachment = {
+  name: string
+  path: string | null
+  kind: DeveloperSupportStoredAttachment['kind']
+  contentType: string
+  signedUrl: string | null
+  expiresAt: string | null
+  textExcerpt: string | null
+}
+
+export function developerSupportAttachmentsForWebhook(
+  signed: DeveloperSupportSignedAttachment[],
+): DeveloperSupportWebhookAttachment[] {
+  return signed.map((attachment) => ({
+    name: attachment.file_name,
+    path: attachment.storage_path,
+    kind: attachment.kind,
+    contentType: attachment.content_type,
+    signedUrl: attachment.signed_url,
+    expiresAt: attachment.expires_at,
+    textExcerpt: attachment.kind === 'text' ? attachment.text_excerpt : null,
+  }))
+}
+
+export function developerSupportAttachmentsForDispatchRecord(
+  signed: DeveloperSupportSignedAttachment[],
+): Array<Record<string, unknown>> {
+  return signed.map((attachment) => {
+    const record: Record<string, unknown> = {
+      id: attachment.id,
+      file_name: attachment.file_name,
+      content_type: attachment.content_type,
+      kind: attachment.kind,
+      storage_path: attachment.storage_path,
+      text_excerpt: attachment.text_excerpt,
+    }
+    if (attachment.signed_url) {
+      record.signed_url = attachment.signed_url
+      record.expires_at = attachment.expires_at
+    }
+    return record
+  })
+}
+
 export async function signDeveloperSupportAttachmentUrls(
   attachments: DeveloperSupportStoredAttachment[],
-): Promise<Array<DeveloperSupportStoredAttachment & { signed_url: string | null }>> {
+): Promise<DeveloperSupportSignedAttachment[]> {
   const { url, key } = await getLuxorExpenseStorageConfig()
   const client = createClient(url, key, { auth: { persistSession: false } })
-  const signed: Array<DeveloperSupportStoredAttachment & { signed_url: string | null }> = []
+  const signed: DeveloperSupportSignedAttachment[] = []
   for (const attachment of attachments) {
     if (!attachment.storage_path) {
-      signed.push({ ...attachment, signed_url: null })
+      signed.push({ ...attachment, signed_url: null, expires_at: null })
       continue
     }
+    const expiresAt = new Date(Date.now() + DEVELOPER_SUPPORT_SIGNED_URL_SECONDS * 1000).toISOString()
     const { data, error } = await client.storage
       .from('luxor-documents')
-      .createSignedUrl(attachment.storage_path, SIGNED_URL_SECONDS, { download: attachment.file_name })
+      .createSignedUrl(attachment.storage_path, DEVELOPER_SUPPORT_SIGNED_URL_SECONDS, { download: attachment.file_name })
     if (error || !data?.signedUrl) throw new Error('Could not prepare developer ticket file links.')
-    signed.push({ ...attachment, signed_url: data.signedUrl })
+    signed.push({ ...attachment, signed_url: data.signedUrl, expires_at: expiresAt })
   }
   return signed
 }

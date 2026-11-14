@@ -121,9 +121,22 @@ test('webhook payload carries pagePath, pageArea, and context route lines', () =
     reporterEmail: 'owner@luxor.invalid',
     reporterName: 'Arianna Patterson',
     attachmentContext: null,
+    attachments: [
+      {
+        name: 'screenshot.png',
+        path: 'elena-chat/00000000-0000-4000-8000-000000000002/file.png',
+        kind: 'image',
+        contentType: 'image/png',
+        signedUrl: 'https://example.test/signed',
+        expiresAt: '2026-11-17T12:00:00.000Z',
+        textExcerpt: null,
+      },
+    ],
   })
   assert.equal(payload.pagePath, '/events')
   assert.equal(payload.pageArea, 'public')
+  assert.equal(payload.attachments.length, 1)
+  assert.equal(payload.attachments[0].signedUrl, 'https://example.test/signed')
   assert.match(payload.context, /Target page path \(authoritative route\): \/events/)
   assert.match(payload.context, /Page area: public/)
 })

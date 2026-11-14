@@ -7,10 +7,14 @@ import { SupabaseRestError, supabaseRestStrict } from '@/lib/supabaseRestServer'
 import { newElenaConfirmationToken, parseElenaConfirmationToken } from '@/lib/luxorElenaConfirmation'
 import { triggerLuxorCursorAutomation } from '@/lib/luxorCursorAutomationServer'
 import {
+  developerSupportAttachmentsForDispatchRecord,
+  developerSupportAttachmentsForWebhook,
   parseDeveloperSupportAttachmentInputs,
   signDeveloperSupportAttachmentUrls,
   storeDeveloperSupportAttachments,
+  type DeveloperSupportSignedAttachment,
   type DeveloperSupportStoredAttachment,
+  type DeveloperSupportWebhookAttachment,
 } from '@/lib/luxorDeveloperSupportAttachmentsServer'
 import {
   getDeveloperSupportPageArea,
@@ -123,7 +127,7 @@ function buildCursorContext(
     '',
     ticket.attachmentContext ? `${ticket.attachmentContext}\n` : '',
     'Work in the luxor-event-space repository on main. Follow AGENTS.md and docs/luxor-design-skill.md for UI work. Keep changes scoped to the reported issue.',
-    'When attachments include signed URLs, download and inspect them for screenshots, PDFs, and context. URLs expire after about seven days.',
+    'When attachments include signed URLs, download and inspect them for screenshots, PDFs, and context. URLs expire after about three days.',
     'Run npm run typecheck and npm run lint:ci -- --quiet before finishing. Do not push unless Lewis explicitly asked in this automation run.',
   ].filter((line, index, array) => !(line === '' && index > 0 && array[index - 1] === '')).join('\n')
 }
@@ -137,6 +141,7 @@ export function buildDeveloperSupportWebhookPayload(input: {
   reporterEmail: string
   reporterName: string
   attachmentContext: string | null
+  attachments: DeveloperSupportWebhookAttachment[]
 }): LuxorDeveloperSupportWebhookPayload {
   const pagePath = normalizeDeveloperSupportPagePath(input.pagePath)
   const pageArea = getDeveloperSupportPageArea(pagePath)
@@ -157,11 +162,18 @@ export function buildDeveloperSupportWebhookPayload(input: {
     title: input.title,
     priority: input.priority,
     ticketId: input.confirmationId,
+    attachments: input.attachments,
   }
 }
 
-async function buildAttachmentContext(attachments: DeveloperSupportStoredAttachment[]) {
-  if (!attachments.length) return null
+async function buildAttachmentContext(attachments: DeveloperSupportStoredAttachment[]): Promise<{
+  attachmentContext: string | null
+  signed: DeveloperSupportSignedAttachment[]
+  webhookAttachments: DeveloperSupportWebhookAttachment[]
+}> {
+  if (!attachments.length) {
+    return { attachmentContext: null, signed: [], webhookAttachments: [] }
+  }
   const signed = await signDeveloperSupportAttachmentUrls(attachments)
   const lines = [
     'Owner-provided attachments (signed URLs for the cloud worker):',
@@ -176,7 +188,11 @@ async function buildAttachmentContext(attachments: DeveloperSupportStoredAttachm
       lines.push(`- ${item.file_name} (${item.content_type}): ${item.signed_url}`)
     }
   }
-  return lines.join('\n')
+  return {
+    attachmentContext: lines.join('\n'),
+    signed,
+    webhookAttachments: developerSupportAttachmentsForWebhook(signed),
+  }
 }
 
 export async function issueElenaDeveloperSupportConfirmation(input: unknown) {
@@ -294,8 +310,24 @@ export async function consumeElenaDeveloperSupportConfirmation(input: unknown) {
 
   const storedAttachments = Array.isArray(consumed.context_attachments) ? consumed.context_attachments : []
   let attachmentContext: string | null
+  let webhookAttachments: DeveloperSupportWebhookAttachment[] = []
+  let dispatchAttachments: Array<Record<string, unknown>> = []
   try {
-    attachmentContext = await buildAttachmentContext(storedAttachments)
+    const attachmentBundle = await buildAttachmentContext(storedAttachments)
+    attachmentContext = attachmentBundle.attachmentContext
+    webhookAttachments = attachmentBundle.webhookAttachments
+    dispatchAttachments = developerSupportAttachmentsForDispatchRecord(attachmentBundle.signed)
+    if (dispatchAttachments.length > 0) {
+      await supabaseRestStrict('rpc/luxor_elena_update_developer_support_context_attachments', {
+        method: 'POST',
+        body: JSON.stringify({
+          p_id: token.id,
+          p_token_hash: token.tokenHash,
+          p_member_id: auth.member.id,
+          p_context_attachments: dispatchAttachments,
+        }),
+      })
+    }
   } catch (error) {
     console.error('[developer-support] confirm failed', { step: 'attachments' })
     throw error
@@ -312,6 +344,7 @@ export async function consumeElenaDeveloperSupportConfirmation(input: unknown) {
     reporterEmail: consumed.reporter_email,
     reporterName: typeof consumed.reporter_name === 'string' ? consumed.reporter_name : consumed.reporter_email,
     attachmentContext,
+    attachments: webhookAttachments,
   })
 
   try {

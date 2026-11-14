@@ -6,6 +6,16 @@ export type LuxorCursorAutomationDispatch = {
   backgroundComposerId: string | null
 }
 
+export type LuxorDeveloperSupportWebhookAttachment = {
+  name: string
+  path: string | null
+  kind: 'image' | 'pdf' | 'text'
+  contentType: string
+  signedUrl: string | null
+  expiresAt: string | null
+  textExcerpt: string | null
+}
+
 export type LuxorDeveloperSupportWebhookPayload = {
   context: string
   pagePath: string
@@ -13,6 +23,7 @@ export type LuxorDeveloperSupportWebhookPayload = {
   title: string
   priority: string
   ticketId: string
+  attachments: LuxorDeveloperSupportWebhookAttachment[]
 }
 
 function parseDispatchBody(value: unknown): LuxorCursorAutomationDispatch {
@@ -55,6 +66,15 @@ export async function triggerLuxorCursorAutomation(
         title: payload.title.slice(0, 200),
         priority: payload.priority,
         ticketId: payload.ticketId,
+        attachments: payload.attachments.slice(0, 5).map((attachment) => ({
+          name: attachment.name.slice(0, 200),
+          path: attachment.path,
+          kind: attachment.kind,
+          contentType: attachment.contentType.slice(0, 120),
+          signedUrl: attachment.signedUrl,
+          expiresAt: attachment.expiresAt,
+          textExcerpt: attachment.textExcerpt ? attachment.textExcerpt.slice(0, 12_000) : null,
+        })),
       }),
       cache: 'no-store',
     })
