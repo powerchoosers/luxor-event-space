@@ -32,8 +32,8 @@ export const LUXOR_EVENT_COLLECTIONS: LuxorEventCollection[] = [
     eventTypesLine: 'Weddings • Engagement Parties • Bridal Showers • Anniversaries',
     eventTypesLineEs: 'Bodas • Fiestas de compromiso • Despedidas de soltera • Aniversarios',
     href: '/events/weddings-romance',
-    image: '/images/dining-hall/main-hall-reception-professional.png',
-    imageAlt: 'Elegant wedding reception setup with romantic lighting at Luxor',
+    image: '/images/dining-hall/main-hall-wedding-wide.png',
+    imageAlt: 'Luxor ballroom prepared for a wedding celebration',
   },
   {
     number: '02',
