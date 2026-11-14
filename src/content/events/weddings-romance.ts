@@ -36,8 +36,8 @@ const en: Omit<EventCategoryPageProps, 'spanish'> = {
       label: 'Engagements',
     },
     {
-      src: '/images/luxor-lounge/luxor-lounge-wedding.png',
-      alt: 'Luxor lounge styled for a bridal shower with romantic table details',
+      src: '/images/luxor-lounge/luxor-lounge-baby-shower.png',
+      alt: 'Seated bridal shower gathering in the Luxor lounge with gift tables and lounge seating',
       label: 'Bridal Showers',
     },
     {
@@ -86,8 +86,8 @@ const es: Omit<EventCategoryPageProps, 'spanish'> = {
       label: 'Compromisos',
     },
     {
-      src: '/images/luxor-lounge/luxor-lounge-wedding.png',
-      alt: 'Lounge de Luxor ambientado para un bridal shower con mesas románticas',
+      src: '/images/luxor-lounge/luxor-lounge-baby-shower.png',
+      alt: 'Bridal shower en el lounge de Luxor con mesas de regalos y asientos tipo lounge',
       label: 'Bridal showers',
     },
     {

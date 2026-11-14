@@ -11,6 +11,7 @@ import { useLuxorTourSlots } from '@/hooks/useLuxorTourSlots'
 import { submitLuxorIdempotentForm } from '@/lib/luxorSubmissionIdempotency'
 import { formatStandardPhoneInput } from '@/lib/luxorPhoneClient'
 import { getLuxorPublicAttribution, getLuxorPublicSessionId, trackLuxorPublicEvent } from '@/lib/luxorPublicAttribution'
+import { publicSiteEventsActive } from '@/lib/publicSitePaths'
 import { PortalSelect } from '@/components/portal/PortalUI'
 import { PublicEventDatePicker } from '@/components/PublicEventDatePicker'
 import {
@@ -154,6 +155,8 @@ export function LuxorConciergeChat() {
   const pathname = usePathname()
   const spanish = pathname.startsWith('/es')
   const packagesPage = /^\/(?:es\/)?packages(?:\/|$)/.test(pathname)
+  const eventsRoute = publicSiteEventsActive(pathname)
+  const eventsLandingRoute = pathname === '/events' || pathname === '/es/events'
   const [open, setOpen] = useState(false)
   const [input, setInput] = useState('')
   const [pending, setPending] = useState(false)
@@ -608,6 +611,8 @@ export function LuxorConciergeChat() {
   return (
     <div
       className="site-floating-action fixed right-4 z-[130] sm:bottom-6 sm:right-6 bottom-20"
+      {...(eventsRoute ? { 'data-events-floating-guard': 'true' as const } : {})}
+      {...(eventsLandingRoute ? { 'data-events-landing': 'true' as const } : {})}
     >
       <AnimatePresence initial={false}>
         {open ? (

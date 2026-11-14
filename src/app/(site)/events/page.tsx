@@ -36,7 +36,10 @@ export default function EventsPage() {
         />
 
         <div className="relative z-10 mx-auto flex min-h-[88svh] w-full max-w-7xl flex-col justify-end px-5 pb-14 pt-36 text-left sm:min-h-[92svh] sm:px-6 sm:pb-20 sm:pt-40 lg:px-8">
-          <p className="font-mono text-[11px] font-bold uppercase tracking-[0.28em]" style={{ color: '#e6c77f' }}>
+          <p
+            className="font-mono text-[11px] font-bold uppercase tracking-[0.28em]"
+            style={{ color: '#f1d27a', textShadow: '0 1px 10px rgba(0,0,0,0.55)' }}
+          >
             {spanish ? 'Celebraciones en Luxor' : 'Celebrations at Luxor'}
           </p>
           <h1
@@ -76,7 +79,7 @@ export default function EventsPage() {
         </div>
       </section>
 
-      <section className="relative py-20 sm:py-24 lg:py-28">
+      <section className="relative py-20 pb-28 sm:py-24 sm:pb-32 lg:py-28 lg:pb-28">
         <div
           aria-hidden
           className="pointer-events-none absolute inset-0 opacity-40"
@@ -100,7 +103,7 @@ export default function EventsPage() {
             </p>
           </div>
 
-          <div className="mt-12 grid gap-10 lg:mt-16 lg:gap-12">
+          <div className="events-collections-grid mt-12 grid gap-10 lg:mt-16 lg:gap-12">
             {LUXOR_EVENT_COLLECTIONS.map((collection, index) => (
               <EventsCollectionCard
                 key={collection.href}

@@ -1187,6 +1187,10 @@ body[data-luxor-site] *::-webkit-scrollbar-thumb:hover {
     transform: scaleX(1);
   }
 
+  .site-header-link[aria-current='page']::after {
+    transform: scaleX(1);
+  }
+
   .site-header--light .site-header-phone {
     color: #5b4632;
     border-color: rgba(141, 103, 43, 0.3);
@@ -2290,6 +2294,43 @@ body[data-luxor-site] .luxor-concierge-launcher {
 
   body[data-luxor-site] .luxor-concierge-launcher > span:nth-child(2),
   body[data-luxor-site] .luxor-concierge-launcher > svg {
+    display: none !important;
+  }
+}
+
+/* Events routes: keep the tablet-width launcher icon-only so it does not cover collection cards. */
+@media (min-width: 640px) and (max-width: 1023px) {
+  body[data-luxor-site] .site-floating-action[data-events-landing='true'] {
+    bottom: 2rem !important;
+    right: 1.25rem !important;
+  }
+
+  body[data-luxor-site] .events-collections-grid {
+    padding-right: 4.75rem;
+    padding-bottom: 1.5rem;
+  }
+
+  body[data-luxor-site] .site-floating-action[data-events-floating-guard='true'] .luxor-concierge-launcher {
+    width: 60px !important;
+    height: 60px !important;
+    justify-content: center !important;
+    gap: 0 !important;
+    padding: 4px !important;
+    border: 1px solid rgba(155, 111, 36, 0.58) !important;
+    border-radius: 9999px !important;
+    background: #fffdf9 !important;
+    box-shadow: 0 5px 16px rgba(61, 43, 23, 0.22) !important;
+  }
+
+  body[data-luxor-site] .site-floating-action[data-events-floating-guard='true'] .luxor-concierge-launcher > span:first-child {
+    width: 48px !important;
+    height: 48px !important;
+    border: 0 !important;
+    background: #f1e9df !important;
+  }
+
+  body[data-luxor-site] .site-floating-action[data-events-floating-guard='true'] .luxor-concierge-launcher > span:nth-child(2),
+  body[data-luxor-site] .site-floating-action[data-events-floating-guard='true'] .luxor-concierge-launcher > svg {
     display: none !important;
   }
 }

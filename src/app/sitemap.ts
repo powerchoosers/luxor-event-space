@@ -19,6 +19,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
     '/privacy',
     '/terms',
     '/es',
+    '/es/events',
     '/es/events/weddings-romance',
     '/es/events/milestones-family-celebrations',
     '/es/events/social-professional-events',

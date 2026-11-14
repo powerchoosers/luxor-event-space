@@ -23,6 +23,9 @@ export const Header = () => {
   const mobileNavLinks = getPublicFooterNavLinks(spanish)
   const mobileMenuButtonRef = useRef<HTMLButtonElement>(null)
   const eventsNavRef = useRef<HTMLDivElement>(null)
+  const eventsTriggerRef = useRef<HTMLAnchorElement>(null)
+  const suppressEventsMenuFocusOpenRef = useRef(false)
+  const suppressEventsMenuHoverOpenRef = useRef(false)
   const reduceMotion = useReducedMotion()
   const eventsActive = publicSiteEventsActive(pathname)
   const eventsHref = publicSitePath('/events', spanish)
@@ -36,30 +39,76 @@ export const Header = () => {
     return false
   }
 
-  function handleEventsMenuKeyDown(event: React.KeyboardEvent<HTMLDivElement>) {
+  function getEventsMenuItems() {
     const menu = eventsNavRef.current
-    if (!menu) return
-    const items = Array.from(menu.querySelectorAll<HTMLElement>('[role="menuitem"]'))
+    if (!menu) return []
+    return Array.from(menu.querySelectorAll<HTMLElement>('[role="menuitem"]'))
+  }
+
+  function focusEventsMenuItem(index: number) {
+    setEventsDropdownOpen(true)
+    window.requestAnimationFrame(() => {
+      const items = getEventsMenuItems()
+      items[index]?.focus()
+    })
+  }
+
+  function dismissEventsMenu(options?: { returnFocus?: boolean }) {
+    suppressEventsMenuFocusOpenRef.current = true
+    suppressEventsMenuHoverOpenRef.current = true
+    setEventsDropdownOpen(false)
+    if (options?.returnFocus !== false) {
+      window.requestAnimationFrame(() => {
+        eventsTriggerRef.current?.focus()
+        window.setTimeout(() => {
+          suppressEventsMenuFocusOpenRef.current = false
+        }, 150)
+      })
+    }
+  }
+
+  function handleEventsMenuKeyDown(event: React.KeyboardEvent<HTMLDivElement>) {
+    const items = getEventsMenuItems()
     if (!items.length) return
 
+    const trigger = eventsTriggerRef.current
+    const onTrigger = trigger != null && document.activeElement === trigger
     const activeIndex = items.findIndex((element) => element === document.activeElement)
+
+    if (onTrigger) {
+      if (event.key === ' ' || event.key === 'Enter' || event.key === 'ArrowDown') {
+        event.preventDefault()
+        focusEventsMenuItem(0)
+        return
+      }
+      if (event.key === 'ArrowUp') {
+        event.preventDefault()
+        focusEventsMenuItem(items.length - 1)
+        return
+      }
+      if (event.key === 'Tab' && !event.shiftKey) {
+        event.preventDefault()
+        focusEventsMenuItem(0)
+        return
+      }
+    }
 
     if (event.key === 'ArrowDown') {
       event.preventDefault()
-      setEventsDropdownOpen(true)
-      items[activeIndex < 0 ? 0 : Math.min(activeIndex + 1, items.length - 1)]?.focus()
+      focusEventsMenuItem(activeIndex < 0 ? 0 : Math.min(activeIndex + 1, items.length - 1))
     } else if (event.key === 'ArrowUp') {
       event.preventDefault()
-      setEventsDropdownOpen(true)
-      items[activeIndex <= 0 ? 0 : activeIndex - 1]?.focus()
+      focusEventsMenuItem(activeIndex <= 0 ? 0 : activeIndex - 1)
     } else if (event.key === 'Home') {
       event.preventDefault()
-      setEventsDropdownOpen(true)
-      items[0]?.focus()
-    } else if (event.key === 'End') {
+      focusEventsMenuItem(0)
+    } else     if (event.key === 'End') {
       event.preventDefault()
-      setEventsDropdownOpen(true)
-      items[items.length - 1]?.focus()
+      focusEventsMenuItem(items.length - 1)
+    } else if (event.key === 'Escape') {
+      event.preventDefault()
+      event.stopPropagation()
+      dismissEventsMenu()
     }
   }
 
@@ -115,15 +164,14 @@ export const Header = () => {
     if (!eventsDropdownOpen) return
 
     function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === 'Escape') {
-        setEventsDropdownOpen(false)
-        const trigger = eventsNavRef.current?.querySelector<HTMLElement>('a, button')
-        window.requestAnimationFrame(() => trigger?.focus())
-      }
+      if (event.key !== 'Escape') return
+      event.preventDefault()
+      event.stopPropagation()
+      dismissEventsMenu()
     }
 
-    window.addEventListener('keydown', handleKeyDown)
-    return () => window.removeEventListener('keydown', handleKeyDown)
+    window.addEventListener('keydown', handleKeyDown, true)
+    return () => window.removeEventListener('keydown', handleKeyDown, true)
   }, [eventsDropdownOpen])
 
   useEffect(() => {
@@ -150,9 +198,19 @@ export const Header = () => {
           <div
                 ref={eventsNavRef}
                 className="relative"
-                onMouseEnter={() => setEventsDropdownOpen(true)}
-                onMouseLeave={() => setEventsDropdownOpen(false)}
-                onFocusCapture={() => setEventsDropdownOpen(true)}
+                onMouseEnter={() => {
+                  if (suppressEventsMenuHoverOpenRef.current) return
+                  setEventsDropdownOpen(true)
+                }}
+                onMouseLeave={() => {
+                  suppressEventsMenuHoverOpenRef.current = false
+                  suppressEventsMenuFocusOpenRef.current = false
+                  setEventsDropdownOpen(false)
+                }}
+                onFocusCapture={() => {
+                  if (suppressEventsMenuFocusOpenRef.current) return
+                  setEventsDropdownOpen(true)
+                }}
                 onBlurCapture={(event) => {
                   const next = event.relatedTarget
                   if (next && eventsNavRef.current?.contains(next as Node)) return
@@ -161,6 +219,7 @@ export const Header = () => {
                 onKeyDown={handleEventsMenuKeyDown}
               >
                 <Link
+                  ref={eventsTriggerRef}
                   href={eventsHref}
                   aria-expanded={eventsDropdownOpen}
                   aria-haspopup="menu"

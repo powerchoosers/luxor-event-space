@@ -32,8 +32,8 @@ const en: Omit<EventCategoryPageProps, 'spanish'> = {
       label: 'Corporate Events',
     },
     {
-      src: '/images/luxor-lounge/luxor-lounge-corporate.png',
-      alt: 'Luxor lounge arranged for a corporate conference or presentation',
+      src: '/images/dining-hall/main-hall-dinner-service-candid.png',
+      alt: 'Seated conference luncheon with table service in the Luxor main hall',
       label: 'Conferences',
     },
     {
@@ -89,8 +89,8 @@ const es: Omit<EventCategoryPageProps, 'spanish'> = {
       label: 'Eventos corporativos',
     },
     {
-      src: '/images/luxor-lounge/luxor-lounge-corporate.png',
-      alt: 'Lounge de Luxor preparado para una conferencia o presentación corporativa',
+      src: '/images/dining-hall/main-hall-dinner-service-candid.png',
+      alt: 'Almuerzo de conferencia con servicio en mesa en el salón principal de Luxor',
       label: 'Conferencias',
     },
     {

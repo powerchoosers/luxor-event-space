@@ -42,7 +42,7 @@ const SITE_ORIGIN = 'https://www.luxoratlaspalmas.com'
 /** Inline photo-overlay colors and scrims — avoid Tailwind gradient/light-text utilities remapped in globals.css. */
 const PHOTO_HEADING = { color: '#fffaf3', textShadow: '0 2px 12px rgba(0, 0, 0, 0.25)' } as const
 const PHOTO_BODY = { color: 'rgba(255, 250, 243, 0.9)' } as const
-const PHOTO_EYEBROW = { color: '#e6c77f' } as const
+const PHOTO_EYEBROW = { color: '#f1d27a', textShadow: '0 1px 10px rgba(0,0,0,0.55)' } as const
 const HERO_SCRIM: CSSProperties = {
   background:
     'linear-gradient(180deg, rgba(0, 0, 0, 0.38) 0%, rgba(0, 0, 0, 0.58) 52%, rgba(0, 0, 0, 0.78) 100%)',
@@ -159,13 +159,13 @@ export function EventCategoryPage({
         </div>
       </section>
 
-      <section className="py-16 sm:py-20 lg:py-24">
+      <section className="py-16 pb-24 sm:py-20 sm:pb-28 lg:py-24 lg:pb-24">
         <motion.div
           initial={reduceMotion ? false : { opacity: 0, y: 16 }}
           whileInView={reduceMotion ? undefined : { opacity: 1, y: 0 }}
           viewport={{ once: true, margin: '-40px' }}
           transition={{ duration: 0.45, ease: [0.23, 1, 0.32, 1] }}
-          className="mx-auto max-w-2xl px-5 text-center sm:px-6 lg:px-8"
+          className="mx-auto max-w-2xl scroll-mt-28 px-5 text-center sm:px-6 lg:scroll-mt-0 lg:px-8"
         >
           <p className="font-mono text-[10px] font-bold uppercase tracking-[0.34em] text-[#8d672b]">{introEyebrow}</p>
           <h2 className="mt-3 font-serif text-3xl leading-tight text-[#241d17] sm:text-4xl">{introTitle}</h2>
