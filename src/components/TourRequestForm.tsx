@@ -151,7 +151,7 @@ export function TourRequestForm({
 
   const containerRef = useRef<HTMLDivElement>(null)
   const customRequestPanelRef = useRef<HTMLDivElement>(null)
-  const isInitialStep = useRef(true)
+  const previousStep = useRef(step)
 
   const scrollToFormTop = () => {
     if (typeof window === 'undefined') return
@@ -168,10 +168,8 @@ export function TourRequestForm({
   }
 
   useEffect(() => {
-    if (isInitialStep.current) {
-      isInitialStep.current = false
-      return
-    }
+    if (previousStep.current === step) return
+    previousStep.current = step
     scrollToFormTop()
   }, [step])
 

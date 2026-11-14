@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { createPortal } from 'react-dom'
 import { ArrowDown, ChevronLeft, ChevronRight, X } from '@/lib/icons/phosphor-compat'
 import { AnimatePresence, animate, motion, type PanInfo, useMotionValue, useReducedMotion } from 'framer-motion'
-import { useEffect, useRef, useState, type MouseEvent } from 'react'
+import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react'
 import { getLuxorLenis } from '@/components/SmoothScroll'
 
 type Locale = 'en' | 'es'
@@ -36,7 +36,7 @@ export function TourGallery({ locale = 'en' }: { locale?: Locale }) {
   const gallerySlides = slides[locale]
   const text = galleryCopy[locale]
   const reduceMotion = useReducedMotion()
-  function scrollToBooking(event: MouseEvent<HTMLAnchorElement>) {
+  function scrollToBooking(event: ReactMouseEvent<HTMLAnchorElement>) {
     if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
     const target = document.getElementById('visit-booking')
     if (!target) return
@@ -154,7 +154,7 @@ export function TourGallery({ locale = 'en' }: { locale?: Locale }) {
       <div aria-hidden="true" className="pointer-events-none absolute inset-x-0 top-0 z-10 h-28 bg-gradient-to-b from-black/55 via-black/20 to-transparent sm:h-36" />
       <div className="pointer-events-none absolute inset-x-5 top-5 z-20 flex items-start justify-between gap-5 sm:inset-x-8 sm:top-8 lg:inset-x-10">
         <h2 id="tour-gallery-title" className="font-serif text-2xl leading-none !text-white drop-shadow-[0_2px_10px_rgba(0,0,0,0.95)] sm:text-4xl">{text.title}</h2>
-        <Link href="#visit-booking" onClick={scrollToBooking} data-conversion="visit_cta_click" data-conversion-label="Visit gallery" className="pointer-events-auto hidden min-h-11 shrink-0 items-center justify-center gap-3 rounded-lg border !border-white/80 bg-transparent px-5 py-3 text-xs font-bold uppercase tracking-[0.16em] !text-white drop-shadow-[0_1px_4px_rgba(0,0,0,0.9)] transition-colors hover:bg-white/15 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white sm:inline-flex">{text.book} <ArrowDown size={15} /></Link>
+        <Link href="#visit-booking" onClick={scrollToBooking} data-conversion="visit_cta_click" data-conversion-label="Visit gallery" style={{ backgroundColor: 'rgba(20, 16, 12, 0.55)' }} className="tour-gallery-visit pointer-events-auto hidden min-h-11 shrink-0 items-center justify-center gap-3 rounded-lg border !border-white/80 px-5 py-3 text-xs font-bold uppercase tracking-[0.16em] !text-white drop-shadow-[0_1px_4px_rgba(0,0,0,0.9)] transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white sm:inline-flex">{text.book} <ArrowDown size={15} /></Link>
       </div>
       <button type="button" aria-label={text.previous} onClick={showPrevious} disabled={active === 0} className="absolute left-4 top-1/2 hidden rounded-full border border-white/30 bg-black/20 p-2 text-white backdrop-blur transition hover:bg-black/50 disabled:cursor-default disabled:opacity-35 sm:block"><ChevronLeft size={20} /></button>
       <button type="button" aria-label={text.next} onClick={showNext} disabled={active === gallerySlides.length - 1} className="absolute right-4 top-1/2 hidden rounded-full border border-white/30 bg-black/20 p-2 text-white backdrop-blur transition hover:bg-black/50 disabled:cursor-default disabled:opacity-35 sm:block"><ChevronRight size={20} /></button>

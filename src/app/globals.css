@@ -1866,6 +1866,10 @@ body[data-luxor-site] main .gallery-photo-title {
   color: #fff !important;
 }
 
+body[data-luxor-site] main .tour-gallery-visit:is(:hover, :focus-visible) {
+  background-color: rgba(20, 16, 12, 0.72) !important;
+}
+
 body[data-luxor-site] main input,
 body[data-luxor-site] main textarea,
 body[data-luxor-site] main select {
@@ -2292,6 +2296,29 @@ body[data-luxor-site] .luxor-concierge-panel textarea {
   border-color: rgba(155, 111, 36, 0.28) !important;
 }
 
+body[data-luxor-site] .luxor-concierge-panel textarea.luxor-concierge-input,
+body[data-luxor-site] .luxor-concierge-panel textarea.luxor-concierge-input:focus {
+  background: transparent !important;
+  border: 0 !important;
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+/* Match the portal's light-field focus treatment without changing field geometry. */
+body[data-luxor-site] :is(main, .luxor-concierge-panel) :is(
+  input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='file']):not([type='color']),
+  textarea:not(.luxor-concierge-input),
+  select,
+  .portal-select-trigger,
+  .public-field-trigger
+):focus,
+body[data-luxor-site] :is(main, .luxor-concierge-panel) :is(.portal-select-trigger, .public-field-trigger)[aria-expanded='true'] {
+  background-color: #fff !important;
+  border-color: rgba(202, 162, 76, 0.4) !important;
+  box-shadow: 0 0 0 3px rgba(202, 162, 76, 0.08) !important;
+  outline: none !important;
+}
+
 /* The footer shares the header's warm light surface. */
 body[data-luxor-site] footer.site-footer--light {
   background: #faf7f1 !important;
@@ -2328,6 +2355,98 @@ body[data-luxor-site] footer.site-footer--light [class*="text-[#d7c29a]"] {
 
 body[data-luxor-site] footer.site-footer--light [class*="bg-black/"] {
   background-color: rgba(255, 255, 255, 0.72) !important;
+}
+
+body[data-luxor-site] footer.site-footer--light .footer-social-link {
+  transition: background-color 180ms ease, border-color 180ms ease, box-shadow 180ms ease, transform 180ms ease;
+}
+
+body[data-luxor-site] footer.site-footer--light .footer-social-link:is(:hover, :focus-visible) {
+  background-color: #f8f0e3 !important;
+  border-color: rgba(185, 138, 61, 0.55);
+}
+
+body[data-luxor-site] footer.site-footer--light .footer-social-link:focus-visible {
+  outline: 2px solid #9b6f24;
+  outline-offset: 3px;
+}
+
+body[data-luxor-site] footer.site-footer--light .footer-text-link {
+  position: relative;
+  display: inline-block;
+  transition: color 180ms ease;
+}
+
+body[data-luxor-site] footer.site-footer--light .footer-text-link::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -4px;
+  height: 1px;
+  background: #caa24c;
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform 240ms ease;
+}
+
+body[data-luxor-site] footer.site-footer--light .footer-text-link:is(:hover, :focus-visible) {
+  color: #8d672b !important;
+}
+
+body[data-luxor-site] footer.site-footer--light .footer-text-link:is(:hover, :focus-visible)::after {
+  transform: scaleX(1);
+}
+
+body[data-luxor-site] footer.site-footer--light a.footer-contact-link > span {
+  position: relative;
+  display: inline-block;
+  transition: color 180ms ease;
+}
+
+body[data-luxor-site] footer.site-footer--light a.footer-contact-link > span::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -4px;
+  height: 1px;
+  background: #caa24c;
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform 240ms ease;
+}
+
+body[data-luxor-site] footer.site-footer--light a.footer-contact-link:is(:hover, :focus-visible) > span {
+  color: #8d672b;
+}
+
+body[data-luxor-site] footer.site-footer--light a.footer-contact-link:is(:hover, :focus-visible) > span::after {
+  transform: scaleX(1);
+}
+
+body[data-luxor-site] main :is(.packages-visit-secondary, .package-tier-option):is(:hover, :focus-visible) {
+  border-color: #b98a3d !important;
+  background-color: #f8f0e3 !important;
+  color: #805b1f !important;
+}
+
+body[data-luxor-site] main :is(.packages-visit-secondary, .package-tier-option):focus-visible {
+  outline: 2px solid #9b6f24;
+  outline-offset: 3px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body[data-luxor-site] footer.site-footer--light .footer-text-link::after,
+  body[data-luxor-site] footer.site-footer--light a.footer-contact-link > span::after {
+    transition: none;
+  }
+  body[data-luxor-site] footer.site-footer--light .footer-social-link {
+    transition: none;
+  }
+  body[data-luxor-site] footer.site-footer--light .footer-social-link:is(:hover, :focus-visible) {
+    transform: none;
+  }
 }
 
 /* Rates retains Luxor's dark editorial direction while sharing its typography and controls. */

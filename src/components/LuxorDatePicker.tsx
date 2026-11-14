@@ -494,7 +494,7 @@ export function LuxorDatePicker({
             setOpen(true)
           } else closeAndReturnFocus()
         }}
-        className={`flex min-h-11 w-full items-center justify-between gap-3 rounded-xl border px-3.5 text-left text-sm transition hover:border-[#caa24c]/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/20 ${isPortal ? 'border-transparent bg-[color:var(--portal-soft,#171310)] text-[color:var(--portal-text,#f7efe3)]' : 'border-[#d8c4a4] bg-[#fffdfa] text-[#3b2b1d]'} ${triggerClassName}`}
+        className={`flex min-h-11 w-full items-center justify-between gap-3 rounded-xl border px-3.5 text-left text-sm transition hover:border-[#caa24c]/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/20 ${isPortal ? 'border-transparent bg-[color:var(--portal-soft,#171310)] text-[color:var(--portal-text,#f7efe3)]' : 'public-field-trigger border-[#d8c4a4] bg-[#fffdfa] text-[#3b2b1d]'} ${triggerClassName}`}
       >
         {triggerPrefix && <span className="shrink-0 text-xs font-medium text-[color:var(--portal-muted)]">{triggerPrefix}</span>}
         <span className={value ? (isPortal ? 'text-[color:var(--portal-text,#f7efe3)]' : 'text-[#3b2b1d]') : (isPortal ? 'text-[color:var(--portal-muted,#b9ad9f)]' : 'text-[#827567]')}>{value ? dateLabel(value, locale, omitWeekday) : placeholder}</span>

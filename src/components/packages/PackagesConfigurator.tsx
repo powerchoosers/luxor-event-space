@@ -276,7 +276,7 @@ export function PackagesConfigurator({ locale = 'en', defaultPackageTier = 'sign
                     key={tier}
                     type="button"
                     onClick={() => setPackageTierId(tier)}
-                    className={`min-h-12 rounded-xl border px-3 py-2 text-sm font-semibold transition ${active ? 'border-[#caa24c] bg-[#caa24c]/16 text-[#241d17]' : 'border-[#d8c4a4] bg-white text-[#665a4e] hover:border-[#caa24c]/45'}`}
+                    className={`package-tier-option min-h-12 rounded-xl border px-3 py-2 text-sm font-semibold transition ${active ? 'border-[#caa24c] bg-[#caa24c]/16 text-[#241d17]' : 'border-[#d8c4a4] bg-white text-[#665a4e]'}`}
                   >
                     {tierCopy[locale][tier]}
                   </button>

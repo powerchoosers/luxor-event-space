@@ -123,7 +123,7 @@ export function PackagesPageContent({ locale = 'en', cards }: PackagesPageConten
                 href={t.visitHref}
                 data-conversion="visit_cta_click"
                 data-conversion-label="Packages hero"
-                className="inline-flex min-h-12 items-center justify-center rounded-md border border-[#caa24c]/45 px-6 py-3 text-sm font-bold uppercase tracking-[0.14em] text-[#f7efe3] transition hover:border-[#f1d27a] hover:text-[#f1d27a]"
+                className="packages-visit-secondary inline-flex min-h-12 items-center justify-center rounded-md border border-[#caa24c]/45 px-6 py-3 text-sm font-bold uppercase tracking-[0.14em] text-[#f7efe3] transition"
               >
                 {t.visitCta}
               </Link>

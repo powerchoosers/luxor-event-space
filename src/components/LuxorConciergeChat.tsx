@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { AnimatePresence, motion } from 'framer-motion'
+import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import type { LuxorInquiryInput } from '@/lib/luxorInquiryTypes'
 import type { PublicLuxorTourSlot } from '@/lib/luxorTourSlots'
 import { useLuxorTourSlots } from '@/hooks/useLuxorTourSlots'
@@ -19,8 +19,7 @@ import {
   Mail,
   MessageCircle,
   Phone,
-  Send,
-  BrainCircuit,
+  ArrowUp,
   User,
   X,
 } from '@/lib/icons/phosphor-compat'
@@ -151,6 +150,7 @@ function getVisitorGreeting() {
 }
 
 export function LuxorConciergeChat() {
+  const reduceMotion = useReducedMotion()
   const pathname = usePathname()
   const spanish = pathname.startsWith('/es')
   const packagesPage = /^\/(?:es\/)?packages(?:\/|$)/.test(pathname)
@@ -183,6 +183,12 @@ export function LuxorConciergeChat() {
   })
   const messageEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
+  useEffect(() => {
+    const textarea = inputRef.current
+    if (!textarea) return
+    textarea.style.height = 'auto'
+    textarea.style.height = `${Math.min(textarea.scrollHeight, 96)}px`
+  }, [input, open])
   const triggerRef = useRef<HTMLButtonElement>(null)
   const formStartedAt = useRef(Date.now())
   const submissionChatRef = useRef<Array<{ role: Message['role']; content: string }> | null>(null)
@@ -496,10 +502,10 @@ export function LuxorConciergeChat() {
       <motion.div
         key={`${messageId}-booking`}
         layout
-        initial={{ opacity: 0, y: 24, scale: 0.96 }}
-        animate={{ opacity: 1, y: 0, scale: 1 }}
-        transition={{ duration: 0.34, ease: [0.16, 1, 0.3, 1] }}
-        className="mt-3 w-full rounded-md border border-[#caa24c]/24 bg-[#0d0908] p-3 shadow-[0_18px_50px_-34px_rgba(0,0,0,1)]"
+        initial={reduceMotion ? false : { opacity: 0, y: 12, filter: 'blur(6px)' }}
+        animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
+        transition={{ duration: reduceMotion ? 0 : 0.34, ease: [0.16, 1, 0.3, 1] }}
+        className="mt-3 w-full rounded-2xl border border-[#caa24c]/24 bg-[#0d0908] p-4 shadow-[0_18px_50px_-34px_rgba(0,0,0,1)]"
         data-booking-card
       >
         <div className="flex items-start justify-between gap-3">
@@ -607,30 +613,30 @@ export function LuxorConciergeChat() {
         {open ? (
           <motion.section
             key="chat-window"
-            initial={{ opacity: 0, y: 16, scale: 0.96 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 16, scale: 0.96 }}
-            transition={{ duration: 0.28, ease: [0.23, 1, 0.32, 1] }}
-            className="luxor-concierge-panel absolute bottom-0 right-0 flex h-[min(560px,calc(100svh-6rem))] w-[calc(100vw-2rem)] max-w-[430px] flex-col overflow-hidden rounded-md border border-[#caa24c]/28 bg-[#080706] text-[#f7efe3] shadow-[0_30px_90px_-36px_rgba(0,0,0,1)] sm:h-[min(560px,calc(100svh-3rem))]"
+            initial={reduceMotion ? false : { opacity: 0, y: 12, scale: 0.98, filter: 'blur(6px)' }}
+            animate={{ opacity: 1, y: 0, scale: 1, filter: 'blur(0px)' }}
+            exit={reduceMotion ? { opacity: 0 } : { opacity: 0, y: 10, scale: 0.98, filter: 'blur(4px)' }}
+            transition={{ duration: reduceMotion ? 0 : 0.28, ease: [0.23, 1, 0.32, 1] }}
+            className="luxor-concierge-panel absolute bottom-0 right-0 flex h-[min(560px,calc(100svh-6rem))] w-[calc(100vw-2rem)] max-w-[430px] flex-col overflow-hidden rounded-2xl border border-[#caa24c]/28 bg-[#080706] text-[#f7efe3] shadow-[0_30px_90px_-36px_rgba(0,0,0,1)] sm:h-[min(560px,calc(100svh-3rem))]"
             role="dialog"
             aria-modal="true"
             aria-label="Luxor concierge chat"
           >
-            <header className="border-b border-[#caa24c]/18 bg-[#0d0908] p-4">
+            <header className="border-b border-[#caa24c]/18 bg-[#0d0908] px-4 py-3">
               <div className="flex items-center gap-3">
                 <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded-full border border-[#f1d27a]/45 bg-[#120d0c]">
                   <Image src="/luxor-concierge.png" alt="Luxor concierge Elena" fill sizes="48px" className="object-cover" />
                 </div>
                 <div className="min-w-0 flex-1">
-                  <p className="font-serif text-xl leading-none text-[#f7efe3]">Elena</p>
-                  <p className="mt-1 font-mono text-[9px] uppercase tracking-[0.22em] text-[#caa24c]">
+                  <p className="text-base font-bold leading-none text-[#f7efe3]">Elena</p>
+                  <p className="mt-1 text-xs text-[#665a4e]">
                     Luxor concierge
                   </p>
                 </div>
                 <button
                   type="button"
                   onClick={() => setOpen(false)}
-                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-[#caa24c]/20 text-[#d7c29a]/78 transition hover:border-[#f1d27a]/45 hover:text-[#f1d27a]"
+                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-[#665a4e] transition hover:bg-[#e9dfd2] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#9b6f24]"
                   aria-label="Close concierge chat"
                 >
                   <X className="h-4 w-4" />
@@ -639,7 +645,7 @@ export function LuxorConciergeChat() {
             </header>
 
             <div className="luxor-scrollbar flex-1 overflow-y-auto px-4 py-4">
-              <div className="space-y-3">
+              <div className="space-y-4">
                 <AnimatePresence initial={false}>
                   {messages.map((message) => (
                     <motion.div
@@ -649,16 +655,17 @@ export function LuxorConciergeChat() {
                     >
                       {message.content ? (
                         <motion.div
-                          initial={{ opacity: 0, y: 50, scale: 0.85, originX: message.role === 'user' ? 1 : 0, originY: 1 }}
-                          animate={{ opacity: 1, y: 0, scale: 1 }}
-                          transition={{ duration: 0.45, ease: [0.16, 1, 0.3, 1] }}
-                          className={`max-w-[86%] rounded-md px-4 py-3 text-sm leading-6 shadow-md shadow-black/5 ${
-                            message.role === 'user'
-                              ? 'bg-[#caa24c] text-[#050505]'
-                              : 'border border-[#caa24c]/18 bg-white/[0.035] text-[#eadcc8]'
-                          }`}
+                          initial={reduceMotion ? false : { opacity: 0, y: 18, scale: 0.985, filter: 'blur(8px)' }}
+                          animate={{ opacity: 1, y: 0, scale: 1, filter: 'blur(0px)' }}
+                          transition={{ duration: reduceMotion ? 0 : 0.38, ease: [0.22, 1, 0.36, 1] }}
+                          className={`flex max-w-[92%] items-start gap-2 ${message.role === 'user' ? 'flex-row-reverse' : ''}`}
                         >
-                          {message.content}
+                          {message.role === 'assistant' ? <span className="relative mt-1 h-6 w-6 shrink-0 overflow-hidden rounded-full border border-[#e4d8c8]"><Image src="/luxor-concierge.png" alt="" fill sizes="24px" className="object-cover" /></span> : null}
+                          <div className={`rounded-2xl border px-4 py-2.5 text-sm leading-6 shadow-sm ${
+                            message.role === 'user'
+                              ? 'rounded-tr-none border-[#d9c8a8] bg-[#f4ead6] text-[#241d17]'
+                              : 'rounded-tl-none border-[#e9dfd2] bg-[#ffffff] text-[#241d17]'
+                          }`}>{message.content}</div>
                         </motion.div>
                       ) : null}
                       {message.ui === 'booking' ? renderBookingCard(message.id) : null}
@@ -671,33 +678,26 @@ export function LuxorConciergeChat() {
                       className="flex justify-start"
                     >
                       <motion.div
-                        initial={{ opacity: 0, y: 30, scale: 0.85, originX: 0, originY: 1 }}
-                        animate={{ opacity: 1, y: 0, scale: 1 }}
-                        exit={{ opacity: 0, scale: 0.8, y: 15 }}
-                        transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
-                        className="inline-flex items-center gap-2 rounded-md border border-[#caa24c]/18 bg-white/[0.035] px-4 py-3 text-xs text-[#d7c29a]/70"
+                        initial={reduceMotion ? false : { opacity: 0, y: 12, filter: 'blur(6px)' }}
+                        animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
+                        exit={reduceMotion ? { opacity: 0 } : { opacity: 0, y: 6, filter: 'blur(4px)' }}
+                        transition={{ duration: reduceMotion ? 0 : 0.25, ease: [0.16, 1, 0.3, 1] }}
+                        className="inline-flex items-center gap-2 rounded-2xl rounded-tl-none border border-[#caa24c]/18 bg-white/[0.035] px-4 py-3 text-xs text-[#d7c29a]/70"
                       >
-                        <motion.div
-                          animate={{ rotate: 360 }}
-                          transition={{ repeat: Infinity, duration: 4, ease: "linear" }}
-                          className="shrink-0"
-                        >
-                          <BrainCircuit className="h-3.5 w-3.5 text-[#caa24c]" />
-                        </motion.div>
-                        <span className="font-serif">Elena is typing</span>
+                        <span>Elena is typing</span>
                         <div className="flex gap-1 items-center ml-1">
                           <motion.span 
-                            animate={{ opacity: [0.3, 1, 0.3] }}
+                            animate={reduceMotion ? { opacity: 0.7 } : { opacity: [0.3, 1, 0.3] }}
                             transition={{ repeat: Infinity, duration: 1.2, delay: 0 }}
                             className="h-1.5 w-1.5 rounded-full bg-[#caa24c]"
                           />
                           <motion.span 
-                            animate={{ opacity: [0.3, 1, 0.3] }}
+                            animate={reduceMotion ? { opacity: 0.7 } : { opacity: [0.3, 1, 0.3] }}
                             transition={{ repeat: Infinity, duration: 1.2, delay: 0.2 }}
                             className="h-1.5 w-1.5 rounded-full bg-[#caa24c]"
                           />
                           <motion.span 
-                            animate={{ opacity: [0.3, 1, 0.3] }}
+                            animate={reduceMotion ? { opacity: 0.7 } : { opacity: [0.3, 1, 0.3] }}
                             transition={{ repeat: Infinity, duration: 1.2, delay: 0.4 }}
                             className="h-1.5 w-1.5 rounded-full bg-[#caa24c]"
                           />
@@ -710,15 +710,14 @@ export function LuxorConciergeChat() {
               </div>
 
               {startChoicesVisible && !eventPickerOpen && !hasBookingCard ? (
-                <div className="mt-4 rounded-md border border-[#caa24c]/18 bg-black/20 p-3">
-                  <p className="font-mono text-[9px] uppercase tracking-[0.22em] text-[#caa24c]">Start here</p>
+                <div className="ml-8 mt-4 space-y-2">
                   <button
                     type="button"
                     onClick={() => {
                       setStartChoicesVisible(false)
                       showBookingCard()
                     }}
-                    className="luxor-gold-raised mt-2 w-full rounded-md px-3 py-3 text-center text-[10px] uppercase tracking-[0.1em]"
+                    className="luxor-gold-raised min-h-11 w-full rounded-xl px-4 py-3 text-center text-xs"
                   >
                     Schedule a visit
                   </button>
@@ -728,13 +727,13 @@ export function LuxorConciergeChat() {
                       setStartChoicesVisible(false)
                       setEventPickerOpen(true)
                     }}
-                    className="mt-2 w-full rounded-md border border-[#caa24c]/22 bg-black/24 px-3 py-2.5 text-center text-[10px] font-bold uppercase tracking-[0.1em] text-[#d7c29a]/82 transition hover:border-[#f1d27a]/50 hover:text-[#f1d27a]"
+                    className="min-h-11 w-full rounded-xl border border-[#e7dac7] bg-[#fffdfa] px-4 py-2.5 text-center text-xs font-semibold text-[#665a4e] transition hover:border-[#b98a3d] hover:bg-[#f8f2e9]"
                   >
                     Tell Elena what you’re planning
                   </button>
                   <Link
                     href="/#brochure-form"
-                    className="mt-2 block text-center text-[10px] font-bold uppercase tracking-[0.1em] text-[#d7c29a]/65 transition hover:text-[#f1d27a]"
+                    className="block rounded-xl px-3 py-2 text-center text-xs font-semibold text-[#805b1f] underline underline-offset-4 transition hover:text-[#5f441b]"
                   >
                     Get venue brochure
                   </Link>
@@ -742,7 +741,7 @@ export function LuxorConciergeChat() {
               ) : null}
 
               {eventPickerOpen ? (
-                <div className="mt-4">
+                <motion.div initial={reduceMotion ? false : { opacity: 0, y: 8, filter: 'blur(4px)' }} animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }} transition={{ duration: reduceMotion ? 0 : 0.25 }} className="ml-8 mt-4">
                   <p className="mb-2 font-mono text-[9px] uppercase tracking-[0.22em] text-[#caa24c]">
                     What are you planning?
                   </p>
@@ -752,18 +751,18 @@ export function LuxorConciergeChat() {
                         key={label}
                         type="button"
                         onClick={() => selectEvent(label)}
-                        className={`${label === 'Other' ? 'col-span-2' : ''} rounded-md border border-[#caa24c]/22 bg-black/24 px-3 py-2 text-left text-[11px] font-bold uppercase tracking-[0.12em] text-[#d7c29a]/82 transition hover:border-[#f1d27a]/50 hover:text-[#f1d27a]`}
+                        className={`${label === 'Other' ? 'col-span-2' : ''} min-h-11 rounded-xl border border-[#e7dac7] bg-[#fffdfa] px-3 py-2 text-left text-xs font-semibold text-[#665a4e] transition hover:border-[#b98a3d] hover:bg-[#f8f2e9]`}
                       >
                         {label}
                       </button>
                     ))}
                   </div>
-                </div>
+                </motion.div>
               ) : null}
 
               {selectedEvent ? (
-                <div className="mt-4 flex items-center gap-3 rounded-md border border-[#caa24c]/18 bg-black/24 p-2.5">
-                  <div className="relative h-14 w-16 shrink-0 overflow-hidden rounded-md border border-[#caa24c]/20">
+                <div className="mt-4 flex items-center gap-3 rounded-2xl border border-[#caa24c]/18 bg-black/24 p-3">
+                  <div className="relative h-14 w-16 shrink-0 overflow-hidden rounded-xl border border-[#caa24c]/20">
                     <Image src={selectedEvent.image} alt={`${selectedEvent.label} event inspiration`} fill sizes="64px" className="object-cover" />
                   </div>
                   <div className="min-w-0 flex-1">
@@ -803,7 +802,7 @@ export function LuxorConciergeChat() {
                 }}
                 className="border-t border-[#caa24c]/18 bg-[#0d0908] p-3"
               >
-                <div className="flex items-end gap-2">
+                <div className="luxor-concierge-composer flex items-end gap-2 rounded-2xl border border-[#e0d3c1] bg-white p-2 shadow-sm focus-within:border-[#b98a3d] focus-within:ring-2 focus-within:ring-[#caa24c]/20">
                   <textarea
                     ref={inputRef}
                     value={input}
@@ -815,16 +814,17 @@ export function LuxorConciergeChat() {
                       }
                     }}
                     rows={1}
-                    placeholder="Tell Elena what you are planning..."
-                    className="max-h-24 min-h-11 flex-1 resize-none rounded-md border border-[#caa24c]/22 bg-black/35 px-3 py-3 text-sm leading-5 text-[#f7efe3] outline-none placeholder:text-[#d7c29a]/38 focus:border-[#f1d27a]/65"
+                    placeholder="Message Elena…"
+                    aria-label="Message Elena"
+                    className="luxor-concierge-input max-h-24 min-h-10 min-w-0 flex-1 resize-none border-0 bg-transparent px-2 py-2.5 text-sm leading-5 text-[#241d17] !outline-none placeholder:text-[#827567]"
                   />
                   <button
                     type="submit"
                     disabled={pending || !input.trim()}
-                    className="luxor-gold-raised flex h-11 w-11 shrink-0 items-center justify-center rounded-md disabled:cursor-not-allowed disabled:opacity-45"
+                    className="luxor-gold-raised flex h-10 w-10 shrink-0 items-center justify-center rounded-full disabled:cursor-not-allowed disabled:opacity-45"
                     aria-label="Send message"
                   >
-                    <Send className="h-4 w-4" />
+                    <ArrowUp className="h-5 w-5" aria-hidden="true" />
                   </button>
                 </div>
               </form>

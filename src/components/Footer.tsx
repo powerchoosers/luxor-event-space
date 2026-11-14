@@ -42,7 +42,7 @@ export const Footer = () => {
             <ul className="mt-6 space-y-4">
               {navLinks.map((link) => (
                 <li key={link.label}>
-                  <Link href={link.href} className="text-sm text-[#d7c29a]/62 transition-colors hover:text-[#f8f3ed]">
+                  <Link href={link.href} className="footer-text-link text-sm text-[#d7c29a]/62">
                     {spanish ? link.labelEs : link.label}
                   </Link>
                 </li>
@@ -57,22 +57,22 @@ export const Footer = () => {
             </p>
             <div className="mt-8 space-y-3 text-sm text-[#d7c29a]/62">
               <a
-                href="https://www.google.com/maps/dir/?api=1&destination=803+Castroville+Rd+%23402%2C+San+Antonio%2C+TX+78237"
+                href="https://www.google.com/maps/search/?api=1&query=803+Castroville+Rd+%23402%2C+San+Antonio%2C+TX+78237"
                 target="_blank"
                 rel="noreferrer"
-                className="flex items-center justify-center gap-3 transition-colors hover:text-[#f8f3ed] lg:justify-start"
+                className="footer-contact-link flex items-center justify-center gap-3 lg:justify-start"
               >
                 <MapPin className="h-4 w-4 shrink-0 text-[#caa24c]" />
                 <span>803 Castroville Rd #402, San Antonio, TX 78237</span>
               </a>
               <a
                 href="mailto:booking@luxoratlaspalmas.com"
-                className="flex items-center justify-center gap-3 transition-colors hover:text-[#f8f3ed] lg:justify-start"
+                className="footer-contact-link flex items-center justify-center gap-3 lg:justify-start"
               >
                 <Mail className="h-4 w-4 shrink-0 text-[#caa24c]" />
                 <span>booking@luxoratlaspalmas.com</span>
               </a>
-              <PublicPhoneLink loadingLabel={spanish ? 'Cargando teléfono…' : 'Loading phone…'} className="flex items-center justify-center gap-3 transition-colors hover:text-[#f8f3ed] lg:justify-start" />
+              <PublicPhoneLink loadingLabel={spanish ? 'Cargando teléfono…' : 'Loading phone…'} className="footer-contact-link flex items-center justify-center gap-3 lg:justify-start" />
               <p>{spanish ? 'Visitas privadas con cita previa.' : 'Private venue visits by appointment.'}</p>
             </div>
           </div>
@@ -98,7 +98,7 @@ export const Footer = () => {
                     target="_blank"
                     rel="noreferrer"
                     aria-label={`${spanish ? 'Sigue a Luxor en' : 'Follow Luxor on'} ${social.label}`}
-                    className="flex h-11 w-11 items-center justify-center rounded-md border border-[#caa24c]/24 bg-black/30 transition hover:border-[#f1d27a]/55 hover:bg-[#caa24c]/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#f1d27a]"
+                    className="footer-social-link flex h-11 w-11 items-center justify-center rounded-md border border-[#caa24c]/24 bg-black/30"
                   >
                     <Image src={social.icon} alt="" width={20} height={20} />
                   </a>
@@ -132,10 +132,10 @@ export const Footer = () => {
           <p className="text-xs text-[#d7c29a]/60">
             &copy; {new Date().getFullYear()} Luxor Event Space. {spanish ? 'Creado con elegancia en San Antonio.' : 'Built with Elegance in San Antonio.'}
           </p>
-          <div className="flex gap-8 text-[10px] font-mono uppercase tracking-[0.2em] text-[#d7c29a]/60 transition-colors hover:text-[#f7efe3]">
-            <Link href="/sms-signup">{spanish ? 'Preferencias de mensajes' : 'Text Preferences'}</Link>
-            <Link href="/privacy">{spanish ? 'Política de privacidad' : 'Privacy Policy'}</Link>
-            <Link href="/terms">{spanish ? 'Términos de servicio' : 'Terms of Service'}</Link>
+          <div className="flex gap-8 text-[10px] font-mono uppercase tracking-[0.2em] text-[#d7c29a]/60">
+            <Link className="footer-text-link" href="/sms-signup">{spanish ? 'Preferencias de mensajes' : 'Text Preferences'}</Link>
+            <Link className="footer-text-link" href="/privacy">{spanish ? 'Política de privacidad' : 'Privacy Policy'}</Link>
+            <Link className="footer-text-link" href="/terms">{spanish ? 'Términos de servicio' : 'Terms of Service'}</Link>
           </div>
         </div>
       </div>
