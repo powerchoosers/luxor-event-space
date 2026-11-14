@@ -599,7 +599,7 @@ export function LuxorConciergeChat() {
 
   return (
     <div
-      className={`site-floating-action fixed bottom-20 right-4 z-[130] sm:right-6 ${packagesPage ? 'md:bottom-[9.5rem]' : 'sm:bottom-6'}`}
+      className={`site-floating-action fixed right-4 z-[130] sm:bottom-6 sm:right-6 ${packagesPage ? 'bottom-36 max-sm:bottom-[8.75rem]' : 'bottom-20'}`}
     >
       <AnimatePresence initial={false}>
         {open ? (

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { CalendarDays, Clock, Tag, Users } from '@/lib/icons/phosphor-compat'
+import { CalendarDays, Check, Clock, Tag, Users } from '@/lib/icons/phosphor-compat'
 import { isGuestCountOverCapacity, LUXOR_GUEST_CAPACITY_MESSAGE, LUXOR_GUEST_CAPACITY_MESSAGE_ES, LUXOR_MAX_GUESTS } from '@/lib/luxorInquiryTypes'
 import { PortalSelect } from '@/components/portal/PortalUI'
 import { LuxorEventTypeCombobox } from '@/components/LuxorEventTypeCombobox'
@@ -154,8 +154,8 @@ export function PackagesConfigurator({ locale = 'en', defaultPackageTier = 'sign
   }, [enhancementQuantities, eventDate, eventType, guestCount, guestInvalid, locale, packageTierId, rentalPeriod])
 
   useEffect(() => {
-    const timer = window.setTimeout(() => { void recalculate() }, 220)
-    return () => window.clearTimeout(timer)
+    // Immediate calculation for snappy instant updates
+    void recalculate()
   }, [recalculate])
 
   async function handleInquire() {
@@ -288,22 +288,27 @@ export function PackagesConfigurator({ locale = 'en', defaultPackageTier = 'sign
                   const checked = Boolean(enhancementQuantities[item.id])
                   return (
                     <li key={item.id}>
-                      <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-[#eadfcf] bg-[#fffdfa] px-3 py-3 text-sm text-[#241d17]">
-                        <input
-                          type="checkbox"
-                          checked={checked}
-                          onChange={(event) => {
-                            setEnhancementQuantities((current) => {
-                              const next = { ...current }
-                              if (event.target.checked) next[item.id] = item.minimumQuantity
-                              else delete next[item.id]
-                              return next
-                            })
-                          }}
-                          className="mt-1 accent-[#caa24c]"
-                        />
-                        <span>
-                          <span className="font-medium">{item.name}</span>
+                      <label className={`group flex cursor-pointer items-start gap-3 rounded-xl border p-3.5 text-sm transition-all duration-150 ${checked ? 'border-[#caa24c] bg-[#caa24c]/10 text-[#241d17]' : 'border-[#d8c4a4]/80 bg-white text-[#241d17] hover:border-[#caa24c]/60'}`}>
+                        <span className="relative mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center">
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={(event) => {
+                              setEnhancementQuantities((current) => {
+                                const next = { ...current }
+                                if (event.target.checked) next[item.id] = item.minimumQuantity
+                                else delete next[item.id]
+                                return next
+                              })
+                            }}
+                            className="peer sr-only"
+                          />
+                          <span className={`flex h-5 w-5 items-center justify-center rounded-md border transition-colors ${checked ? 'border-[#caa24c] bg-[#caa24c] text-white shadow-xs' : 'border-[#b98a3d]/70 bg-[#fffdfa] group-hover:border-[#caa24c]'}`}>
+                            {checked ? <Check className="h-3.5 w-3.5 stroke-[3] text-white" aria-hidden /> : null}
+                          </span>
+                        </span>
+                        <span className="min-w-0 flex-1">
+                          <span className="font-medium leading-snug">{item.name}</span>
                           <span className="mt-0.5 block text-xs tabular-nums text-[#8d672b]">
                             +{new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(item.amount)}
                           </span>

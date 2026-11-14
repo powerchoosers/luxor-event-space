@@ -2,6 +2,7 @@
 
 import { ArrowRight } from '@/lib/icons/phosphor-compat'
 import type { PublicPackagesSummaryLine } from '@/lib/luxorPublicPackagesConfigurator'
+import { AnimatedCurrencyTicker } from '@/components/packages/AnimatedCurrencyTicker'
 
 const money = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' })
 
@@ -138,7 +139,7 @@ export function PackagesConfiguratorSummary({
         <div className="flex items-end justify-between gap-4">
           <p className="font-serif text-xl">{t.total}</p>
           <p className={`font-mono text-2xl font-bold tabular-nums ${totalValueClass}`}>
-            {totalLine || total !== null ? money.format(totalLine?.amount ?? total ?? 0) : '—'}
+            <AnimatedCurrencyTicker value={totalLine ? totalLine.amount : total} />
           </p>
         </div>
       </div>
