@@ -4,11 +4,11 @@ import { useCallback, useEffect, useId, useRef, useState, type KeyboardEvent } f
 import { createPortal } from 'react-dom'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import { X } from '@/lib/icons/phosphor-compat'
-import { filterLuxorEventTypes, LUXOR_EVENT_TYPE_MAX_LENGTH } from '@/lib/luxorInquiryTypes'
+import { LUXOR_EVENT_TYPE_MAX_LENGTH, suggestLuxorEventTypes } from '@/lib/luxorInquiryTypes'
 import {
+  LUXOR_PUBLIC_GLASS_LAYER_Z_INDEX,
   LUXOR_PUBLIC_GLASS_OPTION_BASE,
   LUXOR_PUBLIC_GLASS_POPOVER_MENU,
-  LUXOR_PUBLIC_GLASS_POPOVER_Z_INDEX,
 } from '@/lib/luxorPublicGlassPopover'
 import { PORTAL_MODAL_EASE, PORTAL_MODAL_EXIT_EASE } from '@/components/portal/PortalUI'
 
@@ -21,6 +21,7 @@ type LuxorEventTypeComboboxProps = {
   disabled?: boolean
   hideLabel?: boolean
   variant?: 'public-light' | 'public-dark' | 'portal'
+  locale?: 'en' | 'es'
   /** Public packages configurator only — portaled frosted suggestion menu. */
   popoverSurface?: 'default' | 'public-glass'
   className?: string
@@ -61,6 +62,7 @@ export function LuxorEventTypeCombobox({
   disabled = false,
   hideLabel = false,
   variant = 'portal',
+  locale = 'en',
   popoverSurface = 'default',
   className = '',
   labelClassName = '',
@@ -84,7 +86,7 @@ export function LuxorEventTypeCombobox({
   const [coords, setCoords] = useState({ top: 0, left: 0, width: 0, maxHeight: 256 })
   const isPublicGlass = popoverSurface === 'public-glass'
   const reduceMotion = useReducedMotion()
-  const suggestions = filterLuxorEventTypes(value)
+  const suggestions = suggestLuxorEventTypes(value, locale)
   const activeSuggestion = suggestions[activeIndex]
   const showSuggestions = isOpen && suggestions.length > 0
 
@@ -127,11 +129,11 @@ export function LuxorEventTypeCombobox({
     }
   }, [isPublicGlass, showSuggestions, updateCoords])
 
-  const selectSuggestion = (suggestion: string) => {
-    onChange(suggestion)
+  const selectSuggestion = (canonical: string) => {
+    onChange(canonical)
     setIsOpen(false)
     setActiveIndex(-1)
-    onSelectSuggestion?.(suggestion)
+    onSelectSuggestion?.(canonical)
   }
 
   const handleKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
@@ -153,7 +155,7 @@ export function LuxorEventTypeCombobox({
 
     if (event.key === 'Enter' && isOpen && activeSuggestion) {
       event.preventDefault()
-      selectSuggestion(activeSuggestion)
+      selectSuggestion(activeSuggestion.value)
       return
     }
 
@@ -172,7 +174,13 @@ export function LuxorEventTypeCombobox({
     }
   }
 
-  const listContent = showSuggestions ? (
+  const closeSuggestions = () => {
+    setIsOpen(false)
+    setActiveIndex(-1)
+    inputRef.current?.blur()
+  }
+
+  const listMarkup = (
     <ul
       ref={listRef}
       id={listId}
@@ -181,25 +189,20 @@ export function LuxorEventTypeCombobox({
       data-portal-popover="true"
       className={
         isPublicGlass
-          ? `${LUXOR_PUBLIC_GLASS_POPOVER_MENU} max-h-64 ${listClassName}`
+          ? `${LUXOR_PUBLIC_GLASS_POPOVER_MENU} pointer-events-auto max-h-64 ${listClassName}`
           : `${suggestionLayout === 'flow' ? 'relative mt-2' : 'absolute left-0 top-full z-50 mt-1'} max-h-64 w-full overflow-y-auto rounded-xl border p-1 shadow-xl ${LIST_STYLES[variant]} ${listClassName}`
       }
       style={isPublicGlass ? {
-        position: 'fixed',
-        top: coords.top,
-        left: coords.left,
-        width: coords.width,
         maxHeight: coords.maxHeight,
-        zIndex: LUXOR_PUBLIC_GLASS_POPOVER_Z_INDEX,
       } : undefined}
     >
       {suggestions.map((suggestion, index) => {
         const isActive = activeIndex === index
-        const isSelected = value === suggestion
+        const isSelected = value === suggestion.value
         return (
           <li
             id={`${listId}-option-${index}`}
-            key={suggestion}
+            key={suggestion.value}
             role="option"
             aria-selected={isSelected}
             data-selected={isPublicGlass && isSelected ? 'true' : undefined}
@@ -209,7 +212,7 @@ export function LuxorEventTypeCombobox({
             onMouseEnter={() => setActiveIndex(index)}
             onClick={() => {
               pointerSelectionRef.current = false
-              selectSuggestion(suggestion)
+              selectSuggestion(suggestion.value)
             }}
             className={
               isPublicGlass
@@ -217,12 +220,12 @@ export function LuxorEventTypeCombobox({
                 : `flex min-h-11 cursor-pointer items-center rounded-lg px-3 text-sm transition-colors ${isActive ? variant === 'portal' ? 'bg-[color:var(--portal-soft)]' : variant === 'public-dark' ? 'bg-white/10' : 'bg-[#f5efe5]' : variant === 'portal' ? 'hover:bg-[color:var(--portal-soft)]' : variant === 'public-dark' ? 'hover:bg-white/10' : 'hover:bg-[#f5efe5]'}`
             }
           >
-            {suggestion}
+            {suggestion.label}
           </li>
         )
       })}
     </ul>
-  ) : null
+  )
 
   return (
     <div ref={rootRef} className={`relative min-w-0 ${className}`}>
@@ -292,17 +295,39 @@ export function LuxorEventTypeCombobox({
         <AnimatePresence initial={false}>
           {showSuggestions ? (
             <motion.div
-              key="event-type-glass-list"
+              key="event-type-pg-layer"
               initial={{ opacity: 0 }}
-              animate={{ opacity: 1, transition: { duration: reduceMotion ? 0.04 : 0.16, ease: PORTAL_MODAL_EASE } }}
-              exit={{ opacity: 0, pointerEvents: 'none', transition: { duration: reduceMotion ? 0.04 : 0.12, ease: PORTAL_MODAL_EXIT_EASE } }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0, pointerEvents: 'none' }}
+              transition={{ duration: reduceMotion ? 0.04 : 0.14, ease: PORTAL_MODAL_EXIT_EASE }}
+              className="fixed inset-0"
+              style={{ zIndex: LUXOR_PUBLIC_GLASS_LAYER_Z_INDEX }}
             >
-              {listContent}
+              <button
+                type="button"
+                tabIndex={-1}
+                aria-hidden="true"
+                className="absolute inset-0 cursor-default bg-transparent"
+                onClick={closeSuggestions}
+              />
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1, transition: { duration: reduceMotion ? 0.04 : 0.16, ease: PORTAL_MODAL_EASE } }}
+                exit={{ opacity: 0, pointerEvents: 'none', transition: { duration: reduceMotion ? 0.04 : 0.12, ease: PORTAL_MODAL_EXIT_EASE } }}
+                className="pointer-events-none fixed z-[1]"
+                style={{
+                  top: coords.top,
+                  left: coords.left,
+                  width: coords.width,
+                }}
+              >
+                {listMarkup}
+              </motion.div>
             </motion.div>
           ) : null}
         </AnimatePresence>,
         document.body,
-      ) : listContent}
+      ) : showSuggestions ? listMarkup : null}
     </div>
   )
 }

@@ -11,7 +11,7 @@ import { LuxorDatePicker } from '@/components/LuxorDatePicker'
 import {
   LUXOR_PUBLIC_GLASS_OPTION_BASE,
   LUXOR_PUBLIC_GLASS_OPTION_SELECTED,
-  LUXOR_PUBLIC_GLASS_POPOVER_BACKDROP_Z_INDEX,
+  LUXOR_PUBLIC_GLASS_LAYER_Z_INDEX,
   LUXOR_PUBLIC_GLASS_POPOVER_MENU,
   LUXOR_PUBLIC_GLASS_POPOVER_Z_INDEX,
   PORTAL_FROSTED_POPOVER_MENU,
@@ -2031,83 +2031,146 @@ export function PortalSelect({
       </button>
       {typeof document !== 'undefined' ? createPortal(
         <AnimatePresence initial={false}>
-          {isOpen ? (
+          {isOpen ? (isPublicGlass ? (
             <motion.div
-              key="portal-select-backdrop"
-              aria-hidden="true"
+              key="portal-select-pg-layer"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0, pointerEvents: 'none' }}
               transition={{ duration: reduceMotion ? 0.04 : 0.14, ease: PORTAL_MODAL_EXIT_EASE }}
-              className="fixed inset-0 cursor-default"
-              style={{ zIndex: isPublicGlass ? LUXOR_PUBLIC_GLASS_POPOVER_BACKDROP_Z_INDEX : 9990 }}
-              onClick={() => closeMenu(true)}
-            />
-          ) : null}
-          {isOpen ? (
-            <motion.div
-              key="portal-select-menu-shell"
-              initial={{ opacity: 0 }}
-              animate={menuMotionTransition}
-              exit={reduceMotion ? { opacity: 0, pointerEvents: 'none', transition: { duration: 0.04 } } : { opacity: 0, pointerEvents: 'none', transition: { duration: 0.12, ease: PORTAL_MODAL_EXIT_EASE } }}
-              className="pointer-events-none fixed"
-              style={{
-                top: `${coords.top}px`,
-                left: `${coords.left}px`,
-                width: `${coords.width}px`,
-                zIndex: isPublicGlass ? LUXOR_PUBLIC_GLASS_POPOVER_Z_INDEX : 9999,
-              }}
+              className="fixed inset-0"
+              style={{ zIndex: LUXOR_PUBLIC_GLASS_LAYER_Z_INDEX }}
             >
-              <div
-                ref={dropdownRef}
-                id={listboxId}
-                role="listbox"
+              <button
+                type="button"
                 tabIndex={-1}
-                aria-activedescendant={activeOptionId}
-                data-portal-popover="true"
-                data-scroll-lock="true"
-                onKeyDown={handleListKeyDown}
-                className={`pointer-events-auto ${popoverMenuClass}`}
+                aria-hidden="true"
+                className="absolute inset-0 cursor-default bg-transparent"
+                onClick={() => closeMenu(true)}
+              />
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={menuMotionTransition}
+                exit={reduceMotion ? { opacity: 0, pointerEvents: 'none', transition: { duration: 0.04 } } : { opacity: 0, pointerEvents: 'none', transition: { duration: 0.12, ease: PORTAL_MODAL_EXIT_EASE } }}
+                className="pointer-events-none fixed z-[1]"
                 style={{
-                  maxHeight: `${coords.maxHeight}px`,
+                  top: `${coords.top}px`,
+                  left: `${coords.left}px`,
+                  width: `${coords.width}px`,
                 }}
               >
-                <div className="space-y-0.5">
-                  {options.map((opt, index) => {
-                    const isSelected = opt.value === value
-                    const isActive = activeIndex === index
-                    return (
-                      <button
-                        key={opt.value}
-                        id={`${listboxId}-option-${index}`}
-                        ref={(element) => { optionRefs.current[index] = element }}
-                        type="button"
-                        role="option"
-                        aria-selected={isSelected}
-                        onMouseEnter={() => setActiveIndex(index)}
-                        onClick={() => selectIndex(index)}
-                        className={isPublicGlass
-                          ? `${LUXOR_PUBLIC_GLASS_OPTION_BASE} luxor-public-glass-option justify-between text-xs ${isSelected ? LUXOR_PUBLIC_GLASS_OPTION_SELECTED : ''} ${isActive && !isSelected ? 'bg-[#f5efe5]' : ''}`
-                          : `group flex w-full cursor-pointer items-center justify-between rounded-lg border px-3 py-2 text-left text-xs font-medium transition-all duration-150 ease-[cubic-bezier(0.23,1,0.32,1)] ${
+                <div
+                  ref={dropdownRef}
+                  id={listboxId}
+                  role="listbox"
+                  tabIndex={-1}
+                  aria-activedescendant={activeOptionId}
+                  data-portal-popover="true"
+                  data-scroll-lock="true"
+                  onKeyDown={handleListKeyDown}
+                  className={`pointer-events-auto ${popoverMenuClass}`}
+                  style={{ maxHeight: `${coords.maxHeight}px` }}
+                >
+                  <div className="space-y-0.5">
+                    {options.map((opt, index) => {
+                      const isSelected = opt.value === value
+                      const isActive = activeIndex === index
+                      return (
+                        <button
+                          key={opt.value}
+                          id={`${listboxId}-option-${index}`}
+                          ref={(element) => { optionRefs.current[index] = element }}
+                          type="button"
+                          role="option"
+                          aria-selected={isSelected}
+                          onMouseEnter={() => setActiveIndex(index)}
+                          onClick={() => selectIndex(index)}
+                          className={`${LUXOR_PUBLIC_GLASS_OPTION_BASE} luxor-public-glass-option justify-between text-xs ${isSelected ? LUXOR_PUBLIC_GLASS_OPTION_SELECTED : ''} ${isActive && !isSelected ? 'bg-[#f5efe5]' : ''}`}
+                          data-selected={isSelected ? 'true' : 'false'}
+                        >
+                          <span>{opt.label}</span>
+                          <span className={`text-[9px] transition-opacity duration-150 ${isSelected ? 'text-[#8d672b]' : 'text-[#8d672b] opacity-0 group-hover:opacity-100'}`}>
+                            ●
+                          </span>
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+              </motion.div>
+            </motion.div>
+          ) : (
+            <>
+              <motion.div
+                key="portal-select-backdrop"
+                aria-hidden="true"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0, pointerEvents: 'none' }}
+                transition={{ duration: reduceMotion ? 0.04 : 0.14, ease: PORTAL_MODAL_EXIT_EASE }}
+                className="fixed inset-0 cursor-default"
+                style={{ zIndex: 9990 }}
+                onClick={() => closeMenu(true)}
+              />
+              <motion.div
+                key="portal-select-menu-shell"
+                initial={{ opacity: 0 }}
+                animate={menuMotionTransition}
+                exit={reduceMotion ? { opacity: 0, pointerEvents: 'none', transition: { duration: 0.04 } } : { opacity: 0, pointerEvents: 'none', transition: { duration: 0.12, ease: PORTAL_MODAL_EXIT_EASE } }}
+                className="pointer-events-none fixed"
+                style={{
+                  top: `${coords.top}px`,
+                  left: `${coords.left}px`,
+                  width: `${coords.width}px`,
+                  zIndex: 9999,
+                }}
+              >
+                <div
+                  ref={dropdownRef}
+                  id={listboxId}
+                  role="listbox"
+                  tabIndex={-1}
+                  aria-activedescendant={activeOptionId}
+                  data-portal-popover="true"
+                  data-scroll-lock="true"
+                  onKeyDown={handleListKeyDown}
+                  className={`pointer-events-auto ${popoverMenuClass}`}
+                  style={{ maxHeight: `${coords.maxHeight}px` }}
+                >
+                  <div className="space-y-0.5">
+                    {options.map((opt, index) => {
+                      const isSelected = opt.value === value
+                      const isActive = activeIndex === index
+                      return (
+                        <button
+                          key={opt.value}
+                          id={`${listboxId}-option-${index}`}
+                          ref={(element) => { optionRefs.current[index] = element }}
+                          type="button"
+                          role="option"
+                          aria-selected={isSelected}
+                          onMouseEnter={() => setActiveIndex(index)}
+                          onClick={() => selectIndex(index)}
+                          className={`group flex w-full cursor-pointer items-center justify-between rounded-lg border px-3 py-2 text-left text-xs font-medium transition-all duration-150 ease-[cubic-bezier(0.23,1,0.32,1)] ${
                             isSelected
                               ? isLight ? 'border-[#b98a3d]/30 bg-[#f5ead8] font-semibold text-[#6f4d1f]' : 'border-[#caa24c]/20 bg-[#caa24c]/12 font-semibold text-[#f1d27a]'
                               : isActive
                                 ? isLight ? 'border-transparent bg-[#f8f1e6] text-[#3b2b1d] ring-1 ring-[#b98a3d]/25' : 'border-transparent bg-[color:var(--portal-soft)] text-[color:var(--portal-text,#f7efe3)] ring-1 ring-[#caa24c]/25'
                                 : isLight ? 'border-transparent text-[#5b4632] hover:bg-[#f8f1e6] hover:text-[#3b2b1d]' : 'border-transparent text-[color:var(--portal-muted,#d7c29a)] hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text,#f7efe3)]'
                           }`}
-                        {...(isPublicGlass ? { 'data-selected': isSelected ? 'true' : 'false' } : {})}
-                      >
-                        <span>{opt.label}</span>
-                        <span className={`text-[9px] transition-opacity duration-150 ${isSelected ? isLight ? 'text-[#8d672b]' : 'text-[#f1d27a]' : isLight ? 'text-[#8d672b] opacity-0 group-hover:opacity-100' : 'text-[color:var(--portal-muted,#d7c29a)] opacity-0 group-hover:opacity-100'}`}>
-                          ●
-                        </span>
-                      </button>
-                    )
-                  })}
+                        >
+                          <span>{opt.label}</span>
+                          <span className={`text-[9px] transition-opacity duration-150 ${isSelected ? isLight ? 'text-[#8d672b]' : 'text-[#f1d27a]' : isLight ? 'text-[#8d672b] opacity-0 group-hover:opacity-100' : 'text-[color:var(--portal-muted,#d7c29a)] opacity-0 group-hover:opacity-100'}`}>
+                            ●
+                          </span>
+                        </button>
+                      )
+                    })}
+                  </div>
                 </div>
-              </div>
-            </motion.div>
-          ) : null}
+              </motion.div>
+            </>
+          )) : null}
         </AnimatePresence>,
         document.body
       ) : null}

@@ -210,6 +210,7 @@ export function PackagesConfigurator({ locale = 'en', defaultPackageTier = 'sign
             <LuxorEventTypeCombobox
               label={labels.eventType}
               variant="public-light"
+              locale={locale}
               popoverSurface="public-glass"
               value={eventType}
               onChange={setEventType}

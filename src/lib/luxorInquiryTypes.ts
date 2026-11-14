@@ -77,6 +77,33 @@ function normalizeEventTypeSearchToken(value: string) {
   return value.trim().toLowerCase().normalize('NFD').replace(/\p{M}/gu, '')
 }
 
+export const LUXOR_EVENT_TYPE_ES_LABELS: Partial<Record<LuxorEventType, string>> = {
+  Wedding: 'Boda',
+  'Wedding Reception': 'Recepción de boda',
+  Quinceañera: 'Quinceañera',
+  'Sweet 16': 'Quinceañera (Sweet 16)',
+  Cincoañera: 'Cincoañera',
+  'Birthday Party': 'Fiesta de cumpleaños',
+  Anniversary: 'Aniversario',
+  'Vow Renewal': 'Renovación de votos',
+  'Baby Shower': 'Baby shower',
+  'Bridal Shower': 'Despedida de soltera',
+  'Graduation Party': 'Fiesta de graduación',
+  'Corporate Event': 'Evento corporativo',
+  'Networking Event': 'Evento de networking',
+  'Fashion Show': 'Pasarela de moda',
+  Workshop: 'Taller',
+  'Holiday Party': 'Fiesta navideña',
+  'Repast / Repass': 'Repaso',
+  'Celebration of Life': 'Celebración de vida',
+  'Memorial Service': 'Servicio conmemorativo',
+  'Funeral Reception': 'Recepción funeraria',
+  'Bereavement Gathering': 'Reunión de duelo',
+  'Other Special Event': 'Otro evento especial',
+}
+
+export type LuxorEventTypeSuggestion = { value: LuxorEventType; label: string }
+
 export function filterLuxorEventTypes(query: string) {
   const normalizedQuery = normalizeEventTypeSearchToken(query)
   if (!normalizedQuery) return [...LUXOR_EVENT_TYPES]
@@ -91,7 +118,18 @@ export function filterLuxorEventTypes(query: string) {
       types.forEach((type) => matched.add(type))
     }
   }
+  for (const [canonical, esLabel] of Object.entries(LUXOR_EVENT_TYPE_ES_LABELS)) {
+    const type = canonical as LuxorEventType
+    if (normalizeEventTypeSearchToken(esLabel).includes(normalizedQuery)) matched.add(type)
+  }
   return LUXOR_EVENT_TYPES.filter((type) => matched.has(type))
+}
+
+export function suggestLuxorEventTypes(query: string, locale: 'en' | 'es' = 'en'): LuxorEventTypeSuggestion[] {
+  return filterLuxorEventTypes(query).map((value) => ({
+    value,
+    label: locale === 'es' ? (LUXOR_EVENT_TYPE_ES_LABELS[value] ?? value) : value,
+  }))
 }
 
 export function normalizeLuxorEventType(value: unknown) {

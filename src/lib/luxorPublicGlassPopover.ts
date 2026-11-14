@@ -3,9 +3,11 @@
  * Matches the Elena slash-command glass recipe without pulling portal theme tokens.
  * The marketing site is light-only (`body[data-luxor-site]`); do not add OS-dark overrides here.
  */
-/** Must sit above the portaled public-glass dismiss layer (PortalSelect uses 9990). */
+/** Single stacking layer: backdrop and popover render together; menu is above backdrop inside this shell. */
+export const LUXOR_PUBLIC_GLASS_LAYER_Z_INDEX = 10050
+export const LUXOR_PUBLIC_GLASS_POPOVER_Z_INDEX = LUXOR_PUBLIC_GLASS_LAYER_Z_INDEX
+/** @deprecated Portal menus use {@link LUXOR_PUBLIC_GLASS_LAYER_Z_INDEX} with an inner backdrop. */
 export const LUXOR_PUBLIC_GLASS_POPOVER_BACKDROP_Z_INDEX = 9990
-export const LUXOR_PUBLIC_GLASS_POPOVER_Z_INDEX = 10000
 
 export const LUXOR_PUBLIC_GLASS_POPOVER_SHELL =
   'luxor-public-glass-popover rounded-2xl border border-[#d8c4a4]/80 shadow-[0_18px_40px_-24px_rgba(0,0,0,0.55)] ring-1 ring-black/5'
