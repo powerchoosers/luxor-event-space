@@ -7,9 +7,16 @@ import { CalendarDays, ChevronDown, Menu, X } from '@/lib/icons/phosphor-compat'
 import { LuxorAxisLockup, LuxorWordmark } from '@/components/LuxorWordmark'
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'
 import { PublicPhoneLink } from '@/components/PublicPhoneLink'
-import { LUXOR_EVENT_COLLECTIONS, eventCollectionHref } from '@/lib/luxorEventCollections'
+import { LUXOR_EVENT_COLLECTIONS, eventCollectionHref, type LuxorEventCollection } from '@/lib/luxorEventCollections'
 import { getPublicFooterNavLinks, getPublicNavEventsLink, getPublicNavLinks } from '@/lib/luxorPublicNavLinks'
 import { publicSiteEventsActive, publicSitePath } from '@/lib/publicSitePaths'
+
+function mobileEventCollectionMenuLabel(collection: LuxorEventCollection, spanish: boolean): string {
+  if (spanish) return collection.titleEs
+  if (collection.href === '/events/milestones-family-celebrations') return 'Milestones & Family'
+  if (collection.href === '/events/social-professional-events') return 'Social & Professional'
+  return collection.title
+}
 
 export const Header = () => {
   const [isScrolled, setIsScrolled] = useState(false)
@@ -516,7 +523,7 @@ export const Header = () => {
                                     onClick={closeMobileMenu}
                                     className="block py-3 font-serif text-lg tracking-[0.06em] text-[#4f4338] transition-colors hover:text-[#8d672b]"
                                   >
-                                    {spanish ? collection.titleEs : collection.title}
+                                    {mobileEventCollectionMenuLabel(collection, spanish)}
                                   </Link>
                                 </li>
                               ))}
