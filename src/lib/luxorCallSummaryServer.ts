@@ -2,7 +2,7 @@ import 'server-only'
 
 import { createHash } from 'node:crypto'
 import { canProcessLuxorRecording, getLuxorCallBySid, getLuxorTranscriptSegments } from './luxorCallsServer'
-import { luxorTranscriptSpeaker, type LuxorCall } from './luxorCallTypes'
+import { luxorElenaLiveInboundTranscriptUsesSipBridge, luxorTranscriptSpeaker, type LuxorCall } from './luxorCallTypes'
 import { supabaseRest } from './supabaseRestServer'
 
 function callContextLines(call: LuxorCall) {
@@ -23,7 +23,7 @@ async function buildTranscriptBlock(call: LuxorCall) {
   if (!segments.length) return { text: '', fingerprint: '', partial: true }
   const text = segments
     .map((segment) => {
-      const speaker = luxorTranscriptSpeaker(segment.track)
+      const speaker = luxorTranscriptSpeaker(segment.track, { elenaSipBridge: luxorElenaLiveInboundTranscriptUsesSipBridge(call.metadata) })
       return `${speaker === 'caller' ? 'Caller' : speaker === 'luxor' ? 'Luxor' : 'Speaker'}: ${segment.segment_text}`
     })
     .join('\n')

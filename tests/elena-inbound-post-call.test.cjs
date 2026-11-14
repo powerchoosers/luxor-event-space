@@ -51,3 +51,29 @@ test('parseElenaInboundPostCallExtract reads summary facts for a quince inquiry'
 test('parseElenaInboundPostCallExtract returns null without a name', () => {
   assert.equal(postCall.parseElenaInboundPostCallExtract('General venue question only.', '+15551234567'), null)
 })
+
+test('reconcile skips when call already has inquiry_id', async () => {
+  const reconcile = compile('src/lib/luxorElenaInboundPostCallServer.ts', {
+    'server-only': {},
+    './luxorCallsServer': {
+      normalizePhoneNumber: (value) => {
+        const digits = String(value || '').replace(/\D/g, '')
+        return digits.length === 10 ? '+1' + digits : null
+      },
+      getLuxorCallBySid: async () => ({
+        id: 'call', inquiry_id: 'ed4e8c25-0000-4000-8000-000000000000',
+        summary_status: 'completed', summary_text: 'Caller Maria Lopez', metadata: { scope: 'elena_live_inbound', accepted: true },
+      }),
+      getLuxorTranscriptSegments: async () => [],
+    },
+    './luxorCallTypes': compile('src/lib/luxorCallTypes.ts', {}),
+    './supabaseRestServer': {},
+    './luxorElenaCallerEventType': compile('src/lib/luxorElenaCallerEventType.ts', { './luxorInquiryTypes': { filterLuxorEventTypes: () => [], normalizeLuxorEventType: () => null } }),
+    './luxorBrochureDeliveryQueue': {},
+    './luxorInquiryTypes': {},
+    './luxorElenaInboundServer': { ELENA_LIVE_SCOPE: 'elena_live_inbound' },
+  })
+  const result = await reconcile.reconcileElenaInboundAfterSummary('CA' + '1'.repeat(32))
+  assert.equal(result.status, 'skipped')
+  assert.equal(result.reason, 'inquiry_linked')
+})

@@ -2,7 +2,7 @@ import 'server-only'
 
 import { createHash } from 'node:crypto'
 import { getLuxorCallBySid, getLuxorTranscriptSegments, normalizePhoneNumber } from './luxorCallsServer'
-import { luxorTranscriptSpeaker, type LuxorCall } from './luxorCallTypes'
+import { luxorElenaLiveInboundTranscriptUsesSipBridge, luxorTranscriptSpeaker, type LuxorCall } from './luxorCallTypes'
 import { supabaseRestStrict } from './supabaseRestServer'
 import { resolveElenaCallerEventType } from './luxorElenaCallerEventType'
 import { queueBrochureDelivery } from './luxorBrochureDeliveryQueue'
@@ -56,7 +56,11 @@ async function buildTranscriptText(call: LuxorCall) {
   const segments = await getLuxorTranscriptSegments(call.id)
   if (!segments.length) return ''
   return segments
-    .map((segment) => `${luxorTranscriptSpeaker(segment.track) === 'caller' ? 'Caller' : 'Luxor'}: ${segment.segment_text}`)
+    .map((segment) => {
+      const sipBridge = luxorElenaLiveInboundTranscriptUsesSipBridge(call.metadata)
+      const speaker = luxorTranscriptSpeaker(segment.track, { elenaSipBridge: sipBridge })
+      return `${speaker === 'caller' ? 'Caller' : 'Luxor'}: ${segment.segment_text}`
+    })
     .join('\n')
     .slice(0, 40_000)
 }
@@ -120,10 +124,11 @@ async function extractWithLlm(content: string): Promise<ElenaInboundPostCallExtr
 
 function needsReconcile(call: LuxorCall) {
   if (call.metadata?.scope !== ELENA_LIVE_SCOPE || call.metadata?.accepted !== true) return false
+  if (call.inquiry_id) return false
   const receipt = call.metadata?.lead_update_receipt as { saved_at?: string } | undefined
   const capture = call.metadata?.inbound_capture as { confirmed?: boolean } | undefined
-  if (capture?.confirmed === true && receipt?.saved_at && call.inquiry_id) return false
-  return !call.inquiry_id || capture?.confirmed !== true || !receipt?.saved_at
+  if (capture?.confirmed === true && receipt?.saved_at) return false
+  return !capture?.confirmed || !receipt?.saved_at
 }
 
 async function hasBrochureJob(inquiryId: string) {
@@ -135,7 +140,9 @@ async function hasBrochureJob(inquiryId: string) {
 
 export async function reconcileElenaInboundAfterSummary(callSid: string) {
   const call = await getLuxorCallBySid(callSid)
-  if (!call || !needsReconcile(call)) return { status: 'skipped' as const, reason: 'already_persisted' }
+  if (!call) return { status: 'skipped' as const, reason: 'call_not_found' }
+  if (call.inquiry_id) return { status: 'skipped' as const, reason: 'inquiry_linked' }
+  if (!needsReconcile(call)) return { status: 'skipped' as const, reason: 'already_persisted' }
   if (call.metadata?.post_call_reconcile) return { status: 'skipped' as const, reason: 'duplicate' }
   if (call.summary_status !== 'completed' || !call.summary_text?.trim()) {
     return { status: 'skipped' as const, reason: 'summary_not_ready' }

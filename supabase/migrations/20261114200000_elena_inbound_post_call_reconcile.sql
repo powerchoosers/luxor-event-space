@@ -32,6 +32,9 @@ begin
   if v_call.metadata->'post_call_reconcile'->>'saved_at' is not null then
     return jsonb_build_object('saved', true, 'duplicate', true, 'inquiry_id', v_call.inquiry_id);
   end if;
+  if v_call.inquiry_id is not null then
+    return jsonb_build_object('saved', false, 'skipped', true, 'inquiry_id', v_call.inquiry_id);
+  end if;
   v_name := nullif(btrim(p_fields->>'full_name'), '');
   v_phone := public.luxor_workflow_normalize_phone(coalesce(nullif(btrim(p_fields->>'phone'), ''), v_call.caller_number));
   v_email := nullif(lower(btrim(p_fields->>'email')), '');

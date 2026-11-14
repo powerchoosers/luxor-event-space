@@ -44,7 +44,7 @@ import {
 import { PortalAudioPlayer } from '@/components/portal/PortalAudioPlayer'
 import { usePortalVoice } from '@/components/portal/PortalVoiceProvider'
 import { useToast } from '@/components/portal/ToastProvider'
-import { luxorTranscriptSpeaker, type LuxorCall } from '@/lib/luxorCallTypes'
+import { luxorElenaLiveInboundTranscriptUsesSipBridge, luxorTranscriptSpeaker, type LuxorCall } from '@/lib/luxorCallTypes'
 import {
   formatPhoneDisplay,
   formatUsDialInput,
@@ -1252,7 +1252,7 @@ export default function CallsPage() {
                               segment.startSeconds != null &&
                               currentPlayheadTime >= segment.startSeconds &&
                               currentPlayheadTime < segment.startSeconds + 4
-                            const speaker = luxorTranscriptSpeaker(segment.track)
+                            const speaker = luxorTranscriptSpeaker(segment.track, { elenaSipBridge: luxorElenaLiveInboundTranscriptUsesSipBridge(selectedCall.metadata) })
 
                             return (
                               <button
