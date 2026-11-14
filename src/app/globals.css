@@ -70,6 +70,17 @@ body[data-portal-theme='dark'] .elena-slash-command-popover {
   background-color: color-mix(in srgb, #0e0d0b 78%, transparent);
 }
 
+/* PortalSelect listbox (portaled): near-opaque in light so lead rows never bleed through the filter popover. */
+.portal-select-frosted-popover {
+  background-color: rgba(255, 253, 249, 0.98);
+  -webkit-backdrop-filter: blur(28px) saturate(148%);
+  backdrop-filter: blur(28px) saturate(148%);
+}
+
+body[data-portal-theme='dark'] .portal-select-frosted-popover {
+  background-color: color-mix(in srgb, #0e0d0b 90%, transparent);
+}
+
 /* Inside elevated surfaces in dark mode, adjust nested card tokens so nested elements aren't see-through */
 body[data-portal-theme='dark'] .portal-overlay-surface,
 body[data-portal-theme='dark'] .portal-sheet,

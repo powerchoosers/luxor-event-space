@@ -47,11 +47,51 @@ export function isLuxorEventTypeRequiredFlow(flow: unknown) {
     && LUXOR_EVENT_TYPE_REQUIRED_FLOWS.includes(flow.trim() as (typeof LUXOR_EVENT_TYPE_REQUIRED_FLOWS)[number])
 }
 
+/** Spanish search tokens on /es packages and other public flows (accent-insensitive). */
+const LUXOR_EVENT_TYPE_ES_ALIASES: Record<string, readonly LuxorEventType[]> = {
+  boda: ['Wedding', 'Wedding Reception'],
+  matrimonio: ['Wedding', 'Wedding Reception'],
+  quince: ['Quinceañera', 'Cincoañera', 'Sweet 16'],
+  quinceanera: ['Quinceañera'],
+  quinceañera: ['Quinceañera'],
+  xv: ['Quinceañera', 'Cincoañera'],
+  cumple: ['Birthday Party', 'Sweet 16'],
+  cumpleanos: ['Birthday Party'],
+  cumpleaños: ['Birthday Party'],
+  aniversario: ['Anniversary', 'Vow Renewal'],
+  baby: ['Baby Shower'],
+  despedida: ['Bridal Shower', 'Baby Shower'],
+  bridal: ['Bridal Shower'],
+  graduacion: ['Graduation Party'],
+  graduación: ['Graduation Party'],
+  corporativo: ['Corporate Event', 'Networking Event'],
+  empresarial: ['Corporate Event', 'Networking Event'],
+  fiesta: ['Birthday Party', 'Holiday Party', 'Other Special Event'],
+  funeral: ['Funeral Reception', 'Celebration of Life', 'Memorial Service', 'Bereavement Gathering'],
+  memorial: ['Memorial Service', 'Celebration of Life', 'Bereavement Gathering'],
+  luto: ['Funeral Reception', 'Celebration of Life', 'Memorial Service', 'Bereavement Gathering'],
+  otro: ['Other Special Event'],
+}
+
+function normalizeEventTypeSearchToken(value: string) {
+  return value.trim().toLowerCase().normalize('NFD').replace(/\p{M}/gu, '')
+}
+
 export function filterLuxorEventTypes(query: string) {
-  const normalizedQuery = query.trim().toLowerCase()
-  return normalizedQuery
-    ? LUXOR_EVENT_TYPES.filter((eventType) => eventType.toLowerCase().includes(normalizedQuery))
-    : [...LUXOR_EVENT_TYPES]
+  const normalizedQuery = normalizeEventTypeSearchToken(query)
+  if (!normalizedQuery) return [...LUXOR_EVENT_TYPES]
+
+  const matched = new Set<LuxorEventType>()
+  for (const eventType of LUXOR_EVENT_TYPES) {
+    if (normalizeEventTypeSearchToken(eventType).includes(normalizedQuery)) matched.add(eventType)
+  }
+  for (const [alias, types] of Object.entries(LUXOR_EVENT_TYPE_ES_ALIASES)) {
+    const normalizedAlias = normalizeEventTypeSearchToken(alias)
+    if (normalizedAlias.includes(normalizedQuery) || normalizedQuery.includes(normalizedAlias)) {
+      types.forEach((type) => matched.add(type))
+    }
+  }
+  return LUXOR_EVENT_TYPES.filter((type) => matched.has(type))
 }
 
 export function normalizeLuxorEventType(value: unknown) {

@@ -5,7 +5,7 @@ import { createPortal } from 'react-dom'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import { CalendarDays, ChevronDown, ChevronLeft, ChevronRight } from '@/lib/icons/phosphor-compat'
 import { addCalendarMonthsDateKey, formatLocalDateKey, getDateKeyInTimeZone } from '@/lib/publicEventDate'
-import { LUXOR_PUBLIC_GLASS_POPOVER_SHELL, LUXOR_PUBLIC_GLASS_POPOVER_Z_INDEX } from '@/lib/luxorPublicGlassPopover'
+import { LUXOR_PUBLIC_GLASS_POPOVER_BACKDROP_Z_INDEX, LUXOR_PUBLIC_GLASS_POPOVER_SHELL, LUXOR_PUBLIC_GLASS_POPOVER_Z_INDEX } from '@/lib/luxorPublicGlassPopover'
 
 function parseDateKey(value: string) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return null
@@ -499,7 +499,7 @@ export function LuxorDatePicker({
       {typeof document !== 'undefined' ? createPortal(
         <AnimatePresence initial={false} onExitComplete={() => { if (returnFocusAfterCloseRef.current) { returnFocusAfterCloseRef.current = false; triggerRef.current?.focus() } }}>
         {open ? <>
-          <motion.button key="calendar-backdrop" type="button" tabIndex={-1} aria-label="Close calendar" onClick={closeAndReturnFocus} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: motionDuration }} className="fixed inset-0 z-[9980] cursor-default bg-transparent" />
+          <motion.button key="calendar-backdrop" type="button" tabIndex={-1} aria-label="Close calendar" onClick={closeAndReturnFocus} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: motionDuration }} className="fixed inset-0 cursor-default bg-transparent" style={{ zIndex: isPublicGlass ? LUXOR_PUBLIC_GLASS_POPOVER_BACKDROP_Z_INDEX : 9980 }} />
           <motion.div key="calendar-panel" initial={isPublicGlass || prefersReducedMotion ? { opacity: 0 } : { opacity: 0, y: 8, scale: 0.985 }} animate={isPublicGlass || prefersReducedMotion ? { opacity: 1 } : { opacity: 1, y: 0, scale: 1 }} exit={isPublicGlass || prefersReducedMotion ? { opacity: 0 } : { opacity: 0, y: 6, scale: 0.99 }} transition={{ duration: motionDuration }} style={{ position: 'fixed', zIndex: isPublicGlass ? LUXOR_PUBLIC_GLASS_POPOVER_Z_INDEX : 9981, top: coords.top, left: coords.left, width: coords.width }}>
           <div
             ref={panelRef}
@@ -552,7 +552,7 @@ export function LuxorDatePicker({
                         onFocus={() => setFocusDate(date)}
                         onClick={() => selectDate(date)}
                         style={{ width: coords.daySize, height: coords.daySize }}
-                        className={`relative mx-auto flex items-center justify-center rounded-full text-sm tabular-nums transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8d672b] ${selected ? 'bg-[#caa24c] font-semibold text-white shadow-sm' : disabled ? (isPortal ? 'cursor-not-allowed text-[color:var(--portal-muted,#b9ad9f)] opacity-50' : 'cursor-not-allowed text-[#c9c1b7]') : isToday ? 'border border-[#caa24c] font-semibold text-[#6f4d1f]' : isPortal ? 'text-[color:var(--portal-text,#f7efe3)] hover:bg-[color:var(--portal-soft,rgba(255,255,255,0.06))]' : 'text-[#3b2b1d] hover:bg-[#f5ead8]'}`}
+                        className={`relative mx-auto flex items-center justify-center rounded-full text-sm tabular-nums transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8d672b] ${selected ? 'bg-[#caa24c] font-semibold text-white shadow-sm' : disabled ? (isPortal ? 'cursor-not-allowed text-[color:var(--portal-muted,#b9ad9f)] opacity-50' : isPublicGlass ? 'cursor-not-allowed text-[#6f6258]' : 'cursor-not-allowed text-[#9a8f84]') : isToday ? 'border border-[#caa24c] font-semibold text-[#6f4d1f]' : isPortal ? 'text-[color:var(--portal-text,#f7efe3)] hover:bg-[color:var(--portal-soft,rgba(255,255,255,0.06))]' : 'text-[#3b2b1d] hover:bg-[#f5ead8]'}`}
                       >{day}{available ? <span aria-hidden="true" className={`absolute bottom-0.5 h-1 w-1 rounded-full ${selected ? 'bg-white' : 'bg-emerald-600'}`} /> : null}</button>
                     </div>
                   )

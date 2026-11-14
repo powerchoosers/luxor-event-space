@@ -108,7 +108,7 @@ export function PackagesConfiguratorSummary({
   return (
     <aside
       id={id}
-      className={`min-w-0 scroll-mt-[calc(7rem+1.25rem)] rounded-md border p-5 sm:p-6 ${shellClass} ${compact ? '' : 'lg:sticky lg:top-28 lg:scroll-mt-0 lg:pb-6 lg:pr-44'}`}
+      className={`min-w-0 scroll-mt-[calc(7rem+1.25rem)] rounded-md border p-5 sm:p-6 ${shellClass} ${compact ? '' : 'lg:sticky lg:top-24 lg:scroll-mt-0 lg:max-xl:pb-5 lg:max-xl:pr-4 xl:top-28 xl:pb-6 xl:pr-44'}`}
     >
       <p className={`font-mono text-[11px] font-bold uppercase tracking-[0.22em] ${eyebrowClass}`}>{t.eyebrow}</p>
       {loading ? (

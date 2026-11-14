@@ -11,6 +11,7 @@ import { LuxorDatePicker } from '@/components/LuxorDatePicker'
 import {
   LUXOR_PUBLIC_GLASS_OPTION_BASE,
   LUXOR_PUBLIC_GLASS_OPTION_SELECTED,
+  LUXOR_PUBLIC_GLASS_POPOVER_BACKDROP_Z_INDEX,
   LUXOR_PUBLIC_GLASS_POPOVER_MENU,
   LUXOR_PUBLIC_GLASS_POPOVER_Z_INDEX,
   PORTAL_FROSTED_POPOVER_MENU,
@@ -1890,13 +1891,18 @@ export function PortalSelect({
     }
   }, [options.length])
 
-  const openMenu = React.useCallback(() => {
-    if (disabled) return
-    const selectedIndex = options.findIndex((opt) => opt.value === value)
-    setActiveIndex(selectedIndex >= 0 ? selectedIndex : 0)
+  const openMenuAt = React.useCallback((index: number) => {
+    if (disabled || !options.length) return
+    const lastIndex = options.length - 1
+    setActiveIndex(Math.max(0, Math.min(index, lastIndex)))
     updateCoords()
     setIsOpen(true)
-  }, [disabled, options, updateCoords, value])
+  }, [disabled, options.length, updateCoords])
+
+  const openMenu = React.useCallback(() => {
+    const selectedIndex = options.findIndex((opt) => opt.value === value)
+    openMenuAt(selectedIndex >= 0 ? selectedIndex : 0)
+  }, [openMenuAt, options, value])
 
   const handleListKeyDown = React.useCallback((event: React.KeyboardEvent<HTMLDivElement>) => {
     if (!options.length) return
@@ -1928,7 +1934,8 @@ export function PortalSelect({
         closeMenu(true)
         return
       case 'Tab':
-        closeMenu(false)
+        event.preventDefault()
+        closeMenu(true)
         return
       default:
         return
@@ -1990,8 +1997,26 @@ export function PortalSelect({
           openMenu()
         }}
         onKeyDown={(event) => {
-          if (disabled || isOpen) return
-          if (event.key === 'ArrowDown' || event.key === 'ArrowUp' || event.key === 'Enter' || event.key === ' ') {
+          if (disabled) return
+          if (isOpen) {
+            if (event.key === 'Escape') {
+              event.preventDefault()
+              closeMenu(true)
+            }
+            return
+          }
+          const selectedIndex = options.findIndex((opt) => opt.value === value)
+          if (event.key === 'ArrowDown') {
+            event.preventDefault()
+            openMenuAt(selectedIndex >= 0 ? selectedIndex : 0)
+            return
+          }
+          if (event.key === 'ArrowUp') {
+            event.preventDefault()
+            openMenuAt(selectedIndex >= 0 ? selectedIndex : options.length - 1)
+            return
+          }
+          if (event.key === 'Enter' || event.key === ' ') {
             event.preventDefault()
             openMenu()
           }
@@ -2014,7 +2039,8 @@ export function PortalSelect({
               animate={{ opacity: 1 }}
               exit={{ opacity: 0, pointerEvents: 'none' }}
               transition={{ duration: reduceMotion ? 0.04 : 0.14, ease: PORTAL_MODAL_EXIT_EASE }}
-              className="fixed inset-0 z-[9990] cursor-default"
+              className="fixed inset-0 cursor-default"
+              style={{ zIndex: isPublicGlass ? LUXOR_PUBLIC_GLASS_POPOVER_BACKDROP_Z_INDEX : 9990 }}
               onClick={() => closeMenu(true)}
             />
           ) : null}
