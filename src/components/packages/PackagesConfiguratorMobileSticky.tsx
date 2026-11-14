@@ -37,7 +37,7 @@ export function PackagesConfiguratorMobileSticky({ locale = 'en', total }: Packa
   }
 
   return createPortal(
-    <div className="site-floating-action pointer-events-none fixed inset-x-0 bottom-16 z-[70] border-y border-[#caa24c]/28 bg-[#faf7f1]/95 p-3 shadow-[0_-16px_40px_-28px_rgba(61,43,23,0.45)] backdrop-blur md:hidden">
+    <div className="site-floating-action pointer-events-none fixed inset-x-0 bottom-16 z-[70] border-y border-[#caa24c]/28 bg-[#faf7f1]/95 p-3 shadow-[0_-16px_40px_-28px_rgba(61,43,23,0.45)] backdrop-blur sm:hidden">
       <div className="pointer-events-auto mx-auto flex max-w-lg items-center justify-between gap-3">
         <div className="min-w-0">
           <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#8d672b]">{runningLabel}</p>

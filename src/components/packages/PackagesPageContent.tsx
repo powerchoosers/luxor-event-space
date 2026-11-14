@@ -8,6 +8,7 @@ import { Reveal } from '@/components/Reveal'
 import { StaggerCard, StaggerCards } from '@/components/StaggerCards'
 import { PackageFlipCard } from '@/components/packages/PackageFlipCard'
 import { PackagesConfigurator } from '@/components/packages/PackagesConfigurator'
+import { VenueFilm } from '@/components/VenueFilm'
 import type { PublicPackageCardData } from '@/lib/luxorPublicPackages'
 type PackagesPageContentProps = {
   locale?: 'en' | 'es'
@@ -65,26 +66,36 @@ export function PackagesPageContent({ locale = 'en', cards }: PackagesPageConten
 
   return (
     <main className="overflow-x-hidden bg-[#050505] text-[#f7efe3]">
-      <section className="relative isolate min-h-[92svh] overflow-hidden bg-[#f7f3ec] pt-28 sm:min-h-screen">
-        <div className="relative z-10 mx-auto grid min-h-[calc(92svh-7rem)] max-w-7xl items-center gap-12 px-5 pb-14 pt-10 sm:min-h-[calc(100vh-7rem)] sm:px-6 lg:grid-cols-[0.92fr_1.08fr] lg:gap-16 lg:px-8 lg:pt-14">
-          <div className="min-w-0 text-center lg:text-left">
+      <section className="relative isolate overflow-hidden pt-28 sm:px-6 sm:pb-14 sm:pt-32 lg:px-8 lg:pb-20 lg:pt-40">
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_18%,rgba(202,162,76,0.14),transparent_22rem),radial-gradient(circle_at_88%_12%,rgba(189,101,117,0.16),transparent_20rem),linear-gradient(180deg,#120d0c,#050505)]" />
+        <div className="absolute inset-0 luxor-noise opacity-[0.16]" />
+        
+        {/* On mobile (< 640px): completely unrounded edge-to-edge video directly under header */}
+        <div className="sm:hidden">
+          <div className="w-full overflow-hidden [&_.venue-film]:!rounded-none [&_.venue-film_video]:!rounded-none">
+            <VenueFilm autoPlay />
+          </div>
+        </div>
+
+        <div className="relative z-10 mx-auto grid max-w-7xl gap-8 px-5 pb-12 pt-8 sm:px-0 sm:pb-0 sm:pt-0 lg:grid-cols-[.78fr_1.22fr] lg:items-center lg:gap-10">
+          <div className="order-2 min-w-0 max-w-2xl text-center lg:order-1 lg:text-left">
             <p className="font-mono text-xs font-bold uppercase tracking-[0.28em] text-[#f1d27a]">{t.heroEyebrow}</p>
-            <h1 className="mx-auto max-w-xl text-wrap font-serif text-5xl leading-[0.92] text-[#241d17] sm:text-6xl lg:mx-0 lg:text-7xl">
+            <h1 className="mx-auto mt-5 max-w-xl font-serif text-5xl leading-[0.9] sm:text-6xl lg:mx-0 lg:text-7xl">
               {locale === 'es' ? (
                 <>
-                  Crea tu experiencia <span className="italic text-[#8e6829]">Luxor</span>
+                  Crea tu experiencia <span className="italic text-[#f1d27a]">Luxor</span>
                 </>
               ) : (
                 <>
-                  Create Your <span className="italic text-[#8e6829]">Luxor</span> Experience
+                  Create Your <span className="italic text-[#f1d27a]">Luxor</span> Experience
                 </>
               )}
             </h1>
-            <p className="mx-auto mt-5 max-w-xl text-base leading-7 text-[#665a4e] sm:text-lg lg:mx-0">{t.heroCopy}</p>
-            <div className="mt-7 flex flex-col justify-center gap-3 sm:flex-row lg:justify-start">
+            <p className="mx-auto mt-7 max-w-xl text-base leading-7 text-[#d7c29a]/78 sm:text-lg lg:mx-0">{t.heroCopy}</p>
+            <div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row sm:items-center lg:justify-start">
               <a
                 href="#explore-packages"
-                className="luxor-gold-raised inline-flex min-h-12 items-center justify-center gap-2 rounded-md px-5 py-3 text-sm uppercase tracking-[0.14em]"
+                className="luxor-gold-raised inline-flex min-h-12 items-center justify-center gap-2 rounded-md px-6 py-3 text-sm uppercase tracking-[0.14em]"
               >
                 {t.exploreEyebrow} <ArrowRight className="h-4 w-4" />
               </a>
@@ -92,23 +103,15 @@ export function PackagesPageContent({ locale = 'en', cards }: PackagesPageConten
                 href={t.visitHref}
                 data-conversion="visit_cta_click"
                 data-conversion-label="Packages hero"
-                className="inline-flex min-h-12 items-center justify-center rounded-md border border-[#9b6f24]/35 bg-white/70 px-5 py-3 text-sm font-semibold uppercase tracking-[0.14em] text-[#241d17] transition hover:border-[#9b6f24]/60 hover:bg-white"
+                className="inline-flex min-h-12 items-center justify-center rounded-md border border-[#caa24c]/45 px-6 py-3 text-sm font-bold uppercase tracking-[0.14em] text-[#f7efe3] transition hover:border-[#f1d27a] hover:text-[#f1d27a]"
               >
                 {t.visitCta}
               </Link>
             </div>
           </div>
-
-          <div className="relative min-h-[30rem] overflow-hidden rounded-md border border-[#9b6f24]/25 bg-[#eee6da] shadow-[0_32px_80px_-48px_rgba(61,43,23,0.42)] sm:min-h-[38rem] lg:min-h-[calc(100vh-11rem)]">
-            <Image
-              src="/images/dining-hall/main-hall-reception-professional.png"
-              alt="Luxor main hall prepared for a celebration"
-              fill
-              priority
-              sizes="(min-width: 1024px) 58vw, 100vw"
-              className="object-cover object-center"
-            />
-            <div className="pointer-events-none absolute inset-x-0 bottom-0 h-28 bg-gradient-to-t from-black/25 to-transparent" />
+          {/* On tablet (iPad sm to lg): keeps rounded corners and sits ABOVE the hero text. On desktop (lg+): sits on the right column. */}
+          <div className="order-1 hidden min-w-0 sm:block lg:order-2">
+            <VenueFilm autoPlay />
           </div>
         </div>
       </section>
