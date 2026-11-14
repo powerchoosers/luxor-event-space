@@ -58,16 +58,16 @@ export default function Home() {
       <section className="relative isolate overflow-hidden bg-[#0a0807] py-20 sm:py-28 lg:py-32 border-b border-[#caa24c]/18">
         <div className="absolute inset-0 luxor-noise opacity-20" />
         <div className="relative z-10 mx-auto max-w-4xl px-6 text-center lg:px-8">
-          <p className="font-mono text-[10px] sm:text-xs font-bold uppercase tracking-[0.38em] text-[#caa24c]">
+          <p className="font-mono text-[10px] sm:text-xs font-bold uppercase tracking-[0.38em] text-[#8d672b]">
             Luxor at Las Palmas Events
           </p>
 
-          <h1 className="mt-5 font-serif text-4xl sm:text-5xl lg:text-6xl xl:text-7xl leading-[1.04] text-[#fffaf3]">
-            A Beautiful Setting for Life’s Biggest Moments.
+          <h1 className="mt-5 font-serif text-5xl leading-[0.92] text-[#fffaf3] sm:text-6xl lg:text-7xl">
+            A Beautiful Setting for Life’s <span className="italic text-[#f1d27a]">Biggest</span> Moments.
           </h1>
 
           <p className="mx-auto mt-6 max-w-2xl text-base sm:text-lg leading-relaxed text-[#d7c29a]/80">
-            An elegant ballroom, sophisticated private lounge, and thoughtful amenities created for weddings, quinceañeras, and special celebrations in San Antonio.
+            A modern San Antonio venue created for weddings, quinceañeras, and private celebrations.
           </p>
 
           <div className="mt-8 flex items-center justify-center gap-6">
@@ -84,7 +84,7 @@ export default function Home() {
       <section className="relative isolate overflow-hidden bg-[#050505] py-20 sm:py-28 border-b border-[#caa24c]/18">
         <div className="relative z-10 mx-auto max-w-7xl px-5 sm:px-6 lg:px-8">
           <div className="text-center max-w-2xl mx-auto mb-12 sm:mb-16">
-            <p className="font-mono text-[10px] font-bold uppercase tracking-[0.34em] text-[#caa24c]">
+            <p className="font-mono text-[10px] font-bold uppercase tracking-[0.34em] text-[#8d672b]">
               Curated Preview
             </p>
             <h2 className="mt-3 font-serif text-3xl sm:text-4xl lg:text-5xl text-[#fffaf3]">

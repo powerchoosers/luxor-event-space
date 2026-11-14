@@ -12,7 +12,9 @@ export default function SpanishHomePage() {
     <main lang="es" className="bg-[#050505] text-[#f6efe8]">
       <section className="mx-auto flex min-h-[72vh] max-w-6xl flex-col justify-center px-6 py-24 text-center sm:px-10">
         <p className="text-[10px] font-bold uppercase tracking-[0.36em] text-[#caa24c]">Luxor at Las Palmas Events</p>
-        <h1 className="mx-auto mt-6 max-w-4xl font-serif text-5xl leading-[0.98] text-[#f7efe3] sm:text-7xl">Un espacio para celebrar lo que importa.</h1>
+        <h1 className="mx-auto mt-6 max-w-4xl font-serif text-5xl leading-[0.92] text-[#f7efe3] sm:text-6xl lg:text-7xl">
+          Un espacio para celebrar lo que <span className="italic text-[#f1d27a]">importa</span>.
+        </h1>
         <p className="mx-auto mt-7 max-w-2xl text-base leading-8 text-[#d7c29a]/80">Conoce nuestro espacio en San Antonio para bodas, quinceañeras y celebraciones privadas. Estamos aquí para ayudarte a imaginar tu día.</p>
         <div className="mt-10 flex flex-wrap justify-center gap-3">
           <Link href="/es/visit" className="luxor-gold-raised rounded-md px-6 py-3 text-[11px] uppercase tracking-[0.16em]">Agendar una visita</Link>

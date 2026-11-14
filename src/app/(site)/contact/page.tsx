@@ -22,8 +22,8 @@ export default function ContactPage() {
           <p className="font-mono text-[10px] font-bold uppercase tracking-[0.32em] text-[#8d672b]">
             Get In Touch
           </p>
-          <h1 className="mt-3 font-serif text-4xl sm:text-5xl lg:text-6xl text-[#241d17]">
-            We’d Love to Hear From You
+          <h1 className="mt-3 font-serif text-5xl leading-[0.92] text-[#241d17] sm:text-6xl lg:text-7xl">
+            We’d Love to Hear <span className="italic text-[#8d672b]">From You</span>
           </h1>
           <p className="mt-4 text-base sm:text-lg text-[#665a4e] leading-relaxed">
             Whether you have questions about venue capacity, catering options, or are planning a celebration, our team is here to assist.

@@ -2,7 +2,7 @@
 
 import { FormEvent, useEffect, useId, useRef, useState } from 'react'
 import { Check, ChevronDown, Download, FileText, Loader2, Mail, Megaphone } from '@/lib/icons/phosphor-compat'
-import { motion, AnimatePresence } from 'framer-motion'
+import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'
 import { PublicEventDatePicker } from '@/components/PublicEventDatePicker'
 import { LuxorEventTypeCombobox } from '@/components/LuxorEventTypeCombobox'
 import Link from 'next/link'
@@ -29,6 +29,7 @@ export function LuxorBrochureForm({ className = '' }: { className?: string }) {
   const [smsMarketingConsent, setSmsMarketingConsent] = useState(false)
   const [inquirySmsDisclosureOpen, setInquirySmsDisclosureOpen] = useState(false)
   const [marketingSmsDisclosureOpen, setMarketingSmsDisclosureOpen] = useState(false)
+  const reduceMotion = useReducedMotion()
   const preferencesId = useId()
 
   const [submitting, setSubmitting] = useState(false)
@@ -348,9 +349,35 @@ export function LuxorBrochureForm({ className = '' }: { className?: string }) {
                       open={inquirySmsDisclosureOpen}
                       onClick={() => setInquirySmsDisclosureOpen((open) => !open)}
                     />
-                    <div id={`${preferencesId}-inquiry-sms-disclosure`} hidden={!inquirySmsDisclosureOpen} className="ml-7 mt-2 rounded-lg bg-[#f8f4ed] p-3 text-xs leading-5 text-[#665a4e]">
-                      {LUXOR_INQUIRY_SMS_DISCLOSURE}
-                    </div>
+                    <AnimatePresence initial={false}>
+                      {inquirySmsDisclosureOpen ? (
+                        <motion.div
+                          id={`${preferencesId}-inquiry-sms-disclosure`}
+                          initial={reduceMotion ? { opacity: 0 } : { opacity: 0, height: 0 }}
+                          animate={{
+                            opacity: 1,
+                            height: 'auto',
+                            transition: {
+                              height: { duration: reduceMotion ? 0.05 : 0.44, ease: [0.22, 1, 0.36, 1] },
+                              opacity: { duration: reduceMotion ? 0.05 : 0.32, delay: reduceMotion ? 0 : 0.08, ease: 'easeOut' },
+                            },
+                          }}
+                          exit={reduceMotion ? { opacity: 0 } : {
+                            opacity: 0,
+                            height: 0,
+                            transition: {
+                              height: { duration: reduceMotion ? 0.04 : 0.36, ease: [0.25, 0.1, 0.25, 1] },
+                              opacity: { duration: reduceMotion ? 0.04 : 0.2, ease: 'easeIn' },
+                            },
+                          }}
+                          className="overflow-hidden"
+                        >
+                          <div className="ml-7 mt-2 rounded-lg bg-[#f8f4ed] p-3 text-xs leading-5 text-[#665a4e]">
+                            {LUXOR_INQUIRY_SMS_DISCLOSURE}
+                          </div>
+                        </motion.div>
+                      ) : null}
+                    </AnimatePresence>
                   </div>
                 </div>
 
@@ -377,9 +404,35 @@ export function LuxorBrochureForm({ className = '' }: { className?: string }) {
                       open={marketingSmsDisclosureOpen}
                       onClick={() => setMarketingSmsDisclosureOpen((open) => !open)}
                     />
-                    <div id={`${preferencesId}-marketing-sms-disclosure`} hidden={!marketingSmsDisclosureOpen} className="ml-7 rounded-lg bg-[#f8f4ed] p-3 text-xs leading-5 text-[#665a4e]">
-                      {LUXOR_MARKETING_SMS_DISCLOSURE}
-                    </div>
+                    <AnimatePresence initial={false}>
+                      {marketingSmsDisclosureOpen ? (
+                        <motion.div
+                          id={`${preferencesId}-marketing-sms-disclosure`}
+                          initial={reduceMotion ? { opacity: 0 } : { opacity: 0, height: 0 }}
+                          animate={{
+                            opacity: 1,
+                            height: 'auto',
+                            transition: {
+                              height: { duration: reduceMotion ? 0.05 : 0.44, ease: [0.22, 1, 0.36, 1] },
+                              opacity: { duration: reduceMotion ? 0.05 : 0.32, delay: reduceMotion ? 0 : 0.08, ease: 'easeOut' },
+                            },
+                          }}
+                          exit={reduceMotion ? { opacity: 0 } : {
+                            opacity: 0,
+                            height: 0,
+                            transition: {
+                              height: { duration: reduceMotion ? 0.04 : 0.36, ease: [0.25, 0.1, 0.25, 1] },
+                              opacity: { duration: reduceMotion ? 0.04 : 0.2, ease: 'easeIn' },
+                            },
+                          }}
+                          className="overflow-hidden"
+                        >
+                          <div className="ml-7 rounded-lg bg-[#f8f4ed] p-3 text-xs leading-5 text-[#665a4e]">
+                            {LUXOR_MARKETING_SMS_DISCLOSURE}
+                          </div>
+                        </motion.div>
+                      ) : null}
+                    </AnimatePresence>
                   </div>
                 </div>
               </section>
@@ -424,7 +477,7 @@ export function LuxorBrochureForm({ className = '' }: { className?: string }) {
 function DisclosureButton({ id, panelId, open, onClick }: { id: string; panelId: string; open: boolean; onClick: () => void }) {
   return (
     <button id={id} type="button" aria-controls={panelId} aria-expanded={open} onClick={onClick} className="ml-7 mt-2 inline-flex min-h-9 items-center gap-1.5 rounded-md px-1 text-xs font-semibold text-[#8d672b] underline underline-offset-4 outline-none hover:text-[#6f4d1f] focus-visible:ring-2 focus-visible:ring-[#caa24c]">
-      Learn more <ChevronDown aria-hidden="true" className={`h-3.5 w-3.5 transition-transform ${open ? 'rotate-180' : ''}`} />
+      Learn more <ChevronDown aria-hidden="true" className={`h-3.5 w-3.5 transition-transform duration-300 ease-out ${open ? 'rotate-180' : ''}`} />
     </button>
   )
 }

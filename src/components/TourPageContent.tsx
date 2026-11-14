@@ -90,7 +90,17 @@ export function TourPageContent({
                 </Link>
               </div>
 
-              <h1 className="font-serif text-5xl leading-[0.94] sm:text-6xl">{text.heading}</h1>
+              <h1 className="font-serif text-5xl leading-[0.92] text-[#241d17] sm:text-6xl lg:text-7xl">
+                {locale === 'es' ? (
+                  <>
+                    Conoce el espacio. <span className="italic text-[#8d672b]">Imagina</span> tu día.
+                  </>
+                ) : (
+                  <>
+                    See the room. <span className="italic text-[#8d672b]">Picture</span> your day.
+                  </>
+                )}
+              </h1>
               <p className="max-w-lg text-base leading-7 text-[#665a4e] sm:text-lg">{text.intro}</p>
 
               <div className="inline-flex items-center gap-2 rounded-full border border-[#b98a3d]/25 bg-[#faf6ef] px-3.5 py-1 text-xs font-medium text-[#8d672b]">

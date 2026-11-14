@@ -79,8 +79,8 @@ export function PackagesPageContent({ locale = 'en', cards }: PackagesPageConten
 
         <div className="relative z-10 mx-auto grid max-w-7xl gap-8 px-5 pb-12 pt-8 sm:px-0 sm:pb-0 sm:pt-0 lg:grid-cols-[.78fr_1.22fr] lg:items-center lg:gap-10">
           <div className="order-2 mx-auto min-w-0 max-w-2xl text-center lg:order-1 lg:mx-0">
-            <p className="font-mono text-xs font-bold uppercase tracking-[0.28em] text-[#f1d27a]">{t.heroEyebrow}</p>
-            <h1 className="mx-auto mt-5 max-w-xl font-serif text-5xl leading-[0.9] sm:text-6xl lg:text-7xl">
+            <p className="font-mono text-[10px] sm:text-xs font-bold uppercase tracking-[0.38em] text-[#8d672b]">{t.heroEyebrow}</p>
+            <h1 className="mx-auto mt-5 max-w-xl font-serif text-5xl leading-[0.92] text-[#fffaf3] sm:text-6xl lg:text-7xl">
               {locale === 'es' ? (
                 <>
                   Crea tu experiencia <span className="italic text-[#f1d27a]">Luxor</span>
@@ -132,8 +132,8 @@ export function PackagesPageContent({ locale = 'en', cards }: PackagesPageConten
         </div>
       </section>
 
-      <section id="build-your-experience" className="scroll-mt-28 border-y border-[#caa24c]/16 bg-[#080706] py-16 sm:py-24 lg:py-28">
-        <div className="mx-auto max-w-7xl px-5 pb-[calc(11.5rem+env(safe-area-inset-bottom,0px))] sm:px-6 sm:pb-24 lg:px-8 lg:pb-28">
+      <section id="build-your-experience" className="scroll-mt-28 border-y border-[#caa24c]/16 bg-[#080706] pt-14 pb-8 sm:py-20 lg:py-24">
+        <div className="mx-auto max-w-7xl px-5 sm:px-6 lg:px-8">
           <Reveal className="max-w-3xl">
             <h2 className="font-serif text-4xl leading-[0.95] sm:text-5xl lg:text-6xl">{t.configTitle}</h2>
             <p className="mt-5 max-w-2xl text-base leading-7 text-[#d7c29a]/72">{t.configCopy}</p>

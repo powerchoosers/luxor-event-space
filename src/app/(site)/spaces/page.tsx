@@ -28,8 +28,8 @@ export default function SpacesPage() {
         <div className="relative z-10 mx-auto grid max-w-7xl gap-12 lg:grid-cols-[0.92fr_1.08fr] lg:items-center">
           <div className="max-w-2xl">
             <p className="font-mono text-xs font-bold uppercase tracking-[0.28em] text-[#f1d27a]">The venue</p>
-            <h1 className="font-serif text-5xl leading-[0.9] sm:text-6xl lg:text-8xl">
-              A room made to be understood in person.
+            <h1 className="mt-5 font-serif text-5xl leading-[0.92] text-[#f7efe3] sm:text-6xl lg:text-7xl">
+              A room made to be understood <span className="italic text-[#f1d27a]">in person</span>.
             </h1>
             <p className="mt-7 max-w-xl text-base leading-7 text-[#d7c29a]/78 sm:text-lg">
               Photos help, but the important part is the flow: where guests enter, where dinner happens, where photos land, and where the party opens up.

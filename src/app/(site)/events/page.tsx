@@ -52,9 +52,9 @@ export default function EventsPage() {
       <section className="relative isolate min-h-[92svh] overflow-hidden bg-[#f7f3ec] pt-28 sm:min-h-screen">
         <div className="relative z-10 mx-auto grid min-h-[calc(92svh-7rem)] max-w-7xl items-center gap-12 px-5 pb-14 pt-10 sm:min-h-[calc(100vh-7rem)] sm:px-6 lg:grid-cols-[0.86fr_1.14fr] lg:gap-16 lg:px-8 lg:pt-14">
           <div className="min-w-0 text-center lg:text-left">
-            <p className="font-mono text-xs font-bold uppercase tracking-[0.28em] text-[#f1d27a]">Celebrations at Luxor</p>
+            <p className="font-mono text-xs font-bold uppercase tracking-[0.28em] text-[#8d672b]">Celebrations at Luxor</p>
             <h1 className="mx-auto max-w-xl text-wrap font-serif text-5xl leading-[0.92] text-[#241d17] sm:text-6xl lg:mx-0 lg:text-7xl">
-              Event types that fit the room.
+              Event types that <span className="italic text-[#8d672b]">fit the room</span>.
             </h1>
             <p className="mx-auto mt-5 max-w-xl text-base leading-7 text-[#665a4e] sm:text-lg lg:mx-0">
               Luxor is built for celebrations that need a strong backdrop, simple guest flow, and enough polish before the decor even arrives.

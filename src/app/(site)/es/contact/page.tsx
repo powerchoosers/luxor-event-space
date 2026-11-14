@@ -22,8 +22,8 @@ export default function SpanishContactPage() {
           <p className="font-mono text-[10px] font-bold uppercase tracking-[0.32em] text-[#8d672b]">
             Contáctanos
           </p>
-          <h1 className="mt-3 font-serif text-4xl sm:text-5xl lg:text-6xl text-[#241d17]">
-            Estamos para ayudarte
+          <h1 className="mt-3 font-serif text-5xl leading-[0.92] text-[#241d17] sm:text-6xl lg:text-7xl">
+            Estamos para <span className="italic text-[#8d672b]">ayudarte</span>
           </h1>
           <p className="mt-4 text-base sm:text-lg text-[#665a4e] leading-relaxed">
             Si tienes preguntas sobre la capacidad del salón, opciones de banquete o estás planeando una celebración, nuestro equipo te atenderá con gusto.
