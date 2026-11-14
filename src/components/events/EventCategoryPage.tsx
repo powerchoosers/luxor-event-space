@@ -1,5 +1,6 @@
 'use client'
 
+import type { CSSProperties } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
 import { ArrowRight } from '@/lib/icons/phosphor-compat'
@@ -37,6 +38,22 @@ export type EventCategoryPageProps = {
 }
 
 const SITE_ORIGIN = 'https://www.luxoratlaspalmas.com'
+
+/** Inline photo-overlay colors and scrims — avoid Tailwind gradient/light-text utilities remapped in globals.css. */
+const PHOTO_HEADING = { color: '#fffaf3', textShadow: '0 2px 12px rgba(0, 0, 0, 0.25)' } as const
+const PHOTO_BODY = { color: 'rgba(255, 250, 243, 0.9)' } as const
+const PHOTO_EYEBROW = { color: '#e6c77f' } as const
+const HERO_SCRIM: CSSProperties = {
+  background:
+    'linear-gradient(180deg, rgba(0, 0, 0, 0.38) 0%, rgba(0, 0, 0, 0.58) 52%, rgba(0, 0, 0, 0.78) 100%)',
+}
+const CLOSING_SCRIM: CSSProperties = {
+  background:
+    'linear-gradient(105deg, rgba(0, 0, 0, 0.88) 0%, rgba(0, 0, 0, 0.72) 48%, rgba(0, 0, 0, 0.5) 100%)',
+}
+const CARD_LABEL_SCRIM: CSSProperties = {
+  background: 'linear-gradient(180deg, transparent 42%, rgba(0, 0, 0, 0.78) 100%)',
+}
 
 /** Renders category sections in `LUXOR_EVENT_CATEGORY_PAGE_SECTION_ORDER` (+ optional other collections before closing CTA). */
 export function EventCategoryPage({
@@ -115,28 +132,28 @@ export function EventCategoryPage({
           sizes="100vw"
           className="object-cover object-center"
         />
-        <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(5,5,5,0.35)_0%,rgba(5,5,5,0.55)_55%,rgba(5,5,5,0.72)_100%)]" />
+        <div className="pointer-events-none absolute inset-0" style={HERO_SCRIM} aria-hidden />
 
-        <motion.div
-          initial={reduceMotion ? false : { opacity: 0, y: 18 }}
-          animate={reduceMotion ? undefined : { opacity: 1, y: 0 }}
-          transition={{ duration: 0.5, ease: [0.23, 1, 0.32, 1] }}
-          className="relative z-10 mx-auto flex min-h-[78svh] max-w-7xl flex-col justify-end px-5 pb-14 pt-28 sm:min-h-[82svh] sm:px-6 sm:pb-16 lg:px-8 lg:pb-20"
-        >
-          <p className="font-mono text-[11px] font-bold uppercase tracking-[0.28em] text-[#e6c77f]">{eyebrow}</p>
-          <h1 className="mt-4 max-w-2xl font-serif text-4xl leading-[0.95] text-[#f7efe3] sm:text-5xl lg:text-6xl">
+        <div className="relative z-10 mx-auto flex min-h-[78svh] w-full max-w-7xl flex-col items-start justify-end px-5 pb-14 pt-28 text-left sm:min-h-[82svh] sm:px-6 sm:pb-16 lg:px-8 lg:pb-20">
+          <p className="font-mono text-[11px] font-bold uppercase tracking-[0.28em]" style={PHOTO_EYEBROW}>
+            {eyebrow}
+          </p>
+          <h1 className="mt-4 max-w-2xl font-serif text-4xl leading-[0.95] sm:text-5xl lg:text-6xl" style={PHOTO_HEADING}>
             {title}
           </h1>
-          <p className="mt-4 max-w-xl text-base leading-7 text-[#eadcc8]/90 sm:text-lg">{subtitle}</p>
+          <p className="mt-4 max-w-xl text-base leading-7 sm:text-lg" style={PHOTO_BODY}>
+            {subtitle}
+          </p>
           <div className="mt-8">
             <Link
               href={packagesHref}
-              className="luxor-gold-raised inline-flex min-h-12 items-center justify-center gap-2 rounded-md px-5 py-3 text-sm uppercase tracking-[0.14em]"
+              className="inline-flex min-h-12 items-center justify-center gap-2 rounded-md border border-[#caa24c]/45 bg-[rgba(255,255,255,0.1)] px-5 py-3 text-sm font-semibold uppercase tracking-[0.14em] backdrop-blur-sm transition hover:border-[#caa24c]/70 hover:bg-[rgba(255,255,255,0.16)]"
+              style={{ color: '#fffaf3' }}
             >
               {spanish ? 'Explorar paquetes' : 'Explore Packages'} <ArrowRight className="h-4 w-4" />
             </Link>
           </div>
-        </motion.div>
+        </div>
       </section>
 
       <section className="py-16 sm:py-20 lg:py-24">
@@ -176,10 +193,13 @@ export function EventCategoryPage({
                       className="object-cover transition duration-500 hover:scale-[1.02] motion-reduce:transition-none motion-reduce:hover:scale-100"
                     />
                     {item.label ? (
-                      <div className="absolute inset-0 bg-[linear-gradient(180deg,transparent_42%,rgba(5,5,5,0.78)_100%)]" />
+                      <div className="pointer-events-none absolute inset-0" style={CARD_LABEL_SCRIM} aria-hidden />
                     ) : null}
                     {item.label ? (
-                      <p className="absolute bottom-0 left-0 right-0 px-4 pb-4 font-serif text-2xl leading-tight text-[#f7efe3] sm:px-5 sm:pb-5 sm:text-3xl">
+                      <p
+                        className="absolute bottom-0 left-0 right-0 px-4 pb-4 font-serif text-2xl leading-tight sm:px-5 sm:pb-5 sm:text-3xl"
+                        style={PHOTO_HEADING}
+                      >
                         {item.label}
                       </p>
                     ) : null}
@@ -211,17 +231,21 @@ export function EventCategoryPage({
 
       <section className="relative isolate min-h-[22rem] overflow-hidden sm:min-h-[26rem]">
         <Image src={closingImage} alt={closingImageAlt} fill sizes="100vw" className="object-cover object-center" />
-        <div className="absolute inset-0 bg-[linear-gradient(105deg,rgba(5,5,5,0.88)_0%,rgba(5,5,5,0.72)_50%,rgba(5,5,5,0.55)_100%)]" />
+        <div className="pointer-events-none absolute inset-0" style={CLOSING_SCRIM} aria-hidden />
 
         <motion.div
           initial={reduceMotion ? false : { opacity: 0, y: 16 }}
           whileInView={reduceMotion ? undefined : { opacity: 1, y: 0 }}
           viewport={{ once: true, margin: '-48px' }}
           transition={{ duration: 0.5, ease: [0.23, 1, 0.32, 1] }}
-          className="relative z-10 mx-auto flex min-h-[22rem] max-w-7xl flex-col justify-center px-5 py-16 sm:min-h-[26rem] sm:px-6 sm:py-20 lg:px-8"
+          className="relative z-10 mx-auto flex min-h-[22rem] w-full max-w-7xl flex-col items-start justify-center px-5 py-16 text-left sm:min-h-[26rem] sm:px-6 sm:py-20 lg:px-8"
         >
-          <h2 className="max-w-xl font-serif text-3xl leading-tight text-[#f7efe3] sm:text-4xl lg:text-5xl">{closingTitle}</h2>
-          <p className="mt-4 max-w-lg text-base leading-7 text-[#eadcc8]/88 sm:text-lg">{closingBody}</p>
+          <h2 className="max-w-xl font-serif text-3xl leading-tight sm:text-4xl lg:text-5xl" style={PHOTO_HEADING}>
+            {closingTitle}
+          </h2>
+          <p className="mt-4 max-w-lg text-base leading-7 sm:text-lg" style={PHOTO_BODY}>
+            {closingBody}
+          </p>
           <div className="mt-8">
             <Link
               href={packagesHref}
