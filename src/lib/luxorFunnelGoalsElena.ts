@@ -5,7 +5,6 @@ import {
   parseFunnelGoals,
   type FunnelGoalMetric,
   type FunnelGoals,
-  type FunnelMetricGoals,
 } from '@/lib/luxorFunnelGoals'
 
 export const FUNNEL_GOAL_LABELS: Record<FunnelGoalMetric, string> = {
@@ -294,52 +293,117 @@ export function assertFunnelStageOrder(monthly: Partial<Record<FunnelGoalMetric,
   }
 }
 
-export function rescaleMetricFromMonthlyChange(
-  baseRow: FunnelMetricGoals,
+const MONTHLY_TO_WEEKLY = 12 / 52
+
+export function deriveCadenceValueFromMonthly(
+  monthly: number,
+  cadence: (typeof FUNNEL_GOAL_CADENCES)[number],
   metric: FunnelGoalMetric,
-  newMonthly: number,
-): { assignments: FunnelGoalAssignment[]; conflicts: string[] } {
-  const oldMonthly = baseRow.monthly
-  const conflicts: string[] = []
-  const assignments: FunnelGoalAssignment[] = [{ metric, cadence: 'monthly', value: newMonthly }]
-  if (oldMonthly === null || oldMonthly === 0) {
-    for (const cadence of FUNNEL_GOAL_CADENCES) {
-      if (cadence === 'monthly') continue
-      if (baseRow[cadence] !== null) {
-        conflicts.push(
-          `${FUNNEL_GOAL_LABELS[metric]} · ${cadence} stays at ${baseRow[cadence]} while monthly is set to ${newMonthly}.`,
-        )
-      }
-    }
-    return { assignments, conflicts }
+): number {
+  if (metric === 'revenue') {
+    if (cadence === 'monthly') return monthly
+    if (cadence === 'weekly') return roundRevenue(monthly * MONTHLY_TO_WEEKLY)
+    if (cadence === 'quarterly') return roundRevenue(monthly * 3)
+    return roundRevenue(monthly * 12)
   }
-  const ratio = newMonthly / oldMonthly
-  for (const cadence of FUNNEL_GOAL_CADENCES) {
-    if (cadence === 'monthly') continue
-    const old = baseRow[cadence]
-    if (old === null) continue
-    assignments.push({
+  if (cadence === 'monthly') return monthly
+  if (cadence === 'weekly') return roundCount(monthly * MONTHLY_TO_WEEKLY)
+  if (cadence === 'quarterly') return roundCount(monthly * 3)
+  return roundCount(monthly * 12)
+}
+
+export function enforceStageOrderOnCounts(
+  values: Partial<Record<FunnelGoalMetric, number>>,
+): Partial<Record<FunnelGoalMetric, number>> {
+  let cap = Number.POSITIVE_INFINITY
+  const ordered: Partial<Record<FunnelGoalMetric, number>> = { ...values }
+  for (const metric of FUNNEL_STAGE_METRICS) {
+    const value = ordered[metric]
+    if (value == null) continue
+    const next = Math.min(value, cap)
+    ordered[metric] = next
+    cap = next
+  }
+  return ordered
+}
+
+function assignmentsForCadenceFromMonthly(
+  monthlyTargets: Partial<Record<FunnelGoalMetric, number>>,
+  cadence: (typeof FUNNEL_GOAL_CADENCES)[number],
+): FunnelGoalAssignment[] {
+  const raw: Partial<Record<FunnelGoalMetric, number>> = {}
+  for (const metric of FUNNEL_GOAL_METRICS) {
+    const monthly = monthlyTargets[metric]
+    if (monthly == null) continue
+    raw[metric] = deriveCadenceValueFromMonthly(monthly, cadence, metric)
+  }
+  const stageOrdered = enforceStageOrderOnCounts(
+    Object.fromEntries(FUNNEL_STAGE_METRICS.map((metric) => [metric, raw[metric]])) as Partial<
+      Record<FunnelGoalMetric, number>
+    >,
+  )
+  const final = { ...raw, ...stageOrdered }
+  return FUNNEL_GOAL_METRICS.filter((metric) => monthlyTargets[metric] != null && final[metric] != null).map(
+    (metric) => ({
       metric,
       cadence,
-      value: metric === 'revenue' ? roundRevenue(old * ratio) : roundCount(old * ratio),
-    })
+      value: final[metric]!,
+    }),
+  )
+}
+
+export function scaleOverrideBucket(
+  base: FunnelGoals,
+  monthlyTargets: Partial<Record<FunnelGoalMetric, number>>,
+  kind: 'monthlyOverrides' | 'quarterlyOverrides',
+): { assignments: FunnelGoalAssignment[]; conflicts: string[] } {
+  const conflicts: string[] = []
+  const assignments: FunnelGoalAssignment[] = []
+  const keys = new Set<string>()
+  for (const metric of FUNNEL_GOAL_METRICS) {
+    Object.keys(base[metric][kind]).forEach((key) => keys.add(key))
   }
-  for (const [key, old] of Object.entries(baseRow.monthlyOverrides)) {
-    assignments.push({
-      metric,
-      cadence: 'monthlyOverride',
-      periodKey: key,
-      value: metric === 'revenue' ? roundRevenue(old * ratio) : roundCount(old * ratio),
-    })
+  const cadence: FunnelGoalAssignmentCadence = kind === 'monthlyOverrides' ? 'monthlyOverride' : 'quarterlyOverride'
+
+  for (const key of [...keys].sort()) {
+    const raw: Partial<Record<FunnelGoalMetric, number>> = {}
+    for (const metric of FUNNEL_GOAL_METRICS) {
+      const newMonthly = monthlyTargets[metric]
+      if (newMonthly == null) continue
+      const oldMonthly = base[metric].monthly
+      const oldOverride = base[metric][kind][key]
+      if (oldOverride != null && oldMonthly != null && oldMonthly > 0) {
+        const ratio = newMonthly / oldMonthly
+        raw[metric] = metric === 'revenue' ? roundRevenue(oldOverride * ratio) : roundCount(oldOverride * ratio)
+        continue
+      }
+      if (oldMonthly == null && oldOverride != null) {
+        conflicts.push(
+          `${FUNNEL_GOAL_LABELS[metric]} · ${key} override is unchanged because saved monthly was unset.`,
+        )
+        continue
+      }
+      const periodCadence = kind === 'monthlyOverrides' ? 'monthly' : 'quarterly'
+      raw[metric] = deriveCadenceValueFromMonthly(newMonthly, periodCadence, metric)
+    }
+
+    if (raw.revenue == null && monthlyTargets.revenue != null) {
+      raw.revenue = monthlyTargets.revenue
+    }
+
+    const stageOrdered = enforceStageOrderOnCounts(
+      Object.fromEntries(FUNNEL_STAGE_METRICS.map((metric) => [metric, raw[metric]])) as Partial<
+        Record<FunnelGoalMetric, number>
+      >,
+    )
+    const final = { ...raw, ...stageOrdered }
+    for (const metric of FUNNEL_GOAL_METRICS) {
+      const value = final[metric]
+      if (value == null) continue
+      assignments.push({ metric, cadence, periodKey: key, value })
+    }
   }
-  for (const [key, old] of Object.entries(baseRow.quarterlyOverrides)) {
-    assignments.push({
-      metric,
-      cadence: 'quarterlyOverride',
-      periodKey: key,
-      value: metric === 'revenue' ? roundRevenue(old * ratio) : roundCount(old * ratio),
-    })
-  }
+
   return { assignments, conflicts }
 }
 
@@ -378,12 +442,11 @@ export function buildFunnelGoalsUpdatePlan(
   }
 
   const assignments: FunnelGoalAssignment[] = []
-  for (const metric of FUNNEL_GOAL_METRICS) {
-    const nextMonthly = monthlyTargets[metric]
-    if (nextMonthly == null) continue
-    const current = base[metric].monthly
-    if (current === nextMonthly && !input.brief) continue
-    const scaled = rescaleMetricFromMonthlyChange(base[metric], metric, nextMonthly)
+  for (const cadence of FUNNEL_GOAL_CADENCES) {
+    assignments.push(...assignmentsForCadenceFromMonthly(monthlyTargets, cadence))
+  }
+  for (const kind of ['monthlyOverrides', 'quarterlyOverrides'] as const) {
+    const scaled = scaleOverrideBucket(base, monthlyTargets, kind)
     assignments.push(...scaled.assignments)
     conflicts.push(...scaled.conflicts)
   }

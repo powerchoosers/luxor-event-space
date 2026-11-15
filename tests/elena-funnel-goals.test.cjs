@@ -71,11 +71,24 @@ test('QA brief rescales full funnel in order from saved rates', () => {
   assert.equal(merged.bookedEvents.monthly, 8)
   assert.equal(merged.toursCompleted.monthly, 32)
   assert.equal(merged.revenue.monthly, 36000)
-  assert.equal(merged.bookedEvents.weekly, 3)
+  assert.equal(merged.bookedEvents.weekly, 2)
   assert.equal(merged.bookedEvents.quarterly, 24)
   assert.equal(merged.bookedEvents.annual, 96)
   assert.equal(merged.bookedEvents.monthlyOverrides['2026-11'], 8)
+  assert.equal(merged.revenue.weekly, elena.deriveCadenceValueFromMonthly(36000, 'weekly', 'revenue'))
+  assert.ok(merged.newInquiries.weekly >= merged.toursScheduled.weekly)
+  assert.ok(merged.toursScheduled.weekly >= merged.toursCompleted.weekly)
+  assert.ok(merged.toursCompleted.weekly >= merged.proposalsSent.weekly)
+  assert.ok(merged.proposalsSent.weekly >= merged.bookedEvents.weekly)
   assert.ok(plan.assumptions.length >= 3)
+  assert.equal(plan.conflicts.length, 0)
+})
+
+test('amber conflicts appear when a saved override exists without a saved monthly anchor', () => {
+  const base = productionBase()
+  base.bookedEvents.monthly = null
+  const { conflicts } = elena.scaleOverrideBucket(base, { bookedEvents: 8 }, 'monthlyOverrides')
+  assert.ok(conflicts.some((line) => /override is unchanged because saved monthly was unset/.test(line)))
 })
 
 test('missing upstream rates are rejected when saved goals cannot supply them', () => {

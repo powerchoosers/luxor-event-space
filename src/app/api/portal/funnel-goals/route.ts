@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getVerifiedLuxorPortalSession,getLuxorPortalSession,isAuthorizedLuxorPortalEmail } from '@/lib/luxorPortalAuth'
+import { getLuxorPortalSession } from '@/lib/luxorPortalAuth'
 import { getLuxorPortalMember,memberCan } from '@/lib/luxorPortalAccess'
 import { supabaseRestStrict } from '@/lib/supabaseRestServer'
 import { emptyFunnelGoals,parseFunnelGoals } from '@/lib/luxorFunnelGoals'
@@ -7,8 +7,8 @@ export const dynamic='force-dynamic'
 const headers={'Cache-Control':'no-store'}
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 async function access(){
-  const verified=await getVerifiedLuxorPortalSession(),session=verified?await getLuxorPortalSession():null
-  if(!verified||!session||verified.email!==session.email||!isAuthorizedLuxorPortalEmail(session.email))return null
+  const session=await getLuxorPortalSession()
+  if(!session)return null
   const member=await getLuxorPortalMember(session.email)
   if(!member||member.status!=='active')return null
   const canRead=memberCan(member,'leads')||memberCan(member,'settings')
