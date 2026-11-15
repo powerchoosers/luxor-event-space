@@ -57,33 +57,42 @@ export function ThisWeekCalendar({ days }: ThisWeekCalendarProps) {
   }, [selectedDay])
 
   useEffect(() => {
-    // Horizontally scroll today's card into view inside the container without scrolling the page
+    // Horizontally align the strip so yesterday/today start cleanly at the left edge without mid-card clipping
     const container = scrollContainerRef.current;
     if (!container) return;
 
     const todayElement = container.querySelector<HTMLElement>('[data-today="true"]');
     if (todayElement) {
+      const prevElement = todayElement.previousElementSibling as HTMLElement | null;
+      const anchorElement = prevElement || todayElement;
       const containerRect = container.getBoundingClientRect();
-      const elementRect = todayElement.getBoundingClientRect();
+      const elementRect = anchorElement.getBoundingClientRect();
       const relativeLeft = elementRect.left - containerRect.left + container.scrollLeft;
-      const targetScrollLeft = relativeLeft - (container.clientWidth / 2) + (elementRect.width / 2);
 
       container.scrollTo({
-        left: Math.max(0, targetScrollLeft),
+        left: Math.max(0, relativeLeft - 4),
         behavior: 'auto',
       });
     }
   }, []);
 
+  const getScrollStep = () => {
+    const container = scrollContainerRef.current;
+    if (!container) return 212;
+    const firstCard = container.querySelector<HTMLElement>('button[data-day-card="true"]');
+    if (!firstCard) return 212;
+    return (firstCard.offsetWidth + 10) * 2;
+  };
+
   const scrollLeft = () => {
     if (scrollContainerRef.current) {
-      scrollContainerRef.current.scrollBy({ left: -220, behavior: prefersReducedMotion() ? 'auto' : 'smooth' });
+      scrollContainerRef.current.scrollBy({ left: -getScrollStep(), behavior: prefersReducedMotion() ? 'auto' : 'smooth' });
     }
   };
 
   const scrollRight = () => {
     if (scrollContainerRef.current) {
-      scrollContainerRef.current.scrollBy({ left: 220, behavior: prefersReducedMotion() ? 'auto' : 'smooth' });
+      scrollContainerRef.current.scrollBy({ left: getScrollStep(), behavior: prefersReducedMotion() ? 'auto' : 'smooth' });
     }
   };
 
@@ -130,8 +139,7 @@ export function ThisWeekCalendar({ days }: ThisWeekCalendarProps) {
         {/* Horizontal Scroll Container */}
         <div
           ref={scrollContainerRef}
-          className="flex gap-2.5 overflow-x-auto pb-2.5 pt-1 px-1 scrollbar-thin scrollbar-thumb-amber-500/20 scrollbar-track-transparent snap-x shrink-0"
-          style={{ scrollbarWidth: 'thin' }}
+          className="flex gap-2.5 overflow-x-auto pb-2 pt-1 px-0.5 snap-x snap-mandatory shrink-0 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
         >
           {days.map((day) => {
             const totalEventsCount = day.tours.length + day.events.length + day.payments.length + day.tasks.length;
@@ -141,33 +149,34 @@ export function ThisWeekCalendar({ days }: ThisWeekCalendarProps) {
               <motion.button
                 key={day.dayStr}
                 type="button"
+                data-day-card="true"
                 data-today={day.isToday}
                 layoutId={reduceMotion ? undefined : `calendar-day-${day.dayStr}`}
                 onClick={(event) => handleDayClick(day, event)}
                 aria-label={`View schedule for ${day.label}`}
-                className={`flex flex-col justify-between w-24 h-28 shrink-0 p-2 text-left rounded-xl border transition-all duration-200 snap-center cursor-pointer ${
+                className={`flex flex-col justify-between w-[92px] sm:w-24 h-28 shrink-0 p-2.5 text-left rounded-xl border transition-all duration-200 snap-start cursor-pointer ${
                   day.isToday
-                    ? 'bg-[#fcf8f2] dark:bg-[#caa24c]/10 border-[#caa24c] shadow-[0_0_12px_rgba(202,162,76,0.18)]'
+                    ? 'bg-[#fcf8f2] dark:bg-[#caa24c]/10 border-[#caa24c] shadow-[0_2px_12px_-3px_rgba(202,162,76,0.22)]'
                     : isSelectedDesktop
-                      ? 'bg-[color:var(--portal-soft)] border-[#caa24c]/70 ring-1 ring-[#caa24c]/30'
-                      : 'bg-white/40 dark:bg-black/10 border-[color:var(--portal-border)]/40 hover:border-[#caa24c]/50'
+                      ? 'bg-[color:var(--portal-soft)] border-[#caa24c]/70 ring-1 ring-[#caa24c]/25'
+                      : 'bg-[color:var(--portal-soft)]/35 dark:bg-black/15 border-[color:var(--portal-border)]/60 hover:border-[#caa24c]/45 hover:bg-[color:var(--portal-soft)]/60'
                 }`}
               >
                 <div>
-                  <div className="flex justify-between items-start">
-                    <span className={`text-[8.5px] font-black uppercase tracking-wider ${day.isToday ? 'text-[#caa24c]' : 'text-[color:var(--portal-muted)]'}`}>
+                  <div className="flex justify-between items-center gap-1">
+                    <span className={`text-[9px] font-extrabold uppercase tracking-wider ${day.isToday ? 'text-[#a8792f] dark:text-[#caa24c]' : 'text-[color:var(--portal-muted)]'}`}>
                       {day.weekday}
                     </span>
                     {day.isToday && (
-                      <span className="text-[7px] font-extrabold text-[#caa24c] bg-[#caa24c]/10 px-1 py-0.2 rounded-full uppercase tracking-wider">
+                      <span className="text-[7px] font-extrabold text-[#9a6e25] dark:text-[#dfbd68] bg-[#caa24c]/15 px-1.5 py-0.5 rounded-full uppercase tracking-wider">
                         Today
                       </span>
                     )}
                   </div>
-                  <p className={`text-lg font-black mt-0.5 leading-none ${day.isToday ? 'text-[#caa24c]' : 'text-[color:var(--portal-text)]'}`}>
+                  <p className={`text-lg font-extrabold tabular-nums mt-0.5 leading-none ${day.isToday ? 'text-[#a8792f] dark:text-[#caa24c]' : 'text-[color:var(--portal-text)]'}`}>
                     {day.dayNum}
                   </p>
-                  <p className="text-[8px] font-bold text-[color:var(--portal-muted)] mt-0.5 uppercase tracking-wider">
+                  <p className="text-[8px] font-semibold text-[color:var(--portal-muted)] mt-0.5 uppercase tracking-wider">
                     {day.label.split(' ')[0]}
                   </p>
                 </div>
@@ -303,30 +312,39 @@ export function ThisWeekCalendar({ days }: ThisWeekCalendarProps) {
                   ))}
 
                   {/* Tasks with Client Name & Context */}
-                  {activeDesktopDay.tasks.map((task) => (
-                    <Link
-                      key={`task-${task.id}`}
-                      href={task.inquiry_id ? `/portal/leads/${task.inquiry_id}?tab=tasks` : '/portal/leads'}
-                      className="flex items-center justify-between gap-3 px-2.5 py-1.5 rounded-lg bg-[color:var(--portal-soft)]/60 hover:bg-[#caa24c]/10 border border-[color:var(--portal-border)]/30 transition-colors text-left no-underline"
-                    >
-                      <div className="flex items-center gap-2 min-w-0">
-                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
-                        <div className="min-w-0">
-                          <p className="text-xs font-semibold text-[color:var(--portal-text)] truncate">
-                            {task.client_name ? `${task.title} · ${task.client_name}` : task.title}
-                          </p>
-                          {task.client_name && task.event_type && (
-                            <p className="text-[10px] text-[color:var(--portal-muted)] truncate">
-                              {task.client_name} · {task.event_type}
+                  {activeDesktopDay.tasks.map((task) => {
+                    const hasClientInTitle = Boolean(
+                      task.client_name && task.title.toLowerCase().includes(task.client_name.toLowerCase())
+                    )
+                    const primaryText = task.client_name && !hasClientInTitle
+                      ? `${task.title} · ${task.client_name}`
+                      : task.title
+                    const secondaryText = task.event_type || null
+                    return (
+                      <Link
+                        key={`task-${task.id}`}
+                        href={task.inquiry_id ? `/portal/leads/${task.inquiry_id}?tab=tasks` : '/portal/leads'}
+                        className="flex items-center justify-between gap-3 px-2.5 py-1.5 rounded-lg bg-[color:var(--portal-soft)]/60 hover:bg-[#caa24c]/10 border border-[color:var(--portal-border)]/30 transition-colors text-left no-underline"
+                      >
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
+                          <div className="min-w-0">
+                            <p className="text-xs font-semibold text-[color:var(--portal-text)] truncate">
+                              {primaryText}
                             </p>
-                          )}
+                            {secondaryText && (
+                              <p className="text-[10px] text-[color:var(--portal-muted)] truncate">
+                                {secondaryText}
+                              </p>
+                            )}
+                          </div>
                         </div>
-                      </div>
-                      <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 shrink-0">
-                        Task
-                      </span>
-                    </Link>
-                  ))}
+                        <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 shrink-0">
+                          Task
+                        </span>
+                      </Link>
+                    )
+                  })}
 
                   {/* Payments */}
                   {activeDesktopDay.payments.map((bill) => (
@@ -443,30 +461,39 @@ export function ThisWeekCalendar({ days }: ThisWeekCalendarProps) {
               ))}
 
               {/* Tasks with Client Name */}
-              {selectedDay.tasks.map((task) => (
-                <Link
-                  key={`m-task-${task.id}`}
-                  href={task.inquiry_id ? `/portal/leads/${task.inquiry_id}?tab=tasks` : '/portal/leads'}
-                  className="flex items-center justify-between gap-3 p-2.5 rounded-lg bg-[color:var(--portal-soft)]/70 border border-[color:var(--portal-border)]/30 text-left no-underline"
-                >
-                  <div className="flex items-center gap-2 min-w-0">
-                    <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
-                    <div className="min-w-0">
-                      <p className="text-xs font-semibold text-[color:var(--portal-text)] truncate">
-                        {task.client_name ? `${task.title} · ${task.client_name}` : task.title}
-                      </p>
-                      {task.client_name && task.event_type && (
-                        <p className="text-[10px] text-[color:var(--portal-muted)] truncate">
-                          {task.client_name} · {task.event_type}
+              {selectedDay.tasks.map((task) => {
+                const hasClientInTitle = Boolean(
+                  task.client_name && task.title.toLowerCase().includes(task.client_name.toLowerCase())
+                )
+                const primaryText = task.client_name && !hasClientInTitle
+                  ? `${task.title} · ${task.client_name}`
+                  : task.title
+                const secondaryText = task.event_type || null
+                return (
+                  <Link
+                    key={`m-task-${task.id}`}
+                    href={task.inquiry_id ? `/portal/leads/${task.inquiry_id}?tab=tasks` : '/portal/leads'}
+                    className="flex items-center justify-between gap-3 p-2.5 rounded-lg bg-[color:var(--portal-soft)]/70 border border-[color:var(--portal-border)]/30 text-left no-underline"
+                  >
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
+                      <div className="min-w-0">
+                        <p className="text-xs font-semibold text-[color:var(--portal-text)] truncate">
+                          {primaryText}
                         </p>
-                      )}
+                        {secondaryText && (
+                          <p className="text-[10px] text-[color:var(--portal-muted)] truncate">
+                            {secondaryText}
+                          </p>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                  <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 shrink-0">
-                    Task
-                  </span>
-                </Link>
-              ))}
+                    <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 shrink-0">
+                      Task
+                    </span>
+                  </Link>
+                )
+              })}
 
               {/* Payments */}
               {selectedDay.payments.map((bill) => (

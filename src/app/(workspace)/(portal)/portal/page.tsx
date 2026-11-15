@@ -4,6 +4,8 @@ import { PortalHomeFrame, PortalHomeMarketingHeader } from "@/components/portal/
 import { PortalHomeReady, PortalHomeTransition } from "@/components/portal/PortalHomeTransition";
 import {
   Calendar,
+  CalendarDays,
+  Clock,
   DollarSign,
   ListTodo,
   ChevronRight,
@@ -433,13 +435,20 @@ async function PortalOverviewContent() {
         {/* Today's Priorities */}
         <div className="portal-card-surface flex flex-col justify-between p-6">
           <div>
-            <div className="flex items-center gap-2.5 mb-6">
-              <ListTodo className="h-5 w-5 text-[#caa24c]" strokeWidth={1.5} />
-              <h3 className="text-xs font-black uppercase tracking-[0.2em] text-[color:var(--portal-text)]">TODAY&apos;S PRIORITIES</h3>
+            <div className="flex items-center justify-between gap-3 mb-4">
+              <div className="flex items-center gap-2.5">
+                <ListTodo className="h-5 w-5 text-[#caa24c]" strokeWidth={1.5} />
+                <h3 className="text-xs font-black uppercase tracking-[0.2em] text-[color:var(--portal-text)]">TODAY&apos;S PRIORITIES</h3>
+              </div>
+              {activePriorities.length > 0 && (
+                <span className="rounded-full bg-[#caa24c]/15 px-2 py-0.5 text-[10px] font-bold tabular-nums text-[#8f641e] dark:text-[#dfbd68]">
+                  {activePriorities.length}
+                </span>
+              )}
             </div>
             <TodayPriorities items={activePriorities} />
           </div>
-          <div className="mt-6 pt-4 border-t border-[color:var(--portal-border)]/50">
+          <div className="mt-4 pt-3 border-t border-[color:var(--portal-border)]/50">
             <Link href="/portal/leads" className="text-[#caa24c] hover:text-[#b0883b] transition-colors flex items-center justify-center gap-1 font-bold text-xs">
               View leads <ChevronRight size={14} className="translate-y-[0.5px]" />
             </Link>
@@ -469,6 +478,12 @@ async function PortalOverviewContent() {
               <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[color:var(--portal-muted)] mb-1">BOOKINGS</p>
               <p data-home-reveal className="text-3xl font-extrabold text-[color:var(--portal-text)] tabular-nums tracking-tight">{bookingsCount}</p>
               <p className="text-xs text-[color:var(--portal-muted)] mt-0.5">events this month</p>
+            </div>
+            <div className="mt-4 pt-2 border-t border-[color:var(--portal-border)]/50 flex items-center justify-between text-[11px] font-semibold text-[color:var(--portal-muted)] tabular-nums">
+              <span>{startOfMonth.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}</span>
+              <Link href="/portal/calendar" className="inline-flex items-center gap-0.5 text-[#caa24c] hover:text-[#b0883b] transition-colors font-bold">
+                Calendar <ChevronRight size={13} className="translate-y-[0.5px]" />
+              </Link>
             </div>
           </MagicCard>
         </div>
@@ -513,36 +528,33 @@ async function PortalOverviewContent() {
       {/* Recent activity and quick actions */}
       <div data-home-reveal className="grid grid-cols-1 gap-4 md:grid-cols-2 md:gap-6 2xl:grid-cols-2 items-stretch">
         {/* Recent Activity */}
-        <div className="portal-card-surface flex flex-col justify-between p-5">
+        <div className="portal-card-surface flex flex-col justify-between p-6">
           <div>
-            <div className="flex items-center gap-2.5 mb-3.5">
+            <div className="flex items-center gap-2.5 mb-4">
               <Activity className="h-5 w-5 text-[#caa24c]" strokeWidth={1.5} />
               <h3 className="text-xs font-black uppercase tracking-[0.2em] text-[color:var(--portal-text)]">RECENT ACTIVITY</h3>
             </div>
             
             {recentActivities.length > 0 ? (
-              <div className="space-y-1">
-                {recentActivities.map((act, idx) => {
+              <div className="divide-y divide-[color:var(--portal-border)]/35">
+                {recentActivities.map((act) => {
                   const IconComp = act.icon as React.ComponentType<{ size?: number; strokeWidth?: number }>;
-                  const isLast = idx === recentActivities.length - 1;
                   return (
                     <Link
                       key={act.id}
                       href={act.href}
-                      className={`flex items-center justify-between text-xs py-2 px-2.5 -mx-2.5 rounded-xl transition-all duration-150 hover:bg-[color:var(--portal-soft)] hover:shadow-xs active:scale-[0.99] cursor-pointer group/item ${
-                        !isLast ? "border-b border-[color:var(--portal-border)]/30 border-dashed" : ""
-                      }`}
+                      className="flex items-center justify-between text-xs py-2.5 px-2.5 -mx-2.5 rounded-xl transition-colors duration-150 hover:bg-[color:var(--portal-soft)]/70 cursor-pointer group/item"
                     >
-                      <div className="flex items-center gap-3 min-w-0 pr-2">
-                        <div className="portal-activity-icon w-7 h-7 rounded-full bg-[#fbf5eb] dark:bg-[#caa24c]/10 text-[#caa24c] flex items-center justify-center shrink-0 group-hover/item:bg-[#caa24c] group-hover/item:text-white transition-all duration-150">
+                      <div className="flex items-center gap-3 min-w-0 flex-1 pr-3">
+                        <div className="portal-activity-icon w-7.5 h-7.5 rounded-full bg-[#fbf5eb] dark:bg-[#caa24c]/10 text-[#caa24c] flex items-center justify-center shrink-0 group-hover/item:bg-[#caa24c] group-hover/item:text-white transition-all duration-150">
                           <IconComp size={13} strokeWidth={1.75} />
                         </div>
-                        <div className="min-w-0">
-                          <p className="font-semibold text-[color:var(--portal-text)] group-hover/item:text-[#caa24c] transition-colors duration-150 truncate text-xs">
+                        <div className="min-w-0 flex-1">
+                          <p className="font-semibold text-[color:var(--portal-text)] group-hover/item:text-[#9a6e25] dark:group-hover/item:text-[#dfbd68] transition-colors duration-150 truncate text-xs">
                             {act.title}
                           </p>
                           {act.subtitle && (
-                            <p className="text-[10px] text-[color:var(--portal-muted)] truncate">
+                            <p className="text-[10px] text-[color:var(--portal-muted)] truncate mt-0.5">
                               {act.subtitle}
                             </p>
                           )}
@@ -561,7 +573,7 @@ async function PortalOverviewContent() {
               </p>
             )}
           </div>
-          <div className="mt-3.5 pt-3 border-t border-[color:var(--portal-border)]/50">
+          <div className="mt-4 pt-3 border-t border-[color:var(--portal-border)]/50">
             <Link href="/portal/leads" className="text-[#caa24c] hover:text-[#b0883b] transition-colors flex items-center justify-center gap-1 font-bold text-xs">
               View all activity <ChevronRight size={14} className="translate-y-[0.5px]" />
             </Link>
@@ -569,9 +581,9 @@ async function PortalOverviewContent() {
         </div>
 
         {/* Quick Actions */}
-        <div className="portal-card-surface flex flex-col justify-between p-5">
+        <div className="portal-card-surface flex flex-col justify-between p-6">
           <div>
-            <div className="flex items-center gap-2.5 mb-3.5">
+            <div className="flex items-center gap-2.5 mb-4">
               <Zap className="h-5 w-5 text-[#caa24c]" strokeWidth={1.5} />
               <h3 className="text-xs font-black uppercase tracking-[0.2em] text-[color:var(--portal-text)]">QUICK ACTIONS</h3>
             </div>
@@ -579,51 +591,51 @@ async function PortalOverviewContent() {
             <div className="grid grid-cols-2 gap-2.5">
               <Link
                 href="/portal/leads"
-                className="flex items-center gap-2.5 py-2.5 px-3 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] hover:bg-[color:var(--portal-card)] hover:border-[#caa24c]/40 hover:shadow-xs hover:scale-[1.02] active:scale-95 transition-all text-xs font-semibold text-[color:var(--portal-text)] group"
+                className="flex items-center gap-2.5 py-2.5 px-3 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/70 hover:bg-[color:var(--portal-card)] hover:border-[#caa24c]/45 hover:shadow-xs active:translate-y-px transition-all text-xs font-semibold text-[color:var(--portal-text)] group"
               >
                 <Plus size={16} className="text-[#caa24c] shrink-0" />
                 <span>New Inquiry</span>
               </Link>
               <Link
                 href="/portal/calendar"
-                className="flex items-center gap-2.5 py-2.5 px-3 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] hover:bg-[color:var(--portal-card)] hover:border-[#caa24c]/40 hover:shadow-xs hover:scale-[1.02] active:scale-95 transition-all text-xs font-semibold text-[color:var(--portal-text)] group"
+                className="flex items-center gap-2.5 py-2.5 px-3 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/70 hover:bg-[color:var(--portal-card)] hover:border-[#caa24c]/45 hover:shadow-xs active:translate-y-px transition-all text-xs font-semibold text-[color:var(--portal-text)] group"
               >
-                <Calendar size={16} className="text-[#caa24c] shrink-0" />
+                <Clock size={16} className="text-[#caa24c] shrink-0" />
                 <span>Schedule Tour</span>
               </Link>
               <Link
                 href="/portal/leads"
-                className="flex items-center gap-2.5 py-2.5 px-3 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] hover:bg-[color:var(--portal-card)] hover:border-[#caa24c]/40 hover:shadow-xs hover:scale-[1.02] active:scale-95 transition-all text-xs font-semibold text-[color:var(--portal-text)] group"
+                className="flex items-center gap-2.5 py-2.5 px-3 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/70 hover:bg-[color:var(--portal-card)] hover:border-[#caa24c]/45 hover:shadow-xs active:translate-y-px transition-all text-xs font-semibold text-[color:var(--portal-text)] group"
               >
                 <FileText size={16} className="text-[#caa24c] shrink-0" />
                 <span>Create Proposal</span>
               </Link>
               <Link
                 href="/portal/invoices"
-                className="flex items-center gap-2.5 py-2.5 px-3 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] hover:bg-[color:var(--portal-card)] hover:border-[#caa24c]/40 hover:shadow-xs hover:scale-[1.02] active:scale-95 transition-all text-xs font-semibold text-[color:var(--portal-text)] group"
+                className="flex items-center gap-2.5 py-2.5 px-3 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/70 hover:bg-[color:var(--portal-card)] hover:border-[#caa24c]/45 hover:shadow-xs active:translate-y-px transition-all text-xs font-semibold text-[color:var(--portal-text)] group"
               >
                 <DollarSign size={16} className="text-[#caa24c] shrink-0" />
                 <span>Create Invoice</span>
               </Link>
               <Link
                 href="/portal/calendar"
-                className="flex items-center gap-2.5 py-2.5 px-3 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] hover:bg-[color:var(--portal-card)] hover:border-[#caa24c]/40 hover:shadow-xs hover:scale-[1.02] active:scale-95 transition-all text-xs font-semibold text-[color:var(--portal-text)] group"
+                className="flex items-center gap-2.5 py-2.5 px-3 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/70 hover:bg-[color:var(--portal-card)] hover:border-[#caa24c]/45 hover:shadow-xs active:translate-y-px transition-all text-xs font-semibold text-[color:var(--portal-text)] group"
               >
                 <Calendar size={16} className="text-[#caa24c] shrink-0" />
                 <span>Add Event</span>
               </Link>
               <Link
                 href="/portal/calendar"
-                className="flex items-center gap-2.5 py-2.5 px-3 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] hover:bg-[color:var(--portal-card)] hover:border-[#caa24c]/40 hover:shadow-xs hover:scale-[1.02] active:scale-95 transition-all text-xs font-semibold text-[color:var(--portal-text)] group"
+                className="flex items-center gap-2.5 py-2.5 px-3 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/70 hover:bg-[color:var(--portal-card)] hover:border-[#caa24c]/45 hover:shadow-xs active:translate-y-px transition-all text-xs font-semibold text-[color:var(--portal-text)] group"
               >
-                <Calendar size={16} className="text-[#caa24c] shrink-0" />
+                <CalendarDays size={16} className="text-[#caa24c] shrink-0" />
                 <span>Block Date</span>
               </Link>
             </div>
             
             <Link
               href="/portal/leads"
-              className="mt-2.5 flex items-center justify-center gap-2.5 w-full py-2.5 px-3 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] hover:bg-[color:var(--portal-card)] hover:border-[#caa24c]/40 hover:shadow-xs hover:scale-[1.01] active:scale-[0.99] transition-all text-xs font-semibold text-[color:var(--portal-text)] group"
+              className="mt-2.5 flex items-center justify-center gap-2.5 w-full py-2.5 px-3 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/70 hover:bg-[color:var(--portal-card)] hover:border-[#caa24c]/45 hover:shadow-xs active:translate-y-px transition-all text-xs font-semibold text-[color:var(--portal-text)] group"
             >
               <UserPlus size={16} className="text-[#caa24c] shrink-0" />
               <span>Add Vendor</span>

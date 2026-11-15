@@ -92,7 +92,7 @@ export function TodayPriorities({ items }: { items: Priority[] }) {
   }
 
   return (
-    <div className="space-y-3.5">
+    <div className="divide-y divide-[color:var(--portal-border)]/40">
       {items.length ? (
         items.map((item) => {
           const key = item.id || item.taskId || `${item.href}-${item.title}`
@@ -101,7 +101,7 @@ export function TodayPriorities({ items }: { items: Priority[] }) {
           return (
             <div
               key={key}
-              className="group relative flex items-center gap-2.5 border-b border-dashed border-[color:var(--portal-border)]/35 pb-3 last:border-b-0 last:pb-0"
+              className="group relative -mx-2 flex items-center gap-3 rounded-xl px-2 py-2.5 transition-colors duration-150 first:pt-1.5 last:pb-1.5 hover:bg-[color:var(--portal-soft)]/60"
             >
               {/* Checkbox button: clean, balanced circular check target */}
               <button
@@ -111,10 +111,10 @@ export function TodayPriorities({ items }: { items: Priority[] }) {
                 onClick={() => void toggleComplete(item)}
                 aria-label={`Mark "${item.title}" ${isDone ? 'incomplete' : 'complete'}`}
                 title={isDone ? 'Mark as incomplete' : 'Mark as complete'}
-                className={`portal-checkbox portal-inline-action relative flex !h-4 !w-4 !min-h-0 !min-w-0 shrink-0 items-center justify-center rounded-full border transition-all duration-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#caa24c] ${
+                className={`portal-checkbox portal-inline-action relative flex !h-4.5 !w-4.5 !min-h-0 !min-w-0 shrink-0 items-center justify-center rounded-full border transition-all duration-200 cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#caa24c] ${
                   isDone
                     ? 'border-[#caa24c] bg-[#caa24c] text-white shadow-xs'
-                    : 'border-[color:var(--portal-border)]/90 bg-transparent hover:border-[#caa24c] hover:bg-[#caa24c]/10'
+                    : 'border-[color:var(--portal-muted)]/45 bg-[color:var(--portal-card)] hover:border-[#caa24c] hover:bg-[#caa24c]/10'
                 }`}
               >
                 <AnimatePresence>
@@ -135,15 +135,15 @@ export function TodayPriorities({ items }: { items: Priority[] }) {
               {/* Priority Title & Meta Link */}
               <Link
                 href={item.href}
-                className="flex min-w-0 flex-1 items-center justify-between gap-3 text-left no-underline hover:text-[#a8792f] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#caa24c]"
+                className="flex min-w-0 flex-1 items-center justify-between gap-3 text-left no-underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#caa24c]"
                 title={item.reasoning || item.title}
               >
                 <div className="relative min-w-0 flex-1 py-0.5">
                   <span
-                    className={`block text-xs font-medium leading-relaxed transition-colors duration-200 ${
+                    className={`block text-[12.5px] font-medium leading-snug transition-colors duration-200 ${
                       isDone
                         ? 'text-[color:var(--portal-muted)] opacity-55'
-                        : 'text-[color:var(--portal-text)]'
+                        : 'text-[color:var(--portal-text)] group-hover:text-[#9a6e25] dark:group-hover:text-[#dfbd68]'
                     }`}
                   >
                     {item.title}
@@ -177,11 +177,11 @@ export function TodayPriorities({ items }: { items: Priority[] }) {
                     isDone
                       ? 'text-[color:var(--portal-muted)] opacity-40 line-through'
                       : item.isOverdue
-                        ? 'rounded bg-red-50 px-2 py-0.5 text-[#b93c3c] dark:bg-red-500/10 dark:text-red-400'
+                        ? 'rounded-md border border-red-200/70 bg-red-50/90 px-2 py-0.5 text-[#b93c3c] dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-300'
                         : item.meta.toLowerCase().includes('inquiry') || item.meta.toLowerCase().includes('new')
-                          ? 'rounded bg-[#caa24c]/15 px-2 py-0.5 text-[#9a6e25] dark:bg-[#caa24c]/20 dark:text-[#dfbd68]'
+                          ? 'rounded-md border border-[#caa24c]/30 bg-[#caa24c]/12 px-2 py-0.5 text-[#8f641e] dark:border-[#caa24c]/25 dark:bg-[#caa24c]/15 dark:text-[#dfbd68]'
                           : item.meta.toLowerCase().includes('today')
-                            ? 'rounded bg-emerald-50 px-2 py-0.5 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400'
+                            ? 'rounded-md border border-emerald-200/70 bg-emerald-50/90 px-2 py-0.5 text-emerald-700 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-300'
                             : 'text-[color:var(--portal-muted)]'
                   }`}
                 >

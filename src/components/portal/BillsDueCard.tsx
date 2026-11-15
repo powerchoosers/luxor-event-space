@@ -9,6 +9,32 @@ import ExpenseManagement from '@/components/portal/expenses/ExpenseManagement'
 import { PortalModal } from '@/components/portal/PortalUI'
 import type { LuxorBill } from '@/lib/luxorInquiryTypes'
 
+function formatBillDueDate(dateStr: string | null | undefined): string {
+  if (!dateStr) return 'Due date not set'
+  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(dateStr.trim())
+  if (!match) return `Due ${dateStr}`
+  const year = Number(match[1])
+  const month = Number(match[2])
+  const day = Number(match[3])
+  const date = new Date(Date.UTC(year, month - 1, day, 12, 0, 0))
+  if (Number.isNaN(date.getTime())) return `Due ${dateStr}`
+  const formatted = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'UTC',
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  }).format(date)
+  return `Due ${formatted}`
+}
+
+function formatBillAmount(bill: LuxorBill): string | null {
+  if (bill.amount_state === 'unknown') return null
+  if (bill.amount_state === 'variable') return 'Variable'
+  const amount = Number(bill.amount)
+  if (bill.amount_state !== 'known' || !Number.isFinite(amount) || amount < 0) return null
+  return amount.toLocaleString('en-US', { style: 'currency', currency: bill.currency || 'USD' })
+}
+
 /** A reminder list only: the linked expense ledger is authoritative for balances. */
 export function BillsDueCard({ initialBills }: { initialBills: LuxorBill[] }) {
   const router = useRouter()
@@ -38,38 +64,73 @@ export function BillsDueCard({ initialBills }: { initialBills: LuxorBill[] }) {
   }
 
   const selectedBill = bills.find((b) => b.id === selectedBillId) || null
+  const todayIso = new Date().toISOString().slice(0, 10)
 
-  return <div className="flex h-full flex-col">
-    <div className="flex items-center justify-between gap-3">
-      <div className="flex items-center gap-2">
-        <Receipt size={19} className="text-[#a8792f] dark:text-[#caa24c]" />
-        <h3 className="text-sm font-bold text-[color:var(--portal-text)]">Bills to review</h3>
-      </div>
-      <Link href="/portal/finances?view=bill-review" className="inline-flex items-center gap-1 text-xs font-semibold text-[#9a712e] dark:text-[#e6c77f]">
-        View all <ChevronRight size={14} />
-      </Link>
-    </div>
-    {rows.length ? (
-      <div className="mt-3.5 space-y-1.5">
-        {rows.map((bill) => (
-          <button
-            key={bill.id}
-            type="button"
-            onClick={() => setSelectedBillId(bill.id)}
-            className="flex w-full items-center justify-between gap-3 rounded-xl border border-transparent px-3 py-2.5 text-left transition-colors hover:border-[color:var(--portal-border)]/60 hover:bg-[color:var(--portal-soft)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45"
-          >
-            <span className="min-w-0">
-              <span className="block truncate text-sm font-semibold text-[color:var(--portal-text)]">{bill.provider}</span>
-              <span className="mt-0.5 block truncate text-xs text-[color:var(--portal-muted)]">{bill.service} · {bill.due_date ? `Due ${bill.due_date}` : 'Due date not set'}</span>
+  return <div className="flex h-full flex-col justify-between">
+    <div>
+      <div className="flex items-center justify-between gap-3 mb-4">
+        <div className="flex items-center gap-2.5">
+          <Receipt size={19} className="text-[#caa24c] shrink-0" strokeWidth={1.5} />
+          <h3 className="text-xs font-black uppercase tracking-[0.2em] text-[color:var(--portal-text)]">Bills to review</h3>
+          {open.length > 0 && (
+            <span className="rounded-full bg-[#caa24c]/15 px-2 py-0.5 text-[10px] font-bold tabular-nums text-[#8f641e] dark:text-[#dfbd68]">
+              {open.length}
             </span>
-            <ChevronRight size={16} className="shrink-0 text-[color:var(--portal-muted)]" />
-          </button>
-        ))}
+          )}
+        </div>
+        <Link href="/portal/finances?view=bill-review" className="inline-flex items-center gap-1 text-xs font-bold text-[#caa24c] transition-colors hover:text-[#b0883b]">
+          View all <ChevronRight size={14} className="translate-y-[0.5px]" />
+        </Link>
       </div>
-    ) : (
-      <p className="mt-4 text-sm text-[color:var(--portal-muted)]">No open bills to review.</p>
-    )}
-    <p className="mt-4 text-xs text-[color:var(--portal-muted)]">Open a bill to review it or record a payment through its linked expense.</p>
+      {rows.length ? (
+        <div className="divide-y divide-[color:var(--portal-border)]/40">
+          {rows.map((bill) => {
+            const amountLabel = formatBillAmount(bill)
+            const isOverdue = Boolean(bill.due_date && bill.due_date < todayIso)
+            const isDueToday = Boolean(bill.due_date && bill.due_date === todayIso)
+            return (
+              <button
+                key={bill.id}
+                type="button"
+                onClick={() => setSelectedBillId(bill.id)}
+                className="group -mx-2 flex w-[calc(100%+1rem)] items-center justify-between gap-3 rounded-xl px-2.5 py-2.5 text-left transition-colors hover:bg-[color:var(--portal-soft)]/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 cursor-pointer"
+              >
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-xs font-semibold text-[color:var(--portal-text)] group-hover:text-[#9a6e25] dark:group-hover:text-[#dfbd68] transition-colors">
+                    {bill.provider}
+                  </span>
+                  <span className="mt-0.5 block truncate text-[11px] text-[color:var(--portal-muted)] tabular-nums">
+                    {bill.service} · {formatBillDueDate(bill.due_date)}
+                  </span>
+                </span>
+                <span className="flex shrink-0 items-center gap-2">
+                  {amountLabel && (
+                    <span className="text-xs font-bold tabular-nums text-[color:var(--portal-text)]">
+                      {amountLabel}
+                    </span>
+                  )}
+                  {isOverdue ? (
+                    <span className="rounded-md border border-red-200/70 bg-red-50/90 px-2 py-0.5 text-[10px] font-semibold text-[#b93c3c] dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-300">
+                      Overdue
+                    </span>
+                  ) : isDueToday ? (
+                    <span className="rounded-md border border-amber-200/70 bg-amber-50/90 px-2 py-0.5 text-[10px] font-semibold text-amber-800 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-300">
+                      Due today
+                    </span>
+                  ) : null}
+                  <ChevronRight size={15} className="shrink-0 text-[color:var(--portal-muted)] transition-transform group-hover:translate-x-0.5 group-hover:text-[#caa24c]" />
+                </span>
+              </button>
+            )
+          })}
+        </div>
+      ) : (
+        <p className="py-6 text-center text-xs text-[color:var(--portal-muted)]">No open bills to review.</p>
+      )}
+    </div>
+    <div className="mt-4 pt-3 border-t border-[color:var(--portal-border)]/50 flex items-center justify-between gap-2">
+      <p className="text-[11px] text-[color:var(--portal-muted)]">Select a bill to review details or record a linked expense payment.</p>
+    </div>
     {selectedBillId ? (
       <BillDetailsPanel
         billId={selectedBillId}

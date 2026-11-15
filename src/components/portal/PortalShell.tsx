@@ -1003,13 +1003,13 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
                 if (allowedItems.length === 0) return null
 
                 return (
-                  <div key={section.id} className={sIdx > 0 ? 'mt-1' : ''}>
+                  <div key={section.id} className={sIdx > 0 ? 'mt-1.5' : ''}>
                     {sIdx > 0 && (
                       <div
-                        className={`my-1.5 h-px transition-[margin,background-color] duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] ${
+                        className={`my-2 h-px transition-[margin,background-color] duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] ${
                           sidebarIsCollapsed
-                            ? 'mx-2.5 bg-[#caa24c]/20'
-                            : 'mx-2 bg-[color:var(--portal-border)]/50'
+                            ? 'mx-2 bg-[color:var(--portal-border)] dark:bg-[#caa24c]/25'
+                            : 'mx-2 bg-[color:var(--portal-border)]/70'
                         }`}
                         aria-hidden="true"
                       />
