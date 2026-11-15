@@ -16,13 +16,23 @@ export function formatLuxorSalesBriefingChicagoTitle(dateKey: string) {
   }).format(date)
 }
 
+function stripTrailingPeriodForSubject(text: string) {
+  if (text.endsWith('.') && !text.endsWith('..')) {
+    return text.slice(0, -1).trimEnd()
+  }
+  return text
+}
+
 export function buildLuxorSalesBriefingSubject(input: {
   briefingDateKey: string
   marcusBriefingReady?: boolean
   headline?: string | null
 }) {
   const rawHeadline = input.marcusBriefingReady ? input.headline?.trim() : ''
-  if (rawHeadline) return sanitizeLuxorSalesBriefingCopy(rawHeadline)
+  if (rawHeadline) {
+    const headline = stripTrailingPeriodForSubject(sanitizeLuxorSalesBriefingCopy(rawHeadline))
+    return `Luxor sales briefing: ${headline}`
+  }
   return `Luxor sales briefing: ${formatLuxorSalesBriefingChicagoTitle(input.briefingDateKey)}`
 }
 

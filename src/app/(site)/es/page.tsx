@@ -3,7 +3,7 @@ import Link from 'next/link'
 import { buildLuxorBilingualAlternates } from '@/lib/luxorPublicHreflang'
 
 const ES_HOME_DESCRIPTION =
-  'Salón para quinceañeras, bodas y celebraciones en San Antonio para hasta 180 invitados. Paquetes desde decoración propia hasta todo incluido. Agenda tu visita.'
+  'Salón para quinceañeras, bodas y celebraciones en San Antonio para hasta 180 invitados. Paquetes desde decoración propia hasta decoración completa. Agenda tu visita.'
 
 export const metadata: Metadata = {
   title: {

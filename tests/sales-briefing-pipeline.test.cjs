@@ -95,7 +95,18 @@ test('briefing subject uses Marcus headline when ready', () => {
       marcusBriefingReady: true,
       headline: 'Lead with follow-ups before noon.',
     }),
-    'Lead with follow-ups before noon.',
+    'Luxor sales briefing: Lead with follow-ups before noon',
+  )
+})
+
+test('briefing subject strips a trailing period from the Marcus headline', () => {
+  assert.equal(
+    buildLuxorSalesBriefingSubject({
+      briefingDateKey: '2026-11-16',
+      marcusBriefingReady: true,
+      headline: 'Chase deposits today...',
+    }),
+    'Luxor sales briefing: Chase deposits today...',
   )
 })
 
@@ -132,6 +143,6 @@ test('briefing subject replaces em dashes in Marcus headlines', () => {
       marcusBriefingReady: true,
       headline: 'Tours first — proposals second',
     }),
-    'Tours first: proposals second',
+    'Luxor sales briefing: Tours first: proposals second',
   )
 })
