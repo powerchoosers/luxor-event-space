@@ -4,7 +4,7 @@ import { PackagesInquiryForm } from '@/components/packages/PackagesInquiryForm'
 import { decodePackagesDraftToken, getPackagesInquiryDraft } from '@/lib/luxorPublicPackagesInquiryDraftServer'
 
 export const metadata: Metadata = {
-  title: 'Consulta de paquetes | Luxor at Las Palmas Events',
+  title: 'Consulta de paquetes',
   robots: { index: false, follow: false },
 }
 

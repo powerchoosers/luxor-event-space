@@ -2,7 +2,7 @@ import type { Metadata } from 'next'
 import { PackagesInquiryConfirmation } from '@/components/packages/PackagesInquiryConfirmation'
 
 export const metadata: Metadata = {
-  title: 'Consulta recibida | Luxor at Las Palmas Events',
+  title: 'Consulta recibida',
   robots: { index: false, follow: false },
 }
 

@@ -2,7 +2,9 @@ import type { Metadata } from 'next'
 import Link from 'next/link'
 
 export const metadata: Metadata = {
-  title: 'Luxor at Las Palmas Events | Bodas y celebraciones en San Antonio',
+  title: {
+    absolute: 'Luxor at Las Palmas Events | Bodas y celebraciones en San Antonio',
+  },
   description: 'Un espacio moderno para bodas, quinceañeras y celebraciones privadas en San Antonio.',
   alternates: { canonical: '/es' },
 }
