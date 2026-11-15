@@ -1,4 +1,30 @@
 import type { LuxorInvoice, LuxorPayment } from './luxorInquiryTypes'
+import { LUXOR_TOUR_TIMEZONE } from './luxorTourMetrics'
+
+/** Prefer a colon or hyphen instead of em dashes in briefing copy and subjects. */
+export function sanitizeLuxorSalesBriefingCopy(text: string) {
+  return text.replace(/\s*—\s*/g, ': ').replace(/—/g, '-')
+}
+
+export function formatLuxorSalesBriefingChicagoTitle(dateKey: string) {
+  const date = new Date(`${dateKey}T12:00:00.000Z`)
+  return new Intl.DateTimeFormat('en-US', {
+    timeZone: LUXOR_TOUR_TIMEZONE,
+    weekday: 'long',
+    month: 'long',
+    day: 'numeric',
+  }).format(date)
+}
+
+export function buildLuxorSalesBriefingSubject(input: {
+  briefingDateKey: string
+  marcusBriefingReady?: boolean
+  headline?: string | null
+}) {
+  const rawHeadline = input.marcusBriefingReady ? input.headline?.trim() : ''
+  if (rawHeadline) return sanitizeLuxorSalesBriefingCopy(rawHeadline)
+  return `Luxor sales briefing: ${formatLuxorSalesBriefingChicagoTitle(input.briefingDateKey)}`
+}
 
 export function formatLuxorLeadWaitingLabel(createdAt: string | null | undefined, now = Date.now()) {
   if (!createdAt) return null

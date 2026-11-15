@@ -173,7 +173,7 @@ const basePipeline = {
 const marcusCoaching = {
   headline: 'Lead with follow-ups before noon.',
   coachingMarkdown:
-    'Victoria and Rebecca both need a human touch today.\n\n**Keep tours warm** — confirm parking and the ballroom walkthrough before guests arrive.',
+    'Victoria and Rebecca both need a human touch today.\n\n**On the phone today**\n- Ask for the date first, then the guest count.\n- After a price question, offer a tour before quoting.',
   focusItems: [
     { title: 'Post-tour speed', detail: 'Send custom proposals within 24 hours of every attended tour.' },
     { title: 'Booking payment chase', detail: 'Signed agreements without the initial booking payment get a calm check-in call.' },
