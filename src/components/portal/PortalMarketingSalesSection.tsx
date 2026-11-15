@@ -929,7 +929,7 @@ export function PortalMarketingSalesSection({
                     <th className="pb-3 pr-2">Channel</th>
                     <th className="pb-3 px-2 text-right">Visitors</th>
                     <th className="pb-3 px-2 text-right">Tour Visits</th>
-                    <th className="pb-3 px-2 text-right">Tour Clicks</th>
+                    <th className="pb-3 px-2 text-right">Visit Clicks</th>
                     <th className="pb-3 px-2 text-right text-[#caa24c]">Tours Booked</th>
                     <th className="pb-3 px-2 text-right">Bookings</th>
                     <th className="pb-3 pl-2 text-right">Revenue</th>

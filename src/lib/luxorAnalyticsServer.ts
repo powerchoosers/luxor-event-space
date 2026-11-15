@@ -9,6 +9,7 @@ import { getLuxorTourDateRange } from './luxorTourMetrics'
 import { getFunnelPeriodFromRange } from './luxorFunnelPeriods'
 import { computeVerifiedCrmActivityMetrics, sliceFunnelAnalyticsData } from './luxorFunnelAnalytics'
 import { loadFunnelAnalyticsData } from './luxorFunnelAnalyticsServer'
+import { countLuxorVisitCtaClicks, isLuxorPagePerformanceCtaClickEvent } from './luxorPublicConversionEvents'
 
 export type AnalyticsDatePreset = '7d' | '30d' | '90d' | 'this_month' | 'previous_month' | 'custom'
 
@@ -303,7 +304,7 @@ export async function fetchMarketingAndSalesMetrics(range: DateRange): Promise<M
   ).length
   const tourPageVisits = hasConnectedAnalytics ? tourPageViewsCount : null
 
-  const tourClicksCount = businessCurrentEvents.filter((e) => e.event_name === 'tour_cta_click').length
+  const tourClicksCount = countLuxorVisitCtaClicks(businessCurrentEvents)
   const tourClicks = hasConnectedAnalytics ? tourClicksCount : null
 
   // Web events: previous period
@@ -318,7 +319,7 @@ export async function fetchMarketingAndSalesMetrics(range: DateRange): Promise<M
       e.event_name === 'tour_page_view' ||
       (e.event_name === 'page_view' && (e.page_path?.includes('/tour') || e.page_path?.includes('/visit'))),
   ).length
-  const prevTourClicks = businessPrevEvents.filter((e) => e.event_name === 'tour_cta_click').length
+  const prevTourClicks = countLuxorVisitCtaClicks(businessPrevEvents)
 
   // 2. CRM Analytics: Inquiries & Tours
   const startTimeMs = range.start.getTime()
@@ -547,9 +548,7 @@ export async function fetchMarketingAndSalesMetrics(range: DateRange): Promise<M
     const catTourVisits = hasConnectedAnalytics
       ? catEvents.filter((e) => e.event_name === 'tour_page_view' || (e.event_name === 'page_view' && e.page_path?.includes('/tour'))).length
       : null
-    const catTourClicks = hasConnectedAnalytics
-      ? catEvents.filter((e) => e.event_name === 'tour_cta_click').length
-      : null
+    const catTourClicks = hasConnectedAnalytics ? countLuxorVisitCtaClicks(catEvents) : null
 
     // Filter CRM inquiries matching this category
     const catInquiryIds = new Set(businessInquiries.filter((inq) => normalizeChannel(inq.source, inq.metadata) === category).map((inq) => inq.id))
@@ -605,7 +604,7 @@ export async function fetchMarketingAndSalesMetrics(range: DateRange): Promise<M
     })
 
     const views = pageEvents.filter((e) => e.event_name === 'page_view' || e.event_name === 'tour_page_view').length
-    const ctaClicks = pageEvents.filter((e) => e.event_name === 'tour_cta_click' || e.event_name === 'cta_click').length
+    const ctaClicks = pageEvents.filter((e) => isLuxorPagePerformanceCtaClickEvent(e.event_name)).length
     const engagementRate = views > 0 ? `${Math.min(100, Math.round((ctaClicks / views) * 100))}%` : '—'
     const exitRate = views > 0 ? `${Math.max(10, Math.round(100 - (ctaClicks / views) * 100))}%` : '—'
 
