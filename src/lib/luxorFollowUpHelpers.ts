@@ -120,7 +120,19 @@ export function partitionLeadTasksForDisplay<T extends {
   }
 }
 
+function formatReadableYmd(ymd: string) {
+  const match = ymd.match(/^(\d{4})-(\d{2})-(\d{2})$/)
+  if (!match) return ymd
+  const date = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]), 12, 0, 0)
+  if (Number.isNaN(date.getTime())) return ymd
+  return date.toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  })
+}
+
 export function formatFollowUpDateLabel(dueAt: string | null | undefined, dueDate: string | null | undefined) {
-  if (dueAt) return `${luxorDate(dueAt)} · ${luxorTime(dueAt)}`
-  return dueDate?.slice(0, 10) ?? 'No date'
+  if (dueAt) return `${formatReadableYmd(luxorDate(dueAt))} · ${luxorTime(dueAt)}`
+  return dueDate ? formatReadableYmd(dueDate.slice(0, 10)) : 'No date'
 }

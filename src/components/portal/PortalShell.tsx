@@ -469,7 +469,7 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
 
     const target = event.target instanceof HTMLElement ? event.target : null
     if (!target) return
-    if (target.closest('[role="dialog"], .portal-modal-layer, .portal-modal-body, .portal-sheet, input, textarea, select, [contenteditable="true"]')) return
+    if (target.closest('[role="dialog"], [data-portal-popover="true"], [data-portal-floating-panel="true"], .portal-modal-layer, .portal-modal-body, .portal-sheet, input, textarea, select, [contenteditable="true"]')) return
     if (hasNativeVerticalScrollPath(target, event.deltaY)) return
 
     const page = contentScrollRef.current

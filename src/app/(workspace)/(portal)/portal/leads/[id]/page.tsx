@@ -106,6 +106,7 @@ import { LuxorTestLeadPanel } from '@/components/portal/LuxorTestLeadPanel'
 import { LuxorTestLeadWorkflow } from '@/components/portal/LuxorTestLeadWorkflow'
 import { LuxorEventTypeCombobox } from '@/components/LuxorEventTypeCombobox'
 import { LeadWorkspaceNav } from '@/components/portal/LeadWorkspaceNav'
+import { LeadNotesQuickTab, type LeadNoteContextPayload } from '@/components/portal/LeadNotesQuickTab'
 import { LeadActivityDisclosure } from '@/components/portal/LeadActivityDisclosure'
 import { LeadEmailActivity } from '@/components/portal/LeadEmailActivity'
 import { LeadTaskActivity } from '@/components/portal/LeadTaskActivity'
@@ -2569,8 +2570,8 @@ export default function LeadDetailPage({
         setNotes((prev) => [...prev, note])
         setNoteContent('')
         setNoteType('note')
-        setActiveFeedTab('notes')
-        notify({ title: 'Test activity saved', description: 'Saved with this isolated run; no production note was created.', variant: 'success' })
+        setActiveFeedTab((current) => (current === 'notes' ? 'notes' : 'all'))
+        notify({ title: 'Test note added to activity', description: 'Saved with this isolated run; no production note was created.', variant: 'success' })
         return
       }
       const res = await fetch('/api/notes', {
@@ -2588,8 +2589,8 @@ export default function LeadDetailPage({
       setNotes((prev) => [...prev, note])
       setNoteContent('')
       setNoteType('note')
-      setActiveFeedTab('notes')
-      notify({ title: 'Activity saved', variant: 'success' })
+      setActiveFeedTab((current) => (current === 'notes' ? 'notes' : 'all'))
+      notify({ title: 'Note added to activity', variant: 'success' })
     } catch (err) {
       console.error(err)
       notify({ title: 'Note not saved', description: 'Please try again.', variant: 'error' })
@@ -4395,6 +4396,79 @@ export default function LeadDetailPage({
     }
   }, [activeStage, id, lead?.tour_attendance_status, pathname, router, searchParams])
 
+  const leadNoteContext = useMemo<LeadNoteContextPayload | undefined>(() => {
+    if (!lead) return undefined
+    const contactLabel = lead.full_name || 'Client'
+    return {
+      lead: {
+        id: lead.id,
+        fullName: contactLabel,
+        eventType: lead.event_type,
+        targetDate: lead.target_date,
+        guestCount: lead.guest_count,
+        packageInterest: lead.package_interest,
+        status: lead.status,
+        pipelineStage: lead.pipeline_stage ?? null,
+        preferredTourDate: lead.preferred_tour_date,
+        preferredTourTime: lead.preferred_tour_time,
+        message: lead.message,
+      },
+      calls: callRecords.slice(0, 5).map((call) => {
+        const sipBridge = luxorElenaLiveInboundTranscriptUsesSipBridge(call.metadata)
+        const segmentTranscript = call.transcript_segments?.length
+          ? call.transcript_segments
+              .map((seg) => {
+                const speaker = luxorTranscriptSpeaker(seg.track, { elenaSipBridge: sipBridge })
+                const label = speaker === 'caller' ? contactLabel : 'Luxor'
+                return `${label}: ${seg.text}`
+              })
+              .join('\n')
+          : null
+        const fallbackTranscript =
+          typeof call.metadata?.voicemail_transcript === 'string'
+            ? call.metadata.voicemail_transcript
+            : typeof call.metadata?.transcript === 'string'
+              ? call.metadata.transcript
+              : null
+        return {
+          direction: call.direction,
+          status: call.status,
+          createdAt: call.created_at,
+          duration: call.duration_seconds,
+          transcript: segmentTranscript || fallbackTranscript,
+          summary: call.summary_text || null,
+          notes: call.notes || null,
+        }
+      }),
+      notes: notes
+        .filter((note) => note.note_type !== 'status_change')
+        .slice(0, 8)
+        .map((note) => ({
+          noteType: note.note_type,
+          content: note.content,
+          createdAt: note.created_at,
+        })),
+      emails: emailMessages.slice(0, 6).map((email) => ({
+        subject: email.subject,
+        from: email.from,
+        to: email.to,
+        snippet: email.summary,
+        date: email.receivedAt || undefined,
+      })),
+      texts: textRecords.slice(0, 8).map((msg) => ({
+        direction: msg.direction,
+        body: msg.body,
+        createdAt: msg.created_at,
+      })),
+      tasks: tasks.slice(0, 8).map((task) => ({
+        title: task.title,
+        description: task.description,
+        status: task.status,
+        dueDate: task.due_date || task.due_at || null,
+      })),
+    }
+  }, [callRecords, emailMessages, lead, notes, tasks, textRecords])
+
   if (loading) {
     return <ClientDossierLoading />
   }
@@ -4946,7 +5020,12 @@ export default function LeadDetailPage({
     }
     if (item.id === 'planning') setSelectedStageOverride('planning')
     if (item.id === 'messages') setActiveFeedTab('comms')
-    if (item.id === 'notes') setActiveFeedTab('notes')
+    if (item.id === 'notes') {
+      setActiveFeedTab('notes')
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('luxor-open-lead-notes'))
+      }
+    }
     if (item.id === 'activity') setActiveFeedTab('all')
     if (item.id === 'tasks') setShowTaskTools(true)
   }
@@ -5341,10 +5420,10 @@ export default function LeadDetailPage({
             {lead.phone || lead.email ? (
             <div className="relative hidden items-center gap-1.5 py-1 pr-3 after:absolute after:right-0 after:top-1/2 after:h-6 after:w-px after:-translate-y-1/2 after:bg-[color:var(--portal-border)] lg:flex">
               {lead.phone ? <>
-                <button type="button" aria-label="Call client" title="Call" onClick={() => startLuxorBrowserCall({ phoneNumber: lead.phone!, contactName: lead.full_name, inquiryId: lead.id })} className="inline-flex h-11 w-11 items-center justify-center rounded-lg text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 lg:h-10 lg:w-10"><Phone size={17} aria-hidden="true" /></button>
-                <button type="button" aria-label="Text client" title="Text" onClick={() => window.dispatchEvent(new CustomEvent('luxor-open-text', { detail: { inquiryId: lead.id, phone: lead.phone, contactName: lead.full_name } }))} className="inline-flex h-11 w-11 items-center justify-center rounded-lg text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 lg:h-10 lg:w-10"><MessageSquare size={17} aria-hidden="true" /></button>
+                <button type="button" aria-label="Call client" title="Call" onClick={() => startLuxorBrowserCall({ phoneNumber: lead.phone!, contactName: lead.full_name, inquiryId: lead.id })} className="inline-flex h-11 w-11 items-center justify-center rounded-lg text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 lg:h-10 lg:w-10 cursor-pointer"><Phone size={17} aria-hidden="true" /></button>
+                <button type="button" aria-label="Text client" title="Text" onClick={() => window.dispatchEvent(new CustomEvent('luxor-open-text', { detail: { inquiryId: lead.id, phone: lead.phone, contactName: lead.full_name } }))} className="inline-flex h-11 w-11 items-center justify-center rounded-lg text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 lg:h-10 lg:w-10 cursor-pointer"><MessageSquare size={17} aria-hidden="true" /></button>
               </> : null}
-              {lead.email ? <button type="button" aria-label="Email client" title="Email" onClick={() => window.dispatchEvent(new CustomEvent('luxor-compose-email', { detail: { lead, purpose: 'inquiry-response', initialSubject: `Your ${lead.event_type?.trim() || 'event'} inquiry at Luxor` } }))} className="inline-flex h-11 w-11 items-center justify-center rounded-lg text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 lg:h-10 lg:w-10"><Mail size={17} aria-hidden="true" /></button> : null}
+              {lead.email ? <button type="button" aria-label="Email client" title="Email" onClick={() => window.dispatchEvent(new CustomEvent('luxor-compose-email', { detail: { lead, purpose: 'inquiry-response', initialSubject: `Your ${lead.event_type?.trim() || 'event'} inquiry at Luxor` } }))} className="inline-flex h-11 w-11 items-center justify-center rounded-lg text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 lg:h-10 lg:w-10 cursor-pointer"><Mail size={17} aria-hidden="true" /></button> : null}
             </div>
             ) : null}
             <div className={`absolute right-4 top-4 z-10 pl-1 sm:right-5 sm:top-5 md:relative md:right-auto md:top-auto md:z-auto ${!lead.is_test && (lead.phone || lead.email) ? 'lg:mt-1' : ''}`}>
@@ -5481,7 +5560,7 @@ export default function LeadDetailPage({
           </div>
         </div>
 
-        <section aria-label="Lead essentials" className="grid grid-cols-2 gap-x-4 gap-y-3 border-t border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/45 px-4 py-4 sm:grid-cols-3 sm:px-5 xl:grid-cols-6">
+        <section aria-label="Lead essentials" className="grid grid-cols-2 border-t border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/45 sm:grid-cols-3 xl:grid-cols-6">
           {(isNewsletter ? [
             { label: 'Current stage', value: activeStage.replaceAll('_', ' ') },
             { label: 'Contact', value: lead.full_name },
@@ -5496,9 +5575,29 @@ export default function LeadDetailPage({
             { label: 'Tour', value: lead.preferred_tour_date ? `${formatDisplayDate(lead.preferred_tour_date)}${lead.preferred_tour_time ? ` · ${formatTimeString(lead.preferred_tour_time)}` : ''}` : 'Not scheduled' },
             { label: 'Guests', value: displayGuestCount ? `${displayGuestCount} expected` : 'Not captured' },
             { label: 'Package Interest', value: currentEventPackageInterest || 'Not captured' },
-          ]).map((item) => (
-            <div key={item.label} className="min-w-0 py-1">
-              <p className="text-xs font-medium text-[color:var(--portal-muted)]">{item.label}</p>
+          ]).map((item, idx) => (
+            <div
+              key={item.label}
+              className={`min-w-0 px-4 py-3.5 sm:px-5 ${
+                idx > 0 ? 'border-[color:var(--portal-border)]/70 sm:border-l' : ''
+              } ${idx >= 2 ? 'border-t border-[color:var(--portal-border)]/70 xl:border-t-0' : idx === 1 ? 'border-l border-[color:var(--portal-border)]/70' : ''}`}
+            >
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[color:var(--portal-muted)]">{item.label}</p>
+                {item.label === 'Current stage' && selectedStageOverride && selectedStageOverride !== activeStage ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedStageOverride(null)
+                      setActiveLeadTab('overview')
+                    }}
+                    className="rounded-full border border-[#caa24c]/35 bg-[#caa24c]/12 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-[#8c6529] transition-colors hover:bg-[#caa24c]/20 dark:text-[#f1d27a] cursor-pointer"
+                    title="Reset stage preview to current stage"
+                  >
+                    Viewing {selectedStageOverride.replaceAll('_', ' ')} · Reset
+                  </button>
+                ) : null}
+              </div>
               <p className="mt-1 break-words text-sm font-semibold capitalize text-[color:var(--portal-text)]" title={item.value}>{item.value}</p>
             </div>
           ))}
@@ -5625,7 +5724,7 @@ export default function LeadDetailPage({
       </> : null}
 
       {activeLeadTab === 'overview' || activeLeadTab === 'planning' ? (
-        <div className={`mt-4 ${activeLeadTab === 'overview' ? '' : 'pb-12 sm:pb-16'}`}>
+        <div className="mt-4">
           {/* Workspace content */}
           <div className="min-w-0 space-y-5">
             {activeLeadTab === 'planning' && isLuxorTestInquiry(lead) && activeTestRunId ? <LuxorTestLeadWorkflow leadName={lead.full_name} runId={activeTestRunId} section="planning" onOpenProposal={() => openProposalBuilder()} /> : null}
@@ -7387,108 +7486,140 @@ export default function LeadDetailPage({
 
         </div>
       ) : null}
-      {activeLeadTab !== 'planning' ? (
-      <div className="mt-3 grid min-w-0 grid-cols-1 gap-5 pb-12 sm:pb-16">
-          {activeLeadTab === 'overview' || activeLeadTab === 'activity' || activeLeadTab === 'messages' || activeLeadTab === 'notes' || activeLeadTab === 'delivery' ? (
-            <div className="min-w-0 space-y-6">
-              {activeLeadTab === 'overview' ? <h2 className="px-1 text-base font-semibold text-[color:var(--portal-text)]">Activity</h2> : null}
-              {activeLeadTab === 'notes' ? (
-                <form
-                  onSubmit={handlePostNote}
-                  className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-4 sm:p-5"
-                >
-                  <div className="mb-4 flex flex-wrap items-center justify-between gap-3 border-b border-[color:var(--portal-border)] pb-3">
-                    <div>
-                      <h3 className="flex items-center gap-2.5 text-base font-semibold text-[color:var(--portal-text)]">
-                        <NotebookPen size={16} className="text-[color:var(--portal-muted)]" />
-                        Add a note
+      <div className="mt-4 grid min-w-0 grid-cols-1 gap-5 pb-12 sm:pb-16">
+          <div className="order-2 min-w-0 space-y-5">
+            {activeLeadTab === 'messages' ? (
+              <LuxorTextThread inquiryId={lead.id} phone={lead.phone} contactName={lead.full_name} />
+            ) : null}
+
+            {activeLeadTab === 'delivery' ? (
+              <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-xl shadow-black/10 luxor-soft-enter">
+                <div className="mb-4 flex items-center justify-between gap-3 border-b border-[color:var(--portal-border)] pb-3">
+                  <div>
+                    <p className="text-sm font-semibold text-[color:var(--portal-text)]">Tour email delivery</p>
+                    <p className="mt-1 text-xs leading-5 text-[color:var(--portal-muted)]">Confirmations, reminders, and scheduled send times</p>
+                  </div>
+                  <button type="button" onClick={() => openTourScheduleModal('new_visit')} disabled={!lead.email} className="rounded-lg border border-[#caa24c]/25 bg-[#caa24c]/10 px-3 py-2 text-[9px] font-black uppercase tracking-wider text-[#caa24c] disabled:opacity-40">
+                    Schedule Tour
+                  </button>
+                </div>
+                {tourEmailJobs.length === 0 ? (
+                  <p className="rounded-xl border border-dashed border-[color:var(--portal-border)] px-4 py-6 text-center text-sm text-[color:var(--portal-muted)]">No tour emails have been saved for this client yet.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {tourEmailJobs.map((job) => (
+                      <div key={job.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-[color:var(--portal-soft)] px-4 py-3">
+                        <div className="min-w-0">
+                          <p className="break-words text-sm font-semibold text-[color:var(--portal-text)]">{decodeHtmlEntities(job.subject)}</p>
+                          <p className="mt-1 text-xs leading-5 text-[color:var(--portal-muted)]">
+                            {job.job_type.replaceAll('_', ' ')} · {job.sent_at ? `Sent ${formatTimelineDate(job.sent_at)}` : `Scheduled ${formatTimelineDate(job.scheduled_for)}`}
+                          </p>
+                          {job.last_error ? <p className="mt-1 text-[10px] text-red-400">{job.last_error}</p> : null}
+                        </div>
+                        <PortalStatusBadge status={job.status} borderless />
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </section>
+            ) : null}
+
+            <div className="flex flex-wrap items-center justify-between gap-2 px-1 pt-1">
+              <div className="flex items-center gap-2.5">
+                <h2 className="text-base font-semibold text-[color:var(--portal-text)]">Activity</h2>
+                <span className="rounded-full border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-2.5 py-0.5 text-[11px] font-semibold tabular-nums text-[color:var(--portal-muted)]">
+                  {activityEntries.length.toLocaleString()} {activityEntries.length === 1 ? 'item' : 'items'}
+                </span>
+              </div>
+              <p className="text-xs text-[color:var(--portal-muted)]">
+                Communication and event history across all stages
+              </p>
+            </div>
+
+            {activeLeadTab === 'notes' ? (
+              <form
+                onSubmit={handlePostNote}
+                className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-4 shadow-sm sm:p-5"
+              >
+                <div className="mb-3.5 flex flex-wrap items-center justify-between gap-3 border-b border-[color:var(--portal-border)] pb-3">
+                  <div>
+                    <div className="flex items-center gap-2.5">
+                      <h3 className="flex items-center gap-2 text-sm font-semibold text-[color:var(--portal-text)]">
+                        <NotebookPen size={16} className="text-[#a8792f] dark:text-[#caa24c]" />
+                        General Account Notes
                       </h3>
-                      <p className="mt-1 text-xs text-[color:var(--portal-muted)]">Save a private note to this client record.</p>
+                      <span className="rounded-full border border-[#caa24c]/30 bg-[#caa24c]/10 px-2 py-0.5 text-[10px] font-bold tabular-nums text-[#8c6529] dark:text-[#f1d27a]">
+                        {notes.filter((note) => note.note_type !== 'status_change').length} saved
+                      </span>
                     </div>
+                    <p className="mt-0.5 text-xs text-[color:var(--portal-muted)]">
+                      Save a general note on this account — every note is recorded as an activity entry below.
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setActiveFeedTab((current) => (current === 'notes' ? 'all' : 'notes'))}
+                      className={`min-h-9 rounded-lg border px-2.5 text-xs font-semibold transition-colors cursor-pointer ${
+                        activeFeedTab === 'notes'
+                          ? 'border-[#caa24c]/45 bg-[#caa24c]/15 text-[#8c6529] dark:text-[#f1d27a]'
+                          : 'border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]'
+                      }`}
+                    >
+                      {activeFeedTab === 'notes' ? 'Showing notes only' : 'Filter to notes'}
+                    </button>
                     <PortalSelect
                       value={noteType}
                       onChange={(value) => setNoteType(value as typeof noteType)}
                       options={[
-                        { value: 'note', label: 'Note' },
-                        { value: 'call_log', label: 'Call' },
-                        { value: 'email_log', label: 'Email' },
+                        { value: 'note', label: 'General Note' },
+                        { value: 'call_log', label: 'Call Note' },
+                        { value: 'email_log', label: 'Email Note' },
                       ]}
                     />
                   </div>
+                </div>
 
-                  <textarea
-                    aria-label="Private note"
-                    value={noteContent}
-                    onChange={(event) => setNoteContent(event.target.value)}
-                    placeholder="Type the note here..."
-                    className="min-h-32 w-full rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-4 text-sm leading-6 text-[color:var(--portal-text)] outline-none transition-colors placeholder:text-[color:var(--portal-muted)] focus-visible:ring-2 focus-visible:ring-[#caa24c]/45"
-                  />
+                <textarea
+                  id="lead-account-notes-input"
+                  aria-label="Private note"
+                  rows={3}
+                  value={noteContent}
+                  onChange={(event) => setNoteContent(event.target.value)}
+                  placeholder="Write a general note on this account (preferences, family details, call takeaways, or special requests)..."
+                  className="min-h-24 w-full rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-3.5 text-sm leading-6 text-[color:var(--portal-text)] outline-none transition-colors placeholder:text-[color:var(--portal-muted)] focus:border-[#caa24c]/45 focus-visible:ring-2 focus-visible:ring-[#caa24c]/45"
+                />
 
-                  <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
-                    <div className="flex flex-wrap gap-2">
-                      {quickNoteTemplates.map((template) => (
-                        <button
-                          key={template.label}
-                          type="button"
-                          onClick={() => {
-                            setNoteType(template.type)
-                            setNoteContent(template.value)
-                          }}
-                          className="min-h-10 rounded-lg px-3 py-2 text-xs font-medium text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45"
-                        >
-                          {template.label}
-                        </button>
-                      ))}
-                    </div>
-                    <PortalButton
-                      type="submit"
-                      disabled={submittingNote || !noteContent.trim()}
-                      variant="primary"
-                    >
-                      <Send size={12} />
-                      {submittingNote ? 'Saving...' : 'Save Note'}
-                    </PortalButton>
+                <div className="mt-3.5 flex flex-wrap items-center justify-between gap-3">
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <span className="mr-1 text-[10px] font-bold uppercase tracking-wider text-[color:var(--portal-muted)]">Quick add:</span>
+                    {quickNoteTemplates.map((template) => (
+                      <button
+                        key={template.label}
+                        type="button"
+                        onClick={() => {
+                          setNoteType(template.type)
+                          setNoteContent(template.value)
+                        }}
+                        className="min-h-8 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/70 px-2.5 py-1 text-xs font-medium text-[color:var(--portal-muted)] transition-colors hover:border-[#caa24c]/35 hover:bg-[#caa24c]/10 hover:text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 cursor-pointer"
+                      >
+                        {template.label}
+                      </button>
+                    ))}
                   </div>
-                </form>
-              ) : null}
+                  <PortalButton
+                    type="submit"
+                    disabled={submittingNote || !noteContent.trim()}
+                    variant="primary"
+                  >
+                    <Send size={12} />
+                    {submittingNote ? 'Saving...' : 'Save Note'}
+                  </PortalButton>
+                </div>
+              </form>
+            ) : null}
 
-              {activeLeadTab === 'messages' ? (
-                <LuxorTextThread inquiryId={lead.id} phone={lead.phone} contactName={lead.full_name} />
-              ) : null}
-
-              {activeLeadTab === 'delivery' ? (
-                <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-xl shadow-black/10 luxor-soft-enter">
-                  <div className="mb-4 flex items-center justify-between gap-3 border-b border-[color:var(--portal-border)] pb-3">
-                    <div>
-                      <p className="text-sm font-semibold text-[color:var(--portal-text)]">Tour email delivery</p>
-                      <p className="mt-1 text-xs leading-5 text-[color:var(--portal-muted)]">Confirmations, reminders, and scheduled send times</p>
-                    </div>
-                    <button type="button" onClick={() => openTourScheduleModal('new_visit')} disabled={!lead.email} className="rounded-lg border border-[#caa24c]/25 bg-[#caa24c]/10 px-3 py-2 text-[9px] font-black uppercase tracking-wider text-[#caa24c] disabled:opacity-40">
-                      Schedule Tour
-                    </button>
-                  </div>
-                  {tourEmailJobs.length === 0 ? (
-                    <p className="rounded-xl border border-dashed border-[color:var(--portal-border)] px-4 py-6 text-center text-sm text-[color:var(--portal-muted)]">No tour emails have been saved for this client yet.</p>
-                  ) : (
-                    <div className="space-y-2">
-                      {tourEmailJobs.map((job) => (
-                        <div key={job.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-[color:var(--portal-soft)] px-4 py-3">
-                          <div className="min-w-0">
-                            <p className="break-words text-sm font-semibold text-[color:var(--portal-text)]">{decodeHtmlEntities(job.subject)}</p>
-                            <p className="mt-1 text-xs leading-5 text-[color:var(--portal-muted)]">
-                              {job.job_type.replaceAll('_', ' ')} · {job.sent_at ? `Sent ${formatTimelineDate(job.sent_at)}` : `Scheduled ${formatTimelineDate(job.scheduled_for)}`}
-                            </p>
-                            {job.last_error ? <p className="mt-1 text-[10px] text-red-400">{job.last_error}</p> : null}
-                          </div>
-                          <PortalStatusBadge status={job.status} borderless />
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </section>
-              ) : null}
-
-              {activeLeadTab !== 'messages' && activeLeadTab !== 'delivery' ? <>
+            {activeLeadTab !== 'messages' && activeLeadTab !== 'delivery' ? <>
               <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-4 shadow-xl shadow-black/10">
                 <PortalFilterBar
                   searchValue={activitySearch}
@@ -7699,10 +7830,10 @@ export default function LeadDetailPage({
                 </div>
               )}
               </> : null}
-            </div>
-          ) : null}
+          </div>
 
-          <div className="min-w-0 space-y-5">
+          {['tasks', 'vendors', 'timeline', 'proposals', 'documents', 'contract', 'payments'].includes(activeLeadTab) ? (
+          <div className="order-1 min-w-0 space-y-5">
           {activeLeadTab === 'tasks' ? (
           <div id="lead-tasks" className="scroll-mt-24 rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-4 sm:p-5">
             <div className="mb-4 flex flex-wrap items-center justify-between gap-3 border-b border-[color:var(--portal-border)] pb-3">
@@ -8072,7 +8203,7 @@ export default function LeadDetailPage({
           ) : null}
 
           {activeLeadTab === 'proposals' ? (
-          <section id="lead-proposals" className="nodal-void-card rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 pb-[calc(7rem+env(safe-area-inset-bottom))] sm:p-6 sm:pb-6 backdrop-blur-xl shadow-2xl luxor-soft-enter scroll-mt-24">
+          <section id="lead-proposals" className="nodal-void-card rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 sm:p-6 backdrop-blur-xl shadow-2xl luxor-soft-enter scroll-mt-24">
             {isLuxorTestInquiry(lead) && activeTestRunId ? <LuxorTestLeadWorkflow leadName={lead.full_name} runId={activeTestRunId} section="proposals" onOpenProposal={() => openProposalBuilder()} /> : null}
             <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
               <div>
@@ -8679,8 +8810,8 @@ export default function LeadDetailPage({
               />
           ) : null}
         </div>
+          ) : null}
       </div>
-      ) : null}
 
       {typeof document !== 'undefined' ? createPortal(
         <LeadMobileActionBar
@@ -9578,6 +9709,17 @@ export default function LeadDetailPage({
         }}
       />
 
+      <LeadNotesQuickTab
+        leadName={lead?.full_name || 'Contact'}
+        noteContent={noteContent}
+        onNoteContentChange={setNoteContent}
+        noteType={noteType}
+        onNoteTypeChange={setNoteType}
+        submitting={submittingNote}
+        onSubmit={handlePostNote}
+        notesCount={notes.filter((note) => note.note_type !== 'status_change').length}
+        leadContext={leadNoteContext}
+      />
     </PortalPageFrame>
   )
 }
@@ -9978,7 +10120,7 @@ function LeadLifecycleRail({
   const getStageIdFromStepId = (stepId: string) => {
     if (stepId === 'proposal_sent' || stepId === 'proposal_accepted' || stepId === 'proposal') return 'proposal'
     if (stepId === 'event') return 'event'
-    if (stepId === 'complete') return 'closing'
+    if (stepId === 'complete') return 'complete'
     return stepId
   }
 
@@ -10048,7 +10190,7 @@ function LeadLifecycleRail({
   return (
     <div>
       {/* Compact stage summary for phones and tablets. */}
-      <div className="xl:hidden" onKeyDown={(event) => {
+      <div className="lg:hidden" onKeyDown={(event) => {
         if (event.key !== 'Escape' || !mobileRailExpanded) return
         event.preventDefault()
         setMobileRailExpanded(false)
@@ -10149,8 +10291,8 @@ function LeadLifecycleRail({
       </div>
 
       {/* Horizontal stage rail for wide desktop layouts. */}
-      <div className="portal-scrollbar hidden overflow-x-auto pb-1 xl:block">
-        <div className="relative flex min-w-[760px] items-center justify-between px-4 py-2.5 sm:min-w-[920px] sm:px-6">
+      <div className="portal-scrollbar hidden overflow-x-auto pb-1 lg:block">
+        <div className="relative flex min-w-[680px] items-center justify-between px-3 py-2.5 xl:min-w-[880px] xl:px-6">
           {/* Base Track Line */}
           <div className="absolute left-[5%] right-[5%] top-[26px] h-[2px] rounded-full bg-[color:var(--portal-border)]" />
           {/* Active Gold Fill Line */}
