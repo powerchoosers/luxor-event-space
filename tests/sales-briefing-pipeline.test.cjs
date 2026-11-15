@@ -95,7 +95,7 @@ test('briefing subject uses Marcus headline when ready', () => {
       marcusBriefingReady: true,
       headline: 'Lead with follow-ups before noon.',
     }),
-    'Sales briefing: Lead with follow-ups before noon',
+    'Luxor sales briefing: Lead with follow-ups before noon',
   )
 })
 
@@ -106,7 +106,7 @@ test('briefing subject strips a trailing period from the Marcus headline', () =>
       marcusBriefingReady: true,
       headline: 'Chase deposits today...',
     }),
-    'Sales briefing: Chase deposits today...',
+    'Luxor sales briefing: Chase deposits today...',
   )
 })
 
@@ -143,6 +143,6 @@ test('briefing subject replaces em dashes in Marcus headlines', () => {
       marcusBriefingReady: true,
       headline: 'Tours first — proposals second',
     }),
-    'Sales briefing: Tours first: proposals second',
+    'Luxor sales briefing: Tours first: proposals second',
   )
 })

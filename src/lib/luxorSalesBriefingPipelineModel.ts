@@ -31,7 +31,7 @@ export function buildLuxorSalesBriefingSubject(input: {
   const rawHeadline = input.marcusBriefingReady ? input.headline?.trim() : ''
   if (rawHeadline) {
     const headline = stripTrailingPeriodForSubject(sanitizeLuxorSalesBriefingCopy(rawHeadline))
-    return `Sales briefing: ${headline}`
+    return `Luxor sales briefing: ${headline}`
   }
   return `Luxor sales briefing: ${formatLuxorSalesBriefingChicagoTitle(input.briefingDateKey)}`
 }
