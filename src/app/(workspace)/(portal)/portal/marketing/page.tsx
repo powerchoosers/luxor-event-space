@@ -299,6 +299,7 @@ function MarketingPageContent() {
   // Campaign & Inquiries lists database states
   const [campaigns, setCampaigns] = useState<Campaign[]>([])
   const [inquiries, setInquiries] = useState<LuxorInquiry[]>([])
+  const [bookedAttributionInquiryIds, setBookedAttributionInquiryIds] = useState<string[]>([])
   const [marketingActivity, setMarketingActivity] = useState<MarketingActivityEvent[]>([])
   
   // Loaders
@@ -367,6 +368,17 @@ function MarketingPageContent() {
     }
   }, [])
 
+  const loadBookedAttributionInquiryIds = useCallback(async () => {
+    try {
+      const response = await fetch('/api/marketing/lead-attribution-booked', { cache: 'no-store' })
+      if (!response.ok) return
+      const payload = await response.json() as { inquiryIds?: string[] }
+      setBookedAttributionInquiryIds(Array.isArray(payload.inquiryIds) ? payload.inquiryIds : [])
+    } catch (err) {
+      if (!isTransientFetchError(err)) console.error('Failed to load booked attribution inquiry ids:', err)
+    }
+  }, [])
+
   // 2b. Fetch marketing subscriber lists
   const [marketingLists, setMarketingLists] = useState<MarketingList[]>([])
   const [loadingLists, setLoadingLists] = useState(true)
@@ -390,10 +402,11 @@ function MarketingPageContent() {
     const frame = window.requestAnimationFrame(() => {
       void loadCampaigns()
       void loadInquiries()
+      void loadBookedAttributionInquiryIds()
       void loadMarketingLists()
     })
     return () => window.cancelAnimationFrame(frame)
-  }, [loadCampaigns, loadInquiries, loadMarketingLists])
+  }, [loadCampaigns, loadInquiries, loadBookedAttributionInquiryIds, loadMarketingLists])
 
   // Watchers for Elena AI drafts and changes
   useEffect(() => {
@@ -574,9 +587,10 @@ function MarketingPageContent() {
     await Promise.all([
       loadCampaigns({ silent: true }),
       loadInquiries({ silent: true }),
+      loadBookedAttributionInquiryIds(),
       loadMarketingLists({ silent: true }),
     ])
-  }, [loadCampaigns, loadInquiries, loadMarketingLists])
+  }, [loadCampaigns, loadInquiries, loadBookedAttributionInquiryIds, loadMarketingLists])
 
   useEffect(() => {
     let refreshing = false
@@ -970,6 +984,7 @@ function MarketingPageContent() {
             {activeTab === 'sources' && (
               <LeadSourcesTab
                 inquiries={inquiries}
+                bookedInquiryIds={bookedAttributionInquiryIds}
                 loading={loadingInquiries}
                 onFilterSource={handleFilterSource}
               />

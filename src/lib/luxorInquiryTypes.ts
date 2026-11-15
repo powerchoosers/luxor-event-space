@@ -429,6 +429,26 @@ export function isLuxorNonRevenueTestInquiry(inquiry: Pick<LuxorInquiry, 'id' | 
     || LUXOR_OWNER_CONFIRMED_LEGACY_TEST_INQUIRY_IDS.has(inquiry?.id || '')
 }
 
+const LUXOR_BOOKED_PIPELINE_STAGES = new Set<LuxorPipelineStage>([
+  'deposit',
+  'planning',
+  'final_payment',
+  'event',
+  'closing',
+])
+
+/** Booked for marketing attribution: pipeline stage or explicit booking/deposit linkage, not status alone. */
+export function isLuxorInquiryBookedForAttribution(
+  inquiry: Pick<LuxorInquiry, 'id' | 'pipeline_stage' | 'status' | 'metadata'>,
+  bookedInquiryIds?: ReadonlySet<string>,
+) {
+  const stage = inquiry.pipeline_stage
+  if (stage && LUXOR_BOOKED_PIPELINE_STAGES.has(stage)) return true
+  if (bookedInquiryIds?.has(inquiry.id)) return true
+  if (inquiry.metadata?.deposit_paid_at) return true
+  return false
+}
+
 export function isLuxorNonRevenuePublicEvent(
   event: { inquiry_id?: string | null; metadata?: Record<string, unknown> | null },
   testInquiryIds: ReadonlySet<string>,

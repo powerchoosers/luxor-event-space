@@ -6,6 +6,7 @@ import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'
 import { PublicEventDatePicker } from '@/components/PublicEventDatePicker'
 import { LuxorEventTypeCombobox } from '@/components/LuxorEventTypeCombobox'
 import Link from 'next/link'
+import { getLuxorPublicAttribution, getLuxorPublicSessionId } from '@/lib/luxorPublicAttribution'
 import { submitLuxorIdempotentForm } from '@/lib/luxorSubmissionIdempotency'
 import { LUXOR_INQUIRY_SMS_DISCLOSURE, LUXOR_MARKETING_EMAIL_DISCLOSURE, LUXOR_MARKETING_SMS_DISCLOSURE } from '@/lib/luxorInquiryTypes'
 import { focusPublicConfirmation } from '@/lib/focusPublicConfirmation'
@@ -102,6 +103,8 @@ export function LuxorBrochureForm({ className = '' }: { className?: string }) {
         smsOptIn: smsCustomerCareConsent,
         smsMarketingOptIn: smsMarketingConsent,
         pagePath: typeof window === 'undefined' ? '/' : window.location.pathname,
+        sessionId: getLuxorPublicSessionId(),
+        attribution: getLuxorPublicAttribution(),
         metadata: {
           leadSource: 'Homepage Brochure Form',
           browserTimeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
