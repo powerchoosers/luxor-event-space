@@ -3,10 +3,17 @@ import Link from 'next/link'
 
 export const metadata: Metadata = {
   title: {
-    absolute: 'Luxor at Las Palmas Events | Bodas y celebraciones en San Antonio',
+    absolute: 'Luxor at Las Palmas Events | Quinceañeras, bodas y celebraciones en San Antonio',
   },
   description: 'Un espacio moderno para bodas, quinceañeras y celebraciones privadas en San Antonio.',
-  alternates: { canonical: '/es' },
+  alternates: {
+    canonical: '/es',
+    languages: {
+      'en-US': '/',
+      'es-US': '/es',
+      'x-default': '/',
+    },
+  },
 }
 
 export default function SpanishHomePage() {
