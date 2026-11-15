@@ -514,7 +514,8 @@ export function PortalSettingsManager({
 
   return (
     <div className={`w-full ${isModal ? '' : 'max-w-3xl'} space-y-5`}>
-      <PortalTabTransition activeKey={activeTab} className="space-y-5">
+      {activeTab === 'funnelGoals' && !isAgent ? <FunnelGoalsSettingsPanel /> : null}
+      {activeTab !== 'funnelGoals' ? <PortalTabTransition activeKey={activeTab} className="space-y-5">
         {/* VENUE INFORMATION */}
         {activeTab === 'business' && (
           <div className="space-y-5">
@@ -1101,7 +1102,6 @@ export function PortalSettingsManager({
           </div>
         )}
 
-        {activeTab === 'funnelGoals' && !isAgent && <FunnelGoalsSettingsPanel />}
 
         {/* PROMOTIONS */}
         {activeTab === 'promotions' && <PromotionManager />}
@@ -1170,7 +1170,7 @@ export function PortalSettingsManager({
             <TourAvailabilityManager />
           </section>
         )}
-      </PortalTabTransition>
+      </PortalTabTransition> : null}
 
       {/* Delete Brand Asset Confirmation Modal */}
       <PortalModal

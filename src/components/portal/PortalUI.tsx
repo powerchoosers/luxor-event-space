@@ -627,8 +627,8 @@ export function PortalAnimatedTabs<T extends string>({
             aria-pressed={isActive}
             onClick={() => onTabChange(tab.id)}
             className={`${isSlider
-              ? `relative isolate inline-flex min-h-9 shrink-0 items-center gap-2 rounded-lg px-3.5 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 ${isActive ? 'text-[#9a712e] dark:text-[#e6c77f]' : 'text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]'}`
-              : `relative inline-flex shrink-0 items-center gap-2 whitespace-nowrap px-0 py-1.5 text-xs font-semibold transition-colors ${isActive ? 'text-[#a8792f]' : 'text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]'}`} ${buttonClassName}`}
+              ? `relative isolate inline-flex min-h-9 shrink-0 items-center gap-2 rounded-lg px-3.5 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 ${isActive ? 'text-[color:var(--portal-text)]' : 'text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]'}`
+              : `relative inline-flex shrink-0 items-center gap-2 whitespace-nowrap px-0 py-1.5 text-xs font-semibold transition-colors ${isActive ? 'text-[color:var(--portal-text)]' : 'text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]'}`} ${buttonClassName}`}
           >
             {isSlider && isActive ? (
               <motion.span
@@ -1320,7 +1320,7 @@ export function PortalEmptyState({
   )
 }
 
-export type PortalStatusTone = 'red' | 'blue' | 'gold' | 'green' | 'purple' | 'neutral'
+export type PortalStatusTone = 'red' | 'blue' | 'gold' | 'green' | 'purple' | 'neutral' | 'warning'
 
 const STATUS_TONES: Record<string, PortalStatusTone> = {
   overdue: 'red', error: 'red', failed: 'red', no_show: 'red', urgent: 'red',
@@ -1332,12 +1332,29 @@ const STATUS_TONES: Record<string, PortalStatusTone> = {
 }
 
 const STATUS_TONE_STYLES: Record<PortalStatusTone, string> = {
-  red: 'border-rose-200/80 bg-rose-50/90 text-rose-800 dark:border-rose-400/25 dark:bg-rose-500/10 dark:text-rose-300',
-  blue: 'border-sky-200/80 bg-sky-50/90 text-sky-800 dark:border-sky-400/25 dark:bg-sky-500/10 dark:text-sky-300',
-  gold: 'border-[#dfc98f]/80 bg-[#fbf5e7] text-[#76591f] dark:border-[#caa24c]/30 dark:bg-[#caa24c]/10 dark:text-[#f1d27a]',
-  green: 'border-emerald-200/80 bg-emerald-50/90 text-emerald-800 dark:border-emerald-400/25 dark:bg-emerald-500/10 dark:text-emerald-300',
-  purple: 'border-violet-200/80 bg-violet-50/90 text-violet-800 dark:border-violet-400/25 dark:bg-violet-500/10 dark:text-violet-300',
-  neutral: 'border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] text-[color:var(--portal-muted)]',
+  red: 'bg-rose-50/90 text-rose-800 dark:bg-rose-500/10 dark:text-rose-300',
+  blue: 'bg-sky-50/90 text-sky-800 dark:bg-sky-500/10 dark:text-sky-300',
+  gold: 'bg-[#fbf5e7] text-[#76591f] dark:bg-[#caa24c]/10 dark:text-[#f1d27a]',
+  green: 'bg-emerald-50/90 text-emerald-800 dark:bg-emerald-500/10 dark:text-emerald-300',
+  purple: 'bg-violet-50/90 text-violet-800 dark:bg-violet-500/10 dark:text-violet-300',
+  neutral: 'bg-[color:var(--portal-soft)] text-[color:var(--portal-muted)]',
+  warning: 'bg-amber-100 text-amber-950 dark:bg-amber-500/20 dark:text-amber-200',
+}
+
+export function PortalBadge({
+  children,
+  tone = 'neutral',
+  className = '',
+}: {
+  children: React.ReactNode
+  tone?: PortalStatusTone
+  className?: string
+}) {
+  return (
+    <span className={`inline-flex min-h-5 items-center gap-1 rounded-md border-0 px-2 py-0.5 text-[10px] font-semibold leading-none ${STATUS_TONE_STYLES[tone]} ${className}`}>
+      <span className="relative -top-px inline-flex items-center gap-1">{children}</span>
+    </span>
+  )
 }
 
 function formatStatusText(s: string) {
@@ -1369,18 +1386,15 @@ export function PortalCountBadge({
   )
 }
 
-export const PortalStatusBadge = React.memo(function PortalStatusBadge({ status, tone, warning = false, borderless = false }: { status: string; tone?: PortalStatusTone; warning?: boolean; borderless?: boolean }) {
+export const PortalStatusBadge = React.memo(function PortalStatusBadge({ status, tone, warning = false }: { status: string; tone?: PortalStatusTone; warning?: boolean; borderless?: boolean }) {
   const normalized = status.toLowerCase().replace(/\s+/g, '_')
-  const badgeStyle = STATUS_TONE_STYLES[tone ?? STATUS_TONES[normalized] ?? 'neutral']
-  const warningStyle = borderless
-    ? 'bg-amber-100 text-amber-950 dark:bg-amber-500/20 dark:text-amber-200'
-    : 'border-dashed border-amber-700 bg-amber-100 text-amber-950 ring-1 ring-amber-500/60 dark:border-amber-300 dark:bg-amber-500/20 dark:text-amber-200'
+  const badgeTone = warning ? 'warning' : tone ?? STATUS_TONES[normalized] ?? 'neutral'
 
   return (
-    <span aria-label={warning ? `Warning: ${formatStatusText(status)}` : undefined} className={`inline-flex items-center gap-1.5 rounded-md ${borderless ? '' : 'border'} px-2 py-0.5 text-[11px] font-medium ${warning ? warningStyle : badgeStyle}`}>
+    <PortalBadge tone={badgeTone} className="gap-1.5 text-[11px] font-medium">
       {warning ? <AlertTriangle size={11} aria-hidden="true" /> : null}
       {formatStatusText(status)}
-    </span>
+    </PortalBadge>
   )
 })
 

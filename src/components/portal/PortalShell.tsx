@@ -679,9 +679,14 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
     const handleOpenNewLead = () => setIsNewLeadDrawerOpen(true)
     const handleOpenRecurringCost = () => setIsRecurringCostModalOpen(true)
     const handleOpenLogExpense = () => setIsLogExpenseModalOpen(true)
+    const handleOpenFunnelGoals = () => {
+      setSettingsModalInitialTab('funnelGoals')
+      setIsSettingsModalOpen(true)
+    }
 
     window.addEventListener('luxor-compose-email', handleComposeEvent)
     window.addEventListener('luxor-open-elena', handleOpenElena)
+    window.addEventListener('luxor:open-funnel-goals', handleOpenFunnelGoals)
     window.addEventListener('luxor-open-text', handleTextEvent)
     window.addEventListener('luxor-open-new-lead', handleOpenNewLead)
     window.addEventListener('luxor:open-new-lead', handleOpenNewLead)
@@ -692,6 +697,7 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
     return () => {
       window.removeEventListener('luxor-compose-email', handleComposeEvent)
       window.removeEventListener('luxor-open-elena', handleOpenElena)
+      window.removeEventListener('luxor:open-funnel-goals', handleOpenFunnelGoals)
       window.removeEventListener('luxor-open-text', handleTextEvent)
       window.removeEventListener('luxor-open-new-lead', handleOpenNewLead)
       window.removeEventListener('luxor:open-new-lead', handleOpenNewLead)
@@ -2147,7 +2153,10 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
       {isDesktopViewport ? (
         <PortalSettingsModal
           isOpen={isSettingsModalOpen}
-          onClose={() => setIsSettingsModalOpen(false)}
+          onClose={() => {
+            setIsSettingsModalOpen(false)
+            if (settingsModalInitialTab === 'funnelGoals') window.dispatchEvent(new Event('luxor:funnel-goals-closed'))
+          }}
           initialTab={settingsModalInitialTab}
           portalRole={role}
         />

@@ -42,6 +42,7 @@ import { MagicCard } from '@/components/ui/magic-card'
 import { LeadsFunnelDashboard } from '@/components/portal/LeadsFunnelDashboard'
 import { getDefaultFunnelWeekRange, getFunnelPeriodFromRange, type FunnelPeriod } from '@/lib/luxorFunnelPeriods'
 import type { PortalDateRange } from '@/components/portal/PortalDateRangeControl'
+import { PortalDateRangeControl } from '@/components/portal/PortalDateRangeControl'
 import { isFunnelInquiryEligible } from '@/lib/luxorFunnelEligibility'
 import { EnrollInWorkflowModal } from '@/components/portal/EnrollInWorkflowModal'
 
@@ -533,11 +534,22 @@ export default function LeadsPage() {
     </div>
   ) : null
 
+  const funnelDateRangeButton = activeTab === 'dashboard' ? (
+    <PortalDateRangeControl
+      range={funnelRange}
+      onRangeChange={setFunnelRange}
+      className="ml-2 hidden md:block"
+      dialogLabel="Choose funnel date range"
+      controlId="leads-funnel-period"
+    />
+  ) : null
+
   return (
     <PortalPageFrame className="flex-1 min-h-0 overflow-hidden max-md:pt-4">
       <PortalPageHeader
         icon={<Users size={18} />}
         title="Leads & Clients"
+        titleAccessory={funnelDateRangeButton}
         mobileActionsInline
         actions={
           <div className="flex flex-wrap items-center justify-end gap-3">
@@ -587,8 +599,6 @@ export default function LeadsPage() {
         {funnelPeriodControls}
       </div>
 
-      {funnelPeriodControls ? <div className="hidden shrink-0 md:flex xl:hidden">{funnelPeriodControls}</div> : null}
-
       {/* Desktop sub-tab navigation (hidden on mobile and tablet/iPad to prevent overflow scrolling) */}
       <div className="hidden xl:flex portal-scrollbar min-w-0 w-full max-w-full shrink-0 gap-2 overflow-x-auto pb-0">
         <PortalAnimatedTabs
@@ -611,8 +621,6 @@ export default function LeadsPage() {
           }}
         />
       </div>
-
-      {funnelPeriodControls ? <div className="hidden shrink-0 xl:flex">{funnelPeriodControls}</div> : null}
 
       {viewPreferencesReady ? <PortalTabTransition activeKey={activeTab} className={`flex-1 min-h-0 flex flex-col overflow-visible mt-0 max-md:![transform:none] max-md:![filter:none] ${activeTab === 'dashboard' ? '' : '-mx-4 sm:mx-0'}`}>
         {activeTab === 'dashboard' && (

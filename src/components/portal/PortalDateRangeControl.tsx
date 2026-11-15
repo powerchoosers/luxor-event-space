@@ -12,7 +12,7 @@ type PortalDateRangeControlProps = {
   range: PortalDateRange
   onRangeChange: (range: PortalDateRange) => void
   className?: string
-  alignment?: 'left' | 'right'
+  alignment?: 'left' | 'center' | 'right'
   dialogLabel?: string
   controlId?: string
   /** Shown on the trigger when set (for example the funnel week label). */
@@ -24,7 +24,7 @@ export function PortalDateRangeControl({
   range,
   onRangeChange,
   className = '',
-  alignment = 'left',
+  alignment = 'center',
   dialogLabel = 'Choose date range',
   controlId = 'portal-date-range',
   rangeLabel,
@@ -113,7 +113,7 @@ export function PortalDateRangeControl({
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={reduceMotion ? { opacity: 0 } : { opacity: 0, y: -4, scale: 0.99 }}
             transition={{ duration: reduceMotion ? 0.01 : 0.16, ease: [0.22, 1, 0.36, 1] }}
-            className={`absolute ${alignment === 'left' ? 'left-0' : 'right-0'} top-full z-50 mt-2 w-max max-w-[calc(100vw-2rem)] rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-4 shadow-[0_18px_48px_-24px_rgba(55,37,19,0.48)]`}
+            className={`absolute ${alignment === 'left' ? 'left-0' : alignment === 'right' ? 'right-0' : 'left-1/2 -translate-x-1/2'} top-full z-50 mt-2 w-max max-w-[calc(100vw-2rem)] rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-4 shadow-[0_18px_48px_-24px_rgba(55,37,19,0.48)]`}
           >
             <div className="flex w-max max-w-[calc(100vw-4rem)] items-center gap-2">{periodFields}</div>
           </motion.div>

@@ -151,8 +151,10 @@ export function PortalOverviewSkeleton() {
         <div className="grid auto-rows-fr grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-6">
           {/* Bookings Card Skeleton */}
           <div className="portal-card-surface flex h-full min-h-[156px] w-full flex-col rounded-2xl p-4 sm:min-h-[180px] sm:p-6">
-            <span className="text-[#caa24c] mb-3 block opacity-60"><Calendar size={22} strokeWidth={1.5} /></span>
-            <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[color:var(--portal-muted)] mb-1">BOOKINGS</p>
+            <div className="flex items-center gap-2 mb-3 opacity-60">
+              <Calendar size={22} strokeWidth={1.5} className="text-[#caa24c] shrink-0" />
+              <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[color:var(--portal-muted)]">BOOKINGS</p>
+            </div>
             <PortalSkeleton className="my-1 h-8 w-16 rounded-lg" />
             <PortalSkeleton className="mt-1 h-3 w-24 rounded opacity-60" />
           </div>
@@ -160,10 +162,10 @@ export function PortalOverviewSkeleton() {
           {/* Next Event Card Skeleton */}
           <div className="portal-card-surface flex h-full min-h-[156px] w-full flex-col justify-between rounded-2xl p-4 sm:min-h-[180px] sm:p-6 border border-[color:var(--portal-border)] bg-[color:var(--portal-card)]">
             <div>
-              <span className="text-[#caa24c] mb-3 block opacity-60">
-                <Calendar size={22} strokeWidth={1.5} />
-              </span>
-              <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[color:var(--portal-muted)] mb-1">NEXT EVENT</p>
+              <div className="flex items-center gap-2 mb-3 opacity-60">
+                <Calendar size={22} strokeWidth={1.5} className="text-[#caa24c] shrink-0" />
+                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[color:var(--portal-muted)]">NEXT EVENT</p>
+              </div>
               <div className="my-1 space-y-1.5">
                 <PortalSkeleton className="h-5 w-40 rounded-lg" />
                 <PortalSkeleton className="h-3.5 w-24 rounded opacity-70" />

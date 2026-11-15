@@ -351,6 +351,24 @@ body[data-portal-theme='light'] {
   color-scheme: light;
 }
 
+.portal-analytics-table tbody td {
+  position: relative;
+}
+
+.portal-analytics-table tbody td:first-child {
+  position: sticky;
+}
+
+.portal-analytics-table tbody td::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto;
+  height: 0.5px;
+  background: var(--portal-border);
+  opacity: 0.3;
+  pointer-events: none;
+}
+
 /* Universal golden checkbox styling with white checkmark for all native & custom checkboxes */
 input[type='checkbox'] {
   appearance: none;

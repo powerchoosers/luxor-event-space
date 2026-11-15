@@ -54,6 +54,7 @@ import { getLuxorRevenueCollectionsModel, type LuxorRevenueHistoryRow } from '@/
 import { BooksRecordsPage } from '@/components/portal/BooksRecordsPage'
 import { FinanceMainTabs } from '@/components/portal/FinanceMainTabs'
 import { FinanceBrowseViews, type FinanceBrowseView } from '@/components/portal/FinanceBrowseViews'
+import { PortalDateRangeControl } from '@/components/portal/PortalDateRangeControl'
 import type { LuxorInvoice, LuxorBooking, LuxorPayment, LuxorPaymentRefundView, LuxorBill } from '@/lib/luxorInquiryTypes'
 import type { LuxorPaymentInstallment } from '@/lib/luxorInquiryTypes'
 import { getLuxorBusinessFinanceRows, getLuxorFinanceOverview, getLuxorPaidExpenseBreakdown, getLuxorExpenseCashActivityInPeriod, getLuxorPaymentCalendarDateKey, type LuxorFinanceAllocationRow } from '@/lib/luxorFinanceReporting'
@@ -94,7 +95,6 @@ export default function FinancesPage() {
   const [selectedPaymentRecord, setSelectedPaymentRecord] = useState<LuxorRevenueHistoryRow | null>(null)
   const [paymentScheduleBookingId, setPaymentScheduleBookingId] = useState<string | null>(null)
   const [isViewPickerOpen, setIsViewPickerOpen] = useState(false)
-  const [isDateRangeOpen, setIsDateRangeOpen] = useState(false)
   const [invoices, setInvoices] = useState<LuxorInvoice[]>([])
   const [payments, setPayments] = useState<LuxorPayment[]>([])
   const [refunds, setRefunds] = useState<LuxorPaymentRefundView[]>([])
@@ -112,25 +112,6 @@ export default function FinancesPage() {
   const [searchTerm, setSearchTerm] = useState('')
 
   useEffect(() => { if (!loading) setFinanceViewsReady(true) }, [loading])
-
-  useEffect(() => {
-    if (!isDateRangeOpen) return
-    const dismissOutside = (event: PointerEvent) => {
-      const target = event.target
-      if (!(target instanceof Element)) return
-      if (target.closest('[data-finance-date-range-control="true"]') || target.closest('[data-portal-popover="true"]') || target.closest('[aria-label="Close calendar"]')) return
-      setIsDateRangeOpen(false)
-    }
-    const dismissOnEscape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setIsDateRangeOpen(false)
-    }
-    document.addEventListener('pointerdown', dismissOutside)
-    document.addEventListener('keydown', dismissOnEscape)
-    return () => {
-      document.removeEventListener('pointerdown', dismissOutside)
-      document.removeEventListener('keydown', dismissOnEscape)
-    }
-  }, [isDateRangeOpen])
 
 type LuxorBookingExpense = {
   id: string
@@ -437,39 +418,6 @@ type LuxorBookingExpense = {
     <div className="min-w-0 flex-1 md:w-[176px] md:flex-none" aria-label="To date"><PortalDatePicker value={overviewRange.end} onChange={(value) => { if (value) setOverviewRange((range) => ({ start: value < range.start ? value : range.start, end: value })) }} placeholder="To date" label="To date" triggerPrefix="To" triggerClassName="!min-h-10 !justify-start !gap-1.5 !px-2.5 !text-xs !border-[color:var(--portal-border)]" omitWeekday timeZone="America/Chicago" /></div>
   </>
   const periodControls = <div className="flex w-full items-center gap-2">{periodDateFields}</div>
-  const dateRangePopover = (alignment: 'left' | 'right') => <AnimatePresence initial={false}>
-    {isDateRangeOpen && <motion.div
-      key="finance-date-range-popover"
-      role="dialog"
-      aria-label="Choose finance date range"
-      aria-modal="false"
-      initial={reduceMotion ? false : { opacity: 0, y: -5, scale: 0.985 }}
-      animate={{ opacity: 1, y: 0, scale: 1 }}
-      exit={reduceMotion ? { opacity: 0 } : { opacity: 0, y: -4, scale: 0.99 }}
-      transition={{ duration: reduceMotion ? 0.01 : 0.16, ease: [0.22, 1, 0.36, 1] }}
-      className={`absolute ${alignment === 'left' ? 'left-0' : 'right-0'} top-full z-50 mt-2 w-max max-w-[calc(100vw-2rem)] rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-4 shadow-[0_18px_48px_-24px_rgba(55,37,19,0.48)]`}
-    >
-      <div className="flex w-max max-w-[calc(100vw-4rem)] items-center gap-2">{periodDateFields}</div>
-    </motion.div>}
-  </AnimatePresence>
-  const dateRangeButton = (className: string, alignment: 'left' | 'right') => <div className={`relative ${className}`} data-finance-date-range-control="true">
-    <button
-      type="button"
-      aria-haspopup="dialog"
-      aria-expanded={isDateRangeOpen}
-      onClick={() => setIsDateRangeOpen((open) => !open)}
-      className={`inline-flex min-h-10 items-center gap-2 rounded-xl border px-3 text-xs font-semibold transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 ${
-        isDateRangeOpen
-          ? 'border-[#caa24c]/60 bg-[#caa24c]/10 text-[#8c6420] shadow-sm dark:bg-[#caa24c]/15 dark:text-[#f3d48d]'
-          : 'border-[color:var(--portal-border)] bg-[color:var(--portal-card)] text-[color:var(--portal-text)] shadow-xs hover:border-[#caa24c]/45 hover:bg-[color:var(--portal-soft)]'
-      }`}
-    >
-      <CalendarDots aria-hidden="true" size={16} className="shrink-0 text-[#a8792f] dark:text-[#e6c77f]" />
-      <span>Date range</span>
-      <ChevronDown aria-hidden="true" size={14} className={`shrink-0 text-[color:var(--portal-muted)] transition-transform ${isDateRangeOpen ? 'rotate-180' : ''}`} />
-    </button>
-    {dateRangePopover(alignment)}
-  </div>
 
   const isPayables = ['expenses', 'bill-review', 'bill-providers', 'expense-recurring', 'expense-business', 'expense-events', 'expense-receipts', 'expense-detail'].includes(activeTab)
   const financesTableTabs = ['invoices', 'payments', 'bill-review', 'expense-recurring', 'expense-business', 'bill-providers'] as const
@@ -496,7 +444,7 @@ type LuxorBookingExpense = {
       <PortalPageHeader
         icon={<CurrencyDollar size={18} weight="regular" />}
         title="Finances"
-        titleAccessory={activeTab === 'dashboard' || activeTab === 'expenses' ? dateRangeButton('ml-2 hidden md:block', 'left') : undefined}
+        titleAccessory={activeTab === 'dashboard' || activeTab === 'expenses' ? <PortalDateRangeControl range={overviewRange} onRangeChange={setOverviewRange} className="ml-2 hidden md:block" dialogLabel="Choose finance date range" controlId="finance-overview-period" /> : undefined}
         mobileActionsInline
         actions={
           <div className="flex flex-wrap items-center justify-end gap-2.5">

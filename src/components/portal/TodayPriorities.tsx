@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { Check, X } from '@/lib/icons/phosphor-compat'
 import { motion, AnimatePresence } from 'framer-motion'
+import { PortalBadge } from '@/components/portal/PortalUI'
 
 export type Priority = {
   id?: string
@@ -97,6 +98,14 @@ export function TodayPriorities({ items }: { items: Priority[] }) {
         items.map((item) => {
           const key = item.id || item.taskId || `${item.href}-${item.title}`
           const isDone = Boolean(completedMap[key])
+          const metaLower = item.meta.toLowerCase()
+          const metaTone = item.isOverdue
+            ? 'red'
+            : metaLower.includes('inquiry') || metaLower.includes('new')
+              ? 'gold'
+              : metaLower.includes('today')
+                ? 'green'
+                : null
 
           return (
             <div
@@ -172,21 +181,15 @@ export function TodayPriorities({ items }: { items: Priority[] }) {
                   )}
                 </div>
 
-                <span
-                  className={`shrink-0 text-[10px] font-semibold tabular-nums transition-opacity duration-200 ${
-                    isDone
-                      ? 'text-[color:var(--portal-muted)] opacity-40 line-through'
-                      : item.isOverdue
-                        ? 'rounded-md border border-red-200/70 bg-red-50/90 px-2 py-0.5 text-[#b93c3c] dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-300'
-                        : item.meta.toLowerCase().includes('inquiry') || item.meta.toLowerCase().includes('new')
-                          ? 'rounded-md border border-[#caa24c]/30 bg-[#caa24c]/12 px-2 py-0.5 text-[#8f641e] dark:border-[#caa24c]/25 dark:bg-[#caa24c]/15 dark:text-[#dfbd68]'
-                          : item.meta.toLowerCase().includes('today')
-                            ? 'rounded-md border border-emerald-200/70 bg-emerald-50/90 px-2 py-0.5 text-emerald-700 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-300'
-                            : 'text-[color:var(--portal-muted)]'
-                  }`}
-                >
-                  {item.meta}
-                </span>
+                {isDone || !metaTone ? (
+                  <span className={`shrink-0 text-[10px] font-semibold tabular-nums ${isDone ? 'text-[color:var(--portal-muted)] opacity-40 line-through' : 'text-[color:var(--portal-muted)]'}`}>
+                    {item.meta}
+                  </span>
+                ) : (
+                  <PortalBadge tone={metaTone} className="shrink-0">
+                    {item.meta}
+                  </PortalBadge>
+                )}
               </Link>
 
               {/* Dismiss button for bounce tasks */}

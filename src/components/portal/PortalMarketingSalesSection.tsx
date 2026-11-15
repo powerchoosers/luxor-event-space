@@ -16,10 +16,11 @@ import {
   Info,
   ArrowDown,
   AlertTriangle,
+  ArrowRightLeft,
   BookOpen,
 } from '@/lib/icons/phosphor-compat'
 import { PortalHomeDateControl } from './PortalHomeFrame'
-import { PortalSelect } from '@/components/portal/PortalUI'
+import { PortalBadge, PortalSelect } from '@/components/portal/PortalUI'
 import { BorderBeam } from '@/components/ui/border-beam'
 import { MagicCard } from '@/components/ui/magic-card'
 import { AnimatedCircularProgressBar } from '@/components/ui/animated-circular-progress-bar'
@@ -40,6 +41,8 @@ const DATE_OPTIONS = [
   { value: 'this_month', label: 'This Month' },
   { value: 'previous_month', label: 'Previous Month' },
 ]
+
+const tableRowHoverCell = 'transition-colors duration-200 group-hover:bg-[color:var(--portal-soft)]/60'
 
 function MetricSparkBar({
   percent,
@@ -123,18 +126,10 @@ export function PortalMarketingSalesSection({
     const isZero = delta === 0
 
     return (
-      <span
-        className={`inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[10px] font-semibold tabular-nums ${
-          isZero
-            ? 'bg-[color:var(--portal-soft)] text-[color:var(--portal-muted)]'
-            : isPositive
-            ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
-            : 'bg-rose-500/10 text-rose-600 dark:text-rose-400'
-        }`}
-      >
+      <PortalBadge tone={isZero ? 'neutral' : isPositive ? 'green' : 'red'} className="tabular-nums">
         {isPositive ? <TrendingUp size={11} /> : !isZero ? <TrendingDown size={11} /> : null}
         {isPositive ? `+${delta}%` : isZero ? '0%' : `-${Math.abs(delta)}%`}
-      </span>
+      </PortalBadge>
     )
   }
 
@@ -222,8 +217,8 @@ export function PortalMarketingSalesSection({
         <div className="relative z-10 flex flex-col gap-5 xl:flex-row xl:items-center xl:justify-between">
           <div className="max-w-md">
             <div className="flex items-center gap-2">
-              <span className="flex h-5 w-5 items-center justify-center rounded-full bg-[#caa24c] text-[10px] font-bold text-white">
-                ★
+              <span className="luxor-gold-raised flex h-6 w-6 items-center justify-center rounded-full">
+                <ArrowRightLeft size={12} weight="bold" />
               </span>
               <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[#caa24c]">
                 Lead Generation Comparison
@@ -376,7 +371,7 @@ export function PortalMarketingSalesSection({
           <div className="p-4 sm:p-5 xl:col-span-5 flex flex-col justify-between">
             <div className="flex items-center justify-between gap-3 mb-4 pb-3 border-b border-[color:var(--portal-border)]/60">
               <div className="flex items-center gap-2.5">
-                <span className="inline-flex h-6 w-6 items-center justify-center rounded-lg bg-[color:var(--portal-soft)] border border-[color:var(--portal-border)] text-[10px] font-bold text-[color:var(--portal-text)]">
+                <span className="inline-flex h-6 w-6 items-center justify-center rounded-lg bg-[color:var(--portal-soft)] pt-[3px] text-[10px] font-bold leading-none text-[color:var(--portal-text)]">
                   01
                 </span>
                 <div>
@@ -491,7 +486,7 @@ export function PortalMarketingSalesSection({
           <div className="p-4 sm:p-5 xl:col-span-3 flex flex-col justify-between bg-[color:var(--portal-soft)]/30">
             <div className="flex items-center justify-between gap-3 mb-4 pb-3 border-b border-[color:var(--portal-border)]/60">
               <div className="flex items-center gap-2.5">
-                <span className="inline-flex h-6 w-6 items-center justify-center rounded-lg bg-[#caa24c]/15 border border-[#caa24c]/30 text-[10px] font-bold text-[#caa24c]">
+                <span className="inline-flex h-6 w-6 items-center justify-center rounded-lg bg-[#caa24c]/15 pt-[1px] text-[10px] font-bold leading-none text-[#caa24c]">
                   02
                 </span>
                 <div>
@@ -586,7 +581,7 @@ export function PortalMarketingSalesSection({
           <div className="p-4 sm:p-5 xl:col-span-4 flex flex-col justify-between">
             <div className="flex items-center justify-between gap-3 mb-4 pb-3 border-b border-[color:var(--portal-border)]/60">
               <div className="flex items-center gap-2.5">
-                <span className="inline-flex h-6 w-6 items-center justify-center rounded-lg bg-emerald-500/15 border border-emerald-500/30 text-[10px] font-bold text-emerald-600 dark:text-emerald-400">
+                <span className="inline-flex h-6 w-6 items-center justify-center rounded-lg bg-emerald-500/15 pt-[1px] text-[10px] font-bold leading-none text-emerald-600 dark:text-emerald-400">
                   03
                 </span>
                 <div>
@@ -825,7 +820,14 @@ export function PortalMarketingSalesSection({
         </div>
 
         {/* Funnel progression display with animated fill bars */}
-        <div data-home-reveal className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-7 gap-3">
+        <div className="overflow-x-auto overscroll-x-contain pb-2 portal-scrollbar xl:overflow-visible">
+          <div
+            data-home-reveal
+            role="region"
+            aria-label="Sales funnel stages; scroll horizontally to see every stage"
+            tabIndex={0}
+            className="grid w-max grid-flow-col auto-cols-[14rem] gap-3 outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/60 xl:w-full xl:grid-flow-row xl:grid-cols-7 xl:auto-cols-auto"
+          >
           {metrics.funnel.map((item, index) => {
             const isFirst = index === 0
             const isTourBookedStage = item.stage === 'Tours Booked'
@@ -847,9 +849,9 @@ export function PortalMarketingSalesSection({
                       Stage 0{index + 1}
                     </span>
                     {!isFirst && item.conversionRateFromPrevious !== null ? (
-                      <span className="rounded-full bg-[color:var(--portal-card)] border border-[color:var(--portal-border)] px-2 py-0.5 text-[10px] font-bold tabular-nums text-[#caa24c]">
+                      <PortalBadge tone="gold" className="tabular-nums">
                         {item.conversionRateFromPrevious}%
-                      </span>
+                      </PortalBadge>
                     ) : !isFirst && item.count === null ? (
                       <span className="text-[10px] text-[color:var(--portal-muted)]">—</span>
                     ) : null}
@@ -903,13 +905,14 @@ export function PortalMarketingSalesSection({
               </div>
             )
           })}
+          </div>
         </div>
       </div>
 
       {/* 3. TRAFFIC SOURCES & WEBSITE PERFORMANCE TABLES WITH INLINE DATA BARS */}
-      <div data-home-reveal className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div data-home-reveal className="grid grid-cols-1 2xl:grid-cols-2 gap-6">
         {/* Table 1: Where Are Visitors Coming From? */}
-        <div className="luxor-glass-card rounded-2xl p-4 sm:p-6 shadow-sm flex flex-col justify-between">
+        <div className="luxor-glass-card min-w-0 rounded-2xl p-4 sm:p-6 shadow-sm flex flex-col justify-between">
           <div>
             <div className="flex items-center justify-between mb-4">
               <div>
@@ -922,20 +925,20 @@ export function PortalMarketingSalesSection({
               </div>
             </div>
 
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs">
+            <div role="region" aria-label="Traffic sources table, scroll horizontally for more columns" tabIndex={0} className="overflow-x-auto overscroll-x-contain portal-scrollbar focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#caa24c]">
+            <table className="portal-analytics-table w-full min-w-[650px] border-separate border-spacing-0 text-left text-xs">
                 <thead>
                   <tr className="border-b border-[color:var(--portal-border)]/60 text-[10px] font-bold uppercase tracking-[0.12em] text-[color:var(--portal-muted)]">
-                    <th className="pb-3 pr-2">Channel</th>
+                    <th className="sticky left-0 z-10 bg-[color:var(--portal-card)] pb-3 pl-3 pr-2">Channel</th>
                     <th className="pb-3 px-2 text-right">Visitors</th>
                     <th className="pb-3 px-2 text-right">Tour Visits</th>
                     <th className="pb-3 px-2 text-right">Visit Clicks</th>
                     <th className="pb-3 px-2 text-right text-[#caa24c]">Tours Booked</th>
                     <th className="pb-3 px-2 text-right">Bookings</th>
-                    <th className="pb-3 pl-2 text-right">Revenue</th>
+                    <th className="pb-3 pl-2 pr-3 text-right">Revenue</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-[color:var(--portal-border)]/30">
+                <tbody>
                   {metrics.trafficSources.map((row, idx) => {
                     const visitorSharePct =
                       typeof row.visitors === 'number' && row.visitors > 0
@@ -943,10 +946,10 @@ export function PortalMarketingSalesSection({
                         : 0
 
                     return (
-                      <tr key={row.source} className="hover:bg-[color:var(--portal-soft)]/50 transition-colors">
-                        <td className="py-2.5 pr-2 font-medium text-[color:var(--portal-text)] min-w-[130px]">
+                      <tr key={row.source} className="group">
+                        <td className={`sticky left-0 z-10 min-w-[130px] rounded-l-lg bg-[color:var(--portal-card)] py-2.5 pl-3 pr-2 font-medium text-[color:var(--portal-text)] ${tableRowHoverCell}`}>
                           <div className="flex flex-col gap-1">
-                            <span>{row.source}</span>
+                            <span className="transition-colors duration-200 group-hover:text-[#9a6e25] dark:group-hover:text-[#dfbd68]">{row.source}</span>
                             {visitorSharePct > 0 && (
                               <div className="h-1 w-24 overflow-hidden rounded-full bg-[color:var(--portal-border)]/40">
                                 <motion.div
@@ -961,22 +964,22 @@ export function PortalMarketingSalesSection({
                             )}
                           </div>
                         </td>
-                        <td className="py-2.5 px-2 text-right tabular-nums text-[color:var(--portal-muted)]">
+                        <td className={`py-2.5 px-2 text-right tabular-nums text-[color:var(--portal-muted)] ${tableRowHoverCell}`}>
                           {row.visitors !== null ? row.visitors : '—'}
                         </td>
-                        <td className="py-2.5 px-2 text-right tabular-nums text-[color:var(--portal-muted)]">
+                        <td className={`py-2.5 px-2 text-right tabular-nums text-[color:var(--portal-muted)] ${tableRowHoverCell}`}>
                           {row.tourPageVisits !== null ? row.tourPageVisits : '—'}
                         </td>
-                        <td className="py-2.5 px-2 text-right tabular-nums text-[color:var(--portal-muted)]">
+                        <td className={`py-2.5 px-2 text-right tabular-nums text-[color:var(--portal-muted)] ${tableRowHoverCell}`}>
                           {row.tourClicks !== null ? row.tourClicks : '—'}
                         </td>
-                        <td className="py-2.5 px-2 text-right tabular-nums font-bold text-[#caa24c]">
+                        <td className={`py-2.5 px-2 text-right tabular-nums font-bold text-[#caa24c] ${tableRowHoverCell}`}>
                           {row.toursBooked}
                         </td>
-                        <td className="py-2.5 px-2 text-right tabular-nums font-bold text-emerald-500">
+                        <td className={`py-2.5 px-2 text-right tabular-nums font-bold text-emerald-500 ${tableRowHoverCell}`}>
                           {row.bookings}
                         </td>
-                        <td className="py-2.5 pl-2 text-right tabular-nums text-[color:var(--portal-text)] font-semibold">
+                        <td className={`rounded-r-lg py-2.5 pl-2 pr-3 text-right font-semibold tabular-nums text-[color:var(--portal-text)] ${tableRowHoverCell}`}>
                           ${row.revenue.toLocaleString()}
                         </td>
                       </tr>
@@ -989,7 +992,7 @@ export function PortalMarketingSalesSection({
         </div>
 
         {/* Table 2: Website Performance */}
-        <div className="luxor-glass-card rounded-2xl p-4 sm:p-6 shadow-sm flex flex-col justify-between">
+        <div className="luxor-glass-card min-w-0 rounded-2xl p-4 sm:p-6 shadow-sm flex flex-col justify-between">
           <div>
             <div className="flex items-center justify-between mb-4">
               <div>
@@ -1002,18 +1005,18 @@ export function PortalMarketingSalesSection({
               </div>
             </div>
 
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs">
+            <div role="region" aria-label="Website performance table, scroll horizontally for more columns" tabIndex={0} className="overflow-x-auto overscroll-x-contain portal-scrollbar focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#caa24c]">
+            <table className="portal-analytics-table w-full min-w-[540px] border-separate border-spacing-0 text-left text-xs">
                 <thead>
                   <tr className="border-b border-[color:var(--portal-border)]/60 text-[10px] font-bold uppercase tracking-[0.12em] text-[color:var(--portal-muted)]">
-                    <th className="pb-3 pr-2">Page</th>
+                    <th className="sticky left-0 z-10 bg-[color:var(--portal-card)] pb-3 pl-3 pr-2">Page</th>
                     <th className="pb-3 px-2 text-right">Views</th>
                     <th className="pb-3 px-2 text-right">Engagement</th>
                     <th className="pb-3 px-2 text-right">CTA Clicks</th>
-                    <th className="pb-3 pl-2 text-right">Exit Rate</th>
+                    <th className="pb-3 pl-2 pr-3 text-right">Exit Rate</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-[color:var(--portal-border)]/30">
+                <tbody>
                   {metrics.websitePerformance.map((page, idx) => {
                     const viewSharePct =
                       typeof page.views === 'number' && page.views > 0
@@ -1023,18 +1026,18 @@ export function PortalMarketingSalesSection({
                     return (
                       <tr
                         key={page.path}
-                        className={`hover:bg-[color:var(--portal-soft)]/50 transition-colors ${
+                        className={`group ${
                           page.isPriority ? 'bg-[#caa24c]/[0.03]' : ''
                         }`}
                       >
-                        <td className="py-2.5 pr-2 font-medium text-[color:var(--portal-text)] min-w-[140px]">
+                        <td className={`sticky left-0 z-10 min-w-[140px] rounded-l-lg py-2.5 pl-3 pr-2 font-medium text-[color:var(--portal-text)] ${page.isPriority ? 'bg-[color:color-mix(in_srgb,#caa24c_3%,var(--portal-card))]' : 'bg-[color:var(--portal-card)]'} ${tableRowHoverCell}`}>
                           <div className="flex flex-col gap-1">
                             <div className="flex items-center gap-1.5">
-                              <span>{page.pageName}</span>
+                              <span className="transition-colors duration-200 group-hover:text-[#9a6e25] dark:group-hover:text-[#dfbd68]">{page.pageName}</span>
                               {page.isPriority && (
-                                <span className="rounded bg-[#caa24c]/10 text-[#caa24c] px-1.5 py-0.5 text-[9px] uppercase font-bold tracking-wider">
+                                <PortalBadge tone="gold" className="uppercase tracking-wider">
                                   Priority
-                                </span>
+                                </PortalBadge>
                               )}
                             </div>
                             {viewSharePct > 0 && (
@@ -1051,16 +1054,16 @@ export function PortalMarketingSalesSection({
                             )}
                           </div>
                         </td>
-                        <td className="py-2.5 px-2 text-right tabular-nums text-[color:var(--portal-muted)]">
+                        <td className={`py-2.5 px-2 text-right tabular-nums text-[color:var(--portal-muted)] ${tableRowHoverCell}`}>
                           {page.views !== null ? page.views : '—'}
                         </td>
-                        <td className="py-2.5 px-2 text-right tabular-nums text-[color:var(--portal-muted)]">
+                        <td className={`py-2.5 px-2 text-right tabular-nums text-[color:var(--portal-muted)] ${tableRowHoverCell}`}>
                           {page.engagementRate !== null ? page.engagementRate : '—'}
                         </td>
-                        <td className="py-2.5 px-2 text-right tabular-nums font-bold text-[#caa24c]">
+                        <td className={`py-2.5 px-2 text-right tabular-nums font-bold text-[#caa24c] ${tableRowHoverCell}`}>
                           {page.ctaClicks !== null ? page.ctaClicks : '—'}
                         </td>
-                        <td className="py-2.5 pl-2 text-right tabular-nums text-[color:var(--portal-muted)]">
+                        <td className={`rounded-r-lg py-2.5 pl-2 pr-3 text-right tabular-nums text-[color:var(--portal-muted)] ${tableRowHoverCell}`}>
                           {page.exitRate !== null ? page.exitRate : '—'}
                         </td>
                       </tr>
@@ -1099,17 +1102,12 @@ export function PortalMarketingSalesSection({
                   <span className="text-[10px] font-bold uppercase tracking-wider text-[color:var(--portal-muted)]">
                     {diag.stageTransition}
                   </span>
-                  <span
-                    className={`rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider ${
-                      diag.type === 'alert'
-                        ? 'bg-rose-500/20 text-rose-500 dark:text-rose-400'
-                        : diag.type === 'warning'
-                        ? 'bg-[#caa24c]/20 text-[#caa24c]'
-                        : 'bg-emerald-500/20 text-emerald-600 dark:text-emerald-400'
-                    }`}
+                  <PortalBadge
+                    tone={diag.type === 'alert' ? 'red' : diag.type === 'warning' ? 'gold' : 'green'}
+                    className="uppercase tracking-wider"
                   >
                     {diag.type === 'alert' ? 'Leak Detected' : diag.type === 'warning' ? 'Watch' : 'Optimal'}
-                  </span>
+                  </PortalBadge>
                 </div>
                 <p className="text-xs font-bold text-[color:var(--portal-text)] leading-snug">
                   {diag.message}

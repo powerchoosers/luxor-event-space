@@ -472,10 +472,10 @@ async function PortalOverviewContent() {
         <div className="min-w-0 w-full h-full">
           <MagicCard className="flex h-full min-h-[156px] w-full flex-col justify-between rounded-2xl p-4 sm:min-h-[180px] sm:p-6">
             <div>
-              <span className="text-[#caa24c] mb-3 block">
-                <Calendar size={22} strokeWidth={1.5} />
-              </span>
-              <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[color:var(--portal-muted)] mb-1">BOOKINGS</p>
+              <div className="flex items-center gap-2 mb-3">
+                <Calendar size={22} strokeWidth={1.5} className="text-[#caa24c] shrink-0" />
+                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[color:var(--portal-muted)]">BOOKINGS</p>
+              </div>
               <p data-home-reveal className="text-3xl font-extrabold text-[color:var(--portal-text)] tabular-nums tracking-tight">{bookingsCount}</p>
               <p className="text-xs text-[color:var(--portal-muted)] mt-0.5">events this month</p>
             </div>
@@ -494,10 +494,10 @@ async function PortalOverviewContent() {
             {nextBooking ? (
               <>
                 <div>
-                  <span className="text-[#caa24c] mb-3 block">
-                    <Calendar size={22} strokeWidth={1.5} />
-                  </span>
-                  <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[color:var(--portal-muted)] mb-1">NEXT EVENT</p>
+                  <div className="flex items-center gap-2 mb-3">
+                    <Calendar size={22} strokeWidth={1.5} className="text-[#caa24c] shrink-0" />
+                    <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[color:var(--portal-muted)]">NEXT EVENT</p>
+                  </div>
                   {nextBooking.inquiry_id ? <Link href={`/portal/leads/${nextBooking.inquiry_id}?from=/portal`} data-home-reveal className="line-clamp-2 text-lg font-bold leading-snug tracking-tight text-[color:var(--portal-text)] no-underline transition-colors hover:text-[#a8792f] dark:hover:text-[#f1d27a]">{nextBookingDisplayTitle}</Link> : <p data-home-reveal className="text-lg font-bold text-[color:var(--portal-text)] tracking-tight leading-snug line-clamp-2">{nextBookingDisplayTitle}</p>}
                   <p data-home-reveal className="text-xs font-bold text-[#caa24c] mt-1">{nextBookingRelativeStr}</p>
                 </div>
@@ -508,10 +508,10 @@ async function PortalOverviewContent() {
             ) : (
               <>
                 <div>
-                  <span className="text-[#caa24c] mb-3 block">
-                    <Calendar size={22} strokeWidth={1.5} />
-                  </span>
-                  <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[color:var(--portal-muted)] mb-1">NEXT EVENT</p>
+                  <div className="flex items-center gap-2 mb-3">
+                    <Calendar size={22} strokeWidth={1.5} className="text-[#caa24c] shrink-0" />
+                    <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[color:var(--portal-muted)]">NEXT EVENT</p>
+                  </div>
                   <p className="text-lg font-bold text-[color:var(--portal-text)] tracking-tight leading-snug">No upcoming signed events</p>
                   <p className="text-xs text-[color:var(--portal-muted)] mt-1">No signed bookings scheduled</p>
                 </div>

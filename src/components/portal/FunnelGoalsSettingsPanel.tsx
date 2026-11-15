@@ -2,7 +2,7 @@
 
 import React, { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
-import { PortalButton } from '@/components/portal/PortalUI'
+import { PortalButton, PortalSkeleton, PortalSkeletonTransition } from '@/components/portal/PortalUI'
 import {
   FUNNEL_GOAL_CADENCES,
   FUNNEL_GOAL_METRICS,
@@ -143,10 +143,6 @@ export function FunnelGoalsSettingsPanel() {
   const monthValid = /^\d{4}-(0[1-9]|1[0-2])$/.test(month)
   const quarterValid = /^\d{4}-Q[1-4]$/.test(quarter)
 
-  if (loading) {
-    return <div className={`${card} text-sm text-[color:var(--portal-muted)]`}>Loading funnel goals…</div>
-  }
-
   if (loadError) {
     return (
       <section className={`${card} space-y-3`}>
@@ -169,24 +165,22 @@ export function FunnelGoalsSettingsPanel() {
           </Link>
           .
         </p>
-        {snapshot?.updatedAt ? (
-          <p className="text-[11px] text-[color:var(--portal-muted)]">
-            Last saved {new Intl.DateTimeFormat('en-US', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(snapshot.updatedAt))}.
-          </p>
-        ) : null}
+        <p className="min-h-4 text-[11px] text-[color:var(--portal-muted)]">
+          {snapshot?.updatedAt ? `Last saved ${new Intl.DateTimeFormat('en-US', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(snapshot.updatedAt))}.` : null}
+        </p>
       </section>
 
-      {!snapshot?.canEdit ? (
+      {!loading && !snapshot?.canEdit ? (
         <section className={`${card} text-sm text-[color:var(--portal-muted)]`}>
           Settings permission is required to edit funnel goals. You can still view targets on the funnel dashboard.
         </section>
       ) : (
-        <fieldset disabled={saving || pending} className="space-y-5">
+        <fieldset disabled={loading || saving || pending} aria-busy={loading} className="space-y-5">
           <legend className="sr-only">Funnel performance goals</legend>
 
           <div className="hidden overflow-x-auto md:block">
             <section className={card}>
-              <table className="w-full min-w-[640px] text-left text-xs">
+              <table className="w-full min-w-[640px] table-fixed text-left text-xs">
                 <caption className="mb-3 text-left text-[color:var(--portal-muted)]">
                   Defaults: daily goals calculate calendar totals. Explicit weekly, monthly, quarterly, or annual values override those totals.
                 </caption>
@@ -201,12 +195,12 @@ export function FunnelGoalsSettingsPanel() {
                   </tr>
                 </thead>
                 <tbody>
-                  {draft
-                    ? FUNNEL_GOAL_METRICS.map((metric) => (
+                  {FUNNEL_GOAL_METRICS.map((metric) => (
                         <tr key={metric}>
                           <th className="p-2 font-semibold">{LABELS[metric]}</th>
                           {FUNNEL_GOAL_CADENCES.map((c) => (
                             <td key={c} className="p-2">
+                              <PortalSkeletonTransition loading={loading} overlap skeleton={<PortalSkeleton className="h-[2.35rem] w-full rounded-lg" />}>
                               <input
                                 className={field}
                                 type="number"
@@ -214,46 +208,46 @@ export function FunnelGoalsSettingsPanel() {
                                 max="1000000000000"
                                 step={metric === 'revenue' ? '0.01' : '1'}
                                 aria-label={`${LABELS[metric]} ${c} goal`}
-                                value={draft[metric][c] ?? ''}
+                                value={draft?.[metric][c] ?? ''}
                                 placeholder="Unset"
                                 onChange={(e) => change(metric, c, e.target.value)}
                               />
+                              </PortalSkeletonTransition>
                             </td>
                           ))}
                         </tr>
-                      ))
-                    : null}
+                      ))}
                 </tbody>
               </table>
             </section>
           </div>
 
           <div className="space-y-3 md:hidden">
-            {draft
-              ? FUNNEL_GOAL_METRICS.map((metric) => (
+            {FUNNEL_GOAL_METRICS.map((metric) => (
                   <section key={metric} className={`${card} space-y-3`}>
                     <h4 className="text-sm font-bold text-[color:var(--portal-text)]">{LABELS[metric]}</h4>
                     <div className="grid grid-cols-2 gap-3">
                       {FUNNEL_GOAL_CADENCES.map((c) => (
-                        <label key={c} className="block text-[10px] font-bold uppercase tracking-[0.12em] text-[color:var(--portal-muted)]">
+                        <div key={c} className="block text-[10px] font-bold uppercase tracking-[0.12em] text-[color:var(--portal-muted)]">
                           {c}
+                          <PortalSkeletonTransition loading={loading} overlap className="mt-1.5" skeleton={<PortalSkeleton className="h-[2.35rem] w-full rounded-lg" />}>
                           <input
-                            className={`${field} mt-1.5`}
+                            className={field}
                             type="number"
                             min="0"
                             max="1000000000000"
                             step={metric === 'revenue' ? '0.01' : '1'}
                             aria-label={`${LABELS[metric]} ${c} goal`}
-                            value={draft[metric][c] ?? ''}
+                            value={draft?.[metric][c] ?? ''}
                             placeholder="Unset"
                             onChange={(e) => change(metric, c, e.target.value)}
                           />
-                        </label>
+                          </PortalSkeletonTransition>
+                        </div>
                       ))}
                     </div>
                   </section>
-                ))
-              : null}
+                ))}
           </div>
 
           <div className="grid gap-4 md:grid-cols-2">
@@ -276,10 +270,10 @@ export function FunnelGoalsSettingsPanel() {
                   {!valid ? (
                     <p className="text-xs text-red-600">Enter a valid calendar {monthly ? 'month' : 'quarter'}.</p>
                   ) : null}
-                  {draft
-                    ? FUNNEL_GOAL_METRICS.map((metric) => (
-                        <label key={metric} className="grid grid-cols-1 items-center gap-2 text-xs sm:grid-cols-2">
+                  {FUNNEL_GOAL_METRICS.map((metric) => (
+                        <div key={metric} className="grid grid-cols-1 items-center gap-2 text-xs sm:grid-cols-2">
                           <span className="font-medium text-[color:var(--portal-text)]">{LABELS[metric]}</span>
+                          <PortalSkeletonTransition loading={loading} overlap skeleton={<PortalSkeleton className="h-[2.35rem] w-full rounded-lg" />}>
                           <input
                             className={field}
                             type="number"
@@ -288,13 +282,13 @@ export function FunnelGoalsSettingsPanel() {
                             step={metric === 'revenue' ? '0.01' : '1'}
                             aria-label={`${LABELS[metric]} ${monthly ? 'month' : 'quarter'} override`}
                             disabled={!valid}
-                            value={valid ? draft[metric][type][key] ?? '' : ''}
+                            value={valid ? draft?.[metric][type][key] ?? '' : ''}
                             placeholder="Use default"
                             onChange={(e) => changeOverride(metric, type, key, e.target.value)}
                           />
-                        </label>
-                      ))
-                    : null}
+                          </PortalSkeletonTransition>
+                        </div>
+                      ))}
                 </section>
               )
             })}
