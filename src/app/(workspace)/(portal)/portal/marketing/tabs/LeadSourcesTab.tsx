@@ -74,7 +74,7 @@ export function LeadSourcesTab({ inquiries, bookedInquiryIds = [], loading = fal
   const stats = [
     { label: 'Total Inquiries', value: totals.leads.toLocaleString(), detail: 'All inquiry records' },
     { label: 'Tour Pipeline', value: totals.tours.toLocaleString(), detail: 'Tour scheduled through booked' },
-    { label: 'Booked', value: totals.bookings.toLocaleString(), detail: 'Pipeline stage contract+ or paid booking/deposit records' },
+    { label: 'Booked', value: totals.bookings.toLocaleString(), detail: 'Deposit stage+, confirmed booking, or paid deposit payment' },
     { label: 'Booking Conversion', value: `${totals.conversionRate}%`, detail: 'Booked ÷ total inquiries' },
     { label: 'Recorded Sources', value: totals.sourceCount.toLocaleString(), detail: 'Distinct saved source values' },
   ]

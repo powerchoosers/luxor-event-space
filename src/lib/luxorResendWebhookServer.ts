@@ -340,15 +340,22 @@ async function recordResendMarketingEngagement(row: LuxorMailRow, event: ResendE
   if (!isUuid(recipientId) || !recipientRows.length) return
   const recipient = recipientRows[0]
   if (!recipient) return
-  const known = await supabaseRest<Array<{ id: string }>>(
-    `luxor_marketing_events?select=id&recipient_id=eq.${recipientId}&metadata->>resendEventId=eq.${encodeURIComponent(eventId)}&limit=1`,
-  )
-  if (known.length) return
   const now = event.created_at || new Date().toISOString()
-  await supabaseRest('luxor_marketing_events', {
-    method: 'POST', body: JSON.stringify({ campaign_id: campaignId, recipient_id: recipientId, event_type: kind,
-      metadata: { source: 'resend_webhook', resendEventId: eventId, providerEmailId: event.data.email_id || null } }),
-  })
+  const inserted = await supabaseRest<Array<{ id: string }>>(
+    'luxor_marketing_events?on_conflict=recipient_id,resend_event_id&select=id',
+    {
+      method: 'POST',
+      headers: { Prefer: 'resolution=ignore-duplicates,return=representation' },
+      body: JSON.stringify({
+        campaign_id: campaignId,
+        recipient_id: recipientId,
+        event_type: kind,
+        resend_event_id: eventId,
+        metadata: { source: 'resend_webhook', resendEventId: eventId, providerEmailId: event.data.email_id || null },
+      }),
+    },
+  )
+  if (!inserted.length) return
   await supabaseRest(`luxor_marketing_recipients?id=eq.${recipientId}`, {
     method: 'PATCH', body: JSON.stringify(kind === 'open'
       ? { open_count: Number(recipient.open_count || 0) + 1, first_opened_at: recipient.first_opened_at || now, last_opened_at: now }

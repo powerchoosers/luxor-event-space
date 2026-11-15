@@ -48,7 +48,8 @@ export type MarketingEmailMetrics = {
 }
 
 type AggregateMarketingEmailMetricsInput = {
-  mailRows: MarketingEmailMetricsMailRow[]
+  sentMailRows: MarketingEmailMetricsMailRow[]
+  mailByProviderId: Map<string, MarketingEmailMetricsMailRow>
   jobsById: Map<string, MarketingEmailMetricsJob>
   resendEvents: MarketingEmailMetricsResendEvent[]
   activityLimit?: number
@@ -72,19 +73,22 @@ function hasTruthyTestMarker(metadata: unknown) {
   return typeof runId === 'string' && runId.trim().length > 0
 }
 
+function resolveMarketingCampaignId(
+  mail: MarketingEmailMetricsMailRow,
+  job?: MarketingEmailMetricsJob,
+) {
+  const metadata = mail.metadata || {}
+  if (isUuid(metadata.marketingCampaignId)) return metadata.marketingCampaignId
+  const jobMetadata = job?.metadata || {}
+  return isUuid(jobMetadata.campaign_id) ? jobMetadata.campaign_id : null
+}
+
 export function classifyMarketingEmailChannel(
   mail: MarketingEmailMetricsMailRow,
   job?: MarketingEmailMetricsJob,
 ): MarketingEmailChannel {
-  const metadata = mail.metadata || {}
-  if (isUuid(metadata.marketingCampaignId)) return 'campaign'
-
   const resolvedJob = job || undefined
   const jobMetadata = resolvedJob?.metadata || {}
-
-  if (resolvedJob?.job_type === 'marketing_campaign' || isUuid(jobMetadata.campaign_id)) {
-    return 'campaign'
-  }
 
   if (
     jobMetadata.follow_up_sequence === true
@@ -96,6 +100,8 @@ export function classifyMarketingEmailChannel(
 
   const automationKey = typeof jobMetadata.automation_key === 'string' ? jobMetadata.automation_key : ''
   if (automationKey.includes('follow_up') || automationKey.includes('brochure')) return 'follow_up'
+
+  if (resolveMarketingCampaignId(mail, job)) return 'campaign'
 
   return 'system'
 }
@@ -131,18 +137,17 @@ function activityEventType(eventType: string): MarketingEmailDeliveryActivity['e
   return null
 }
 
+function productionMailForEvent(
+  mail: MarketingEmailMetricsMailRow | undefined,
+  jobsById: Map<string, MarketingEmailMetricsJob>,
+) {
+  if (!mail) return null
+  const jobId = typeof mail.metadata?.emailJobId === 'string' ? mail.metadata.emailJobId : null
+  const job = jobId ? jobsById.get(jobId) : undefined
+  return isProductionMarketingMailRow(mail, job) ? mail : null
+}
+
 export function aggregateMarketingEmailMetrics(input: AggregateMarketingEmailMetricsInput): MarketingEmailMetrics {
-  const productionMail = input.mailRows.filter((mail) => {
-    const jobId = typeof mail.metadata?.emailJobId === 'string' ? mail.metadata.emailJobId : null
-    const job = jobId ? input.jobsById.get(jobId) : undefined
-    return isProductionMarketingMailRow(mail, job)
-  })
-
-  const mailByProvider = new Map<string, MarketingEmailMetricsMailRow>()
-  for (const mail of productionMail) {
-    if (mail.provider_id) mailByProvider.set(mail.provider_id, mail)
-  }
-
   const totals = emptyCounts()
   const byChannel: Record<MarketingEmailChannel, MarketingEmailChannelCounts> = {
     campaign: emptyCounts(),
@@ -150,14 +155,14 @@ export function aggregateMarketingEmailMetrics(input: AggregateMarketingEmailMet
     system: emptyCounts(),
   }
 
-  for (const mail of productionMail) {
+  for (const mail of input.sentMailRows) {
+    const production = productionMailForEvent(mail, input.jobsById)
+    if (!production?.accepted_at) continue
     const jobId = typeof mail.metadata?.emailJobId === 'string' ? mail.metadata.emailJobId : null
     const job = jobId ? input.jobsById.get(jobId) : undefined
     const channel = classifyMarketingEmailChannel(mail, job)
-    if (mail.accepted_at) {
-      totals.sent += 1
-      byChannel[channel].sent += 1
-    }
+    totals.sent += 1
+    byChannel[channel].sent += 1
   }
 
   const countedEvents = new Set<string>()
@@ -168,7 +173,7 @@ export function aggregateMarketingEmailMetrics(input: AggregateMarketingEmailMet
     if (countedEvents.has(dedupeKey)) continue
     countedEvents.add(dedupeKey)
 
-    const mail = mailByProvider.get(event.provider_email_id)
+    const mail = productionMailForEvent(input.mailByProviderId.get(event.provider_email_id), input.jobsById)
     if (!mail) continue
     const jobId = typeof mail.metadata?.emailJobId === 'string' ? mail.metadata.emailJobId : null
     const job = jobId ? input.jobsById.get(jobId) : undefined
@@ -182,7 +187,7 @@ export function aggregateMarketingEmailMetrics(input: AggregateMarketingEmailMet
     .map((event) => {
       const mapped = activityEventType(event.event_type)
       if (!mapped || !event.provider_email_id) return null
-      const mail = mailByProvider.get(event.provider_email_id)
+      const mail = productionMailForEvent(input.mailByProviderId.get(event.provider_email_id), input.jobsById)
       if (!mail) return null
       const jobId = typeof mail.metadata?.emailJobId === 'string' ? mail.metadata.emailJobId : null
       const job = jobId ? input.jobsById.get(jobId) : undefined

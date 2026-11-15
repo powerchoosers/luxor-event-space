@@ -42,19 +42,60 @@ async function readByIds<T>(table: string, select: string, values: Array<string 
   return rows
 }
 
+async function readByProviderIds(select: string, providerIds: string[]) {
+  const batches: string[][] = []
+  for (let index = 0; index < providerIds.length; index += ID_BATCH_SIZE) {
+    batches.push(providerIds.slice(index, index + ID_BATCH_SIZE))
+  }
+
+  const rows: MarketingEmailMetricsMailRow[] = []
+  for (let index = 0; index < batches.length; index += ID_BATCH_CONCURRENCY) {
+    const group = batches.slice(index, index + ID_BATCH_CONCURRENCY)
+    const results = await Promise.all(group.map((batch) => supabaseRest<MarketingEmailMetricsMailRow[]>(
+      `luxor_mail_messages?select=${select}&provider=eq.resend&direction=eq.outgoing&provider_id=in.(${batch.map(encodeURIComponent).join(',')})&limit=${batch.length}`,
+    )))
+    results.forEach((result) => rows.push(...result))
+  }
+  return rows
+}
+
 export async function getLuxorMarketingEmailMetrics(days: number, now = new Date(), activityLimit = 50): Promise<MarketingEmailMetrics> {
   const range = getMarketingOverviewRange(days, now)
   const from = encodeURIComponent(range.start.toISOString())
   const until = encodeURIComponent(range.endExclusive.toISOString())
 
-  const mailRows = await readRows<MarketingEmailMetricsMailRow>(
-    'luxor_mail_messages',
-    'id,provider_id,accepted_at,occurred_at,subject,metadata',
-    `&provider=eq.resend&direction=eq.outgoing&accepted_at=gte.${from}&accepted_at=lt.${until}`,
-    'accepted_at.desc,id.asc',
-  )
+  const [sentMailRows, resendEvents] = await Promise.all([
+    readRows<MarketingEmailMetricsMailRow>(
+      'luxor_mail_messages',
+      'id,provider_id,accepted_at,occurred_at,subject,metadata',
+      `&provider=eq.resend&direction=eq.outgoing&accepted_at=gte.${from}&accepted_at=lt.${until}`,
+      'accepted_at.desc,id.asc',
+    ),
+    readRows<MarketingEmailMetricsResendEvent>(
+      'luxor_resend_events',
+      'event_id,event_type,provider_email_id,received_at',
+      `&event_type=in.(email.delivered,email.opened,email.clicked,email.bounced)&received_at=gte.${from}&received_at=lt.${until}`,
+      'received_at.desc,event_id.asc',
+    ),
+  ])
 
-  const jobIds = mailRows
+  const providerIds = [
+    ...new Set([
+      ...resendEvents.map((event) => event.provider_email_id).filter((value): value is string => Boolean(value)),
+      ...sentMailRows.map((row) => row.provider_id).filter((value): value is string => Boolean(value)),
+    ]),
+  ]
+
+  const linkedMailRows = providerIds.length
+    ? await readByProviderIds('id,provider_id,accepted_at,occurred_at,subject,metadata', providerIds)
+    : []
+
+  const mailByProviderId = new Map<string, MarketingEmailMetricsMailRow>()
+  for (const mail of [...sentMailRows, ...linkedMailRows]) {
+    if (mail.provider_id) mailByProviderId.set(mail.provider_id, mail)
+  }
+
+  const jobIds = [...mailByProviderId.values()]
     .map((mail) => (typeof mail.metadata?.emailJobId === 'string' ? mail.metadata.emailJobId : null))
     .filter((value): value is string => Boolean(value))
   const jobs = await readByIds<MarketingEmailMetricsJob>(
@@ -64,27 +105,9 @@ export async function getLuxorMarketingEmailMetrics(days: number, now = new Date
   )
   const jobsById = new Map(jobs.map((job) => [job.id, job]))
 
-  const providerIds = [...new Set(mailRows.map((row) => row.provider_id).filter((value): value is string => Boolean(value)))]
-  const resendEvents: MarketingEmailMetricsResendEvent[] = []
-  if (providerIds.length) {
-    const batches: string[][] = []
-    for (let index = 0; index < providerIds.length; index += ID_BATCH_SIZE) {
-      batches.push(providerIds.slice(index, index + ID_BATCH_SIZE))
-    }
-    for (let index = 0; index < batches.length; index += ID_BATCH_CONCURRENCY) {
-      const group = batches.slice(index, index + ID_BATCH_CONCURRENCY)
-      const results = await Promise.all(group.map((batch) => readRows<MarketingEmailMetricsResendEvent>(
-        'luxor_resend_events',
-        'event_id,event_type,provider_email_id,received_at',
-        `&provider_email_id=in.(${batch.map(encodeURIComponent).join(',')})&event_type=in.(email.delivered,email.opened,email.clicked,email.bounced)&received_at=gte.${from}&received_at=lt.${until}`,
-        'received_at.desc,event_id.asc',
-      )))
-      results.forEach((result) => resendEvents.push(...result))
-    }
-  }
-
   return aggregateMarketingEmailMetrics({
-    mailRows,
+    sentMailRows,
+    mailByProviderId,
     jobsById,
     resendEvents,
     activityLimit,

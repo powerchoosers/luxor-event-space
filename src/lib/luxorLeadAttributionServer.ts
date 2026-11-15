@@ -7,7 +7,7 @@ export async function listLuxorBookedAttributionInquiryIds() {
   const [bookingRows, paymentRows] = await Promise.all([
     readMarketingOverviewPages(
       (offset, limit) => supabaseRest<Array<{ inquiry_id: string | null }>>(
-        `luxor_bookings?select=inquiry_id&status=neq.cancelled&inquiry_id=not.is.null&limit=${limit}&offset=${offset}`,
+        `luxor_bookings?select=inquiry_id&status=in.(confirmed,completed)&inquiry_id=not.is.null&limit=${limit}&offset=${offset}`,
       ),
       { pageSize: 1000, maxRows: 10_000 },
     ),
@@ -26,7 +26,7 @@ export async function listLuxorBookedAttributionInquiryIds() {
   for (const row of paymentRows) {
     if (!row.inquiry_id) continue
     const kind = typeof row.metadata?.payment_kind === 'string' ? row.metadata.payment_kind : ''
-    if (kind === 'deposit' || row.metadata?.initial_booking_payment) inquiryIds.add(row.inquiry_id)
+    if (kind === 'deposit' || row.metadata?.initial_booking_payment === true) inquiryIds.add(row.inquiry_id)
   }
   return [...inquiryIds]
 }

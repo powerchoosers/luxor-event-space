@@ -9,6 +9,13 @@ const {
 } = require('../src/lib/luxorMarketingEmailMetrics.ts')
 
 test('classifyMarketingEmailChannel splits campaign, follow-up, and system mail', () => {
+  assert.equal(
+    classifyMarketingEmailChannel(
+      { id: 'm0', provider_id: 'p0', accepted_at: '2026-01-01', occurred_at: '2026-01-01', subject: 'Campaign type only', metadata: { emailJobId: '44444444-4444-4444-8444-444444444444' } },
+      { id: '44444444-4444-4444-8444-444444444444', test_run_id: null, job_type: 'marketing_campaign', metadata: {} },
+    ),
+    'system',
+  )
   assert.equal(classifyMarketingEmailChannel({ id: 'm1', provider_id: 'p1', accepted_at: '2026-01-01', occurred_at: '2026-01-01', subject: 'Campaign', metadata: { marketingCampaignId: '11111111-1111-4111-8111-111111111111' } }), 'campaign')
   assert.equal(
     classifyMarketingEmailChannel(
@@ -48,8 +55,10 @@ test('aggregateMarketingEmailMetrics counts resend clicks from joined provider i
   const jobsById = new Map([
     ['bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', { id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', test_run_id: null, job_type: 'brochure_follow_up', metadata: { follow_up_sequence: true } }],
   ])
+  const mailByProviderId = new Map(mailRows.map((mail) => [mail.provider_id, mail]))
   const metrics = aggregateMarketingEmailMetrics({
-    mailRows,
+    sentMailRows: mailRows,
+    mailByProviderId,
     jobsById,
     resendEvents: [
       { event_id: 'e1', event_type: 'email.clicked', provider_email_id: 'provider-campaign', received_at: '2026-03-01T13:00:00.000Z' },

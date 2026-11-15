@@ -430,7 +430,6 @@ export function isLuxorNonRevenueTestInquiry(inquiry: Pick<LuxorInquiry, 'id' | 
 }
 
 const LUXOR_BOOKED_PIPELINE_STAGES = new Set<LuxorPipelineStage>([
-  'contract',
   'deposit',
   'planning',
   'final_payment',
@@ -446,7 +445,7 @@ export function isLuxorInquiryBookedForAttribution(
   const stage = inquiry.pipeline_stage
   if (stage && LUXOR_BOOKED_PIPELINE_STAGES.has(stage)) return true
   if (bookedInquiryIds?.has(inquiry.id)) return true
-  if (inquiry.metadata?.deposit_paid_at || inquiry.metadata?.booking_confirmed_at) return true
+  if (inquiry.metadata?.deposit_paid_at) return true
   return false
 }
 
