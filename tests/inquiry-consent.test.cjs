@@ -143,6 +143,17 @@ test('inquiry normalization records only explicitly checked independent choices'
   })
   assert.equal(spanishVisitEmail.metadata.marketingEmailConsent.disclosure, inquiryTypes.LUXOR_LEGACY_VISIT_EMAIL_DISCLOSURE_ES)
 
+  const spanishContactLocale = normalizeInquiry({
+    ...base,
+    source: 'contact_page',
+    flow: 'contact_form',
+    metadata: { locale: 'es' },
+    attribution: { landingPage: '/es/contact?utm_source=test' },
+    pagePath: '/es/contact',
+  })
+  assert.equal(spanishContactLocale.page_path, '/es/contact')
+  assert.equal(spanishContactLocale.metadata.attribution.landingPage, '/es/contact?utm_source=test')
+
   const spanishNewsletter = normalizeInquiry({
     ...base,
     source: 'newsletter',
@@ -332,8 +343,8 @@ test('the public form keeps three separate unchecked optional controls and expan
   assert.match(source, /type="checkbox" checked=\{emailMarketingConsent\}/)
   assert.match(source, /type="checkbox" checked=\{smsMarketingConsent\}/)
   assert.match(source, /aria-expanded=\{open\}/)
-  assert.match(source, /hidden=\{!inquirySmsDisclosureOpen\}/)
-  assert.match(source, /hidden=\{!marketingSmsDisclosureOpen\}/)
+  assert.match(source, /\{inquirySmsDisclosureOpen \? \(/)
+  assert.match(source, /\{marketingSmsDisclosureOpen \? \(/)
   assert.match(source, /LUXOR_INQUIRY_SMS_DISCLOSURE/)
   assert.match(source, /LUXOR_MARKETING_SMS_DISCLOSURE/)
   assert.match(source, /LUXOR_MARKETING_EMAIL_DISCLOSURE/)

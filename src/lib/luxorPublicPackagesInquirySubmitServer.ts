@@ -12,7 +12,7 @@ import {
 } from '@/lib/luxorPublicPackagesInquiryDraftServer'
 import { getDefaultLuxorProposalPricing } from '@/lib/luxorProposalPricingServer'
 import { createLuxorInquiry, findRecentDuplicateLuxorInquiry } from '@/lib/luxorInquiriesServer'
-import { LUXOR_INQUIRY_PACKAGE_INTEREST_OPTIONS, type LuxorInquiryInput } from '@/lib/luxorInquiryTypes'
+import { LUXOR_INQUIRY_PACKAGE_INTEREST_OPTIONS, type LuxorInquiryInput, type LuxorPublicAttribution } from '@/lib/luxorInquiryTypes'
 import { hashPublicRequestIp } from '@/lib/luxorPublicEventsServer'
 
 const PACKAGE_LABELS: Record<string, string> = {
@@ -38,6 +38,8 @@ export async function submitPublicPackagesInquiry(input: {
   marketingOptIn?: boolean
   locale?: 'en' | 'es'
   pagePath?: string
+  referrer?: string
+  attribution?: LuxorPublicAttribution
   sessionId?: string
   formStartedAt?: number
   userAgent?: string
@@ -78,6 +80,8 @@ export async function submitPublicPackagesInquiry(input: {
     formStartedAt: input.formStartedAt,
     sessionId: input.sessionId,
     pagePath: input.pagePath,
+    referrer: input.referrer,
+    attribution: input.attribution,
     metadata: {
       ...(input.idempotencyKey ? { idempotencyKey: input.idempotencyKey } : {}),
       websiteLocale: input.locale || draft.locale,

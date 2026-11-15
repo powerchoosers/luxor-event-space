@@ -83,7 +83,10 @@ export function normalizeInquiry(input: LuxorInquiryInput, userAgent?: string) {
   const consentProfile = getLuxorConsentFormProfile(
     input.source,
     input.flow,
-    submittedMetadata.websiteLocale ?? submittedMetadata.tourLanguagePreference ?? submittedMetadata.language,
+    submittedMetadata.websiteLocale
+      ?? submittedMetadata.tourLanguagePreference
+      ?? submittedMetadata.language
+      ?? submittedMetadata.locale,
   )
   const customerCareSmsOptIn = Boolean(phone && consentProfile?.customerCareSmsDisclosure && input.smsOptIn === true)
   const marketingSmsOptIn = Boolean(phone && consentProfile?.marketingSmsDisclosure && input.smsMarketingOptIn === true)

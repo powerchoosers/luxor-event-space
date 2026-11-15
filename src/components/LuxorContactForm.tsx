@@ -3,6 +3,7 @@
 import { FormEvent, useState } from 'react'
 import { Check, Loader2, Send } from '@/lib/icons/phosphor-compat'
 import { motion, AnimatePresence } from 'framer-motion'
+import { getLuxorPublicAttribution, getLuxorPublicSessionId } from '@/lib/luxorPublicAttribution'
 import { submitLuxorIdempotentForm } from '@/lib/luxorSubmissionIdempotency'
 import { focusPublicConfirmation } from '@/lib/focusPublicConfirmation'
 
@@ -65,10 +66,13 @@ export function LuxorContactForm({
         eventType: 'Private celebration',
         source: 'contact_page',
         flow: 'contact_form',
-        pagePath: typeof window === 'undefined' ? '/contact' : window.location.pathname,
+        pagePath: typeof window === 'undefined' ? (spanish ? '/es/contact' : '/contact') : window.location.pathname,
+        referrer: typeof document === 'undefined' ? undefined : document.referrer,
+        sessionId: getLuxorPublicSessionId(),
+        attribution: getLuxorPublicAttribution(),
         metadata: {
           contactFormSubmittedAt: new Date().toISOString(),
-          locale,
+          websiteLocale: locale,
         },
       }
 
