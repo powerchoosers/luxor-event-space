@@ -50,6 +50,8 @@ import { ElenaLiveVoiceClient, type ElenaVoiceState } from '@/lib/elenaLiveVoice
 import { ElenaSilkOrb } from './ElenaSilkOrb'
 import { ElenaEmailDraftCard, EmailDraftPayload } from './ElenaEmailDraftCard'
 import { ElenaWorkflowDraftCard, type ElenaWorkflowDraftPayload } from './ElenaWorkflowDraftCard'
+import { ElenaFunnelGoalsCard } from './ElenaFunnelGoalsCard'
+import type { ElenaFunnelGoalsCardPayload } from '@/lib/luxorFunnelGoalsElena'
 import {
   ElenaLeadUpdateCard,
   ElenaContractCard,
@@ -125,6 +127,7 @@ type Message = {
   newContactCard?: NewContactCardPayload
   tourInviteCard?: TourInviteCardPayload
   workflowDraft?: ElenaWorkflowDraftPayload
+  funnelGoalsCard?: ElenaFunnelGoalsCardPayload
   workflowLinks?: Array<{ name: string; href: string | null; note: string }>
   textCampaignDraft?: { name: string; bodyTemplate: string; campaignType: string }
   voiceTranscript?: Array<{ role: 'user' | 'assistant'; text: string }>
@@ -146,6 +149,7 @@ type ElenaChatResponse = {
   newContactCard?: NewContactCardPayload
   tourInviteCard?: TourInviteCardPayload
   workflowDraft?: ElenaWorkflowDraftPayload
+  funnelGoalsCard?: ElenaFunnelGoalsCardPayload
   workflowLinks?: Array<{ name: string; href: string | null; note: string }>
   navigation?: { href: string }
   userAttachments?: MessageAttachment[]
@@ -170,6 +174,7 @@ function hasVoiceActionOutput(message: Message) {
     || message.newContactCard
     || message.tourInviteCard
     || message.workflowDraft
+    || message.funnelGoalsCard
     || message.workflowLinks?.length
     || message.textCampaignDraft
     || message.toolActivityFailed
@@ -1448,6 +1453,7 @@ export function PortalElenaChat({ isOpen, onClose, activePath, portalRole, userE
             newContactCard: data.newContactCard,
             tourInviteCard: data.tourInviteCard,
             workflowDraft: data.workflowDraft,
+            funnelGoalsCard: data.funnelGoalsCard,
             workflowLinks: data.workflowLinks,
             textCampaignDraft: data.textCampaignDraft,
           },
@@ -1504,6 +1510,23 @@ export function PortalElenaChat({ isOpen, onClose, activePath, portalRole, userE
       : message)
     setMessages(updatedMessages)
     return persistSessionMessages(updatedMessages)
+  }
+
+  const handleFunnelGoalsSaved = (msgIndex: number, savedAt: string | null) => {
+    const updatedMessages = messages.map((message, index) => index === msgIndex && message.funnelGoalsCard
+      ? { ...message, funnelGoalsCard: { ...message.funnelGoalsCard, savedAt: savedAt || new Date().toISOString() } }
+      : message)
+    setMessages(updatedMessages)
+    if (currentSessionId) {
+      void fetch('/api/portal/elena-chat/sessions', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: currentSessionId,
+          messages: updatedMessages,
+        }),
+      })
+    }
   }
 
   const handleWorkflowDraftSaved = (msgIndex: number, workflow: { id: string; name: string }) => {
@@ -2017,6 +2040,22 @@ export function PortalElenaChat({ isOpen, onClose, activePath, portalRole, userE
                           />
                         )}
 
+                        {msg.funnelGoalsCard && (
+                          <ElenaFunnelGoalsCard
+                            payload={msg.funnelGoalsCard}
+                            onSaved={({ updatedAt }) => {
+                              handleFunnelGoalsSaved(index, updatedAt)
+                              setMessages((prev) => [
+                                ...prev,
+                                {
+                                  role: 'assistant',
+                                  content: 'Goals saved. Settings → Funnel goals and the Leads funnel dashboard will use these targets.',
+                                },
+                              ])
+                            }}
+                          />
+                        )}
+
                         {msg.workflowLinks?.filter((item) => isSafeWorkflowLink(item.href)).map((item) => <Link key={item.href} href={item.href!} onClick={() => { stopVoice(); onClose() }} className="mt-2 inline-flex min-h-11 w-[96%] items-center justify-between gap-3 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-4 py-3 text-left text-xs font-semibold text-[color:var(--portal-text)] transition hover:border-[#caa24c]/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45"><span><span className="block">{item.name}</span><span className="mt-1 block font-normal text-[color:var(--portal-muted)]">{item.note}</span></span><ExternalLink size={15} aria-hidden="true" /></Link>)}
 
                         {msg.textCampaignDraft && (
@@ -2238,6 +2277,7 @@ export function PortalElenaChat({ isOpen, onClose, activePath, portalRole, userE
                   </AnimatePresence>
                 </div>
               )}
+              <div className="min-h-28 shrink-0" aria-hidden="true" />
               <div ref={messagesEndRef} />
             </motion.div>
           </AnimatePresence>

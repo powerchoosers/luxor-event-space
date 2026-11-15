@@ -25,6 +25,14 @@ import { LUXOR_UNSLOP_CHAT_RULES, LUXOR_UNSLOP_COPY_RULES } from '@/lib/luxorUns
 import { completeComposerMessage } from '@/lib/luxorComposerAiServer'
 import { prepareElenaChatAttachments, type OpenRouterContentPart } from '@/lib/luxorElenaAttachmentsServer'
 import { storeElenaChatAttachments, type ElenaChatStoredAttachment } from '@/lib/luxorElenaChatAttachmentsServer'
+import { emptyFunnelGoals, parseFunnelGoals } from '@/lib/luxorFunnelGoals'
+import {
+  buildElenaFunnelGoalsCard,
+  buildFunnelGoalsUpdatePlan,
+  parseFunnelGoalAssignments,
+  type ElenaFunnelGoalsCardPayload,
+  type FunnelGoalsBrief,
+} from '@/lib/luxorFunnelGoalsElena'
 
 type ToolCall = {
   id: string
@@ -106,6 +114,7 @@ type ChatMessage = {
     savedWorkflowName?: string
   }
   workflowLinks?: MessageWorkflowMatch[]
+  funnelGoalsCard?: ElenaFunnelGoalsCardPayload
   attachments?: Array<{
     id?: string
     name: string
@@ -483,6 +492,7 @@ Use permitted live CRM context and structured read tools. Never use SQL. Do not 
 - For an invoice or payment link, direct the user to the relevant portal workflow. Payment requests require a signed agreement; do not claim that Elena sent or created one.
 - When the owner asks you to create a task, reminder, or follow-up note, link it to one existing Luxor client. If the exact client is not already clear from the active context, ask the owner which client by name or email before preparing a task card. Resolve the named client with "lookup_luxor_lead"; if more than one person could match, ask one short disambiguation question. Never invent or guess a client ID. Only call "prepare_task_card" after a real inquiry record has been uniquely resolved, and pass its inquiryId.
 - When the owner reports a portal bug, broken page, confusing workflow, missing button, wrong number, or asks for developer help fixing the Luxor website or portal, call "prepare_developer_support_card". Summarize the issue in title and description fields. If the owner already attached screenshots, PDFs, or text files in this chat, say they can include those files on the developer support card before sending. Use priority "urgent" only for blocked revenue, safety, or signing/payment issues. Never claim the ticket was sent until the owner confirms the developer support card. If the owner types /ticket or clearly wants a Braxton cloud fix ticket without extra discussion, call prepare_developer_support_card immediately with a concise title from their message and the current portal page path.
+- When the owner wants to set, update, or talk through Leads funnel goals, sales targets, conversion rates, monthly bookings, or revenue goals, ask only for funnel rates saved goals cannot infer (inquiry-to-tour, show rate, proposal close, etc.), or state the default rate you are assuming from saved goals and let the owner correct you before calling "prepare_funnel_goals_card". Work backward through the full funnel so inquiries, tours scheduled, tours completed, proposals, and bookings stay in order. When monthly targets change, weekly, quarterly, annual, and saved overrides rescale from the same ratio unless the card flags a conflict. Respect Luxor goal rules: daily goals calculate calendar totals; explicit weekly, monthly, quarterly, or annual values override those totals. Pass funnelBrief with bookings, revenue, and rates; the card merges onto saved goals. Never claim goals were saved until the owner clicks Save goals on the review card.
 - When the owner asks you to take them to, open, pull up, or show a specific lead or client, first resolve that person exactly. For duplicate first names, never choose one arbitrarily: prefer the active dossier only when the owner says "this lead" or gives matching context; otherwise query Luxor inquiries and use email, event type, target date, phone, or prior conversation context to identify one person. If more than one candidate still fits, ask the owner a short disambiguation question using useful human details such as name, email, event type, or date. Never show, ask for, or explain database IDs to the owner. Once the record is uniquely resolved, call "navigate_to_lead" so the portal opens that dossier and Elena shows a read-only contact card.
 - For a tour invite, direct the user to the lead or Calendar workspace to review and send it. Tour invite sending through Elena is currently unavailable; never claim one was sent.
 - Tour-day changes through Elena are unavailable. Schedule updates can reopen times; direct the owner to Calendar to review availability and do not claim a lasting closure was made.
@@ -760,6 +770,77 @@ const TOOLS_DEFINITION = [
   {
     type: 'function',
     function: {
+      name: 'prepare_funnel_goals_card',
+      description:
+        'Prepare a reviewable funnel-goals card for Settings and the Leads funnel dashboard. Use after discussing targets in plain language. Does not save until the owner confirms on the card.',
+      parameters: {
+        type: 'object',
+        properties: {
+          summary: { type: 'string', description: 'Short owner-facing summary of what these targets accomplish.' },
+          calculations: {
+            type: 'string',
+            description: 'Plain-language math notes (rates, bookings, revenue, and funnel steps).',
+          },
+          funnelBrief: {
+            type: 'object',
+            description: 'Optional structured brief. Work backward from outcomes when rates are known.',
+            properties: {
+              bookingsPerMonth: { type: 'number' },
+              averageRevenuePerBooking: { type: 'number' },
+              tourToBookingRate: { type: 'number', description: 'Booked events per completed tour (0–1).' },
+              proposalToBookingRate: { type: 'number', description: 'Booked events per proposal sent (0–1).' },
+              tourCompletedToProposalRate: { type: 'number', description: 'Proposals sent per completed tour (0–1).' },
+              toursScheduledToCompletedRate: { type: 'number', description: 'Completed tours per scheduled tour (0–1).' },
+              inquiryToTourScheduledRate: { type: 'number', description: 'Tours scheduled per new inquiry (0–1).' },
+            },
+          },
+          goalValues: {
+            type: 'array',
+            description:
+              'Explicit values to merge onto saved goals. Use for direct targets or month/quarter overrides.',
+            items: {
+              type: 'object',
+              properties: {
+                metric: {
+                  type: 'string',
+                  enum: [
+                    'newInquiries',
+                    'toursScheduled',
+                    'toursCompleted',
+                    'proposalsSent',
+                    'bookedEvents',
+                    'revenue',
+                  ],
+                },
+                cadence: {
+                  type: 'string',
+                  enum: [
+                    'daily',
+                    'weekly',
+                    'monthly',
+                    'quarterly',
+                    'annual',
+                    'monthlyOverride',
+                    'quarterlyOverride',
+                  ],
+                },
+                periodKey: {
+                  type: 'string',
+                  description: 'YYYY-MM or YYYY-Q1..Q4 when cadence is monthlyOverride or quarterlyOverride.',
+                },
+                value: { type: 'number' },
+              },
+              required: ['metric', 'cadence', 'value'],
+            },
+          },
+        },
+        required: ['summary'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
       name: 'prepare_developer_support_card',
       description: 'Prepare an owner-only developer support ticket card for portal or website fixes. Sends to Braxton in the cloud after explicit confirmation.',
       parameters: {
@@ -861,8 +942,22 @@ function toolActivityLabel(name: string) {
     prepare_invoice_card: 'Preparing an invoice draft',
     prepare_task_card: 'Preparing a task',
     prepare_developer_support_card: 'Preparing a developer support ticket',
+    prepare_funnel_goals_card: 'Preparing funnel goals',
   }
   return labels[name]
+}
+
+async function loadStoredFunnelGoalsForElena() {
+  const rows = await supabaseRestStrict<Array<{ goals: unknown; revision: number }>>(
+    'luxor_funnel_goals?singleton=eq.true&select=goals,revision&limit=1',
+  )
+  if (!Array.isArray(rows) || rows.length > 1) throw new Error('Saved goals are unavailable.')
+  if (!rows.length) return { goals: emptyFunnelGoals(), revision: 0 }
+  const goals = parseFunnelGoals(rows[0].goals)
+  if (!goals || !Number.isSafeInteger(rows[0].revision) || rows[0].revision < 0) {
+    throw new Error('Saved goals are unavailable.')
+  }
+  return { goals, revision: rows[0].revision }
 }
 
 export async function POST(request: Request) {
@@ -2113,6 +2208,7 @@ ${can('planner') ? formatRows(bookings, ['client_name', 'event_type', 'event_dat
       prepare_invoice_card: ['leads', 'planner', 'finances'],
       prepare_task_card: ['leads', 'calendar'],
       prepare_developer_support_card: [],
+      prepare_funnel_goals_card: ['settings'],
       prepare_email_draft: ['leads', 'emails'],
       prepare_custom_workflow_draft: ['marketing'],
       read_workflow_progress: ['marketing', 'leads'],
@@ -2153,6 +2249,7 @@ ${can('planner') ? formatRows(bookings, ['client_name', 'event_type', 'event_dat
     let workflowDraftPayload: ChatMessage['workflowDraft'] | null = null
     let workflowLinksPayload: MessageWorkflowMatch[] | null = null
     let navigationPayload: { href: string } | null = null
+    let funnelGoalsPayload: ElenaFunnelGoalsCardPayload | null = null
 
     while (loopCount < maxLoops) {
       loopCount++
@@ -2800,6 +2897,52 @@ ${can('planner') ? formatRows(bookings, ['client_name', 'event_type', 'event_dat
               })
             }
           }
+          else if (toolCall.function?.name === 'prepare_funnel_goals_card') {
+            try {
+              if (!can('settings')) throw new Error('Settings permission is required to update funnel goals.')
+              const args = typeof toolCall.function.arguments === 'string'
+                ? JSON.parse(toolCall.function.arguments)
+                : toolCall.function.arguments
+              const stored = await loadStoredFunnelGoalsForElena()
+              const brief = args?.funnelBrief && typeof args.funnelBrief === 'object' && !Array.isArray(args.funnelBrief)
+                ? args.funnelBrief as FunnelGoalsBrief
+                : undefined
+              const plan = buildFunnelGoalsUpdatePlan(stored.goals, {
+                brief,
+                goalValues: args?.goalValues,
+              })
+              funnelGoalsPayload = buildElenaFunnelGoalsCard({
+                summary: String(args.summary || ''),
+                calculations: String(args.calculations || ''),
+                baseGoals: stored.goals,
+                assignments: plan.assignments,
+                revision: stored.revision,
+                canSave: can('settings'),
+                assumptions: plan.assumptions,
+                conflicts: plan.conflicts,
+              })
+              openrouterMessages.push({
+                role: 'tool',
+                tool_call_id: toolCall.id,
+                name: 'prepare_funnel_goals_card',
+                content: JSON.stringify({
+                  ok: true,
+                  message:
+                    'Funnel goals review card loaded in Elena Chat. The owner must review the exact values and click Save goals; never claim they were saved.',
+                  changedPaths: funnelGoalsPayload.changedPaths,
+                }),
+              })
+            } catch (goalsError) {
+              openrouterMessages.push({
+                role: 'tool',
+                tool_call_id: toolCall.id,
+                name: 'prepare_funnel_goals_card',
+                content: JSON.stringify({
+                  error: goalsError instanceof Error ? goalsError.message : 'Could not prepare the funnel goals card.',
+                }),
+              })
+            }
+          }
           else if (toolCall.function?.name === 'prepare_developer_support_card') {
             try {
               if (member.role !== 'owner') throw new Error('Developer support tickets are owner-only.')
@@ -2869,6 +3012,7 @@ ${can('planner') ? formatRows(bookings, ['client_name', 'event_type', 'event_dat
         tourInviteCard: tourInviteCardPayload || undefined,
         workflowDraft: workflowDraftPayload || undefined,
         workflowLinks: workflowLinksPayload || undefined,
+        funnelGoalsCard: funnelGoalsPayload || undefined,
       }
     ]
 
@@ -2898,6 +3042,7 @@ ${can('planner') ? formatRows(bookings, ['client_name', 'event_type', 'event_dat
       workflowLinks: workflowLinksPayload || undefined,
       toolActivity,
       navigation: navigationPayload || undefined,
+      funnelGoalsCard: funnelGoalsPayload || undefined,
       userAttachments: userAttachmentsForClient || undefined,
     })
   } catch (err: unknown) {

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getVerifiedLuxorPortalSession,getLuxorPortalSession,isAuthorizedLuxorPortalEmail } from '@/lib/luxorPortalAuth'
+import { getLuxorPortalSession } from '@/lib/luxorPortalAuth'
 import { getLuxorPortalMember,memberCan } from '@/lib/luxorPortalAccess'
 import { supabaseRestStrict } from '@/lib/supabaseRestServer'
 import { emptyFunnelGoals,parseFunnelGoals } from '@/lib/luxorFunnelGoals'
@@ -7,15 +7,18 @@ export const dynamic='force-dynamic'
 const headers={'Cache-Control':'no-store'}
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 async function access(){
-  const verified=await getVerifiedLuxorPortalSession(),session=verified?await getLuxorPortalSession():null
-  if(!verified||!session||verified.email!==session.email||!isAuthorizedLuxorPortalEmail(session.email))return null
+  const session=await getLuxorPortalSession()
+  if(!session)return null
   const member=await getLuxorPortalMember(session.email)
-  return member?.status==='active'&&memberCan(member,'leads')?{email:session.email,canEdit:memberCan(member,'settings')}:null
+  if(!member||member.status!=='active')return null
+  const canRead=memberCan(member,'leads')||memberCan(member,'settings')
+  if(!canRead)return null
+  return {email:session.email,canEdit:memberCan(member,'settings')}
 }
 function unavailable(){return NextResponse.json({available:false,code:'goals_unavailable',error:'Shared goals are unavailable. No saved result can be confirmed.'},{status:503,headers})}
 export async function GET(){
   try{
-    const actor=await access();if(!actor)return NextResponse.json({error:'Active staff with lead access is required.'},{status:403,headers})
+    const actor=await access();if(!actor)return NextResponse.json({error:'Active staff with lead or settings access is required.'},{status:403,headers})
     const rows=await supabaseRestStrict<Array<{goals:unknown;revision:number;updated_at:string|null}>>('luxor_funnel_goals?singleton=eq.true&select=goals,revision,updated_at&limit=1')
     if(!Array.isArray(rows)||rows.length>1)throw new Error('Invalid saved goals')
     if(!rows.length)return NextResponse.json({available:true,goals:emptyFunnelGoals(),revision:0,updatedAt:null,canEdit:actor.canEdit},{headers})
