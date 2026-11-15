@@ -1,6 +1,6 @@
 import 'server-only'
 
-import { listLuxorDailyPriorities } from './luxorDailyPrioritiesServer'
+import { listSavedLuxorDailyPriorities } from './luxorDailyPrioritiesServer'
 import { listAllLuxorInquiries } from './luxorInquiriesServer'
 import { listLuxorBookings } from './luxorBookingsServer'
 import { isLuxorNonRevenueTestInquiry } from './luxorInquiryTypes'
@@ -45,7 +45,7 @@ export async function gatherLuxorSalesBriefingPipeline(briefingDateKey: string):
   const [inquiries, bookings, dailyPriorities] = await Promise.all([
     listAllLuxorInquiries().catch(() => []),
     listLuxorBookings().catch(() => []),
-    listLuxorDailyPriorities(briefingDateKey).catch(() => []),
+    listSavedLuxorDailyPriorities(briefingDateKey),
   ])
 
   const businessLeads = inquiries.filter((lead) => !isLuxorNonRevenueTestInquiry(lead))

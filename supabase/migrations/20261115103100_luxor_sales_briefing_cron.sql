@@ -1,4 +1,5 @@
--- Schedule the sales briefing worker at 13:00 and 14:00 UTC Mon–Sat (8 AM America/Chicago with DST handled in the app).
+-- Schedule the sales briefing worker at :10 past 13:00 and 14:00 UTC Mon–Sat (~8:10 America/Chicago;
+-- after luxor-daily-priorities-supabase at minute 0). The route still requires 8 AM CT and sent_at idempotency for DST.
 
 create extension if not exists pg_net with schema extensions;
 create extension if not exists pg_cron with schema pg_catalog;
@@ -20,7 +21,7 @@ $$;
 
 select cron.schedule(
   'luxor-sales-briefing-supabase',
-  '0 13,14 * * 1-6',
+  '10 13,14 * * 1-6',
   $cron$
     select net.http_post(
       url := 'https://www.luxoratlaspalmas.com/api/cron/sales-briefing',

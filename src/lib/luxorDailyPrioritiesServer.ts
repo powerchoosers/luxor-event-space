@@ -27,6 +27,19 @@ export type LuxorDailyPriority = {
   metadata?: Record<string, unknown>
 }
 
+/** Read saved rows only; does not run the generator (for email/reporting workers). */
+export async function listSavedLuxorDailyPriorities(dateStr: string): Promise<LuxorDailyPriority[]> {
+  try {
+    const existing = await supabaseRest<LuxorDailyPriority[]>(
+      `luxor_daily_priorities?priority_date=eq.${encodeURIComponent(dateStr)}&order=rank.asc`,
+    )
+    return existing ?? []
+  } catch (error) {
+    console.error('Failed to read saved luxor_daily_priorities:', error)
+    return []
+  }
+}
+
 export async function listLuxorDailyPriorities(dateStr?: string): Promise<LuxorDailyPriority[]> {
   const targetDate = dateStr || luxorTodayKey()
   try {
