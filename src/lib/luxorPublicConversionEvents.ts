@@ -7,6 +7,9 @@ export const LUXOR_TOUR_CTA_CLICK_EVENT = 'tour_cta_click' as const
 /** Generic CTA click events counted in per-page performance (engagement rate). */
 export const LUXOR_GENERIC_CTA_CLICK_EVENT = 'cta_click' as const
 
+/** Call CTA click events counted in per-page performance (engagement rate). */
+export const LUXOR_CALL_CTA_CLICK_EVENT = 'call_cta_click' as const
+
 export const LUXOR_VISIT_CTA_CLICK_EVENT_NAMES = [
   LUXOR_VISIT_CTA_CLICK_EVENT,
   LUXOR_TOUR_CTA_CLICK_EVENT,
@@ -15,6 +18,7 @@ export const LUXOR_VISIT_CTA_CLICK_EVENT_NAMES = [
 export const LUXOR_PAGE_PERFORMANCE_CTA_CLICK_EVENT_NAMES = [
   ...LUXOR_VISIT_CTA_CLICK_EVENT_NAMES,
   LUXOR_GENERIC_CTA_CLICK_EVENT,
+  LUXOR_CALL_CTA_CLICK_EVENT,
 ] as const
 
 export type LuxorVisitCtaClickEventName = (typeof LUXOR_VISIT_CTA_CLICK_EVENT_NAMES)[number]
