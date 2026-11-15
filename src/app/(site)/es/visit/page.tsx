@@ -1,10 +1,11 @@
 import type { Metadata } from 'next'
+import { buildLuxorBilingualAlternates } from '@/lib/luxorPublicHreflang'
 import { TourPageContent } from '@/components/TourPageContent'
 
 export const metadata: Metadata = {
   title: 'Agendar una visita',
   description: 'Elige una hora para conocer Luxor at Las Palmas Events en persona y conversar sobre tu celebración.',
-  alternates: { canonical: '/es/visit', languages: { en: '/visit', es: '/es/visit' } },
+  alternates: buildLuxorBilingualAlternates('/es/visit', '/visit', '/es/visit'),
 }
 
 type PageProps = { searchParams: Promise<{ inquiryId?: string; source?: string }> }

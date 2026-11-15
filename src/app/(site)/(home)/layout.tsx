@@ -1,15 +1,9 @@
 import type { Metadata } from 'next'
 import type { ReactNode } from 'react'
+import { buildLuxorBilingualAlternates } from '@/lib/luxorPublicHreflang'
 
 export const metadata: Metadata = {
-  alternates: {
-    canonical: '/',
-    languages: {
-      'en-US': '/',
-      'es-US': '/es',
-      'x-default': '/',
-    },
-  },
+  alternates: buildLuxorBilingualAlternates('/', '/', '/es'),
 }
 
 export default function HomeLayout({ children }: { children: ReactNode }) {

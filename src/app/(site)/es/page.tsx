@@ -1,19 +1,22 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
+import { buildLuxorBilingualAlternates } from '@/lib/luxorPublicHreflang'
+
+const ES_HOME_DESCRIPTION =
+  'Salón para quinceañeras, bodas y celebraciones en San Antonio para hasta 180 invitados. Paquetes desde decoración propia hasta todo incluido. Agenda tu visita.'
 
 export const metadata: Metadata = {
   title: {
-    absolute: 'Luxor at Las Palmas Events | Quinceañeras, bodas y celebraciones en San Antonio',
+    absolute: 'Salón para quinceañeras en San Antonio | Luxor at Las Palmas',
   },
-  description: 'Un espacio moderno para bodas, quinceañeras y celebraciones privadas en San Antonio.',
-  alternates: {
-    canonical: '/es',
-    languages: {
-      'en-US': '/',
-      'es-US': '/es',
-      'x-default': '/',
-    },
+  description: ES_HOME_DESCRIPTION,
+  openGraph: {
+    description: ES_HOME_DESCRIPTION,
   },
+  twitter: {
+    description: ES_HOME_DESCRIPTION,
+  },
+  alternates: buildLuxorBilingualAlternates('/es', '/', '/es'),
 }
 
 export default function SpanishHomePage() {

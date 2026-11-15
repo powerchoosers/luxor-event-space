@@ -1,4 +1,5 @@
 import type { Metadata } from 'next'
+import { buildLuxorBilingualAlternates } from '@/lib/luxorPublicHreflang'
 import Link from 'next/link'
 import { Calendar, Mail, MapPin, Phone } from '@/lib/icons/phosphor-compat'
 import { LuxorContactForm } from '@/components/LuxorContactForm'
@@ -7,7 +8,7 @@ import { PublicPhoneLink } from '@/components/PublicPhoneLink'
 export const metadata: Metadata = {
   title: 'Contacto',
   description: 'Contáctanos en Luxor at Las Palmas Events en San Antonio para preguntas sobre el lugar, disponibilidad o agendar una visita.',
-  alternates: { canonical: '/es/contact', languages: { en: '/contact', es: '/es/contact' } },
+  alternates: buildLuxorBilingualAlternates('/es/contact', '/contact', '/es/contact'),
 }
 
 const googleMapsUrl = 'https://maps.app.goo.gl/qQyX6MP98A9FNwvr6?g_st=ic'

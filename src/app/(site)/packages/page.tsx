@@ -1,4 +1,5 @@
 import type { Metadata } from 'next'
+import { buildLuxorBilingualAlternates } from '@/lib/luxorPublicHreflang'
 import { PackagesPageContent } from '@/components/packages/PackagesPageContent'
 import { buildPublicPackageCards } from '@/lib/luxorPublicPackages'
 import { loadPublicPackagesPricingSnapshot } from '@/lib/luxorPublicPackageStartingPricesServer'
@@ -8,7 +9,7 @@ export const revalidate = 300
 export const metadata: Metadata = {
   title: 'Event Packages | Luxor at Las Palmas Events',
   description: 'Explore Essentials, Signature, and Luxor event packages at Luxor at Las Palmas Events in San Antonio.',
-  alternates: { canonical: '/packages', languages: { en: '/packages', es: '/es/packages' } },
+  alternates: buildLuxorBilingualAlternates('/packages', '/packages', '/es/packages'),
 }
 
 export default async function PackagesPage() {

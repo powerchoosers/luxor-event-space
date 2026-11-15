@@ -23,6 +23,7 @@ import { PublicEventDatePicker } from '@/components/PublicEventDatePicker'
 import { LuxorTimePicker } from '@/components/LuxorTimePicker'
 import { LuxorEventTypeCombobox } from '@/components/LuxorEventTypeCombobox'
 import { PublicPhoneLink } from '@/components/PublicPhoneLink'
+import { getLuxorPublicAttribution, getLuxorPublicSessionId } from '@/lib/luxorPublicAttribution'
 import { submitLuxorIdempotentForm } from '@/lib/luxorSubmissionIdempotency'
 import { formatLocalDateKey, isLuxorDateSelectable } from '@/lib/publicEventDate'
 
@@ -354,7 +355,10 @@ export function TourRequestForm({
       source: 'visit_page',
       flow: customMode ? 'custom_visit_request' : 'visit_booking',
       marketingOptIn,
-      pagePath: typeof window === 'undefined' ? '/visit' : window.location.pathname,
+      pagePath: typeof window === 'undefined' ? (spanish ? '/es/visit' : '/visit') : window.location.pathname,
+      referrer: typeof document === 'undefined' ? undefined : document.referrer,
+      sessionId: getLuxorPublicSessionId(),
+      attribution: getLuxorPublicAttribution(),
       metadata: {
         selectedTourSlotId: slotId || null,
         browserTimeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,

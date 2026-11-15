@@ -11,7 +11,7 @@ import {
   LUXOR_MARKETING_SMS_DISCLOSURE,
 } from '@/lib/luxorInquiryTypes'
 import { submitLuxorIdempotentForm } from '@/lib/luxorSubmissionIdempotency'
-import { getLuxorPublicSessionId } from '@/lib/luxorPublicAttribution'
+import { getLuxorPublicAttribution, getLuxorPublicSessionId } from '@/lib/luxorPublicAttribution'
 import type { PublicPackagesConfiguratorInput, PublicPackagesSummaryLine } from '@/lib/luxorPublicPackagesConfigurator'
 import { PackagesInquiryEventSummary } from '@/components/packages/PackagesInquiryEventSummary'
 import {
@@ -139,7 +139,9 @@ export function PackagesInquiryForm({ locale = 'en', draftToken, draft }: Packag
         marketingOptIn,
         formStartedAt: startedAt,
         sessionId: getLuxorPublicSessionId(),
-        pagePath: typeof window === 'undefined' ? '/packages/inquiry' : window.location.pathname,
+        pagePath: typeof window === 'undefined' ? (locale === 'es' ? '/es/packages/inquiry' : '/packages/inquiry') : window.location.pathname,
+        referrer: typeof document === 'undefined' ? undefined : document.referrer,
+        attribution: getLuxorPublicAttribution(),
         locale,
       })
       const data = await response.json().catch(() => ({})) as { error?: string; inquiry?: { id: string } }

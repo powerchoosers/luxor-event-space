@@ -42,6 +42,8 @@ export async function POST(request: NextRequest) {
       marketingOptIn: body.marketingOptIn === true,
       locale: body.locale === 'es' ? 'es' : 'en',
       pagePath: typeof body.pagePath === 'string' ? body.pagePath : undefined,
+      referrer: typeof body.referrer === 'string' ? body.referrer : undefined,
+      attribution: (object(body.attribution) ?? undefined) as import('@/lib/luxorInquiryTypes').LuxorPublicAttribution | undefined,
       sessionId: typeof body.sessionId === 'string' ? body.sessionId : undefined,
       formStartedAt: typeof body.formStartedAt === 'number' ? body.formStartedAt : undefined,
       userAgent: request.headers.get('user-agent') ?? undefined,
