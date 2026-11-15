@@ -27,7 +27,7 @@ export type DeveloperTicketDraft = {
 }
 
 const DRAFT_KEY_PREFIX = 'luxor_developer_ticket_draft_v1:'
-const EMPTY_DRAFT: DeveloperTicketDraft = {
+export const DEVELOPER_TICKET_DRAFT_EMPTY: DeveloperTicketDraft = {
   version: 1,
   active: false,
   phase: 'compose',
@@ -47,14 +47,14 @@ export function developerTicketDraftStorageKey(userEmail: string) {
 }
 
 export function readDeveloperTicketDraft(userEmail: string): DeveloperTicketDraft {
-  if (typeof window === 'undefined' || !userEmail) return EMPTY_DRAFT
+  if (typeof window === 'undefined' || !userEmail) return DEVELOPER_TICKET_DRAFT_EMPTY
   try {
     const raw = window.localStorage.getItem(developerTicketDraftStorageKey(userEmail))
-    if (!raw) return EMPTY_DRAFT
+    if (!raw) return DEVELOPER_TICKET_DRAFT_EMPTY
     const parsed = JSON.parse(raw) as unknown
-    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return EMPTY_DRAFT
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return DEVELOPER_TICKET_DRAFT_EMPTY
     const value = parsed as Record<string, unknown>
-    if (value.version !== 1) return EMPTY_DRAFT
+    if (value.version !== 1) return DEVELOPER_TICKET_DRAFT_EMPTY
     const priority = value.priority
     const validPriority = priority === 'low' || priority === 'medium' || priority === 'high' || priority === 'urgent'
       ? priority
@@ -83,7 +83,7 @@ export function readDeveloperTicketDraft(userEmail: string): DeveloperTicketDraf
       updatedAt: typeof value.updatedAt === 'number' ? value.updatedAt : 0,
     }
   } catch {
-    return EMPTY_DRAFT
+    return DEVELOPER_TICKET_DRAFT_EMPTY
   }
 }
 
@@ -97,7 +97,7 @@ export function writeDeveloperTicketDraft(userEmail: string, draft: DeveloperTic
 export function clearDeveloperTicketDraft(userEmail: string) {
   if (typeof window === 'undefined' || !userEmail) return
   window.localStorage.removeItem(developerTicketDraftStorageKey(userEmail))
-  window.dispatchEvent(new CustomEvent('luxor:developer-ticket-draft', { detail: EMPTY_DRAFT }))
+  window.dispatchEvent(new CustomEvent('luxor:developer-ticket-draft', { detail: DEVELOPER_TICKET_DRAFT_EMPTY }))
 }
 
 export function subscribeDeveloperTicketDraft(callback: () => void) {

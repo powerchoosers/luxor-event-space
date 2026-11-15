@@ -366,6 +366,21 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
   }, [pathname, router, searchParams])
   const [sidebarCollapsed, setSidebarCollapsed] = useState(initialSidebarCollapsed)
   const [elenaOpen, setElenaOpen] = useState(false)
+  const elenaLauncherRef = useRef<HTMLButtonElement>(null)
+
+  const focusAfterElenaClose = useCallback(() => {
+    const devToggle = document.getElementById('portal-developer-ticket-panel-toggle')
+    if (devToggle instanceof HTMLElement && devToggle.offsetParent !== null) {
+      devToggle.focus()
+      return
+    }
+    elenaLauncherRef.current?.focus()
+  }, [])
+
+  const closeElenaChat = useCallback(() => {
+    focusAfterElenaClose()
+    window.requestAnimationFrame(() => setElenaOpen(false))
+  }, [focusAfterElenaClose, setElenaOpen])
   const [accountMenuOpen, setAccountMenuOpen] = useState(false)
   const accountContainerRef = useRef<HTMLDivElement>(null)
 
@@ -1686,8 +1701,12 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
 
               {/* 4. Elena AI Concierge */}
               <button
+                ref={elenaLauncherRef}
                 type="button"
-                onClick={() => setElenaOpen((current) => !current)}
+                onClick={() => {
+                  if (elenaOpen) closeElenaChat()
+                  else setElenaOpen(true)
+                }}
                 className={`relative flex h-9 w-9 shrink-0 overflow-hidden rounded-full border transition-all hover:scale-105 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/50 cursor-pointer ${
                   elenaOpen 
                     ? 'border-[#caa24c] ring-2 ring-[#caa24c]/30' 
@@ -1981,7 +2000,7 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
           </button>
         </nav>
       <PortalDeveloperModeElenaSync elenaOpen={elenaOpen} />
-      <PortalElenaChat isOpen={elenaOpen} onClose={() => setElenaOpen(false)} activePath={pathname} portalRole={role} userEmail={session.email} />
+      <PortalElenaChat isOpen={elenaOpen} onClose={closeElenaChat} activePath={pathname} portalRole={role} userEmail={session.email} />
       <AnimatePresence>
         {mobileMoreOpen && (
           <motion.div

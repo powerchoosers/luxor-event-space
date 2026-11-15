@@ -1,16 +1,22 @@
 'use client'
 
-import React, { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import React, { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import { ChevronDown, MousePointerClick, Wrench } from '@/lib/icons/phosphor-compat'
 import {
   clearDeveloperTicketDraft,
+  DEVELOPER_TICKET_DRAFT_EMPTY,
   readDeveloperTicketDraft,
   subscribeDeveloperTicketDraft,
   writeDeveloperTicketDraft,
   type DeveloperTicketDraft,
   type DeveloperTicketDraftPhase,
 } from '@/lib/luxorDeveloperTicketDraft'
+import {
+  buildDeveloperTicketAnnotationCommit,
+  resolveDeveloperTicketAnnotationElement,
+  shouldSaveDeveloperTicketNote,
+} from '@/lib/luxorDeveloperTicketNoteSave'
 import type { DeveloperSupportCardPayload } from '@/components/portal/ElenaCRMContainers'
 import {
   developerTicketAnnotationDisplayLine,
@@ -47,6 +53,7 @@ type DeveloperModeContextValue = {
   setPanelExpanded: (value: boolean) => void
   elenaChatOpen: boolean
   setElenaChatOpen: (open: boolean) => void
+  beginEditAnnotation: (id: string, returnFocus: HTMLElement | null) => void
 }
 
 const DeveloperModeContext = createContext<DeveloperModeContextValue | null>(null)
@@ -83,10 +90,13 @@ export function PortalDeveloperModeProvider({
   children: React.ReactNode
 }) {
   const owner = portalRole === 'owner'
-  const [draft, setDraft] = useState<DeveloperTicketDraft>(() => (owner ? readDeveloperTicketDraft(userEmail) : readDeveloperTicketDraft('')))
+  const isClient = useSyncExternalStore(() => () => {}, () => true, () => false)
+  const [draft, setDraft] = useState<DeveloperTicketDraft>(DEVELOPER_TICKET_DRAFT_EMPTY)
   const [elementSelectMode, setElementSelectMode] = useState(false)
   const [panelExpanded, setPanelExpanded] = useState(false)
   const [elenaChatOpen, setElenaChatOpen] = useState(false)
+  const editAnnotationRequestRef = useRef<{ id: string; returnFocus: HTMLElement | null } | null>(null)
+  const [editAnnotationSignal, setEditAnnotationSignal] = useState(0)
 
   const persistDraft = useMemo(
     () => debounce((email: string, value: DeveloperTicketDraft) => writeDeveloperTicketDraft(email, value), 280),
@@ -103,11 +113,11 @@ export function PortalDeveloperModeProvider({
   }, [owner, persistDraft, userEmail])
 
   useEffect(() => {
-    if (!owner) return
-    return subscribeDeveloperTicketDraft(() => {
-      setDraft(readDeveloperTicketDraft(userEmail))
-    })
-  }, [owner, userEmail])
+    if (!owner || !isClient) return
+    const sync = () => setDraft(readDeveloperTicketDraft(userEmail))
+    sync()
+    return subscribeDeveloperTicketDraft(sync)
+  }, [isClient, owner, userEmail])
 
   const startDeveloperTicket = useCallback((payload: DeveloperSupportCardPayload, chatId?: string | null) => {
     if (!owner) return
@@ -169,7 +179,18 @@ export function PortalDeveloperModeProvider({
     })
   }, [persistDraft, userEmail])
 
-  const developerModeActive = owner && draft.active && draft.phase !== 'sent'
+  const beginEditAnnotation = useCallback((id: string, returnFocus: HTMLElement | null) => {
+    editAnnotationRequestRef.current = { id, returnFocus }
+    setEditAnnotationSignal((value) => value + 1)
+  }, [])
+
+  const consumeEditAnnotationRequest = useCallback(() => {
+    const next = editAnnotationRequestRef.current
+    editAnnotationRequestRef.current = null
+    return next
+  }, [])
+
+  const developerModeActive = isClient && owner && draft.active && draft.phase !== 'sent'
 
   const value = useMemo<DeveloperModeContextValue>(() => ({
     developerModeActive,
@@ -193,6 +214,7 @@ export function PortalDeveloperModeProvider({
     setPanelExpanded,
     elenaChatOpen,
     setElenaChatOpen,
+    beginEditAnnotation,
   }), [
     developerModeActive,
     draft,
@@ -205,6 +227,8 @@ export function PortalDeveloperModeProvider({
     removeAnnotation,
     startDeveloperTicket,
     upsertAnnotation,
+    beginEditAnnotation,
+    isClient,
   ])
 
   if (!owner) return <>{children}</>
@@ -226,6 +250,8 @@ export function PortalDeveloperModeProvider({
           onUpsertAnnotation={upsertAnnotation}
           onRemoveAnnotation={removeAnnotation}
           onPatchDraft={patchDraft}
+          editAnnotationSignal={editAnnotationSignal}
+          consumeEditAnnotationRequest={consumeEditAnnotationRequest}
         />
       ) : null}
     </DeveloperModeContext.Provider>
@@ -245,6 +271,8 @@ function PortalDeveloperModeChrome({
   onUpsertAnnotation,
   onRemoveAnnotation,
   onPatchDraft,
+  editAnnotationSignal,
+  consumeEditAnnotationRequest,
 }: {
   activePath: string
   draft: DeveloperTicketDraft
@@ -258,6 +286,8 @@ function PortalDeveloperModeChrome({
   onUpsertAnnotation: (annotation: DeveloperTicketAnnotation) => void
   onRemoveAnnotation: (id: string) => void
   onPatchDraft: (patch: Partial<DeveloperTicketDraft>) => void
+  editAnnotationSignal: number
+  consumeEditAnnotationRequest: () => { id: string; returnFocus: HTMLElement | null } | null
 }) {
   const reduceMotion = useReducedMotion()
   const hoverRef = useRef<HTMLElement | null>(null)
@@ -268,14 +298,26 @@ function PortalDeveloperModeChrome({
   const editingAnnotationIdRef = useRef<string | null>(null)
   const noteAnchorBaselineRef = useRef('')
   const noteSaveCancelledRef = useRef(false)
+  const noteSaveSuppressedRef = useRef(false)
+  const useStoredElementRef = useRef(false)
+  const noteDraftRef = useRef(noteDraft)
   const notePopoverReturnFocusRef = useRef<HTMLElement | null>(null)
   const selectElementTriggerRef = useRef<HTMLButtonElement>(null)
   const ticketPanelBodyRef = useRef<HTMLDivElement>(null)
   const pendingAnchorRef = useRef(pendingAnchor)
+  const draftRef = useRef(draft)
 
   useEffect(() => {
     pendingAnchorRef.current = pendingAnchor
   }, [pendingAnchor])
+
+  useEffect(() => {
+    draftRef.current = draft
+  }, [draft])
+
+  useEffect(() => {
+    noteDraftRef.current = noteDraft
+  }, [noteDraft])
 
   const clearNoteSaveTimer = useCallback(() => {
     if (saveTimerRef.current) {
@@ -285,10 +327,12 @@ function PortalDeveloperModeChrome({
   }, [])
 
   const cancelNotePopover = useCallback(() => {
+    noteSaveSuppressedRef.current = true
     noteSaveCancelledRef.current = true
     clearNoteSaveTimer()
     setNoteDraft(noteAnchorBaselineRef.current)
     setPendingAnchor(null)
+    useStoredElementRef.current = false
     editingAnnotationIdRef.current = null
     const returnTarget = notePopoverReturnFocusRef.current
     notePopoverReturnFocusRef.current = null
@@ -300,26 +344,76 @@ function PortalDeveloperModeChrome({
   }, [clearNoteSaveTimer])
 
   const commitNotePopover = useCallback(() => {
-    if (noteSaveCancelledRef.current) return
+    const trimmed = noteDraftRef.current.trim().slice(0, LUXOR_DEVELOPER_TICKET_ANNOTATION_NOTE_MAX)
     const anchor = pendingAnchorRef.current
-    if (!anchor) return
-    const trimmed = noteDraft.trim()
-    if (!trimmed) return
-    const descriptor = buildDeveloperTicketElementDescriptor(anchor.element)
-    if (!descriptor) return
-    const id = editingAnnotationIdRef.current || crypto.randomUUID()
-    const now = Date.now()
-    const existing = draft.annotations.find((item) => item.id === id)
-    onUpsertAnnotation({
-      id,
-      note: trimmed.slice(0, LUXOR_DEVELOPER_TICKET_ANNOTATION_NOTE_MAX),
-      pagePath: activePath,
-      element: descriptor,
-      viewport: readDeveloperTicketViewport(),
-      createdAt: existing?.createdAt || now,
-      updatedAt: now,
-    })
-  }, [activePath, draft.annotations, noteDraft, onUpsertAnnotation])
+    if (
+      !shouldSaveDeveloperTicketNote({
+        cancelled: noteSaveCancelledRef.current,
+        suppressed: noteSaveSuppressedRef.current,
+        hasAnchor: Boolean(anchor),
+        trimmedNote: trimmed,
+      })
+    ) {
+      return
+    }
+    const id = editingAnnotationIdRef.current
+    if (!id) return
+    const existing = draftRef.current.annotations.find((item) => item.id === id)
+    let elementDescriptor = existing?.element
+    if (!useStoredElementRef.current && anchor?.element) {
+      elementDescriptor = buildDeveloperTicketElementDescriptor(anchor.element) || undefined
+    }
+    if (!elementDescriptor) return
+    onUpsertAnnotation(
+      buildDeveloperTicketAnnotationCommit({
+        id,
+        note: trimmed,
+        pagePath: activePath,
+        viewport: readDeveloperTicketViewport(),
+        element: elementDescriptor,
+        existing,
+      }),
+    )
+    noteAnchorBaselineRef.current = trimmed
+    noteSaveCancelledRef.current = false
+    noteSaveSuppressedRef.current = false
+    useStoredElementRef.current = false
+    setPendingAnchor(null)
+    editingAnnotationIdRef.current = null
+  }, [activePath, onUpsertAnnotation])
+
+  const openAnnotationEditor = useCallback((input: {
+    id: string
+    note: string
+    storedElement: DeveloperTicketAnnotation['element']
+    returnFocus: HTMLElement | null
+  }) => {
+    onSetSelectMode(false)
+    editingAnnotationIdRef.current = input.id
+    useStoredElementRef.current = true
+    noteAnchorBaselineRef.current = input.note
+    noteSaveCancelledRef.current = false
+    noteSaveSuppressedRef.current = false
+    notePopoverReturnFocusRef.current = input.returnFocus
+    setNoteDraft(input.note)
+    const matched = resolveDeveloperTicketAnnotationElement(input.storedElement.selector)
+    const rect = matched
+      ? matched.getBoundingClientRect()
+      : new DOMRect(Math.max(16, window.innerWidth / 2 - 140), Math.max(80, window.innerHeight / 2 - 80), 1, 1)
+    setPendingAnchor({ rect, element: matched || document.documentElement })
+  }, [onSetSelectMode])
+
+  const openNewAnnotationEditor = useCallback((anchor: { rect: DOMRect; element: HTMLElement }) => {
+    const id = crypto.randomUUID()
+    editingAnnotationIdRef.current = id
+    useStoredElementRef.current = false
+    noteAnchorBaselineRef.current = ''
+    noteSaveCancelledRef.current = false
+    noteSaveSuppressedRef.current = false
+    notePopoverReturnFocusRef.current = selectElementTriggerRef.current
+    setNoteDraft('')
+    setPendingAnchor(anchor)
+  }, [])
 
   useLayoutEffect(() => {
     const body = ticketPanelBodyRef.current
@@ -371,16 +465,7 @@ function PortalDeveloperModeChrome({
       event.stopPropagation()
       const descriptor = buildDeveloperTicketElementDescriptor(target)
       if (!descriptor) return
-      const rect = target.getBoundingClientRect()
-      const id = editingAnnotationIdRef.current || crypto.randomUUID()
-      editingAnnotationIdRef.current = id
-      const existing = draft.annotations.find((item) => item.id === id)
-      const baseline = existing?.note || ''
-      noteAnchorBaselineRef.current = baseline
-      noteSaveCancelledRef.current = false
-      notePopoverReturnFocusRef.current = selectElementTriggerRef.current
-      setNoteDraft(baseline)
-      setPendingAnchor({ rect, element: target })
+      openNewAnnotationEditor({ rect: target.getBoundingClientRect(), element: target })
     }
     window.addEventListener('keydown', onKeyDown)
     window.addEventListener('pointermove', onMove)
@@ -390,17 +475,23 @@ function PortalDeveloperModeChrome({
       window.removeEventListener('pointermove', onMove)
       window.removeEventListener('click', onClick, true)
     }
-  }, [cancelNotePopover, draft.annotations, elementSelectMode, onSetSelectMode, pendingAnchor])
+  }, [cancelNotePopover, elementSelectMode, onSetSelectMode, openNewAnnotationEditor, pendingAnchor])
 
   useEffect(() => {
-    if (!pendingAnchor || !noteDraft.trim() || noteSaveCancelledRef.current) return
-    clearNoteSaveTimer()
-    saveTimerRef.current = setTimeout(() => {
-      if (noteSaveCancelledRef.current) return
-      commitNotePopover()
-    }, 420)
-    return clearNoteSaveTimer
-  }, [clearNoteSaveTimer, commitNotePopover, noteDraft, pendingAnchor])
+    const request = consumeEditAnnotationRequest()
+    if (!request) return
+    const item = draft.annotations.find((annotation) => annotation.id === request.id)
+    if (!item) return
+    const frame = window.requestAnimationFrame(() => {
+      openAnnotationEditor({
+        id: item.id,
+        note: item.note,
+        storedElement: item.element,
+        returnFocus: request.returnFocus,
+      })
+    })
+    return () => window.cancelAnimationFrame(frame)
+  }, [consumeEditAnnotationRequest, draft.annotations, editAnnotationSignal, openAnnotationEditor])
 
   const showFloatingPanel = !elenaChatOpen && draft.phase !== 'sent'
 
@@ -453,10 +544,7 @@ function PortalDeveloperModeChrome({
             <textarea
               autoFocus
               value={noteDraft}
-              onChange={(event) => {
-                noteSaveCancelledRef.current = false
-                setNoteDraft(event.target.value)
-              }}
+              onChange={(event) => setNoteDraft(event.target.value)}
               onKeyDown={(event) => {
                 if (event.key === 'Escape') {
                   event.preventDefault()
@@ -466,7 +554,10 @@ function PortalDeveloperModeChrome({
               }}
               onBlur={() => {
                 clearNoteSaveTimer()
-                if (!noteSaveCancelledRef.current) commitNotePopover()
+                window.queueMicrotask(() => {
+                  if (noteSaveCancelledRef.current || noteSaveSuppressedRef.current) return
+                  commitNotePopover()
+                })
               }}
               rows={3}
               maxLength={LUXOR_DEVELOPER_TICKET_ANNOTATION_NOTE_MAX}
@@ -480,6 +571,18 @@ function PortalDeveloperModeChrome({
               >
                 Close
               </button>
+              <button
+                type="button"
+                className="luxor-gold-raised inline-flex min-h-11 items-center rounded-lg px-4 text-[11px] font-bold !text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/50"
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={() => {
+                  noteSaveSuppressedRef.current = false
+                  noteSaveCancelledRef.current = false
+                  commitNotePopover()
+                }}
+              >
+                Save note
+              </button>
             </div>
           </motion.div>
         ) : null}
@@ -489,6 +592,7 @@ function PortalDeveloperModeChrome({
           <section className={`portal-popover-surface w-[min(22rem,calc(100vw-1.5rem))] overflow-hidden rounded-2xl border border-[color:var(--portal-border)] shadow-lg ${panelExpanded ? 'shadow-2xl' : ''}`}>
             <button
               type="button"
+              id="portal-developer-ticket-panel-toggle"
               onClick={onTogglePanel}
               aria-expanded={panelExpanded}
               aria-controls="portal-developer-ticket-panel-body"
@@ -551,9 +655,13 @@ function PortalDeveloperModeChrome({
                               <button
                                 type="button"
                                 className="inline-flex min-h-11 items-center px-2 font-semibold text-[#a8792f] dark:text-[#f1d27a]"
-                                onClick={() => {
-                                  editingAnnotationIdRef.current = item.id
-                                  setNoteDraft(item.note)
+                                onClick={(event) => {
+                                  openAnnotationEditor({
+                                    id: item.id,
+                                    note: item.note,
+                                    storedElement: item.element,
+                                    returnFocus: event.currentTarget,
+                                  })
                                 }}
                               >
                                 Edit
@@ -599,7 +707,7 @@ export function DeveloperTicketAnnotationRows({
   disabled,
 }: {
   annotations: DeveloperTicketAnnotation[]
-  onEdit: (id: string) => void
+  onEdit: (id: string, trigger: HTMLElement) => void
   onRemove: (id: string) => void
   disabled?: boolean
 }) {
@@ -613,7 +721,7 @@ export function DeveloperTicketAnnotationRows({
             <span className="min-w-0 flex-1 leading-snug text-[color:var(--portal-text)]">{developerTicketAnnotationDisplayLine(item)}</span>
             {!disabled ? (
               <span className="flex shrink-0 gap-2 text-[10px] font-semibold">
-                <button type="button" className="inline-flex min-h-11 items-center px-2 text-[#a8792f] dark:text-[#f1d27a]" onClick={() => onEdit(item.id)}>Edit</button>
+                <button type="button" className="inline-flex min-h-11 items-center px-2 text-[#a8792f] dark:text-[#f1d27a]" onClick={(event) => onEdit(item.id, event.currentTarget)}>Edit</button>
                 <button type="button" className="inline-flex min-h-11 items-center px-2 text-red-600 dark:text-red-400" onClick={() => onRemove(item.id)}>Remove</button>
               </span>
             ) : null}

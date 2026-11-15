@@ -1720,7 +1720,7 @@ export function ElenaDeveloperSupportCard({
                     <DeveloperTicketAnnotationRows
                       annotations={ticketAnnotations}
                       disabled={isSaving}
-                      onEdit={() => developerMode?.setElementSelectMode(true)}
+                      onEdit={(id, trigger) => developerMode?.beginEditAnnotation(id, trigger)}
                       onRemove={(id) => developerMode?.removeAnnotation(id)}
                     />
                     {developerMode ? (
