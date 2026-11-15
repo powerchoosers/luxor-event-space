@@ -6,7 +6,7 @@ import { loadPublicPackagesPricingSnapshot } from '@/lib/luxorPublicPackageStart
 export const revalidate = 300
 
 export const metadata: Metadata = {
-  title: 'Paquetes para eventos | Luxor at Las Palmas Events',
+  title: 'Paquetes para eventos',
   description: 'Conoce los paquetes Esenciales, Signature y Luxor en Luxor at Las Palmas Events en San Antonio.',
   alternates: { canonical: '/es/packages', languages: { en: '/packages', es: '/es/packages' } },
 }

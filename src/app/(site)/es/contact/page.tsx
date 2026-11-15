@@ -5,7 +5,7 @@ import { LuxorContactForm } from '@/components/LuxorContactForm'
 import { PublicPhoneLink } from '@/components/PublicPhoneLink'
 
 export const metadata: Metadata = {
-  title: 'Contacto | Luxor at Las Palmas Events',
+  title: 'Contacto',
   description: 'Contáctanos en Luxor at Las Palmas Events en San Antonio para preguntas sobre el lugar, disponibilidad o agendar una visita.',
   alternates: { canonical: '/es/contact', languages: { en: '/contact', es: '/es/contact' } },
 }
