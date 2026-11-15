@@ -6,7 +6,15 @@ import {
 import { luxorElenaMailFrom } from './luxorMailConfig'
 import { luxorInquiryStatusLabel } from './luxorInquiryTypes'
 import type { LuxorDailyPriority } from './luxorDailyPrioritiesServer'
-import { formatLuxorTourDate, LUXOR_TOUR_TIMEZONE } from './luxorTourMetrics'
+import { formatLuxorTourDate } from './luxorTourMetrics'
+import {
+  buildLuxorSalesBriefingSubject,
+  formatLuxorSalesBriefingChicagoTitle,
+  sanitizeLuxorSalesBriefingCopy,
+} from './luxorSalesBriefingPipelineModel'
+import { coachingMarkdownToHtml } from './luxorSalesBriefingCoachingMarkdown'
+
+export { buildLuxorSalesBriefingSubject, sanitizeLuxorSalesBriefingCopy } from './luxorSalesBriefingPipelineModel'
 
 export type LuxorSalesBriefingFocusItem = {
   title: string
@@ -103,22 +111,6 @@ function addListSection(sections: string[], heading: string, lines: string[]) {
   sections.push(bulletList(lines))
 }
 
-function coachingMarkdownToHtml(markdown: string) {
-  const blocks = markdown.trim().split(/\n{2,}/)
-  return blocks
-    .map((block) => {
-      const trimmed = block.trim()
-      if (!trimmed) return ''
-      if (/^[-*]\s+/m.test(trimmed)) {
-        const lines = trimmed.split('\n').map((line) => line.replace(/^[-*]\s+/, '').trim()).filter(Boolean)
-        return bulletList(lines.map((line) => escapeHtml(line)))
-      }
-      const paragraph = escapeHtml(trimmed).replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>').replace(/\n/g, '<br />')
-      return `<p style="margin:0 0 12px;color:#201b16;font-size:15px;line-height:1.72;">${paragraph}</p>`
-    })
-    .join('')
-}
-
 function buildElenaSignatureRow(senderPhone: string | null) {
   return buildLuxorConversationalEmailSignatureRow(
     {
@@ -137,19 +129,7 @@ function injectBeforeSystemFooter(systemHtml: string, html: string) {
   return systemHtml.replace(/<tr><td class="luxor-footer/, `${html}<tr><td class="luxor-footer`)
 }
 
-function formatChicagoBriefingTitle(dateKey: string) {
-  const date = new Date(`${dateKey}T12:00:00.000Z`)
-  return new Intl.DateTimeFormat('en-US', {
-    timeZone: LUXOR_TOUR_TIMEZONE,
-    weekday: 'long',
-    month: 'long',
-    day: 'numeric',
-  }).format(date)
-}
-
-export function buildLuxorSalesBriefingSubject(pipeline: Pick<LuxorSalesBriefingPipeline, 'briefingDateKey'>) {
-  return `Luxor sales briefing — ${formatChicagoBriefingTitle(pipeline.briefingDateKey)}`
-}
+const formatChicagoBriefingTitle = formatLuxorSalesBriefingChicagoTitle
 
 function renderTourLine(origin: string, tour: LuxorSalesBriefingTourLine) {
   const when = tour.tourTime
@@ -181,18 +161,20 @@ export function renderLuxorSalesBriefingEmail(input: {
     const marcusParts: string[] = [sectionHeading('From Marcus, Director of Growth & Sales')]
     if (input.coaching?.headline) {
       marcusParts.push(
-        `<p style="margin:0 0 12px;color:#201b16;font-family:Cormorant Garamond,Georgia,serif;font-size:24px;line-height:1.25;">${escapeHtml(input.coaching.headline)}</p>`,
+        `<p style="margin:0 0 12px;color:#201b16;font-family:Cormorant Garamond,Georgia,serif;font-size:24px;line-height:1.25;">${escapeHtml(sanitizeLuxorSalesBriefingCopy(input.coaching.headline))}</p>`,
       )
     }
     if (input.coaching?.coachingMarkdown?.trim()) {
-      marcusParts.push(coachingMarkdownToHtml(input.coaching.coachingMarkdown))
+      marcusParts.push(
+        coachingMarkdownToHtml(sanitizeLuxorSalesBriefingCopy(input.coaching.coachingMarkdown)),
+      )
     }
     if (input.coaching?.focusItems?.length) {
       marcusParts.push(
         bulletList(
           input.coaching.focusItems.map(
             (item) =>
-              `<strong>${escapeHtml(item.title)}</strong>${item.detail ? ` — ${escapeHtml(item.detail)}` : ''}`,
+              `<strong>${escapeHtml(sanitizeLuxorSalesBriefingCopy(item.title))}</strong>${item.detail ? `: ${escapeHtml(sanitizeLuxorSalesBriefingCopy(item.detail))}` : ''}`,
           ),
         ),
       )
@@ -303,7 +285,11 @@ export function renderLuxorSalesBriefingEmail(input: {
   const signature = buildElenaSignatureRow(input.senderPhone ?? null)
   const html = signature ? injectBeforeSystemFooter(systemHtml, signature) : systemHtml
   return {
-    subject: buildLuxorSalesBriefingSubject(input.pipeline),
+    subject: buildLuxorSalesBriefingSubject({
+      briefingDateKey: input.pipeline.briefingDateKey,
+      marcusBriefingReady: input.marcusBriefingReady,
+      headline: input.coaching?.headline,
+    }),
     html,
     text: luxorEmailHtmlToPlainText(html),
   }
