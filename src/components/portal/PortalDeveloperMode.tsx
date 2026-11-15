@@ -1,6 +1,6 @@
 'use client'
 
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
+import React, { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import { ChevronDown, MousePointerClick, Wrench } from '@/lib/icons/phosphor-compat'
 import {
@@ -266,6 +266,72 @@ function PortalDeveloperModeChrome({
   const [noteDraft, setNoteDraft] = useState('')
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const editingAnnotationIdRef = useRef<string | null>(null)
+  const noteAnchorBaselineRef = useRef('')
+  const noteSaveCancelledRef = useRef(false)
+  const notePopoverReturnFocusRef = useRef<HTMLElement | null>(null)
+  const selectElementTriggerRef = useRef<HTMLButtonElement>(null)
+  const ticketPanelBodyRef = useRef<HTMLDivElement>(null)
+  const pendingAnchorRef = useRef(pendingAnchor)
+
+  useEffect(() => {
+    pendingAnchorRef.current = pendingAnchor
+  }, [pendingAnchor])
+
+  const clearNoteSaveTimer = useCallback(() => {
+    if (saveTimerRef.current) {
+      clearTimeout(saveTimerRef.current)
+      saveTimerRef.current = null
+    }
+  }, [])
+
+  const cancelNotePopover = useCallback(() => {
+    noteSaveCancelledRef.current = true
+    clearNoteSaveTimer()
+    setNoteDraft(noteAnchorBaselineRef.current)
+    setPendingAnchor(null)
+    editingAnnotationIdRef.current = null
+    const returnTarget = notePopoverReturnFocusRef.current
+    notePopoverReturnFocusRef.current = null
+    if (typeof window !== 'undefined') {
+      window.requestAnimationFrame(() => {
+        returnTarget?.focus()
+      })
+    }
+  }, [clearNoteSaveTimer])
+
+  const commitNotePopover = useCallback(() => {
+    if (noteSaveCancelledRef.current) return
+    const anchor = pendingAnchorRef.current
+    if (!anchor) return
+    const trimmed = noteDraft.trim()
+    if (!trimmed) return
+    const descriptor = buildDeveloperTicketElementDescriptor(anchor.element)
+    if (!descriptor) return
+    const id = editingAnnotationIdRef.current || crypto.randomUUID()
+    const now = Date.now()
+    const existing = draft.annotations.find((item) => item.id === id)
+    onUpsertAnnotation({
+      id,
+      note: trimmed.slice(0, LUXOR_DEVELOPER_TICKET_ANNOTATION_NOTE_MAX),
+      pagePath: activePath,
+      element: descriptor,
+      viewport: readDeveloperTicketViewport(),
+      createdAt: existing?.createdAt || now,
+      updatedAt: now,
+    })
+  }, [activePath, draft.annotations, noteDraft, onUpsertAnnotation])
+
+  useLayoutEffect(() => {
+    const body = ticketPanelBodyRef.current
+    if (!body) return
+    if (!panelExpanded) {
+      body.inert = true
+      body.setAttribute('aria-hidden', 'true')
+    } else {
+      body.inert = false
+      body.removeAttribute('aria-hidden')
+    }
+  }, [panelExpanded])
 
   useEffect(() => {
     document.body.setAttribute('data-portal-developer-mode', 'true')
@@ -279,8 +345,11 @@ function PortalDeveloperModeChrome({
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
         event.preventDefault()
+        if (pendingAnchor) {
+          cancelNotePopover()
+          return
+        }
         onSetSelectMode(false)
-        setPendingAnchor(null)
       }
     }
     const onMove = (event: PointerEvent) => {
@@ -305,9 +374,13 @@ function PortalDeveloperModeChrome({
       const rect = target.getBoundingClientRect()
       const id = editingAnnotationIdRef.current || crypto.randomUUID()
       editingAnnotationIdRef.current = id
-      setPendingAnchor({ rect, element: target })
       const existing = draft.annotations.find((item) => item.id === id)
-      setNoteDraft(existing?.note || '')
+      const baseline = existing?.note || ''
+      noteAnchorBaselineRef.current = baseline
+      noteSaveCancelledRef.current = false
+      notePopoverReturnFocusRef.current = selectElementTriggerRef.current
+      setNoteDraft(baseline)
+      setPendingAnchor({ rect, element: target })
     }
     window.addEventListener('keydown', onKeyDown)
     window.addEventListener('pointermove', onMove)
@@ -317,31 +390,17 @@ function PortalDeveloperModeChrome({
       window.removeEventListener('pointermove', onMove)
       window.removeEventListener('click', onClick, true)
     }
-  }, [draft.annotations, elementSelectMode, onSetSelectMode, pendingAnchor])
+  }, [cancelNotePopover, draft.annotations, elementSelectMode, onSetSelectMode, pendingAnchor])
 
   useEffect(() => {
-    if (!pendingAnchor || !noteDraft.trim()) return
-    if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
+    if (!pendingAnchor || !noteDraft.trim() || noteSaveCancelledRef.current) return
+    clearNoteSaveTimer()
     saveTimerRef.current = setTimeout(() => {
-      const descriptor = buildDeveloperTicketElementDescriptor(pendingAnchor.element)
-      if (!descriptor) return
-      const id = editingAnnotationIdRef.current || crypto.randomUUID()
-      const now = Date.now()
-      const existing = draft.annotations.find((item) => item.id === id)
-      onUpsertAnnotation({
-        id,
-        note: noteDraft.trim().slice(0, LUXOR_DEVELOPER_TICKET_ANNOTATION_NOTE_MAX),
-        pagePath: activePath,
-        element: descriptor,
-        viewport: readDeveloperTicketViewport(),
-        createdAt: existing?.createdAt || now,
-        updatedAt: now,
-      })
+      if (noteSaveCancelledRef.current) return
+      commitNotePopover()
     }, 420)
-    return () => {
-      if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
-    }
-  }, [activePath, draft.annotations, noteDraft, onUpsertAnnotation, pendingAnchor])
+    return clearNoteSaveTimer
+  }, [clearNoteSaveTimer, commitNotePopover, noteDraft, pendingAnchor])
 
   const showFloatingPanel = !elenaChatOpen && draft.phase !== 'sent'
 
@@ -394,7 +453,21 @@ function PortalDeveloperModeChrome({
             <textarea
               autoFocus
               value={noteDraft}
-              onChange={(event) => setNoteDraft(event.target.value)}
+              onChange={(event) => {
+                noteSaveCancelledRef.current = false
+                setNoteDraft(event.target.value)
+              }}
+              onKeyDown={(event) => {
+                if (event.key === 'Escape') {
+                  event.preventDefault()
+                  event.stopPropagation()
+                  cancelNotePopover()
+                }
+              }}
+              onBlur={() => {
+                clearNoteSaveTimer()
+                if (!noteSaveCancelledRef.current) commitNotePopover()
+              }}
               rows={3}
               maxLength={LUXOR_DEVELOPER_TICKET_ANNOTATION_NOTE_MAX}
               className="mt-1 w-full resize-y rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-bg)] p-2 text-xs text-[color:var(--portal-text)] outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/50"
@@ -402,12 +475,8 @@ function PortalDeveloperModeChrome({
             <div className="mt-2 flex justify-end gap-2">
               <button
                 type="button"
-                className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg border border-[color:var(--portal-border)] px-4 text-[11px] font-semibold text-[color:var(--portal-text)]"
-                onClick={() => {
-                  editingAnnotationIdRef.current = null
-                  setPendingAnchor(null)
-                  setNoteDraft('')
-                }}
+                className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg border border-[color:var(--portal-border)] px-4 text-[11px] font-semibold text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/50"
+                onClick={() => cancelNotePopover()}
               >
                 Close
               </button>
@@ -423,7 +492,7 @@ function PortalDeveloperModeChrome({
               onClick={onTogglePanel}
               aria-expanded={panelExpanded}
               aria-controls="portal-developer-ticket-panel-body"
-              className={`flex min-h-11 w-full items-center gap-2 px-3 text-left text-xs font-semibold text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 focus-visible:ring-offset-2 focus-visible:ring-offset-[color:var(--portal-card)] ${panelExpanded ? 'border-b border-[color:var(--portal-border)]' : ''}`}
+              className={`flex min-h-11 w-full items-center gap-2 rounded-2xl px-3 text-left text-xs font-semibold text-[color:var(--portal-text)] outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/50 focus-visible:ring-offset-2 focus-visible:ring-offset-[color:var(--portal-card)] ${panelExpanded ? 'rounded-b-none border-b border-[color:var(--portal-border)]' : ''}`}
             >
               <Wrench size={14} className="shrink-0 text-[#caa24c]" aria-hidden="true" />
               <span className="min-w-0 flex-1">
@@ -442,6 +511,7 @@ function PortalDeveloperModeChrome({
             </button>
             <div
               id="portal-developer-ticket-panel-body"
+              ref={ticketPanelBodyRef}
               aria-hidden={!panelExpanded}
               {...(!panelExpanded ? { inert: true } : {})}
               className={`grid transition-[grid-template-rows] duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] motion-reduce:transition-none ${panelExpanded ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'}`}
@@ -504,9 +574,10 @@ function PortalDeveloperModeChrome({
                 </div>
                 <footer className="flex flex-wrap gap-2 border-t border-[color:var(--portal-border)] p-3">
                   <button
+                    ref={selectElementTriggerRef}
                     type="button"
                     onClick={onToggleSelect}
-                    className={`inline-flex min-h-11 items-center gap-1.5 rounded-lg px-3 text-[11px] font-semibold ${elementSelectMode ? 'luxor-gold-raised !text-white' : 'border border-[color:var(--portal-border)] text-[color:var(--portal-text)]'}`}
+                    className={`inline-flex min-h-11 items-center gap-1.5 rounded-lg px-3 text-[11px] font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/50 ${elementSelectMode ? 'luxor-gold-raised !text-white' : 'border border-[color:var(--portal-border)] text-[color:var(--portal-text)]'}`}
                   >
                     <MousePointerClick size={13} aria-hidden="true" />
                     {elementSelectMode ? 'Selecting…' : 'Select element'}

@@ -77,6 +77,7 @@ import {
   type ElenaSlashCommand,
 } from '@/lib/luxorElenaSlashCommands'
 import type { PortalRole } from '@/lib/luxorPortalAccess'
+import { usePortalDeveloperMode } from '@/components/portal/PortalDeveloperMode'
 
 type ExecutedQuery = {
   query: string
@@ -563,6 +564,22 @@ export function PortalElenaChat({ isOpen, onClose, activePath, portalRole, userE
   const [loadedSessionId, setLoadedSessionId] = useState<string | null>(null)
   const activeSessionRef = useRef<string | null>(null)
   const isOpenRef = useRef(isOpen)
+  const elenaPanelRef = useRef<HTMLElement>(null)
+  const developerMode = usePortalDeveloperMode()
+  const elenaPanelHidden = !isOpen
+
+  useLayoutEffect(() => {
+    const panel = elenaPanelRef.current
+    if (!panel) return
+    if (elenaPanelHidden) {
+      panel.inert = true
+      panel.setAttribute('aria-hidden', 'true')
+    } else {
+      panel.inert = false
+      panel.removeAttribute('aria-hidden')
+    }
+  }, [elenaPanelHidden, developerMode?.developerModeActive])
+
   const [showSessionsList, setShowSessionsList] = useState(false)
   const [editingSessionId, setEditingSessionId] = useState<string | null>(null)
   const [editTitleInput, setEditTitleInput] = useState('')
@@ -1579,12 +1596,14 @@ export function PortalElenaChat({ isOpen, onClose, activePath, portalRole, userE
 
   return (
     <motion.aside 
+      ref={elenaPanelRef}
       initial={{ x: '100%' }}
       animate={{ x: isOpen ? 0 : '100%' }}
       transition={{ duration: 0.3, ease: [0.23, 1, 0.32, 1] }}
       className="portal-elena-chat-panel fixed right-0 top-0 z-[65] flex w-full flex-col border-l-0 border-[color:var(--portal-border)] bg-[color:var(--portal-bg)] text-[color:var(--portal-text)] shadow-[-24px_0_60px_-36px_rgba(0,0,0,0.85)] max-lg:bottom-[var(--portal-mobile-nav-height)] max-lg:h-[calc(100dvh-var(--portal-mobile-nav-height))] lg:bottom-0 lg:h-full lg:w-[420px] lg:border-l"
-      aria-hidden={!isOpen}
-      inert={!isOpen}
+      aria-hidden={elenaPanelHidden}
+      {...(elenaPanelHidden ? { inert: true } : {})}
+      tabIndex={elenaPanelHidden ? -1 : undefined}
     >
       {/* Header */}
       <div className="flex h-16 shrink-0 items-center justify-between border-b border-[color:var(--portal-border)] px-4">
