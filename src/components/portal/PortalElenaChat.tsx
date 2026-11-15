@@ -2277,6 +2277,7 @@ export function PortalElenaChat({ isOpen, onClose, activePath, portalRole, userE
                   </AnimatePresence>
                 </div>
               )}
+              <div className="min-h-28 shrink-0" aria-hidden="true" />
               <div ref={messagesEndRef} />
             </motion.div>
           </AnimatePresence>

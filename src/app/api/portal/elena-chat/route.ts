@@ -27,11 +27,10 @@ import { prepareElenaChatAttachments, type OpenRouterContentPart } from '@/lib/l
 import { storeElenaChatAttachments, type ElenaChatStoredAttachment } from '@/lib/luxorElenaChatAttachmentsServer'
 import { emptyFunnelGoals, parseFunnelGoals } from '@/lib/luxorFunnelGoals'
 import {
-  assignmentsFromBrief,
   buildElenaFunnelGoalsCard,
+  buildFunnelGoalsUpdatePlan,
   parseFunnelGoalAssignments,
   type ElenaFunnelGoalsCardPayload,
-  type FunnelGoalAssignment,
   type FunnelGoalsBrief,
 } from '@/lib/luxorFunnelGoalsElena'
 
@@ -493,7 +492,7 @@ Use permitted live CRM context and structured read tools. Never use SQL. Do not 
 - For an invoice or payment link, direct the user to the relevant portal workflow. Payment requests require a signed agreement; do not claim that Elena sent or created one.
 - When the owner asks you to create a task, reminder, or follow-up note, link it to one existing Luxor client. If the exact client is not already clear from the active context, ask the owner which client by name or email before preparing a task card. Resolve the named client with "lookup_luxor_lead"; if more than one person could match, ask one short disambiguation question. Never invent or guess a client ID. Only call "prepare_task_card" after a real inquiry record has been uniquely resolved, and pass its inquiryId.
 - When the owner reports a portal bug, broken page, confusing workflow, missing button, wrong number, or asks for developer help fixing the Luxor website or portal, call "prepare_developer_support_card". Summarize the issue in title and description fields. If the owner already attached screenshots, PDFs, or text files in this chat, say they can include those files on the developer support card before sending. Use priority "urgent" only for blocked revenue, safety, or signing/payment issues. Never claim the ticket was sent until the owner confirms the developer support card. If the owner types /ticket or clearly wants a Braxton cloud fix ticket without extra discussion, call prepare_developer_support_card immediately with a concise title from their message and the current portal page path.
-- When the owner wants to set, update, or talk through Leads funnel goals, sales targets, conversion rates, monthly bookings, or revenue goals, ask only the questions you still need, work backward through the funnel with honest math, then call "prepare_funnel_goals_card". Use explicit monthly values for outcomes such as bookings and revenue unless the owner asks for another cadence. Respect Luxor goal rules: daily goals calculate calendar totals; explicit weekly, monthly, quarterly, or annual values override those totals. Pass only the values you intend to change in goalValues or funnelBrief; the card merges them onto existing saved goals and shows every value that will be written. Never claim goals were saved until the owner clicks Save goals on the review card.
+- When the owner wants to set, update, or talk through Leads funnel goals, sales targets, conversion rates, monthly bookings, or revenue goals, ask only for funnel rates saved goals cannot infer (inquiry-to-tour, show rate, proposal close, etc.), or state the default rate you are assuming from saved goals and let the owner correct you before calling "prepare_funnel_goals_card". Work backward through the full funnel so inquiries, tours scheduled, tours completed, proposals, and bookings stay in order. When monthly targets change, weekly, quarterly, annual, and saved overrides rescale from the same ratio unless the card flags a conflict. Respect Luxor goal rules: daily goals calculate calendar totals; explicit weekly, monthly, quarterly, or annual values override those totals. Pass funnelBrief with bookings, revenue, and rates; the card merges onto saved goals. Never claim goals were saved until the owner clicks Save goals on the review card.
 - When the owner asks you to take them to, open, pull up, or show a specific lead or client, first resolve that person exactly. For duplicate first names, never choose one arbitrarily: prefer the active dossier only when the owner says "this lead" or gives matching context; otherwise query Luxor inquiries and use email, event type, target date, phone, or prior conversation context to identify one person. If more than one candidate still fits, ask the owner a short disambiguation question using useful human details such as name, email, event type, or date. Never show, ask for, or explain database IDs to the owner. Once the record is uniquely resolved, call "navigate_to_lead" so the portal opens that dossier and Elena shows a read-only contact card.
 - For a tour invite, direct the user to the lead or Calendar workspace to review and send it. Tour invite sending through Elena is currently unavailable; never claim one was sent.
 - Tour-day changes through Elena are unavailable. Schedule updates can reopen times; direct the owner to Calendar to review availability and do not claim a lasting closure was made.
@@ -2905,23 +2904,22 @@ ${can('planner') ? formatRows(bookings, ['client_name', 'event_type', 'event_dat
                 ? JSON.parse(toolCall.function.arguments)
                 : toolCall.function.arguments
               const stored = await loadStoredFunnelGoalsForElena()
-              const assignments: FunnelGoalAssignment[] = []
-              if (args?.funnelBrief && typeof args.funnelBrief === 'object' && !Array.isArray(args.funnelBrief)) {
-                assignments.push(...assignmentsFromBrief(args.funnelBrief as FunnelGoalsBrief))
-              }
-              if (Array.isArray(args?.goalValues) && args.goalValues.length) {
-                assignments.push(...parseFunnelGoalAssignments(args.goalValues))
-              }
-              if (!assignments.length) {
-                throw new Error('Provide goalValues or funnelBrief with the targets you want to save.')
-              }
+              const brief = args?.funnelBrief && typeof args.funnelBrief === 'object' && !Array.isArray(args.funnelBrief)
+                ? args.funnelBrief as FunnelGoalsBrief
+                : undefined
+              const plan = buildFunnelGoalsUpdatePlan(stored.goals, {
+                brief,
+                goalValues: args?.goalValues,
+              })
               funnelGoalsPayload = buildElenaFunnelGoalsCard({
                 summary: String(args.summary || ''),
                 calculations: String(args.calculations || ''),
                 baseGoals: stored.goals,
-                assignments,
+                assignments: plan.assignments,
                 revision: stored.revision,
                 canSave: can('settings'),
+                assumptions: plan.assumptions,
+                conflicts: plan.conflicts,
               })
               openrouterMessages.push({
                 role: 'tool',

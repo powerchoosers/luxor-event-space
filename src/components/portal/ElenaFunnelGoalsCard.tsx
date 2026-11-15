@@ -60,6 +60,23 @@ export function ElenaFunnelGoalsCard({ payload, onSaved }: ElenaFunnelGoalsCardP
           {payload.calculations ? (
             <p className="mt-2 whitespace-pre-wrap text-[11px] leading-5 text-[color:var(--portal-muted)]">{payload.calculations}</p>
           ) : null}
+          {payload.assumptions?.length ? (
+            <ul className="mt-2 list-disc space-y-1 pl-4 text-[11px] leading-5 text-[color:var(--portal-muted)]">
+              {payload.assumptions.map((line) => (
+                <li key={line}>{line}</li>
+              ))}
+            </ul>
+          ) : null}
+          {payload.conflicts?.length ? (
+            <div className="mt-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[11px] leading-5 text-amber-950 dark:text-amber-100">
+              <p className="font-semibold">Review period alignment</p>
+              <ul className="mt-1 list-disc space-y-1 pl-4">
+                {payload.conflicts.map((line) => (
+                  <li key={line}>{line}</li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
           <p className="mt-2 text-[11px] leading-5 text-[color:var(--portal-muted)]">
             Defaults: daily goals calculate calendar totals. Explicit weekly, monthly, quarterly, or annual values override those totals.
             Unlisted saved targets stay unchanged.
@@ -67,8 +84,8 @@ export function ElenaFunnelGoalsCard({ payload, onSaved }: ElenaFunnelGoalsCardP
         </div>
       </div>
 
-      <div className="mt-3 overflow-x-auto rounded-lg border border-[color:var(--portal-border)]">
-        <table className="w-full min-w-[280px] text-left text-[11px]">
+      <div className="mt-3 max-w-full overflow-x-auto rounded-lg border border-[color:var(--portal-border)] pr-1 sm:pr-0">
+        <table className="w-full min-w-0 text-left text-[11px] sm:min-w-[280px]">
           <thead className="bg-[color:var(--portal-soft)]/50 text-[color:var(--portal-muted)]">
             <tr>
               <th className="px-2 py-2 font-semibold">Target</th>
