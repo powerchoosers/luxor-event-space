@@ -17,11 +17,10 @@ where resend_event_id is null
 --   select recipient_id, resend_event_id, count(*) as row_count
 --   from public.luxor_marketing_events
 --   where resend_event_id is not null
---     and event_type in ('open', 'click')
 --   group by recipient_id, resend_event_id
 --   having count(*) > 1;
 
+-- Non-partial unique index so PostgREST on_conflict=recipient_id,resend_event_id works.
+-- NULL resend_event_id values remain distinct, so legacy rows are not constrained.
 create unique index if not exists luxor_marketing_events_resend_recipient_event_uidx
-  on public.luxor_marketing_events (recipient_id, resend_event_id)
-  where resend_event_id is not null
-    and event_type in ('open', 'click');
+  on public.luxor_marketing_events (recipient_id, resend_event_id);
