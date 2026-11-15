@@ -220,9 +220,9 @@ export function PackagesInquiryForm({ locale = 'en', draftToken, draft }: Packag
         </button>
         <p className="mt-4 text-xs leading-5 text-[#827567]">
           {t.privacy.split(locale === 'es' ? 'Política de privacidad' : 'Privacy Policy')[0]}
-          <Link href={locale === 'es' ? '/es/privacy' : '/privacy'} className="text-[#8d672b] underline">Privacy Policy</Link>
+          <Link href="/privacy" className="text-[#8d672b] underline">{locale === 'es' ? 'Política de privacidad' : 'Privacy Policy'}</Link>
           {' / '}
-          <Link href={locale === 'es' ? '/es/terms' : '/terms'} className="text-[#8d672b] underline">{locale === 'es' ? 'Términos' : 'Terms'}</Link>.
+          <Link href="/terms" className="text-[#8d672b] underline">{locale === 'es' ? 'Términos' : 'Terms'}</Link>.
         </p>
       </form>
 
