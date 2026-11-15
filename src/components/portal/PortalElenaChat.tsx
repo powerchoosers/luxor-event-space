@@ -50,6 +50,8 @@ import { ElenaLiveVoiceClient, type ElenaVoiceState } from '@/lib/elenaLiveVoice
 import { ElenaSilkOrb } from './ElenaSilkOrb'
 import { ElenaEmailDraftCard, EmailDraftPayload } from './ElenaEmailDraftCard'
 import { ElenaWorkflowDraftCard, type ElenaWorkflowDraftPayload } from './ElenaWorkflowDraftCard'
+import { ElenaFunnelGoalsCard } from './ElenaFunnelGoalsCard'
+import type { ElenaFunnelGoalsCardPayload } from '@/lib/luxorFunnelGoalsElena'
 import {
   ElenaLeadUpdateCard,
   ElenaContractCard,
@@ -125,6 +127,7 @@ type Message = {
   newContactCard?: NewContactCardPayload
   tourInviteCard?: TourInviteCardPayload
   workflowDraft?: ElenaWorkflowDraftPayload
+  funnelGoalsCard?: ElenaFunnelGoalsCardPayload
   workflowLinks?: Array<{ name: string; href: string | null; note: string }>
   textCampaignDraft?: { name: string; bodyTemplate: string; campaignType: string }
   voiceTranscript?: Array<{ role: 'user' | 'assistant'; text: string }>
@@ -146,6 +149,7 @@ type ElenaChatResponse = {
   newContactCard?: NewContactCardPayload
   tourInviteCard?: TourInviteCardPayload
   workflowDraft?: ElenaWorkflowDraftPayload
+  funnelGoalsCard?: ElenaFunnelGoalsCardPayload
   workflowLinks?: Array<{ name: string; href: string | null; note: string }>
   navigation?: { href: string }
   userAttachments?: MessageAttachment[]
@@ -170,6 +174,7 @@ function hasVoiceActionOutput(message: Message) {
     || message.newContactCard
     || message.tourInviteCard
     || message.workflowDraft
+    || message.funnelGoalsCard
     || message.workflowLinks?.length
     || message.textCampaignDraft
     || message.toolActivityFailed
@@ -1448,6 +1453,7 @@ export function PortalElenaChat({ isOpen, onClose, activePath, portalRole, userE
             newContactCard: data.newContactCard,
             tourInviteCard: data.tourInviteCard,
             workflowDraft: data.workflowDraft,
+            funnelGoalsCard: data.funnelGoalsCard,
             workflowLinks: data.workflowLinks,
             textCampaignDraft: data.textCampaignDraft,
           },
@@ -1504,6 +1510,23 @@ export function PortalElenaChat({ isOpen, onClose, activePath, portalRole, userE
       : message)
     setMessages(updatedMessages)
     return persistSessionMessages(updatedMessages)
+  }
+
+  const handleFunnelGoalsSaved = (msgIndex: number, savedAt: string | null) => {
+    const updatedMessages = messages.map((message, index) => index === msgIndex && message.funnelGoalsCard
+      ? { ...message, funnelGoalsCard: { ...message.funnelGoalsCard, savedAt: savedAt || new Date().toISOString() } }
+      : message)
+    setMessages(updatedMessages)
+    if (currentSessionId) {
+      void fetch('/api/portal/elena-chat/sessions', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: currentSessionId,
+          messages: updatedMessages,
+        }),
+      })
+    }
   }
 
   const handleWorkflowDraftSaved = (msgIndex: number, workflow: { id: string; name: string }) => {
@@ -2014,6 +2037,22 @@ export function PortalElenaChat({ isOpen, onClose, activePath, portalRole, userE
                           <ElenaWorkflowDraftCard
                             draft={msg.workflowDraft}
                             onSaved={(workflow) => handleWorkflowDraftSaved(index, workflow)}
+                          />
+                        )}
+
+                        {msg.funnelGoalsCard && (
+                          <ElenaFunnelGoalsCard
+                            payload={msg.funnelGoalsCard}
+                            onSaved={({ updatedAt }) => {
+                              handleFunnelGoalsSaved(index, updatedAt)
+                              setMessages((prev) => [
+                                ...prev,
+                                {
+                                  role: 'assistant',
+                                  content: 'Goals saved. Settings → Funnel goals and the Leads funnel dashboard will use these targets.',
+                                },
+                              ])
+                            }}
                           />
                         )}
 
