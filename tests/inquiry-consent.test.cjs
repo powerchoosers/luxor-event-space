@@ -335,6 +335,8 @@ test('audience selection requires the exact requested SMS scope', async () => {
 
 test('the public form keeps three separate unchecked optional controls and expandable disclosures', () => {
   const source = fs.readFileSync(path.join(root, 'src/components/LuxorBrochureForm.tsx'), 'utf8')
+  assert.match(source, /sessionId:\s*getLuxorPublicSessionId\(\)/)
+  assert.match(source, /attribution:\s*getLuxorPublicAttribution\(\)/)
   for (const control of ['inquiry-sms', 'marketing-email', 'marketing-sms']) {
     assert.match(source, new RegExp(`id=\\{\x60\\$\\{preferencesId\\}-${control}\\x60\\} type="checkbox"`))
   }

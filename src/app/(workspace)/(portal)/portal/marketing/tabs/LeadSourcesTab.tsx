@@ -4,10 +4,11 @@ import React, { useMemo } from 'react'
 import { motion } from 'framer-motion'
 import { ArrowUpRight, MapPin, TrendingUp, Users } from '@/lib/icons/phosphor-compat'
 import { PortalStickyTable, PortalStickyThead, PortalTableCard } from '@/components/portal/PortalUI'
-import { isLuxorNonRevenueTestInquiry, type LuxorInquiry } from '@/lib/luxorInquiryTypes'
+import { isLuxorInquiryBookedForAttribution, isLuxorNonRevenueTestInquiry, type LuxorInquiry } from '@/lib/luxorInquiryTypes'
 
 interface LeadSourcesTabProps {
   inquiries: LuxorInquiry[]
+  bookedInquiryIds?: string[]
   loading?: boolean
   onFilterSource: (source: string) => void
 }
@@ -21,7 +22,9 @@ type SourceRow = {
   latestAt: string
 }
 
-export function LeadSourcesTab({ inquiries, loading = false, onFilterSource }: LeadSourcesTabProps) {
+export function LeadSourcesTab({ inquiries, bookedInquiryIds = [], loading = false, onFilterSource }: LeadSourcesTabProps) {
+  const bookedInquiryIdSet = useMemo(() => new Set(bookedInquiryIds), [bookedInquiryIds])
+
   const sourceRows = useMemo<SourceRow[]>(() => {
     const grouped = new Map<string, SourceRow>()
 
@@ -37,7 +40,7 @@ export function LeadSourcesTab({ inquiries, loading = false, onFilterSource }: L
       }
       current.leads += 1
       if (isInTourPipeline(inquiry)) current.tours += 1
-      if (inquiry.status === 'booked') current.bookings += 1
+      if (isLuxorInquiryBookedForAttribution(inquiry, bookedInquiryIdSet)) current.bookings += 1
       if (new Date(inquiry.created_at).getTime() > new Date(current.latestAt).getTime()) current.latestAt = inquiry.created_at
       grouped.set(source, current)
     })
@@ -45,12 +48,12 @@ export function LeadSourcesTab({ inquiries, loading = false, onFilterSource }: L
     return Array.from(grouped.values())
       .map((row) => ({ ...row, conversionRate: row.leads ? Math.round((row.bookings / row.leads) * 1000) / 10 : 0 }))
       .sort((a, b) => b.leads - a.leads || a.source.localeCompare(b.source))
-  }, [inquiries])
+  }, [inquiries, bookedInquiryIdSet])
 
   const totals = useMemo(() => {
     const businessInquiries = inquiries.filter((inquiry) => !isLuxorNonRevenueTestInquiry(inquiry))
     const tours = businessInquiries.filter(isInTourPipeline).length
-    const bookings = businessInquiries.filter((inquiry) => inquiry.status === 'booked').length
+    const bookings = businessInquiries.filter((inquiry) => isLuxorInquiryBookedForAttribution(inquiry, bookedInquiryIdSet)).length
     return {
       leads: businessInquiries.length,
       tours,
@@ -58,7 +61,7 @@ export function LeadSourcesTab({ inquiries, loading = false, onFilterSource }: L
       conversionRate: businessInquiries.length ? Math.round((bookings / businessInquiries.length) * 1000) / 10 : 0,
       sourceCount: sourceRows.length,
     }
-  }, [inquiries, sourceRows.length])
+  }, [inquiries, sourceRows.length, bookedInquiryIdSet])
 
   const topConverting = [...sourceRows]
     .filter((row) => row.bookings > 0)
@@ -71,7 +74,7 @@ export function LeadSourcesTab({ inquiries, loading = false, onFilterSource }: L
   const stats = [
     { label: 'Total Inquiries', value: totals.leads.toLocaleString(), detail: 'All inquiry records' },
     { label: 'Tour Pipeline', value: totals.tours.toLocaleString(), detail: 'Tour scheduled through booked' },
-    { label: 'Booked', value: totals.bookings.toLocaleString(), detail: 'Inquiries marked booked' },
+    { label: 'Booked', value: totals.bookings.toLocaleString(), detail: 'Pipeline stage contract+ or paid booking/deposit records' },
     { label: 'Booking Conversion', value: `${totals.conversionRate}%`, detail: 'Booked ÷ total inquiries' },
     { label: 'Recorded Sources', value: totals.sourceCount.toLocaleString(), detail: 'Distinct saved source values' },
   ]

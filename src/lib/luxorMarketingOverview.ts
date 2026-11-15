@@ -1,3 +1,5 @@
+import type { MarketingEmailMetrics } from './luxorMarketingEmailMetrics'
+
 export const LUXOR_MARKETING_TIME_ZONE = 'America/Chicago'
 
 export type MarketingOverviewRange = {
@@ -57,6 +59,7 @@ export type MarketingOverviewData = {
   sentRecipientCount: number
   excludedUnlinkedSentCount: number
   clickEventCount: number
+  emailMetrics: MarketingEmailMetrics
   inquiriesByDay: Array<{ date: string; count: number }>
   sourceBreakdown: Array<{ source: string; count: number }>
   upcomingCampaignCount: number
@@ -73,6 +76,7 @@ type MarketingOverviewInput = {
   emailJobs: MarketingOverviewEmailJob[]
   events: MarketingOverviewEvent[]
   campaigns: MarketingOverviewCampaign[]
+  emailMetrics: MarketingEmailMetrics
   now?: Date
   activityLimit?: number
 }
@@ -203,9 +207,6 @@ export function aggregateMarketingOverview(input: MarketingOverviewInput): Marke
   const now = input.now ?? new Date()
   const jobsById = new Map(input.emailJobs.map((job) => [job.id, job]))
   const campaignsById = new Map(input.campaigns.map((campaign) => [campaign.id, campaign]))
-  const recipientsById = new Map<string, MarketingOverviewRecipient>()
-  for (const recipient of [...input.sentRecipients, ...input.eventRecipients]) recipientsById.set(recipient.id, recipient)
-
   const series = new Map<string, number>()
   const [startYear, startMonth, startDay] = range.startDate.split('-').map(Number)
   for (let index = 0; index < range.days; index += 1) {
@@ -226,33 +227,25 @@ export function aggregateMarketingOverview(input: MarketingOverviewInput): Marke
 
   const hasProductionAssociation = (recipient: MarketingOverviewRecipient) => {
     if (hasTestMarker(recipient.metadata)) return false
-    if (!recipient.email_job_id) return false
-    const job = jobsById.get(recipient.email_job_id)
-    if (!job || job.test_run_id) return false
     const campaign = recipient.campaign_id ? campaignsById.get(recipient.campaign_id) : null
-    return !campaign || !hasTestMarker(campaign.metadata)
+    if (campaign && hasTestMarker(campaign.metadata)) return false
+    if (recipient.email_job_id) {
+      const job = jobsById.get(recipient.email_job_id)
+      return Boolean(job && !job.test_run_id)
+    }
+    return Boolean(recipient.campaign_id && campaign)
   }
 
   let sentRecipientCount = 0
   let excludedUnlinkedSentCount = 0
   for (const recipient of input.sentRecipients) {
     if (recipient.status !== 'sent' || !isWithinRange(recipient.sent_at, range)) continue
-    if (!recipient.email_job_id || !jobsById.has(recipient.email_job_id)) {
-      excludedUnlinkedSentCount += 1
+    if (!hasProductionAssociation(recipient)) {
+      if (!recipient.email_job_id && !recipient.campaign_id) excludedUnlinkedSentCount += 1
       continue
     }
-    if (hasProductionAssociation(recipient)) sentRecipientCount += 1
+    sentRecipientCount += 1
   }
-
-  const eligibleEvents = input.events
-    .filter((event) => isWithinRange(event.created_at, range) && !hasTestMarker(event.metadata))
-    .filter((event) => {
-      const recipient = event.recipient_id ? recipientsById.get(event.recipient_id) : undefined
-      if (!recipient || !hasProductionAssociation(recipient)) return false
-      const campaign = event.campaign_id ? campaignsById.get(event.campaign_id) : null
-      return !campaign || !hasTestMarker(campaign.metadata)
-    })
-    .sort((left, right) => new Date(right.created_at).getTime() - new Date(left.created_at).getTime())
 
   const upcomingCampaigns = input.campaigns
     .filter((campaign) => campaign.status === 'scheduled' && campaign.scheduled_for)
@@ -267,12 +260,6 @@ export function aggregateMarketingOverview(input: MarketingOverviewInput): Marke
   const otherSourceCount = sortedSources.slice(5).reduce((sum, item) => sum + item.count, 0)
   if (otherSourceCount) sourceBreakdown.push({ source: 'Other sources', count: otherSourceCount })
 
-  const activityLimit = Math.max(1, Math.min(100, Math.floor(input.activityLimit ?? 50)))
-  const campaignName = (id: string | null) => {
-    const name = id ? campaignsById.get(id)?.name : null
-    return name?.trim() || 'Campaign name unavailable'
-  }
-
   return {
     period: {
       days: range.days,
@@ -283,7 +270,8 @@ export function aggregateMarketingOverview(input: MarketingOverviewInput): Marke
     inquiryCount,
     sentRecipientCount,
     excludedUnlinkedSentCount,
-    clickEventCount: eligibleEvents.filter((event) => event.event_type === 'click').length,
+    clickEventCount: input.emailMetrics.totals.clicked,
+    emailMetrics: input.emailMetrics,
     inquiriesByDay: [...series.entries()].map(([date, count]) => ({ date, count })),
     sourceBreakdown,
     upcomingCampaignCount: upcomingCampaigns.length,
@@ -292,12 +280,18 @@ export function aggregateMarketingOverview(input: MarketingOverviewInput): Marke
       name: campaign.name?.trim() || 'Untitled campaign',
       scheduledFor: campaign.scheduled_for as string,
     })),
-    trackedActivityCount: eligibleEvents.length,
-    recentActivity: eligibleEvents.slice(0, activityLimit).map((event) => ({
+    trackedActivityCount: input.emailMetrics.trackedActivityCount,
+    recentActivity: input.emailMetrics.recentActivity.map((event) => ({
       id: event.id,
-      createdAt: event.created_at,
-      eventType: event.event_type,
-      campaignName: campaignName(event.campaign_id),
+      createdAt: event.createdAt,
+      eventType: event.eventType,
+      campaignName: `${formatDeliveryChannel(event.channel)} · ${event.label}`,
     })),
   }
+}
+
+function formatDeliveryChannel(channel: 'campaign' | 'follow_up' | 'system') {
+  if (channel === 'campaign') return 'Campaign email'
+  if (channel === 'follow_up') return 'Follow-up email'
+  return 'System email'
 }

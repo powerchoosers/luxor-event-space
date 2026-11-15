@@ -320,12 +320,24 @@ async function recordResendMarketingEngagement(row: LuxorMailRow, event: ResendE
   if (!kind) return
   const metadata = row.metadata || {}
   const campaignId = metadata.marketingCampaignId
-  const recipientId = metadata.marketingRecipientId
-  if (!isUuid(campaignId) || !isUuid(recipientId)) return
+  let recipientId = metadata.marketingRecipientId
+  if (!isUuid(campaignId)) return
 
-  const recipientRows = await supabaseRest<MarketingRecipient[]>(
-    `luxor_marketing_recipients?select=id,campaign_id,open_count,click_count,first_opened_at&id=eq.${recipientId}&campaign_id=eq.${campaignId}&limit=1`,
-  )
+  let recipientRows = isUuid(recipientId)
+    ? await supabaseRest<MarketingRecipient[]>(
+      `luxor_marketing_recipients?select=id,campaign_id,open_count,click_count,first_opened_at&id=eq.${recipientId}&campaign_id=eq.${campaignId}&limit=1`,
+    )
+    : []
+
+  if (!recipientRows.length && row.to_addresses?.[0]) {
+    const email = String(row.to_addresses[0]).trim().toLowerCase()
+    recipientRows = await supabaseRest<MarketingRecipient[]>(
+      `luxor_marketing_recipients?select=id,campaign_id,open_count,click_count,first_opened_at&campaign_id=eq.${encodeURIComponent(campaignId)}&email=eq.${encodeURIComponent(email)}&order=created_at.desc&limit=1`,
+    )
+    recipientId = recipientRows[0]?.id
+  }
+
+  if (!isUuid(recipientId) || !recipientRows.length) return
   const recipient = recipientRows[0]
   if (!recipient) return
   const known = await supabaseRest<Array<{ id: string }>>(

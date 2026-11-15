@@ -1,6 +1,7 @@
 import 'server-only'
 
 import { supabaseRest } from './supabaseRestServer'
+import { getLuxorMarketingEmailMetrics } from './luxorMarketingEmailMetricsServer'
 import {
   aggregateMarketingOverview,
   getMarketingOverviewRange,
@@ -50,7 +51,7 @@ export async function getLuxorMarketingOverview(days: number, now = new Date()) 
   const until = encodeURIComponent(range.endExclusive.toISOString())
   const nowIso = encodeURIComponent(now.toISOString())
 
-  const [inquiries, sentRecipients, events, upcomingCampaigns] = await Promise.all([
+  const [inquiries, sentRecipients, events, upcomingCampaigns, emailMetrics] = await Promise.all([
     readRows<MarketingOverviewInquiry>(
       'luxor_inquiries',
       'id,created_at,source,is_test',
@@ -75,6 +76,7 @@ export async function getLuxorMarketingOverview(days: number, now = new Date()) 
       `&status=eq.scheduled&scheduled_for=gte.${nowIso}`,
       'scheduled_for.asc,id.asc',
     ),
+    getLuxorMarketingEmailMetrics(days, now),
   ])
 
   const eventRecipients = await readByIds<MarketingOverviewRecipient>(
@@ -110,6 +112,7 @@ export async function getLuxorMarketingOverview(days: number, now = new Date()) 
     emailJobs,
     events,
     campaigns: [...campaignsById.values()],
+    emailMetrics,
     now,
   })
 }

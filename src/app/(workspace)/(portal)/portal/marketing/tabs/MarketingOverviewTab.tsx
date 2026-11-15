@@ -90,13 +90,31 @@ export function MarketingOverviewTab({ onTabChange, onCreateCampaign }: Marketin
           <MetricCard label="Inquiries" value={data?.inquiryCount} detail="Non-test inquiry records by creation date" loading={loading} />
         </PortalStaggerCard>
         <PortalStaggerCard>
-          <MetricCard label="Campaign emails sent" value={data?.sentRecipientCount} detail="Recipient records marked sent with a non-test email job" loading={loading} />
-        </PortalStaggerCard>
-        <PortalStaggerCard>
-          <MetricCard label="Click events recorded" value={data?.clickEventCount} detail="Tracked click events in this date range" loading={loading} />
+          <MetricCard label="Campaign emails sent" value={data?.sentRecipientCount} detail="Marketing recipient rows marked sent, including campaign sends without a linked job" loading={loading} />
         </PortalStaggerCard>
         <PortalStaggerCard>
           <MetricCard label="Upcoming campaigns" value={data?.upcomingCampaignCount} detail="Scheduled campaigns with future send dates" loading={loading} />
+        </PortalStaggerCard>
+        <PortalStaggerCard>
+          <MetricCard label="Delivery events tracked" value={data?.trackedActivityCount} detail="Delivered, open, click, and bounce Resend events in range" loading={loading} />
+        </PortalStaggerCard>
+      </PortalStaggerGroup>
+
+      <PortalStaggerGroup aria-label="Outbound email delivery" className="grid grid-cols-2 border-b border-[color:var(--portal-border)] md:grid-cols-3 xl:grid-cols-5" staggerDelay={0.06}>
+        <PortalStaggerCard>
+          <MetricCard label="Sent" value={data?.emailMetrics.totals.sent} detail="Resend-accepted outgoing mail in range, excluding test runs" loading={loading} />
+        </PortalStaggerCard>
+        <PortalStaggerCard>
+          <MetricCard label="Delivered" value={data?.emailMetrics.totals.delivered} detail="Resend delivery events joined to outbox mail" loading={loading} />
+        </PortalStaggerCard>
+        <PortalStaggerCard>
+          <MetricCard label="Opens (approx.)" value={data?.emailMetrics.totals.opened} detail="Resend open signals; mail apps may auto-open and inflate this count" loading={loading} />
+        </PortalStaggerCard>
+        <PortalStaggerCard>
+          <MetricCard label="Clicked" value={data?.emailMetrics.totals.clicked} detail="Resend click events across campaign, follow-up, and system mail" loading={loading} />
+        </PortalStaggerCard>
+        <PortalStaggerCard>
+          <MetricCard label="Bounced" value={data?.emailMetrics.totals.bounced} detail="Resend bounce events joined to production outbox mail" loading={loading} />
         </PortalStaggerCard>
       </PortalStaggerGroup>
 
@@ -185,7 +203,7 @@ export function MarketingOverviewTab({ onTabChange, onCreateCampaign }: Marketin
               ))}
             </ul>
           )}
-          <p className="mt-3 border-t border-[color:var(--portal-border)] pt-3 text-[10px] leading-4 text-[color:var(--portal-muted)]">Opens and clicks are tracking signals, not proof that an email was read or delivered.</p>
+          <p className="mt-3 border-t border-[color:var(--portal-border)] pt-3 text-[10px] leading-4 text-[color:var(--portal-muted)]">Opens are approximate because mail apps may prefetch messages. Clicks and bounces come from Resend events tied to outbox mail.</p>
         </section>
       </div>
 
@@ -446,8 +464,10 @@ function formatDateTime(value: string) {
 }
 
 function formatEventType(value: string) {
-  if (value === 'open') return 'Open signal recorded'
-  if (value === 'click') return 'Click event recorded'
+  if (value === 'open' || value === 'opened') return 'Open signal recorded (approx.)'
+  if (value === 'click' || value === 'clicked') return 'Click event recorded'
+  if (value === 'delivered') return 'Delivered'
+  if (value === 'bounced') return 'Bounced'
   if (value === 'unsubscribe') return 'Unsubscribe recorded'
-  return 'Campaign event recorded'
+  return 'Email event recorded'
 }

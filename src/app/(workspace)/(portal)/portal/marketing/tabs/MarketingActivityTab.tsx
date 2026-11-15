@@ -31,15 +31,35 @@ export function MarketingActivityTab() {
     return () => { active = false }
   }, [retryVersion])
 
+  const emailTotals = data?.emailMetrics.totals
+
   return (
-    <div className="min-h-0 flex-1 overflow-y-auto portal-scrollbar pb-8">
+    <div className="min-h-0 flex-1 space-y-6 overflow-y-auto portal-scrollbar pb-8">
+      <section aria-label="Outbound email delivery summary" className="overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)]">
+        <div className="grid grid-cols-2 divide-x divide-y divide-[color:var(--portal-border)] md:grid-cols-3 xl:grid-cols-5 md:divide-y-0">
+          {[
+            ['Sent', emailTotals?.sent, 'Resend-accepted outgoing mail'],
+            ['Delivered', emailTotals?.delivered, 'Resend delivered events'],
+            ['Opens (approx.)', emailTotals?.opened, 'Mail-app auto-opens may inflate this'],
+            ['Clicked', emailTotals?.clicked, 'Resend click events in range'],
+            ['Bounced', emailTotals?.bounced, 'Resend bounce events in range'],
+          ].map(([label, value, detail]) => (
+            <div key={String(label)} className="p-4 sm:p-5">
+              <p className="text-[9px] font-black uppercase tracking-[0.14em] text-[color:var(--portal-muted)]">{label}</p>
+              {loading ? <div className="mt-3 h-7 w-14 rounded luxor-skeleton" aria-hidden="true" /> : <p className="mt-2 font-mono text-2xl font-semibold leading-none text-[color:var(--portal-text)]">{typeof value === 'number' ? value.toLocaleString() : '—'}</p>}
+              <p className="mt-2 text-[10px] leading-4 text-[color:var(--portal-muted)]">{detail}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+
       <section aria-labelledby="marketing-activity-heading" className="overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)]">
         <div className="border-b border-[color:var(--portal-border)] p-4 sm:p-6">
           <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[#a8792f]">Campaign tracking</p>
           <div className="mt-1 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
             <div>
               <h2 id="marketing-activity-heading" className="text-lg font-bold text-[color:var(--portal-text)]">Recent activity</h2>
-              <p className="mt-1 text-xs leading-5 text-[color:var(--portal-muted)]">Open, click, and unsubscribe events associated with non-test campaign email jobs.</p>
+              <p className="mt-1 text-xs leading-5 text-[color:var(--portal-muted)]">Delivery, open, click, and bounce events from Resend joined to outbox mail (campaign, follow-up, and system).</p>
             </div>
             {data ? <p className="text-[10px] font-semibold text-[color:var(--portal-muted)]">{data.trackedActivityCount.toLocaleString()} tracked events · {formatDate(data.period.startDate)}–{formatDate(data.period.endDate)} · Chicago time</p> : null}
           </div>
@@ -59,7 +79,7 @@ export function MarketingActivityTab() {
               {data.recentActivity.map((event) => (
                 <li key={event.id} className="flex min-w-0 items-center gap-3 py-4">
                   <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-[#caa24c]/30 bg-[#caa24c]/10 text-[#a8792f]">
-                    {event.eventType === 'click' ? <ArrowUpRight size={15} /> : <Mail size={15} />}
+                    {event.eventType === 'clicked' || event.eventType === 'click' ? <ArrowUpRight size={15} /> : <Mail size={15} />}
                   </span>
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-sm font-semibold text-[color:var(--portal-text)]">{decodeHtmlEntities(event.campaignName)}</span>
@@ -76,7 +96,7 @@ export function MarketingActivityTab() {
         )}
 
         <p className="border-t border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/50 px-4 py-3 text-[10px] leading-5 text-[color:var(--portal-muted)] sm:px-6">
-          This view covers email campaign tracking events only. Opens and clicks are tracking signals; they do not confirm delivery or prove that a person read an email. Other activity types are not included in this Phase 1 view.
+          Opens are approximate because mail apps may prefetch messages. Counts exclude test-run mail and come from Resend events joined to production outbox rows.
         </p>
       </section>
     </div>
@@ -84,10 +104,12 @@ export function MarketingActivityTab() {
 }
 
 function formatEventType(value: string) {
-  if (value === 'open') return 'Open signal recorded'
-  if (value === 'click') return 'Click event recorded'
+  if (value === 'open' || value === 'opened') return 'Open signal recorded (approx.)'
+  if (value === 'click' || value === 'clicked') return 'Click event recorded'
+  if (value === 'delivered') return 'Delivered'
+  if (value === 'bounced') return 'Bounced'
   if (value === 'unsubscribe') return 'Unsubscribe recorded'
-  return 'Campaign event recorded'
+  return 'Email event recorded'
 }
 
 function formatDate(value: string) {
