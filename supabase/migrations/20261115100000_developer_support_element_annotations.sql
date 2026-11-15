@@ -7,7 +7,10 @@ alter table public.luxor_elena_developer_support_confirmations
   check (jsonb_typeof(element_annotations) = 'array' and jsonb_array_length(element_annotations) <= 25);
 
 create or replace function public.luxor_elena_validate_developer_support_annotations(p_annotations jsonb)
-returns void language plpgsql security definer set search_path = '' as $$
+returns void
+language plpgsql
+set search_path = ''
+as $$
 declare
   v_item jsonb;
 begin
@@ -43,7 +46,7 @@ $$;
 
 drop function if exists public.luxor_elena_issue_developer_support_confirmation(uuid, text, uuid, text, bigint, text, text, text, text, jsonb);
 
-create function public.luxor_elena_issue_developer_support_confirmation(
+create or replace function public.luxor_elena_issue_developer_support_confirmation(
   p_id uuid,
   p_token_hash text,
   p_member_id uuid,
@@ -100,9 +103,7 @@ begin
 end;
 $$;
 
-drop function if exists public.luxor_elena_consume_developer_support_confirmation(uuid, text, uuid, text, bigint);
-
-create function public.luxor_elena_consume_developer_support_confirmation(
+create or replace function public.luxor_elena_consume_developer_support_confirmation(
   p_id uuid,
   p_token_hash text,
   p_member_id uuid,
