@@ -29,6 +29,7 @@
     "test:phase5-bills": "node --test tests/luxor-phase5-bills.test.cjs",
     "test:phase6-budget-summary": "node --test tests/luxor-phase6-budget-summary.test.cjs",
     "test:books-health": "node --test tests/luxor-books-health.test.cjs",
+    "test:sales-briefing": "node --test tests/sales-briefing-send-gate.test.cjs tests/sales-briefing-pipeline.test.cjs",
     "phase5:migration-readiness": "node scripts/phase5-migration-readiness.cjs",
     "phase5:stage": "node scripts/stage-phase5.cjs"
   },

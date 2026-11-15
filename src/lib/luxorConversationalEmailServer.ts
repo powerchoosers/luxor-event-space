@@ -92,9 +92,22 @@ export function withoutLuxorEmailSignature(html: string) {
   )
 }
 
-export function buildConversationalEmailHtml(params: ConversationalEmailParams): string {
+export type LuxorEmailSignatureParams = Pick<
+  ConversationalEmailParams,
+  'senderName' | 'senderRole' | 'senderEmail' | 'senderPhone' | 'senderImageUrl' | 'organizationName' | 'signatureWebsite'
+>
+
+export type LuxorEmailSignatureRowOptions = {
+  horizontalPadPx?: number
+  borderColor?: string
+}
+
+/** Full-width table row with avatar, name, role, phone, email, and site — for system or conversational templates. */
+export function buildLuxorConversationalEmailSignatureRow(
+  params: LuxorEmailSignatureParams,
+  options: LuxorEmailSignatureRowOptions = {},
+) {
   const {
-    body,
     senderName = 'Luxor Event Space',
     senderRole = 'Venue Team',
     senderEmail = 'booking@luxoratlaspalmas.com',
@@ -103,6 +116,8 @@ export function buildConversationalEmailHtml(params: ConversationalEmailParams):
     organizationName = 'Luxor Event Space',
     signatureWebsite,
   } = params
+  const horizontalPadPx = options.horizontalPadPx ?? 28
+  const borderColor = options.borderColor ?? '#e8e1d7'
 
   const initials = senderName
     .split(/\s+/)
@@ -125,6 +140,53 @@ export function buildConversationalEmailHtml(params: ConversationalEmailParams):
     : String(senderPhone || '').trim()
   const senderPhoneHref = senderPhoneDigits.length === 10 ? `+1${senderPhoneDigits}` : String(senderPhone || '').trim()
 
+  const avatarHtml = safeSenderImageUrl
+    ? `<img src="${escapeHtml(safeSenderImageUrl)}" width="44" height="44" alt="${escapeHtml(senderName)}" style="display:block;width:44px;height:44px;border-radius:22px;object-fit:cover;border:1px solid #dfc98f;" />`
+    : `<table role="presentation" width="44" height="44" cellpadding="0" cellspacing="0" border="0" style="width:44px;height:44px;background-color:#caa24c;border-radius:22px;">
+        <tr>
+          <td width="44" height="44" align="center" valign="middle" style="width:44px;height:44px;border-radius:22px;font-family:Georgia,'Times New Roman',serif;font-size:16px;font-weight:700;line-height:44px;color:#18130d;letter-spacing:0.05em;">
+            ${escapeHtml(initials)}
+          </td>
+        </tr>
+      </table>`
+
+  return `<tr>
+    <td class="luxor-signature-wrap" style="padding:0 ${horizontalPadPx}px 30px;width:100%;">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="width:100%;border-top:1px solid ${borderColor};">
+        <tr>
+          <td style="padding:18px 0 0;vertical-align:top;width:100%;">
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+              <tr>
+                <td style="padding:0 12px 0 0;vertical-align:top;width:44px;">${avatarHtml}</td>
+                <td style="vertical-align:middle;">
+                  <p style="margin:0;font-family:Arial,'Helvetica Neue',sans-serif;font-size:14px;font-weight:700;color:#332c24;line-height:1.35;">${escapeHtml(senderName)}</p>
+                  <p style="margin:2px 0 0;font-family:Arial,'Helvetica Neue',sans-serif;font-size:12px;color:#756b60;line-height:1.45;">${escapeHtml(senderRole)} · ${escapeHtml(organizationName)}</p>
+                  <p style="margin:5px 0 0;font-family:Arial,'Helvetica Neue',sans-serif;font-size:12px;color:#756b60;line-height:1.5;">
+                    ${senderPhoneDisplay ? `<a href="tel:${escapeHtml(senderPhoneHref)}" style="color:#756b60;text-decoration:none;">${escapeHtml(senderPhoneDisplay)}</a><span style="color:#c3b9ac;"> &nbsp;|&nbsp; </span>` : ''}<a href="mailto:${escapeHtml(senderEmail)}" style="color:#756b60;text-decoration:none;">${escapeHtml(senderEmail)}</a>
+                  </p>
+                  ${signatureWebsite ? `<p style="margin:4px 0 0;font-family:Arial,'Helvetica Neue',sans-serif;font-size:12px;line-height:1.5;"><a href="${escapeHtml(signatureWebsite.startsWith('http') ? signatureWebsite : `https://${signatureWebsite}`)}" style="color:#756b60;text-decoration:none;">${escapeHtml(signatureWebsite.replace(/^https?:\/\/(www\.)?/i, ''))}</a></p>` : ''}
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+      </table>
+    </td>
+  </tr>`
+}
+
+export function buildConversationalEmailHtml(params: ConversationalEmailParams): string {
+  const {
+    body,
+    senderName = 'Luxor Event Space',
+    senderRole = 'Venue Team',
+    senderEmail = 'booking@luxoratlaspalmas.com',
+    senderPhone = null,
+    senderImageUrl,
+    organizationName = 'Luxor Event Space',
+    signatureWebsite,
+  } = params
+
   const formattedBodyHtml = params.bodyHtml
     ? `<div style="font-family:Arial,'Helvetica Neue',Helvetica,sans-serif;font-size:15px;line-height:1.75;color:#332c24;">${sanitizeRichEmailHtml(params.bodyHtml)}</div>`
     : body
@@ -139,15 +201,15 @@ export function buildConversationalEmailHtml(params: ConversationalEmailParams):
         )
         .join('')
 
-  const avatarHtml = safeSenderImageUrl
-    ? `<img src="${escapeHtml(safeSenderImageUrl)}" width="44" height="44" alt="${escapeHtml(senderName)}" style="display:block;width:44px;height:44px;border-radius:22px;object-fit:cover;border:1px solid #dfc98f;" />`
-    : `<table role="presentation" width="44" height="44" cellpadding="0" cellspacing="0" border="0" style="width:44px;height:44px;background-color:#caa24c;border-radius:22px;">
-        <tr>
-          <td width="44" height="44" align="center" valign="middle" style="width:44px;height:44px;border-radius:22px;font-family:Georgia,'Times New Roman',serif;font-size:16px;font-weight:700;line-height:44px;color:#18130d;letter-spacing:0.05em;">
-            ${escapeHtml(initials)}
-          </td>
-        </tr>
-      </table>`
+  const signatureRow = buildLuxorConversationalEmailSignatureRow({
+    senderName,
+    senderRole,
+    senderEmail,
+    senderPhone,
+    senderImageUrl,
+    organizationName,
+    signatureWebsite,
+  })
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -181,29 +243,7 @@ export function buildConversationalEmailHtml(params: ConversationalEmailParams):
               ${formattedBodyHtml}
             </td>
           </tr>
-          <tr>
-            <td class="luxor-signature-wrap" style="padding:0 28px 30px;">
-              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="width:100%;border-top:1px solid #e8e1d7;">
-                <tr>
-                  <td style="padding:18px 0 0;vertical-align:top;">
-                    <table role="presentation" cellpadding="0" cellspacing="0" border="0">
-                      <tr>
-                        <td style="padding:0 12px 0 0;vertical-align:top;">${avatarHtml}</td>
-                        <td style="vertical-align:middle;">
-                          <p style="margin:0;font-family:Arial,'Helvetica Neue',sans-serif;font-size:14px;font-weight:700;color:#332c24;line-height:1.35;">${escapeHtml(senderName)}</p>
-                          <p style="margin:2px 0 0;font-family:Arial,'Helvetica Neue',sans-serif;font-size:12px;color:#756b60;line-height:1.45;">${escapeHtml(senderRole)} · ${escapeHtml(organizationName)}</p>
-                          <p style="margin:5px 0 0;font-family:Arial,'Helvetica Neue',sans-serif;font-size:12px;color:#756b60;line-height:1.5;">
-                            ${senderPhoneDisplay ? `<a href="tel:${escapeHtml(senderPhoneHref)}" style="color:#756b60;text-decoration:none;">${escapeHtml(senderPhoneDisplay)}</a><span style="color:#c3b9ac;"> &nbsp;|&nbsp; </span>` : ''}<a href="mailto:${escapeHtml(senderEmail)}" style="color:#756b60;text-decoration:none;">${escapeHtml(senderEmail)}</a>
-                          </p>
-                          ${signatureWebsite ? `<p style="margin:4px 0 0;font-family:Arial,'Helvetica Neue',sans-serif;font-size:12px;line-height:1.5;"><a href="${escapeHtml(signatureWebsite.startsWith('http') ? signatureWebsite : `https://${signatureWebsite}`)}" style="color:#756b60;text-decoration:none;">${escapeHtml(signatureWebsite.replace(/^https?:\/\/(www\.)?/i, ''))}</a></p>` : ''}
-                        </td>
-                      </tr>
-                    </table>
-                  </td>
-                </tr>
-              </table>
-            </td>
-          </tr>
+          ${signatureRow}
         </table>
       </td>
     </tr>
