@@ -43,10 +43,12 @@ test('visit CTA helpers count current and legacy event names', () => {
   assert.equal(countLuxorVisitCtaClicks(events), 3)
 })
 
-test('page performance CTA clicks include visit, tour legacy, and generic cta_click', () => {
+test('page performance CTA clicks include visit, tour legacy, generic cta_click, and call CTA', () => {
   assert.equal(isLuxorPagePerformanceCtaClickEvent('visit_cta_click'), true)
   assert.equal(isLuxorPagePerformanceCtaClickEvent('tour_cta_click'), true)
   assert.equal(isLuxorPagePerformanceCtaClickEvent('cta_click'), true)
+  assert.equal(isLuxorPagePerformanceCtaClickEvent('call_cta_click'), true)
+  assert.equal(isLuxorVisitCtaClickEvent('call_cta_click'), false)
   assert.equal(isLuxorPagePerformanceCtaClickEvent('brochure_submitted'), false)
 })
 
