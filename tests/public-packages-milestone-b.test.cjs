@@ -170,6 +170,51 @@ test('findRecentDuplicateLuxorInquiry prefers metadata idempotency key', async (
   assert.match(calls[0], /idempotencyKey/)
 })
 
+test('findRecentDuplicateLuxorInquiry ignores earlier visit inquiries for packages payload', async () => {
+  const inquiryTypes = loadTypeScript('src/lib/luxorInquiryTypes.ts')
+  const duplicateMatch = loadTypeScript('src/lib/luxorInquiryDuplicateMatch.ts')
+  const { findRecentDuplicateLuxorInquiry } = loadTypeScript('src/lib/luxorInquiriesServer.ts', {
+    'server-only': {},
+    './luxorInquiryTypes': inquiryTypes,
+    './luxorEmailJobsServer': {},
+    './supabaseRestServer': {
+      supabaseRest: async (query) => {
+        if (query.includes('or=(')) {
+          return [{
+            id: 'tour-after-visit',
+            flow: 'tour_request',
+            source: 'visit_page',
+            email: 'lead@example.invalid',
+          }]
+        }
+        return []
+      },
+    },
+    './luxorTourMetrics': {},
+    './luxorTextAutomationsServer': {},
+    './luxorTourSlotsServer': {},
+    './luxorTourSlots': {},
+    './luxorCalendarServer': {},
+    './luxorTourPlanningServer': {},
+    './luxorPhoneNumbersServer': {},
+    './luxorInquiryDuplicateMatch': duplicateMatch,
+  })
+
+  const duplicate = await findRecentDuplicateLuxorInquiry({
+    fullName: 'Aria Test',
+    email: 'lead@example.invalid',
+    phone: '2105550100',
+    flow: 'packages_event_inquiry',
+    source: 'website_packages',
+    metadata: {
+      idempotencyKey: 'fresh-packages-key-abcdef01',
+      packagesConfigurator: { draft_id: 'draft-visit-then-packages' },
+    },
+  }, 30)
+
+  assert.equal(duplicate, null)
+})
+
 test('createLuxorInquiry replays on metadata idempotency unique violation without re-notifying', async () => {
   const inquiryTypes = loadTypeScript('src/lib/luxorInquiryTypes.ts')
   const winner = {
