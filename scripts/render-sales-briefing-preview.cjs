@@ -8,7 +8,7 @@ const Module = require('node:module')
 const ts = require('typescript')
 
 const root = path.resolve(__dirname, '..')
-const outPath = '/opt/cursor/artifacts/sales-briefing-preview.html'
+const artifactDir = '/opt/cursor/artifacts'
 
 process.env.LUXOR_ELENA_MAIL_ADDRESS = process.env.LUXOR_ELENA_MAIL_ADDRESS || 'elena@luxoratlaspalmas.com'
 process.env.LUXOR_MAIL_ALLOWED_SENDERS =
@@ -56,7 +56,7 @@ const email = compileModule('src/lib/luxorSalesBriefingEmail.ts', {
   'server-only': {},
 })
 
-const pipeline = {
+const basePipeline = {
   briefingDateKey: '2026-11-15',
   newInquiries: [
     {
@@ -65,6 +65,7 @@ const pipeline = {
       eventType: 'Quinceañera',
       status: 'new',
       href: '/portal/leads/sample-new',
+      waitingLabel: 'waiting 3h',
     },
     {
       id: 'lead-new-2',
@@ -72,6 +73,7 @@ const pipeline = {
       eventType: 'Wedding Reception',
       status: 'contacted',
       href: '/portal/leads/sample-contacted',
+      waitingLabel: 'waiting 14h',
     },
   ],
   openInquiriesCount: 14,
@@ -84,27 +86,37 @@ const pipeline = {
       href: '/portal/leads/sample-open',
     },
   ],
+  leadsToCallToday: [
+    {
+      id: 'task-call-1',
+      name: 'Rebecca Aleman',
+      detail: 'Call Rebecca for her tour follow-up',
+      href: '/portal/leads/sample-contacted',
+    },
+  ],
   toursToday: [
     {
-      id: 'tour-today-1',
+      id: 'visit-today-1',
       name: 'Sofia Ramirez',
       tourDate: '2026-11-15',
       tourTime: '11:00 AM',
+      tourStatus: 'Confirmed',
       href: '/portal/leads/sample-tour-today',
     },
   ],
   upcomingTours: [
     {
-      id: 'tour-upcoming-1',
+      id: 'visit-upcoming-1',
       name: 'Daniel & Priya',
       tourDate: '2026-11-18',
       tourTime: '5:30 PM',
+      tourStatus: 'Requested',
       href: '/portal/leads/sample-tour-upcoming',
     },
   ],
-  awaitingDeposit: [
+  awaitingBookingPayment: [
     {
-      id: 'booking-deposit-1',
+      id: 'booking-pay-1',
       clientName: 'Elena Morales',
       eventDate: '2027-03-14',
       href: '/portal/leads/sample-deposit',
@@ -117,6 +129,24 @@ const pipeline = {
       eventDate: '2026-11-22',
       eventType: 'Celebration of Life',
       href: '/portal/leads/sample-event',
+    },
+  ],
+  overdueFollowUps: [
+    {
+      id: 'task-overdue-1',
+      name: 'Mia Ortega',
+      detail: 'Due 2026-11-13',
+      href: '/portal/leads/sample-open',
+    },
+  ],
+  tourNoShowsToRebook: [
+    {
+      id: 'visit-noshow-1',
+      name: 'Jordan Lee',
+      tourDate: '2026-11-12',
+      tourTime: '4:00 PM',
+      tourStatus: 'No-show',
+      href: '/portal/leads/sample-noshow',
     },
   ],
   dailyPriorities: [
@@ -140,22 +170,48 @@ const pipeline = {
   ],
 }
 
-const rendered = email.renderLuxorSalesBriefingEmail({
+const marcusCoaching = {
+  headline: 'Lead with follow-ups before noon.',
+  coachingMarkdown:
+    'Victoria and Rebecca both need a human touch today.\n\n**Keep tours warm** — confirm parking and the ballroom walkthrough before guests arrive.',
+  focusItems: [
+    { title: 'Post-tour speed', detail: 'Send custom proposals within 24 hours of every attended tour.' },
+    { title: 'Booking payment chase', detail: 'Signed agreements without the initial booking payment get a calm check-in call.' },
+  ],
+}
+
+function writePreview(filename, rendered) {
+  const outPath = path.join(artifactDir, filename)
+  fs.mkdirSync(artifactDir, { recursive: true })
+  fs.writeFileSync(outPath, rendered.html, 'utf8')
+  console.log(`Wrote ${outPath} (${rendered.html.length} bytes)`)
+  console.log(`Subject: ${rendered.subject}`)
+}
+
+const marcusRendered = email.renderLuxorSalesBriefingEmail({
   siteOrigin: 'https://www.luxoratlaspalmas.com',
-  pipeline,
-  coaching: {
-    headline: 'Lead with follow-ups before noon.',
-    coachingMarkdown:
-      'Victoria and Rebecca both need a human touch today.\n\n**Keep tours warm** — confirm parking and the ballroom walkthrough before guests arrive.',
-    focusItems: [
-      { title: 'Post-tour speed', detail: 'Send custom proposals within 24 hours of every attended tour.' },
-      { title: 'Deposit chase', detail: 'Signed agreements without deposit should get a calm check-in call.' },
-    ],
-  },
+  pipeline: basePipeline,
+  marcusBriefingReady: true,
+  coaching: marcusCoaching,
   senderPhone: '+12105550111',
 })
 
-fs.mkdirSync(path.dirname(outPath), { recursive: true })
-fs.writeFileSync(outPath, rendered.html, 'utf8')
-console.log(`Wrote ${outPath} (${rendered.html.length} bytes)`)
-console.log(`Subject: ${rendered.subject}`)
+const neutralRendered = email.renderLuxorSalesBriefingEmail({
+  siteOrigin: 'https://www.luxoratlaspalmas.com',
+  pipeline: {
+    ...basePipeline,
+    leadsToCallToday: [],
+    overdueFollowUps: [],
+    tourNoShowsToRebook: [],
+    toursToday: [],
+    upcomingTours: [],
+    awaitingBookingPayment: [],
+  },
+  marcusBriefingReady: false,
+  coaching: null,
+  senderPhone: '+12105550111',
+})
+
+writePreview('sales-briefing-preview-marcus-ready.html', marcusRendered)
+writePreview('sales-briefing-preview-neutral.html', neutralRendered)
+writePreview('sales-briefing-preview.html', marcusRendered)

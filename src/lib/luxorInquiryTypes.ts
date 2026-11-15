@@ -7,6 +7,26 @@ export type LuxorInquiryStatus =
   | 'booked'
   | 'closed_lost'
 
+export const LUXOR_INQUIRY_STATUS_LABELS: Record<LuxorInquiryStatus, string> = {
+  new: 'New',
+  contacted: 'Contacted',
+  tour_requested: 'Tour requested',
+  tour_confirmed: 'Tour confirmed',
+  proposal_sent: 'Proposal sent',
+  booked: 'Booked',
+  closed_lost: 'Closed / not booked',
+}
+
+export function luxorInquiryStatusLabel(status: string) {
+  const known = LUXOR_INQUIRY_STATUS_LABELS[status as LuxorInquiryStatus]
+  if (known) return known
+  return status
+    .split('_')
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ')
+}
+
 export const LUXOR_EVENT_TYPES = [
   'Wedding',
   'Wedding Reception',

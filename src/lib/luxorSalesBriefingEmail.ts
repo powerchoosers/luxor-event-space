@@ -1,7 +1,10 @@
 import { renderLuxorSystemEmail } from './luxorEmailDesignSystem'
-import { buildConversationalEmailHtml } from './luxorConversationalEmailServer'
+import {
+  buildLuxorConversationalEmailSignatureRow,
+  luxorEmailHtmlToPlainText,
+} from './luxorConversationalEmailServer'
 import { luxorElenaMailFrom } from './luxorMailConfig'
-import { luxorEmailHtmlToPlainText } from './luxorConversationalEmailServer'
+import { luxorInquiryStatusLabel } from './luxorInquiryTypes'
 import type { LuxorDailyPriority } from './luxorDailyPrioritiesServer'
 import { formatLuxorTourDate, LUXOR_TOUR_TIMEZONE } from './luxorTourMetrics'
 
@@ -22,6 +25,7 @@ export type LuxorSalesBriefingInquiryLine = {
   eventType: string
   status: string
   href: string
+  waitingLabel?: string | null
 }
 
 export type LuxorSalesBriefingTourLine = {
@@ -29,10 +33,11 @@ export type LuxorSalesBriefingTourLine = {
   name: string
   tourDate: string
   tourTime: string | null
+  tourStatus: string
   href: string
 }
 
-export type LuxorSalesBriefingDepositLine = {
+export type LuxorSalesBriefingPaymentLine = {
   id: string
   clientName: string
   eventDate: string
@@ -47,15 +52,25 @@ export type LuxorSalesBriefingEventLine = {
   href: string
 }
 
+export type LuxorSalesBriefingTaskLine = {
+  id: string
+  name: string
+  detail: string
+  href: string | null
+}
+
 export type LuxorSalesBriefingPipeline = {
   briefingDateKey: string
   newInquiries: LuxorSalesBriefingInquiryLine[]
   openInquiriesCount: number
   openInquiryHighlights: LuxorSalesBriefingInquiryLine[]
+  leadsToCallToday: LuxorSalesBriefingTaskLine[]
   toursToday: LuxorSalesBriefingTourLine[]
   upcomingTours: LuxorSalesBriefingTourLine[]
-  awaitingDeposit: LuxorSalesBriefingDepositLine[]
+  awaitingBookingPayment: LuxorSalesBriefingPaymentLine[]
   eventsNext14Days: LuxorSalesBriefingEventLine[]
+  overdueFollowUps: LuxorSalesBriefingTaskLine[]
+  tourNoShowsToRebook: LuxorSalesBriefingTourLine[]
   dailyPriorities: LuxorDailyPriority[]
 }
 
@@ -72,12 +87,7 @@ function sectionHeading(label: string) {
   return `<h2 style="margin:28px 0 10px;color:#8f6829;font-family:Manrope,Helvetica Neue,Arial,sans-serif;font-size:11px;font-weight:800;letter-spacing:.22em;text-transform:uppercase;">${escapeHtml(label)}</h2>`
 }
 
-function emptyLine(copy: string) {
-  return `<p style="margin:0 0 8px;color:#6f6456;font-size:14px;line-height:1.6;">${escapeHtml(copy)}</p>`
-}
-
 function bulletList(items: string[]) {
-  if (!items.length) return emptyLine('Nothing on the board right now.')
   return `<ul style="margin:0 0 8px;padding:0 0 0 18px;color:#201b16;font-size:14px;line-height:1.65;">${items
     .map((item) => `<li style="margin:0 0 8px;">${item}</li>`)
     .join('')}</ul>`
@@ -85,6 +95,12 @@ function bulletList(items: string[]) {
 
 function linkLine(label: string, href: string) {
   return `<a href="${escapeHtml(href)}" style="color:#8f6829;font-weight:700;text-decoration:none;">${escapeHtml(label)}</a>`
+}
+
+function addListSection(sections: string[], heading: string, lines: string[]) {
+  if (!lines.length) return
+  sections.push(sectionHeading(heading))
+  sections.push(bulletList(lines))
 }
 
 function coachingMarkdownToHtml(markdown: string) {
@@ -103,24 +119,18 @@ function coachingMarkdownToHtml(markdown: string) {
     .join('')
 }
 
-function extractElenaSignatureHtml(fullHtml: string) {
-  const match = fullHtml.match(/<tr>\s*<td class="luxor-signature-wrap"[\s\S]*?<\/tr>/i)
-  return match?.[0] || ''
-}
-
-export function buildElenaSignatureFragment(senderPhone: string | null) {
-  const full = buildConversationalEmailHtml({
-    to: '',
-    subject: 'Luxor sales briefing',
-    body: '',
-    senderName: 'Elena',
-    senderRole: "Luxor's AI concierge",
-    organizationName: 'Luxor at Las Palmas Events',
-    senderEmail: luxorElenaMailFrom(),
-    senderPhone,
-    signatureWebsite: 'luxoratlaspalmas.com',
-  })
-  return extractElenaSignatureHtml(full)
+function buildElenaSignatureRow(senderPhone: string | null) {
+  return buildLuxorConversationalEmailSignatureRow(
+    {
+      senderName: 'Elena',
+      senderRole: "Luxor's AI concierge",
+      organizationName: 'Luxor at Las Palmas Events',
+      senderEmail: luxorElenaMailFrom(),
+      senderPhone,
+      signatureWebsite: 'luxoratlaspalmas.com',
+    },
+    { horizontalPadPx: 42, borderColor: '#d9c7a6' },
+  )
 }
 
 function injectBeforeSystemFooter(systemHtml: string, html: string) {
@@ -141,30 +151,44 @@ export function buildLuxorSalesBriefingSubject(pipeline: Pick<LuxorSalesBriefing
   return `Luxor sales briefing — ${formatChicagoBriefingTitle(pipeline.briefingDateKey)}`
 }
 
+function renderTourLine(origin: string, tour: LuxorSalesBriefingTourLine) {
+  const when = tour.tourTime
+    ? `${formatLuxorTourDate(tour.tourDate)} at ${tour.tourTime}`
+    : formatLuxorTourDate(tour.tourDate)
+  return `${linkLine(tour.name, `${origin}${tour.href}`)} · ${escapeHtml(tour.tourStatus)} · ${escapeHtml(when)}`
+}
+
 export function renderLuxorSalesBriefingEmail(input: {
   siteOrigin: string
   pipeline: LuxorSalesBriefingPipeline
+  marcusBriefingReady?: boolean
   coaching?: LuxorSalesBriefingCoaching | null
   senderPhone?: string | null
 }) {
   const origin = input.siteOrigin.replace(/\/$/, '')
   const portal = `${origin}/portal`
   const sections: string[] = []
+  const marcusReady = Boolean(input.marcusBriefingReady && input.coaching)
+  const intro = marcusReady
+    ? "Here's today's sales briefing from Marcus."
+    : "Here's your sales briefing for today."
 
   sections.push(
-    `<p style="margin:0 0 18px;color:#201b16;font-size:15px;line-height:1.72;">Here's today's sales briefing from Marcus.</p>`,
+    `<p style="margin:0 0 18px;color:#201b16;font-size:15px;line-height:1.72;">${escapeHtml(intro)}</p>`,
   )
 
-  if (input.coaching?.headline || input.coaching?.coachingMarkdown || input.coaching?.focusItems?.length) {
-    sections.push(sectionHeading('From Marcus, Director of Growth & Sales'))
-    if (input.coaching.headline) {
-      sections.push(`<p style="margin:0 0 12px;color:#201b16;font-family:Cormorant Garamond,Georgia,serif;font-size:24px;line-height:1.25;">${escapeHtml(input.coaching.headline)}</p>`)
+  if (marcusReady) {
+    const marcusParts: string[] = [sectionHeading('From Marcus, Director of Growth & Sales')]
+    if (input.coaching?.headline) {
+      marcusParts.push(
+        `<p style="margin:0 0 12px;color:#201b16;font-family:Cormorant Garamond,Georgia,serif;font-size:24px;line-height:1.25;">${escapeHtml(input.coaching.headline)}</p>`,
+      )
     }
-    if (input.coaching.coachingMarkdown?.trim()) {
-      sections.push(coachingMarkdownToHtml(input.coaching.coachingMarkdown))
+    if (input.coaching?.coachingMarkdown?.trim()) {
+      marcusParts.push(coachingMarkdownToHtml(input.coaching.coachingMarkdown))
     }
-    if (input.coaching.focusItems?.length) {
-      sections.push(
+    if (input.coaching?.focusItems?.length) {
+      marcusParts.push(
         bulletList(
           input.coaching.focusItems.map(
             (item) =>
@@ -173,87 +197,94 @@ export function renderLuxorSalesBriefingEmail(input: {
         ),
       )
     }
+    if (marcusParts.length > 1) sections.push(...marcusParts)
   }
 
-  sections.push(sectionHeading('New inquiries'))
-  sections.push(
-    bulletList(
-      input.pipeline.newInquiries.map((inquiry) =>
-        `${linkLine(inquiry.name, `${origin}${inquiry.href}`)} · ${escapeHtml(inquiry.eventType || 'Event')} · ${escapeHtml(inquiry.status)}`,
-      ),
-    ),
+  addListSection(
+    sections,
+    'Leads to call today',
+    input.pipeline.leadsToCallToday.map((row) => {
+      const linked = row.href ? linkLine(row.name, `${origin}${row.href}`) : escapeHtml(row.name)
+      return `${linked} · ${escapeHtml(row.detail)}`
+    }),
   )
 
-  sections.push(sectionHeading('Open pipeline'))
-  sections.push(
-    `<p style="margin:0 0 8px;color:#201b16;font-size:14px;line-height:1.65;"><strong>${input.pipeline.openInquiriesCount}</strong> active lead${input.pipeline.openInquiriesCount === 1 ? '' : 's'} in the pipeline.</p>`,
+  addListSection(
+    sections,
+    'New inquiries',
+    input.pipeline.newInquiries.map((inquiry) => {
+      const waiting = inquiry.waitingLabel ? ` · ${escapeHtml(inquiry.waitingLabel)}` : ''
+      return `${linkLine(inquiry.name, `${origin}${inquiry.href}`)} · ${escapeHtml(inquiry.eventType || 'Event')} · ${escapeHtml(luxorInquiryStatusLabel(inquiry.status))}${waiting}`
+    }),
   )
-  if (input.pipeline.openInquiryHighlights.length) {
+
+  if (input.pipeline.openInquiriesCount > 0) {
+    sections.push(sectionHeading('Open pipeline'))
     sections.push(
-      bulletList(
-        input.pipeline.openInquiryHighlights.map(
-          (inquiry) =>
-            `${linkLine(inquiry.name, `${origin}${inquiry.href}`)} · ${escapeHtml(inquiry.eventType || 'Event')} · ${escapeHtml(inquiry.status)}`,
-        ),
-      ),
+      `<p style="margin:0 0 8px;color:#201b16;font-size:14px;line-height:1.65;"><strong>${input.pipeline.openInquiriesCount}</strong> active lead${input.pipeline.openInquiriesCount === 1 ? '' : 's'} in the pipeline.</p>`,
     )
+    if (input.pipeline.openInquiryHighlights.length) {
+      sections.push(
+        bulletList(
+          input.pipeline.openInquiryHighlights.map(
+            (inquiry) =>
+              `${linkLine(inquiry.name, `${origin}${inquiry.href}`)} · ${escapeHtml(inquiry.eventType || 'Event')} · ${escapeHtml(luxorInquiryStatusLabel(inquiry.status))}`,
+          ),
+        ),
+      )
+    }
   }
 
-  sections.push(sectionHeading('Tours today'))
-  sections.push(
-    bulletList(
-      input.pipeline.toursToday.map((tour) => {
-        const when = tour.tourTime ? `${formatLuxorTourDate(tour.tourDate)} at ${tour.tourTime}` : formatLuxorTourDate(tour.tourDate)
-        return `${linkLine(tour.name, `${origin}${tour.href}`)} · ${escapeHtml(when)}`
-      }),
+  addListSection(
+    sections,
+    'Tours today',
+    input.pipeline.toursToday.map((tour) => renderTourLine(origin, tour)),
+  )
+  addListSection(
+    sections,
+    'Upcoming tours',
+    input.pipeline.upcomingTours.map((tour) => renderTourLine(origin, tour)),
+  )
+  addListSection(
+    sections,
+    'Awaiting booking payment',
+    input.pipeline.awaitingBookingPayment.map(
+      (row) =>
+        `${linkLine(row.clientName, `${origin}${row.href}`)} · event ${escapeHtml(formatLuxorTourDate(row.eventDate))}`,
     ),
   )
-
-  sections.push(sectionHeading('Upcoming tours'))
-  sections.push(
-    bulletList(
-      input.pipeline.upcomingTours.map((tour) => {
-        const when = tour.tourTime ? `${formatLuxorTourDate(tour.tourDate)} at ${tour.tourTime}` : formatLuxorTourDate(tour.tourDate)
-        return `${linkLine(tour.name, `${origin}${tour.href}`)} · ${escapeHtml(when)}`
-      }),
+  addListSection(
+    sections,
+    'Events in the next 14 days',
+    input.pipeline.eventsNext14Days.map(
+      (event) =>
+        `${linkLine(event.clientName, `${origin}${event.href}`)} · ${escapeHtml(event.eventType || 'Event')} · ${escapeHtml(formatLuxorTourDate(event.eventDate))}`,
     ),
   )
-
-  sections.push(sectionHeading('Awaiting booking deposit'))
-  sections.push(
-    bulletList(
-      input.pipeline.awaitingDeposit.map(
-        (row) =>
-          `${linkLine(row.clientName, `${origin}${row.href}`)} · event ${escapeHtml(formatLuxorTourDate(row.eventDate))}`,
-      ),
-    ),
+  addListSection(
+    sections,
+    'Overdue follow-ups',
+    input.pipeline.overdueFollowUps.map((row) => {
+      const linked = row.href ? linkLine(row.name, `${origin}${row.href}`) : escapeHtml(row.name)
+      return `${linked} · ${escapeHtml(row.detail)}`
+    }),
+  )
+  addListSection(
+    sections,
+    'Tour no-shows to rebook',
+    input.pipeline.tourNoShowsToRebook.map((tour) => renderTourLine(origin, tour)),
   )
 
-  sections.push(sectionHeading('Events in the next 14 days'))
-  sections.push(
-    bulletList(
-      input.pipeline.eventsNext14Days.map(
-        (event) =>
-          `${linkLine(event.clientName, `${origin}${event.href}`)} · ${escapeHtml(event.eventType || 'Event')} · ${escapeHtml(formatLuxorTourDate(event.eventDate))}`,
-      ),
-    ),
-  )
-
-  sections.push(sectionHeading('Saved daily priorities'))
   const openPriorities = input.pipeline.dailyPriorities.filter((priority) => !priority.completed)
-  sections.push(
-    bulletList(
-      openPriorities.length
-        ? openPriorities.map(
-            (priority) =>
-              `${linkLine(priority.title, `${origin}${priority.href}`)}${priority.meta ? ` · ${escapeHtml(priority.meta)}` : ''}`,
-          )
-        : input.pipeline.dailyPriorities.map(
-            (priority) =>
-              `${escapeHtml(priority.title)}${priority.completed ? ' (done)' : ''}`,
-          ),
-    ),
-  )
+  const priorityLines = openPriorities.length
+    ? openPriorities.map(
+        (priority) =>
+          `${linkLine(priority.title, `${origin}${priority.href}`)}${priority.meta ? ` · ${escapeHtml(priority.meta)}` : ''}`,
+      )
+    : input.pipeline.dailyPriorities.map(
+        (priority) => `${escapeHtml(priority.title)}${priority.completed ? ' (done)' : ''}`,
+      )
+  addListSection(sections, 'Saved daily priorities', priorityLines)
 
   const title = 'Your morning sales briefing'
   const eyebrow = 'Daily sales briefing'
@@ -269,7 +300,7 @@ export function renderLuxorSalesBriefingEmail(input: {
     theme: 'brand',
   })
 
-  const signature = buildElenaSignatureFragment(input.senderPhone ?? null)
+  const signature = buildElenaSignatureRow(input.senderPhone ?? null)
   const html = signature ? injectBeforeSystemFooter(systemHtml, signature) : systemHtml
   return {
     subject: buildLuxorSalesBriefingSubject(input.pipeline),

@@ -2,8 +2,10 @@ import 'server-only'
 
 import { listSavedLuxorDailyPriorities } from './luxorDailyPrioritiesServer'
 import { listAllLuxorInquiries } from './luxorInquiriesServer'
-import { listLuxorBookings } from './luxorBookingsServer'
-import { isLuxorNonRevenueTestInquiry } from './luxorInquiryTypes'
+import { listLuxorBookings, listAllPayments } from './luxorBookingsServer'
+import { listInvoices } from './luxorInvoicesServer'
+import { listAllTasks } from './luxorTasksServer'
+import { isLuxorNonRevenueTestInquiry, type LuxorInquiry, type LuxorInvoice, type LuxorPayment, type LuxorTask } from './luxorInquiryTypes'
 import { luxorDateKey, LUXOR_TOUR_TIMEZONE } from './luxorTourMetrics'
 import { supabaseRest } from './supabaseRestServer'
 import {
@@ -18,6 +20,9 @@ import {
   luxorSalesBriefingSendEnabled,
   readLuxorChicagoClock,
 } from './luxorSalesBriefingSendGate'
+import { bookingAwaitingInitialPayment, formatLuxorLeadWaitingLabel } from './luxorSalesBriefingPipelineModel'
+
+export { bookingAwaitingInitialPayment, formatLuxorLeadWaitingLabel } from './luxorSalesBriefingPipelineModel'
 
 export type LuxorSalesBriefingRow = {
   id: string
@@ -34,22 +39,135 @@ export type LuxorSalesBriefingRow = {
   updated_at: string
 }
 
+type LuxorTourVisitRow = {
+  id: string
+  inquiry_id: string
+  tour_date: string
+  attendance_status: string
+  calendar_event_id: string | null
+}
+
+type LuxorCalendarEventBrief = {
+  id: string
+  inquiry_id: string
+  status: 'confirmed' | 'cancelled'
+  state: { startUtc?: string; endUtc?: string } | null
+}
+
+const OPEN_INQUIRY_STATUSES = new Set(['new', 'contacted', 'tour_requested', 'tour_confirmed', 'proposal_sent'])
+const ACTIVE_TOUR_VISIT_STATUSES = new Set(['pending', 'rescheduled'])
+
 function addChicagoDays(dateKey: string, days: number) {
   const [year, month, day] = dateKey.split('-').map(Number)
   return new Date(Date.UTC(year, month - 1, day + days)).toISOString().slice(0, 10)
 }
 
-const OPEN_INQUIRY_STATUSES = new Set(['new', 'contacted', 'tour_requested', 'tour_confirmed', 'proposal_sent'])
+function formatTourTimeFromUtc(startUtc: string | undefined) {
+  if (!startUtc) return null
+  const parsed = new Date(startUtc)
+  if (Number.isNaN(parsed.getTime())) return null
+  return new Intl.DateTimeFormat('en-US', {
+    timeZone: LUXOR_TOUR_TIMEZONE,
+    hour: 'numeric',
+    minute: '2-digit',
+  }).format(parsed)
+}
+
+function tourStatusLabel(inquiry: LuxorInquiry) {
+  return inquiry.status === 'tour_confirmed' ? 'Confirmed' : 'Requested'
+}
+
+function isActiveSalesLead(inquiry: LuxorInquiry) {
+  return inquiry.status !== 'closed_lost' && inquiry.status !== 'booked'
+}
+
+function isTourLeadStatus(inquiry: LuxorInquiry) {
+  return inquiry.status === 'tour_requested' || inquiry.status === 'tour_confirmed'
+}
+
+async function listLuxorTourVisitsBetween(startDate: string, endDate: string) {
+  return supabaseRest<LuxorTourVisitRow[]>(
+    `luxor_tour_visits?select=id,inquiry_id,tour_date,attendance_status,calendar_event_id&tour_date=gte.${encodeURIComponent(startDate)}&tour_date=lte.${encodeURIComponent(endDate)}&order=tour_date.asc`,
+  ).catch(() => [])
+}
+
+async function listLuxorCalendarEventsById(ids: string[]) {
+  if (!ids.length) return [] as LuxorCalendarEventBrief[]
+  const unique = [...new Set(ids)]
+  const batches: LuxorCalendarEventBrief[] = []
+  for (let index = 0; index < unique.length; index += 80) {
+    const slice = unique.slice(index, index + 80).map(encodeURIComponent).join(',')
+    const page = await supabaseRest<LuxorCalendarEventBrief[]>(
+      `luxor_calendar_events?select=id,inquiry_id,status,state&id=in.(${slice})`,
+    ).catch(() => [])
+    batches.push(...page)
+  }
+  return batches
+}
+
+function mapTourVisitLines(input: {
+  visits: LuxorTourVisitRow[]
+  inquiryById: Map<string, LuxorInquiry>
+  calendarById: Map<string, LuxorCalendarEventBrief>
+  briefingDateKey: string
+  mode: 'today' | 'upcoming' | 'no_show'
+  windowEnd?: string
+}) {
+  const lines = []
+  for (const visit of input.visits) {
+    const inquiry = input.inquiryById.get(visit.inquiry_id)
+    if (!inquiry || !isActiveSalesLead(inquiry)) continue
+    const calendar = visit.calendar_event_id ? input.calendarById.get(visit.calendar_event_id) : null
+    if (input.mode === 'no_show') {
+      if (visit.attendance_status !== 'no_show') continue
+    } else {
+      if (!isTourLeadStatus(inquiry)) continue
+      if (!ACTIVE_TOUR_VISIT_STATUSES.has(visit.attendance_status)) continue
+      if (calendar && calendar.status !== 'confirmed') continue
+      if (input.mode === 'today' && visit.tour_date !== input.briefingDateKey) continue
+      if (
+        input.mode === 'upcoming'
+        && (visit.tour_date <= input.briefingDateKey || (input.windowEnd && visit.tour_date > input.windowEnd))
+      ) {
+        continue
+      }
+    }
+    lines.push({
+      id: visit.id,
+      name: inquiry.full_name || 'Guest',
+      tourDate: visit.tour_date,
+      tourTime: formatTourTimeFromUtc(calendar?.state?.startUtc),
+      tourStatus: input.mode === 'no_show' ? 'No-show' : tourStatusLabel(inquiry),
+      href: `/portal/leads/${encodeURIComponent(inquiry.id)}`,
+    })
+  }
+  return lines.sort((a, b) => a.tourDate.localeCompare(b.tourDate)).slice(0, input.mode === 'upcoming' ? 10 : 8)
+}
+
+function businessTask(task: LuxorTask, testInquiryIds: Set<string>) {
+  return task.status === 'pending' && (!task.inquiry_id || !testInquiryIds.has(task.inquiry_id))
+}
 
 export async function gatherLuxorSalesBriefingPipeline(briefingDateKey: string): Promise<LuxorSalesBriefingPipeline> {
-  const [inquiries, bookings, dailyPriorities] = await Promise.all([
+  const windowEnd = addChicagoDays(briefingDateKey, 14)
+  const lookbackStart = addChicagoDays(briefingDateKey, -30)
+  const now = Date.now()
+
+  const [inquiries, bookings, dailyPriorities, tasks, invoices, payments, tourVisits, noShowVisits] = await Promise.all([
     listAllLuxorInquiries().catch(() => []),
     listLuxorBookings().catch(() => []),
     listSavedLuxorDailyPriorities(briefingDateKey),
+    listAllTasks().catch(() => []),
+    listInvoices(3000).catch(() => []),
+    listAllPayments().catch(() => []),
+    listLuxorTourVisitsBetween(briefingDateKey, windowEnd),
+    listLuxorTourVisitsBetween(lookbackStart, briefingDateKey),
   ])
 
   const businessLeads = inquiries.filter((lead) => !isLuxorNonRevenueTestInquiry(lead))
-  const cutoff = Date.now() - 48 * 60 * 60 * 1000
+  const testInquiryIds = new Set(inquiries.filter(isLuxorNonRevenueTestInquiry).map((lead) => lead.id))
+  const inquiryById = new Map(businessLeads.map((lead) => [lead.id, lead]))
+  const cutoff = now - 48 * 60 * 60 * 1000
 
   const newInquiries = businessLeads
     .filter((lead) => lead.status === 'new' || (lead.created_at && Date.parse(lead.created_at) >= cutoff))
@@ -61,11 +179,10 @@ export async function gatherLuxorSalesBriefingPipeline(briefingDateKey: string):
       eventType: lead.event_type || 'Event',
       status: lead.status,
       href: `/portal/leads/${encodeURIComponent(lead.id)}`,
+      waitingLabel: formatLuxorLeadWaitingLabel(lead.created_at, now),
     }))
 
-  const openLeads = businessLeads.filter(
-    (lead) => OPEN_INQUIRY_STATUSES.has(lead.status) && lead.status !== 'booked',
-  )
+  const openLeads = businessLeads.filter((lead) => OPEN_INQUIRY_STATUSES.has(lead.status))
   const openInquiryHighlights = openLeads
     .sort((a, b) => Date.parse(b.updated_at || b.created_at || '') - Date.parse(a.updated_at || a.created_at || ''))
     .slice(0, 6)
@@ -77,44 +194,47 @@ export async function gatherLuxorSalesBriefingPipeline(briefingDateKey: string):
       href: `/portal/leads/${encodeURIComponent(lead.id)}`,
     }))
 
-  const toursToday = businessLeads
-    .filter(
-      (lead) =>
-        lead.preferred_tour_date === briefingDateKey
-        && !['attended', 'no_show', 'cancelled'].includes(lead.tour_attendance_status || ''),
-    )
-    .map((lead) => ({
-      id: lead.id,
-      name: lead.full_name || 'Guest',
-      tourDate: lead.preferred_tour_date || briefingDateKey,
-      tourTime: lead.preferred_tour_time || null,
-      href: `/portal/leads/${encodeURIComponent(lead.id)}`,
-    }))
+  const calendarById = new Map(
+    (await listLuxorCalendarEventsById(
+      [...tourVisits, ...noShowVisits].map((visit) => visit.calendar_event_id).filter((id): id is string => Boolean(id)),
+    )).map((event) => [event.id, event]),
+  )
 
-  const windowEnd = addChicagoDays(briefingDateKey, 14)
-  const upcomingTours = businessLeads
-    .filter((lead) => {
-      const date = lead.preferred_tour_date
-      if (!date || date <= briefingDateKey || date > windowEnd) return false
-      return !['attended', 'no_show', 'cancelled'].includes(lead.tour_attendance_status || '')
-    })
-    .sort((a, b) => (a.preferred_tour_date || '').localeCompare(b.preferred_tour_date || ''))
-    .slice(0, 8)
-    .map((lead) => ({
-      id: lead.id,
-      name: lead.full_name || 'Guest',
-      tourDate: lead.preferred_tour_date || '',
-      tourTime: lead.preferred_tour_time || null,
-      href: `/portal/leads/${encodeURIComponent(lead.id)}`,
-    }))
+  const toursToday = mapTourVisitLines({
+    visits: tourVisits,
+    inquiryById,
+    calendarById,
+    briefingDateKey,
+    mode: 'today',
+  })
+  const upcomingTours = mapTourVisitLines({
+    visits: tourVisits,
+    inquiryById,
+    calendarById,
+    briefingDateKey,
+    mode: 'upcoming',
+    windowEnd,
+  })
+  const tourNoShowsToRebook = mapTourVisitLines({
+    visits: noShowVisits,
+    inquiryById,
+    calendarById,
+    briefingDateKey,
+    mode: 'no_show',
+  })
+
+  const depositByBookingId = new Map(
+    invoices
+      .filter((invoice) => invoice.invoice_kind === 'deposit' && invoice.booking_id)
+      .map((invoice) => [invoice.booking_id as string, invoice]),
+  )
 
   const inquiryNames = new Map(businessLeads.map((lead) => [lead.id, lead.full_name || 'Client']))
-  const awaitingDeposit = bookings
+  const awaitingBookingPayment = bookings
     .filter((booking) => {
       if (booking.status === 'cancelled' || booking.status === 'completed') return false
       if (booking.contract_status !== 'signed') return false
-      const depositPaidAt = booking.metadata?.deposit_paid_at
-      return !depositPaidAt
+      return bookingAwaitingInitialPayment(booking.id, depositByBookingId, payments)
     })
     .sort((a, b) => (a.event_date || '').localeCompare(b.event_date || ''))
     .slice(0, 8)
@@ -126,6 +246,45 @@ export async function gatherLuxorSalesBriefingPipeline(briefingDateKey: string):
         ? `/portal/leads/${encodeURIComponent(booking.inquiry_id)}?tab=agreement`
         : '/portal/bookings',
     }))
+
+  const leadsToCallToday = tasks
+    .filter(
+      (task) =>
+        businessTask(task, testInquiryIds)
+        && task.due_date === briefingDateKey
+        && (task.task_type === 'call' || /phone call|call /i.test(task.title)),
+    )
+    .sort((a, b) => a.title.localeCompare(b.title))
+    .slice(0, 8)
+    .map((task) => {
+      const inquiry = task.inquiry_id ? inquiryById.get(task.inquiry_id) : null
+      return {
+        id: task.id,
+        name: inquiry?.full_name || task.title,
+        detail: task.title,
+        href: task.inquiry_id ? `/portal/leads/${encodeURIComponent(task.inquiry_id)}` : null,
+      }
+    })
+
+  const overdueFollowUps = tasks
+    .filter(
+      (task) =>
+        businessTask(task, testInquiryIds)
+        && task.due_date
+        && task.due_date < briefingDateKey
+        && (task.task_type === 'call' || task.task_type === 'email' || /follow-up|phone call/i.test(task.title)),
+    )
+    .sort((a, b) => (a.due_date || '').localeCompare(b.due_date || ''))
+    .slice(0, 6)
+    .map((task) => {
+      const inquiry = task.inquiry_id ? inquiryById.get(task.inquiry_id) : null
+      return {
+        id: task.id,
+        name: inquiry?.full_name || task.title,
+        detail: `Due ${task.due_date}`,
+        href: task.inquiry_id ? `/portal/leads/${encodeURIComponent(task.inquiry_id)}` : null,
+      }
+    })
 
   const activeBookings = bookings.filter(
     (booking) =>
@@ -153,10 +312,13 @@ export async function gatherLuxorSalesBriefingPipeline(briefingDateKey: string):
     newInquiries,
     openInquiriesCount: openLeads.length,
     openInquiryHighlights,
+    leadsToCallToday,
     toursToday,
     upcomingTours,
-    awaitingDeposit,
+    awaitingBookingPayment,
     eventsNext14Days,
+    overdueFollowUps,
+    tourNoShowsToRebook,
     dailyPriorities,
   }
 }
@@ -169,8 +331,7 @@ export async function getLuxorSalesBriefingRow(briefingDateKey: string) {
 }
 
 function coachingFromRow(row: LuxorSalesBriefingRow | null): LuxorSalesBriefingCoaching | null {
-  if (!row) return null
-  if (row.status === 'skipped' || row.status === 'draft') return null
+  if (!row || row.status !== 'ready') return null
   return {
     headline: row.headline,
     coachingMarkdown: row.coaching_markdown,
@@ -186,10 +347,12 @@ export async function buildLuxorSalesBriefingDelivery(now = new Date()) {
     getLuxorSalesBriefingRow(clock.dateKey),
     getPublicLuxorPhoneNumber().catch(() => null),
   ])
+  const marcusBriefingReady = row?.status === 'ready'
   const coaching = coachingFromRow(row)
   const rendered = renderLuxorSalesBriefingEmail({
     siteOrigin,
     pipeline,
+    marcusBriefingReady,
     coaching,
     senderPhone,
   })
@@ -204,6 +367,7 @@ export async function buildLuxorSalesBriefingDelivery(now = new Date()) {
     clock,
     pipeline,
     row,
+    marcusBriefingReady,
     coaching,
     rendered,
     gate,
