@@ -1,8 +1,8 @@
 'use client'
 
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
-import { motion, useReducedMotion } from 'framer-motion'
-import { ChevronUp, MousePointerClick, Wrench } from '@/lib/icons/phosphor-compat'
+import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
+import { ChevronDown, MousePointerClick, Wrench } from '@/lib/icons/phosphor-compat'
 import {
   clearDeveloperTicketDraft,
   readDeveloperTicketDraft,
@@ -24,7 +24,6 @@ import {
   readDeveloperTicketViewport,
 } from '@/lib/luxorDeveloperTicketElementPicker'
 import { normalizeDeveloperSupportPagePath } from '@/lib/luxorDeveloperSupportPagePaths'
-import { PortalCloseButton } from '@/components/portal/PortalUI'
 
 type DeveloperModeContextValue = {
   developerModeActive: boolean
@@ -360,7 +359,7 @@ function PortalDeveloperModeChrome({
         type="button"
         data-portal-dev-ignore
         onClick={onExit}
-        className="fixed bottom-[calc(var(--portal-mobile-nav-height,0px)+1rem)] right-3 z-[63] rounded-full border border-[color:var(--portal-border)] bg-[color:var(--portal-card)]/95 px-4 py-2 text-xs font-semibold text-[color:var(--portal-text)] shadow-md backdrop-blur-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 sm:bottom-6 sm:right-6"
+        className="fixed bottom-[calc(var(--portal-mobile-nav-height,0px)+1rem)] right-3 z-[63] inline-flex min-h-11 items-center rounded-full border border-[color:var(--portal-border)] bg-[color:var(--portal-card)]/95 px-4 text-xs font-semibold text-[color:var(--portal-text)] shadow-md backdrop-blur-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 sm:bottom-6 sm:right-6"
       >
         Exit developer mode
       </button>
@@ -376,129 +375,146 @@ function PortalDeveloperModeChrome({
           style={{ left: hoverRect.left, top: hoverRect.top, width: hoverRect.width, height: hoverRect.height }}
         />
       ) : null}
-      {pendingAnchor ? (
-        <motion.div
-          data-portal-dev-ignore
-          initial={reduceMotion ? false : { opacity: 0, scale: 0.96 }}
-          animate={{ opacity: 1, scale: 1 }}
-          className="portal-popover-surface fixed z-[64] w-[min(18rem,calc(100vw-2rem))] rounded-xl border border-[color:var(--portal-border)] p-3 shadow-xl"
-          style={{
-            left: Math.min(pendingAnchor.rect.left, window.innerWidth - 300),
-            top: Math.min(pendingAnchor.rect.bottom + 8, window.innerHeight - 160),
-          }}
-        >
-          <label className="block text-[10px] font-semibold text-[color:var(--portal-muted)]">Note for this element</label>
-          <textarea
-            autoFocus
-            value={noteDraft}
-            onChange={(event) => setNoteDraft(event.target.value)}
-            rows={3}
-            maxLength={LUXOR_DEVELOPER_TICKET_ANNOTATION_NOTE_MAX}
-            className="mt-1 w-full resize-y rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-bg)] p-2 text-xs text-[color:var(--portal-text)] outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/50"
-          />
-          <div className="mt-2 flex justify-end gap-2">
-            <button
-              type="button"
-              className="rounded-lg border border-[color:var(--portal-border)] px-2.5 py-1.5 text-[11px] font-semibold text-[color:var(--portal-text)]"
-              onClick={() => {
-                editingAnnotationIdRef.current = null
-                setPendingAnchor(null)
-                setNoteDraft('')
-              }}
-            >
-              Close
-            </button>
-          </div>
-        </motion.div>
-      ) : null}
+      <AnimatePresence>
+        {pendingAnchor ? (
+          <motion.div
+            key="developer-ticket-note-popover"
+            data-portal-dev-ignore
+            initial={reduceMotion ? false : { opacity: 0, scale: 0.96 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={reduceMotion ? { opacity: 0, scale: 1 } : { opacity: 0, scale: 0.96 }}
+            transition={{ duration: reduceMotion ? 0 : 0.22 }}
+            className="portal-popover-surface fixed z-[64] w-[min(18rem,calc(100vw-2rem))] rounded-xl border border-[color:var(--portal-border)] p-3 shadow-xl"
+            style={{
+              left: Math.min(pendingAnchor.rect.left, window.innerWidth - 300),
+              top: Math.min(pendingAnchor.rect.bottom + 8, window.innerHeight - 160),
+            }}
+          >
+            <label className="block text-[10px] font-semibold text-[color:var(--portal-muted)]">Note for this element</label>
+            <textarea
+              autoFocus
+              value={noteDraft}
+              onChange={(event) => setNoteDraft(event.target.value)}
+              rows={3}
+              maxLength={LUXOR_DEVELOPER_TICKET_ANNOTATION_NOTE_MAX}
+              className="mt-1 w-full resize-y rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-bg)] p-2 text-xs text-[color:var(--portal-text)] outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/50"
+            />
+            <div className="mt-2 flex justify-end gap-2">
+              <button
+                type="button"
+                className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg border border-[color:var(--portal-border)] px-4 text-[11px] font-semibold text-[color:var(--portal-text)]"
+                onClick={() => {
+                  editingAnnotationIdRef.current = null
+                  setPendingAnchor(null)
+                  setNoteDraft('')
+                }}
+              >
+                Close
+              </button>
+            </div>
+          </motion.div>
+        ) : null}
+      </AnimatePresence>
       {showFloatingPanel ? (
         <div className="fixed bottom-[calc(var(--portal-mobile-nav-height,0px)+1rem)] left-3 z-[63] sm:bottom-6 sm:left-6" data-portal-dev-ignore>
-          {!panelExpanded ? (
+          <section className={`portal-popover-surface w-[min(22rem,calc(100vw-1.5rem))] overflow-hidden rounded-2xl border border-[color:var(--portal-border)] shadow-lg ${panelExpanded ? 'shadow-2xl' : ''}`}>
             <button
               type="button"
               onClick={onTogglePanel}
-              className="portal-popover-surface flex items-center gap-2 rounded-2xl border border-[color:var(--portal-border)] px-3 py-2 text-xs font-semibold text-[color:var(--portal-text)] shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45"
+              aria-expanded={panelExpanded}
+              aria-controls="portal-developer-ticket-panel-body"
+              className={`flex min-h-11 w-full items-center gap-2 px-3 text-left text-xs font-semibold text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 focus-visible:ring-offset-2 focus-visible:ring-offset-[color:var(--portal-card)] ${panelExpanded ? 'border-b border-[color:var(--portal-border)]' : ''}`}
             >
-              <Wrench size={14} className="text-[#caa24c]" aria-hidden="true" />
-              Developer ticket
-              <ChevronUp size={14} aria-hidden="true" />
+              <Wrench size={14} className="shrink-0 text-[#caa24c]" aria-hidden="true" />
+              <span className="min-w-0 flex-1">
+                <span className="block text-xs font-bold text-[color:var(--portal-text)]">Developer ticket</span>
+                {panelExpanded ? (
+                  <span className="block text-[10px] font-normal text-[color:var(--portal-muted)]">Stays in sync with Elena</span>
+                ) : null}
+              </span>
+              <span className="inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center">
+                <ChevronDown
+                  size={16}
+                  aria-hidden="true"
+                  className={`transition-transform duration-300 motion-reduce:transition-none ${panelExpanded ? 'rotate-180' : ''}`}
+                />
+              </span>
             </button>
-          ) : (
-            <motion.section
-              initial={reduceMotion ? false : { opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="portal-popover-surface w-[min(22rem,calc(100vw-1.5rem))] rounded-2xl border border-[color:var(--portal-border)] shadow-2xl"
+            <div
+              id="portal-developer-ticket-panel-body"
+              aria-hidden={!panelExpanded}
+              {...(!panelExpanded ? { inert: true } : {})}
+              className={`grid transition-[grid-template-rows] duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] motion-reduce:transition-none ${panelExpanded ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'}`}
             >
-              <header className="flex items-center justify-between gap-2 border-b border-[color:var(--portal-border)] px-3 py-2.5">
-                <div>
-                  <p className="text-xs font-bold text-[color:var(--portal-text)]">Developer ticket</p>
-                  <p className="text-[10px] text-[color:var(--portal-muted)]">Stays in sync with Elena</p>
+              <div className="min-h-0 overflow-hidden">
+                <div className="max-h-[min(60vh,28rem)] space-y-3 overflow-y-auto p-3">
+                  <label className="block text-[11px] font-semibold text-[color:var(--portal-text)]">
+                    Title
+                    <input
+                      value={draft.title}
+                      onChange={(event) => onPatchDraft({ title: event.target.value })}
+                      className="mt-1 w-full rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-bg)] px-2.5 py-2 text-xs text-[color:var(--portal-text)] outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/50"
+                    />
+                  </label>
+                  <label className="block text-[11px] font-semibold text-[color:var(--portal-text)]">
+                    Details
+                    <textarea
+                      value={draft.description}
+                      onChange={(event) => onPatchDraft({ description: event.target.value })}
+                      rows={3}
+                      className="mt-1 w-full resize-y rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-bg)] p-2 text-xs text-[color:var(--portal-text)] outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/50"
+                    />
+                  </label>
+                  <p className="text-[10px] text-[color:var(--portal-muted)]">
+                    Page: <span className="font-semibold text-[color:var(--portal-text)]">{draft.pagePath}</span>
+                  </p>
+                  <div className="space-y-2">
+                    <p className="text-[11px] font-semibold text-[color:var(--portal-text)]">Page notes</p>
+                    {draft.annotations.length === 0 ? (
+                      <p className="text-[10px] text-[color:var(--portal-muted)]">No annotations yet.</p>
+                    ) : (
+                      <ul className="space-y-1.5">
+                        {draft.annotations.map((item) => (
+                          <li key={item.id} className="rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-bg)] px-2 py-1.5 text-[10px] text-[color:var(--portal-text)]">
+                            <p className="leading-snug">{developerTicketAnnotationDisplayLine(item)}</p>
+                            <div className="mt-1 flex gap-2">
+                              <button
+                                type="button"
+                                className="inline-flex min-h-11 items-center px-2 font-semibold text-[#a8792f] dark:text-[#f1d27a]"
+                                onClick={() => {
+                                  editingAnnotationIdRef.current = item.id
+                                  setNoteDraft(item.note)
+                                }}
+                              >
+                                Edit
+                              </button>
+                              <button
+                                type="button"
+                                className="inline-flex min-h-11 items-center px-2 font-semibold text-red-600 dark:text-red-400"
+                                onClick={() => onRemoveAnnotation(item.id)}
+                              >
+                                Remove
+                              </button>
+                            </div>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
                 </div>
-                <PortalCloseButton onClick={onTogglePanel} aria-label="Collapse developer ticket panel" />
-              </header>
-              <div className="max-h-[min(60vh,28rem)] space-y-3 overflow-y-auto p-3">
-                <label className="block text-[11px] font-semibold text-[color:var(--portal-text)]">
-                  Title
-                  <input
-                    value={draft.title}
-                    onChange={(event) => onPatchDraft({ title: event.target.value })}
-                    className="mt-1 w-full rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-bg)] px-2.5 py-2 text-xs text-[color:var(--portal-text)] outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/50"
-                  />
-                </label>
-                <label className="block text-[11px] font-semibold text-[color:var(--portal-text)]">
-                  Details
-                  <textarea
-                    value={draft.description}
-                    onChange={(event) => onPatchDraft({ description: event.target.value })}
-                    rows={3}
-                    className="mt-1 w-full resize-y rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-bg)] p-2 text-xs text-[color:var(--portal-text)] outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/50"
-                  />
-                </label>
-                <p className="text-[10px] text-[color:var(--portal-muted)]">
-                  Page: <span className="font-semibold text-[color:var(--portal-text)]">{draft.pagePath}</span>
-                </p>
-                <div className="space-y-2">
-                  <p className="text-[11px] font-semibold text-[color:var(--portal-text)]">Page notes</p>
-                  {draft.annotations.length === 0 ? (
-                    <p className="text-[10px] text-[color:var(--portal-muted)]">No annotations yet.</p>
-                  ) : (
-                    <ul className="space-y-1.5">
-                      {draft.annotations.map((item) => (
-                        <li key={item.id} className="rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-bg)] px-2 py-1.5 text-[10px] text-[color:var(--portal-text)]">
-                          <p className="leading-snug">{developerTicketAnnotationDisplayLine(item)}</p>
-                          <div className="mt-1 flex gap-2">
-                            <button
-                              type="button"
-                              className="font-semibold text-[#a8792f] dark:text-[#f1d27a]"
-                              onClick={() => {
-                                editingAnnotationIdRef.current = item.id
-                                setNoteDraft(item.note)
-                              }}
-                            >
-                              Edit
-                            </button>
-                            <button type="button" className="font-semibold text-red-600 dark:text-red-400" onClick={() => onRemoveAnnotation(item.id)}>
-                              Remove
-                            </button>
-                          </div>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </div>
+                <footer className="flex flex-wrap gap-2 border-t border-[color:var(--portal-border)] p-3">
+                  <button
+                    type="button"
+                    onClick={onToggleSelect}
+                    className={`inline-flex min-h-11 items-center gap-1.5 rounded-lg px-3 text-[11px] font-semibold ${elementSelectMode ? 'luxor-gold-raised !text-white' : 'border border-[color:var(--portal-border)] text-[color:var(--portal-text)]'}`}
+                  >
+                    <MousePointerClick size={13} aria-hidden="true" />
+                    {elementSelectMode ? 'Selecting…' : 'Select element'}
+                  </button>
+                </footer>
               </div>
-              <footer className="flex flex-wrap gap-2 border-t border-[color:var(--portal-border)] p-3">
-                <button
-                  type="button"
-                  onClick={onToggleSelect}
-                  className={`inline-flex min-h-9 items-center gap-1.5 rounded-lg px-3 text-[11px] font-semibold ${elementSelectMode ? 'luxor-gold-raised !text-white' : 'border border-[color:var(--portal-border)] text-[color:var(--portal-text)]'}`}
-                >
-                  <MousePointerClick size={13} aria-hidden="true" />
-                  {elementSelectMode ? 'Selecting…' : 'Select element'}
-                </button>
-              </footer>
-            </motion.section>
-          )}
+            </div>
+          </section>
         </div>
       ) : null}
     </div>
@@ -526,8 +542,8 @@ export function DeveloperTicketAnnotationRows({
             <span className="min-w-0 flex-1 leading-snug text-[color:var(--portal-text)]">{developerTicketAnnotationDisplayLine(item)}</span>
             {!disabled ? (
               <span className="flex shrink-0 gap-2 text-[10px] font-semibold">
-                <button type="button" className="text-[#a8792f] dark:text-[#f1d27a]" onClick={() => onEdit(item.id)}>Edit</button>
-                <button type="button" className="text-red-600 dark:text-red-400" onClick={() => onRemove(item.id)}>Remove</button>
+                <button type="button" className="inline-flex min-h-11 items-center px-2 text-[#a8792f] dark:text-[#f1d27a]" onClick={() => onEdit(item.id)}>Edit</button>
+                <button type="button" className="inline-flex min-h-11 items-center px-2 text-red-600 dark:text-red-400" onClick={() => onRemove(item.id)}>Remove</button>
               </span>
             ) : null}
           </li>
