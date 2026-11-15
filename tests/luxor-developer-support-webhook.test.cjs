@@ -28,6 +28,7 @@ function load(file, stubs = {}) {
 }
 
 const pagePaths = load('src/lib/luxorDeveloperSupportPagePaths.ts')
+const ticketAnnotations = load('src/lib/luxorDeveloperTicketAnnotations.ts')
 const stubs = {
   'server-only': {},
   '@/lib/luxorPortalAuth': {},
@@ -37,6 +38,7 @@ const stubs = {
   '@/lib/luxorCursorAutomationServer': {},
   '@/lib/luxorDeveloperSupportAttachmentsServer': { parseDeveloperSupportAttachmentInputs: () => [] },
   '@/lib/luxorDeveloperSupportPagePaths': pagePaths,
+  '@/lib/luxorDeveloperTicketAnnotations': ticketAnnotations,
 }
 const limits = load('src/lib/luxorDeveloperSupportLimits.ts')
 const { parseDeveloperSupportTicket, buildDeveloperSupportWebhookPayload } = load(
@@ -132,6 +134,7 @@ test('webhook payload carries pagePath, pageArea, and context route lines', () =
         textExcerpt: null,
       },
     ],
+    annotations: [],
   })
   assert.equal(payload.pagePath, '/events')
   assert.equal(payload.pageArea, 'public')
@@ -139,4 +142,31 @@ test('webhook payload carries pagePath, pageArea, and context route lines', () =
   assert.equal(payload.attachments[0].signedUrl, 'https://example.test/signed')
   assert.match(payload.context, /Target page path \(authoritative route\): \/events/)
   assert.match(payload.context, /Page area: public/)
+})
+
+test('webhook payload includes element annotations', () => {
+  const parsed = ticketAnnotations.parseDeveloperSupportAnnotations([
+    {
+      id: 'n1',
+      note: 'Button missing',
+      pagePath: '/portal/leads',
+      element: { selector: 'button.add', role: 'button', label: 'Add' },
+      viewport: { width: 1440, height: 900 },
+    },
+  ])
+  const payload = buildDeveloperSupportWebhookPayload({
+    confirmationId: '00000000-0000-4000-8000-000000000001',
+    title: 'Leads',
+    description: null,
+    priority: 'medium',
+    pagePath: '/portal/leads',
+    reporterEmail: 'owner@luxor.invalid',
+    reporterName: 'Arianna Patterson',
+    attachmentContext: null,
+    attachments: [],
+    annotations: parsed,
+  })
+  assert.equal(payload.annotations.length, 1)
+  assert.equal(payload.annotations[0].note, 'Button missing')
+  assert.match(payload.context, /Owner page notes/)
 })

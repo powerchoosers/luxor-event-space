@@ -58,6 +58,7 @@ import type { EmailComposeDraft } from '@/components/portal/EmailComposeDrawer'
 import type { Tab as SettingsTabType } from '@/components/portal/PortalSettingsManager'
 import { getRecentLeads, getRecentLeadsServerSnapshot, subscribeRecentLeads, saveRecentLead, clearRecentLeads, type RecentLeadItem } from '@/lib/luxorRecentLeads'
 import { PortalFloatingScrollbar } from '@/components/portal/PortalFloatingScrollbar'
+import { PortalDeveloperModeElenaSync, PortalDeveloperModeProvider } from '@/components/portal/PortalDeveloperMode'
 
 type PortalUserProfile = {
   displayName: string
@@ -934,6 +935,7 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
 
   return (
     <>
+      <PortalDeveloperModeProvider userEmail={session.email} portalRole={role} activePath={pathname}>
       <PortalVoiceProvider canUsePhone={canAccess('calls')} canViewLeadDetails={canAccess('leads')} canText={canAccess('messages')} canEmail={canAccess('emails')}>
       <aside
         onWheelCapture={handOffWheelToPage}
@@ -1978,6 +1980,7 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
             <span className="relative z-10">More</span>
           </button>
         </nav>
+      <PortalDeveloperModeElenaSync elenaOpen={elenaOpen} />
       <PortalElenaChat isOpen={elenaOpen} onClose={() => setElenaOpen(false)} activePath={pathname} portalRole={role} userEmail={session.email} />
       <AnimatePresence>
         {mobileMoreOpen && (
@@ -2163,6 +2166,7 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
       ) : null}
       <PortalGlobalTooltip />
       </PortalVoiceProvider>
+      </PortalDeveloperModeProvider>
     </>
   )
 }

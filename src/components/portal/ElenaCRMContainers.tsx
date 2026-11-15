@@ -20,6 +20,7 @@ import {
   Wrench,
   FileText,
   Plus,
+  MousePointerClick,
   ChevronDown,
   ChevronLeft,
   Globe,
@@ -39,6 +40,7 @@ import {
   developerSupportDescriptionLimitMessage,
   LUXOR_DEVELOPER_SUPPORT_DESCRIPTION_MAX,
 } from '@/lib/luxorDeveloperSupportLimits'
+import { DeveloperTicketAnnotationRows, usePortalDeveloperMode } from '@/components/portal/PortalDeveloperMode'
 
 // --- 1. Lead Update Container ---
 export interface LeadUpdatePayload {
@@ -1256,10 +1258,16 @@ export function ElenaDeveloperSupportCard({
   onSavedAttachments?: (items: DeveloperSupportSavedAttachment[]) => void | Promise<void>
   onSuccess?: (msg: string) => void
 }) {
-  const [title, setTitle] = useState(payload.title || '')
-  const [description, setDescription] = useState(payload.description || '')
-  const [ticketPagePath, setTicketPagePath] = useState(() => normalizeDeveloperSupportPagePath(payload.pagePath))
-  const [priority, setPriority] = useState<'low' | 'medium' | 'high' | 'urgent'>(payload.priority || 'medium')
+  const developerMode = usePortalDeveloperMode()
+  const developerBound = Boolean(developerMode?.developerModeActive)
+  const [title, setTitle] = useState(() => (developerBound ? developerMode!.draft.title : payload.title || ''))
+  const [description, setDescription] = useState(() => (developerBound ? developerMode!.draft.description : payload.description || ''))
+  const [ticketPagePath, setTicketPagePath] = useState(() => normalizeDeveloperSupportPagePath(
+    developerBound ? developerMode!.draft.pagePath : payload.pagePath,
+  ))
+  const [priority, setPriority] = useState<'low' | 'medium' | 'high' | 'urgent'>(() => (
+    developerBound ? developerMode!.draft.priority : payload.priority || 'medium'
+  ))
   const [confirmation, setConfirmation] = useState<{ token: string; expiresAt: string; summary: string; reporterName: string } | null>(null)
   const [isSaving, setIsSaving] = useState(false)
   const [isSent, setIsSent] = useState(false)
@@ -1267,10 +1275,14 @@ export function ElenaDeveloperSupportCard({
   const [error, setError] = useState<string | null>(null)
   const [localAttachments, setLocalAttachments] = useState<DeveloperSupportAttachmentCandidate[]>(() => candidatesFromSavedAttachments(payload.savedAttachments, chatId))
   const [attachmentNotice, setAttachmentNotice] = useState('')
-  const [selectedAttachmentKeys, setSelectedAttachmentKeys] = useState<Set<string>>(() => new Set([
-    ...attachmentCandidates.map((item) => item.key),
-    ...candidatesFromSavedAttachments(payload.savedAttachments, chatId).map((item) => item.key),
-  ]))
+  const [selectedAttachmentKeys, setSelectedAttachmentKeys] = useState<Set<string>>(() => new Set(
+    developerBound && developerMode!.draft.selectedAttachmentKeys.length
+      ? developerMode!.draft.selectedAttachmentKeys
+      : [
+        ...attachmentCandidates.map((item) => item.key),
+        ...candidatesFromSavedAttachments(payload.savedAttachments, chatId).map((item) => item.key),
+      ],
+  ))
   const fileInputRef = useRef<HTMLInputElement>(null)
   const detailsRef = useRef<HTMLTextAreaElement>(null)
   const seenChatKeysRef = useRef<Set<string>>(new Set())
@@ -1284,8 +1296,32 @@ export function ElenaDeveloperSupportCard({
   }, [attachmentCandidates, localAttachments])
   const attachmentOptionKey = attachmentCandidates.map((item) => item.key).join('|')
 
-  useEffect(() => {
+  const setTitleSynced = (value: string) => {
+    setTitle(value)
+    developerMode?.setTitle(value)
+  }
+  const setDescriptionSynced = (value: string) => {
+    setDescription(value)
+    developerMode?.setDescription(value)
+  }
+  const setTicketPagePathSynced = (value: string) => {
+    setTicketPagePath(value)
+    developerMode?.setPagePath(value)
+  }
+  const setPrioritySynced = (value: 'low' | 'medium' | 'high' | 'urgent') => {
+    setPriority(value)
+    developerMode?.setPriority(value)
+  }
+  const setSelectedAttachmentKeysSynced = (updater: (prev: Set<string>) => Set<string>) => {
     setSelectedAttachmentKeys((prev) => {
+      const next = updater(prev)
+      developerMode?.setSelectedAttachmentKeys(Array.from(next))
+      return next
+    })
+  }
+
+  useEffect(() => {
+    setSelectedAttachmentKeysSynced((prev) => {
       const next = new Set(prev)
       for (const item of attachmentCandidates) {
         if (!seenChatKeysRef.current.has(item.key)) next.add(item.key)
@@ -1296,7 +1332,7 @@ export function ElenaDeveloperSupportCard({
   }, [attachmentOptionKey, attachmentCandidates])
 
   const toggleAttachment = (key: string) => {
-    setSelectedAttachmentKeys((prev) => {
+    setSelectedAttachmentKeysSynced((prev) => {
       const next = new Set(prev)
       if (next.has(key)) next.delete(key)
       else if (next.size < 5) next.add(key)
@@ -1392,7 +1428,7 @@ export function ElenaDeveloperSupportCard({
     if (next.length > 0) {
       const persisted = [...localAttachments, ...next].slice(0, 5)
       setLocalAttachments(persisted)
-      setSelectedAttachmentKeys((prev) => {
+      setSelectedAttachmentKeysSynced((prev) => {
         const selected = new Set(prev)
         for (const item of next) selected.add(item.key)
         return selected
@@ -1426,6 +1462,35 @@ export function ElenaDeveloperSupportCard({
   const confirmationRef = useRef(confirmation)
   confirmationRef.current = confirmation
   const supportCardPhase = isSent ? 'sent' : uncertain ? 'uncertain' : confirmation ? 'review' : 'compose'
+  const ticketAnnotations = developerMode?.draft.annotations ?? []
+
+  const developerTicketStartedRef = useRef(false)
+  useEffect(() => {
+    if (developerTicketStartedRef.current || !developerMode) return
+    developerTicketStartedRef.current = true
+    developerMode.startDeveloperTicket(payload, chatId)
+    developerMode.setChatId(chatId || null)
+  }, [developerMode, payload, chatId])
+
+  useEffect(() => {
+    if (!developerBound || !developerMode) return
+    setTitle(developerMode.draft.title)
+    setDescription(developerMode.draft.description)
+    setTicketPagePath(normalizeDeveloperSupportPagePath(developerMode.draft.pagePath))
+    setPriority(developerMode.draft.priority)
+    if (developerMode.draft.selectedAttachmentKeys.length) {
+      setSelectedAttachmentKeys(new Set(developerMode.draft.selectedAttachmentKeys))
+    }
+  }, [
+    developerBound,
+    developerMode,
+    developerMode?.draft.title,
+    developerMode?.draft.description,
+    developerMode?.draft.pagePath,
+    developerMode?.draft.priority,
+    developerMode?.draft.selectedAttachmentKeys,
+    developerMode?.draft.annotations,
+  ])
 
   useEffect(() => {
     const el = detailsRef.current
@@ -1452,6 +1517,7 @@ export function ElenaDeveloperSupportCard({
           priority,
           pagePath: ticketPagePath || null,
           attachments,
+          annotations: developerMode?.draft.annotations ?? [],
         },
       }),
     })
@@ -1513,6 +1579,7 @@ export function ElenaDeveloperSupportCard({
       }
       setConfirmation(null)
       setIsSent(true)
+      developerMode?.finishDeveloperTicketSent()
       onSuccess?.('Support ticket sent to Braxton. The cloud worker will pick it up.')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'The ticket was not sent. Check your connection, then try Send again.')
@@ -1565,6 +1632,12 @@ export function ElenaDeveloperSupportCard({
                     ) : (
                       <p className="text-[10px] leading-snug text-[color:var(--portal-muted)]">No files are attached to this ticket.</p>
                     )}
+                    <DeveloperTicketAnnotationRows
+                      annotations={ticketAnnotations}
+                      disabled
+                      onEdit={() => undefined}
+                      onRemove={() => undefined}
+                    />
                   </motion.div>
                   <p className="text-[10px] text-[color:var(--portal-muted)]">This confirmation expires shortly.</p>
                 </>
@@ -1574,7 +1647,7 @@ export function ElenaDeveloperSupportCard({
                     <DeveloperSupportPagePicker
                       value={ticketPagePath}
                       defaultPath={normalizeDeveloperSupportPagePath(payload.pagePath)}
-                      onChange={setTicketPagePath}
+                      onChange={setTicketPagePathSynced}
                       disabled={isSaving}
                     />
                   </motion.div>
@@ -1582,7 +1655,7 @@ export function ElenaDeveloperSupportCard({
                     What needs fixing?
                     <input
                       value={title}
-                      onChange={(e) => setTitle(e.target.value)}
+                      onChange={(e) => setTitleSynced(e.target.value)}
                       disabled={isSaving}
                       className="mt-1 min-h-11 w-full rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-bg)] px-3.5 py-2 text-xs text-[color:var(--portal-text)] outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/50 disabled:opacity-60 sm:min-h-9"
                     />
@@ -1591,7 +1664,7 @@ export function ElenaDeveloperSupportCard({
                     <span className="mb-1 block text-xs font-semibold text-[color:var(--portal-text)]">Priority</span>
                     <PortalSelect
                       value={priority}
-                      onChange={(value) => setPriority(value as 'low' | 'medium' | 'high' | 'urgent')}
+                      onChange={(value) => setPrioritySynced(value as 'low' | 'medium' | 'high' | 'urgent')}
                       disabled={isSaving}
                       className="w-full"
                       buttonClassName="!h-9 !rounded-lg !text-left !text-xs"
@@ -1615,7 +1688,7 @@ export function ElenaDeveloperSupportCard({
                     <textarea
                       ref={detailsRef}
                       value={description}
-                      onChange={(e) => setDescription(e.target.value)}
+                      onChange={(e) => setDescriptionSynced(e.target.value)}
                       rows={3}
                       maxLength={LUXOR_DEVELOPER_SUPPORT_DESCRIPTION_MAX}
                       disabled={isSaving}
@@ -1644,6 +1717,23 @@ export function ElenaDeveloperSupportCard({
                       </p>
                     )}
                     {attachmentNotice ? <p role="status" className="text-[10px] leading-snug text-[color:var(--portal-muted)]">{attachmentNotice}</p> : null}
+                    <DeveloperTicketAnnotationRows
+                      annotations={ticketAnnotations}
+                      disabled={isSaving}
+                      onEdit={() => developerMode?.setElementSelectMode(true)}
+                      onRemove={(id) => developerMode?.removeAnnotation(id)}
+                    />
+                    {developerMode ? (
+                      <button
+                        type="button"
+                        disabled={isSaving}
+                        onClick={() => developerMode.setElementSelectMode(!developerMode.elementSelectMode)}
+                        className="inline-flex min-h-9 items-center gap-2 rounded-lg border border-[color:var(--portal-border)] px-3 text-xs font-semibold text-[color:var(--portal-text)] disabled:opacity-50"
+                      >
+                        <MousePointerClick size={14} aria-hidden="true" />
+                        {developerMode.elementSelectMode ? 'Cancel element select' : 'Annotate page element'}
+                      </button>
+                    ) : null}
                   </motion.div>
                 </>
               )}

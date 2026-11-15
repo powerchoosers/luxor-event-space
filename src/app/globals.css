@@ -119,6 +119,16 @@ body[data-portal-theme='dark'] .portal-popover-surface {
   -webkit-backdrop-filter: blur(24px);
 }
 
+body[data-portal-developer-mode='true'] .portal-main {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, #caa24c 30%, transparent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body[data-portal-developer-mode='true'] .portal-main {
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, #caa24c 36%, transparent);
+  }
+}
+
 /* Elena slash menu + public packages pickers: frosted popover (portaled; no transformed ancestors) */
 .elena-slash-command-popover,
 .luxor-public-glass-popover {
