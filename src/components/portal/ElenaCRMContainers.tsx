@@ -1072,16 +1072,15 @@ function DeveloperSupportTicketSubmittedSummary({
           { key: 'team', label: 'With the team', done: snapshot.withTeam, pending: !snapshot.withTeam },
         ].map((step) => (
           <li key={step.key} className="flex items-center gap-2">
-            <span
-              className={`inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-md ${
-                step.done
-                  ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300'
-                  : 'bg-[color:var(--portal-soft)] text-[color:var(--portal-muted)]'
-              }`}
-              aria-hidden="true"
-            >
-              {step.done ? <Check size={12} /> : <Loader2 size={12} className={step.pending && !reduceMotion ? 'animate-spin' : ''} />}
-            </span>
+            {step.done ? (
+              <Check size={14} strokeWidth={2.25} className="shrink-0 text-emerald-600 dark:text-emerald-400" aria-hidden="true" />
+            ) : (
+              <Loader2
+                size={14}
+                className={`shrink-0 text-[color:var(--portal-muted)] ${step.pending && !reduceMotion ? 'animate-spin' : ''}`}
+                aria-hidden="true"
+              />
+            )}
             <span className={`font-semibold ${step.done ? 'text-[color:var(--portal-text)]' : 'text-[color:var(--portal-muted)]'}`}>
               {step.label}
             </span>
@@ -1722,7 +1721,7 @@ export function ElenaDeveloperSupportCard({
     <motion.div
       layout
       transition={{ duration: layoutDuration, ease: layoutEase, layout: { duration: layoutDuration, ease: layoutEase } }}
-      className={`mt-3 w-full overflow-hidden border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] ${isSent ? 'rounded-xl' : 'rounded-2xl'}`}
+      className={`mt-3 w-full overflow-hidden border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] ${isSent ? 'max-w-lg rounded-xl' : 'rounded-2xl'}`}
     >
       <motion.div
         layout="position"
