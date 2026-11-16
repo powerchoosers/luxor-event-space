@@ -77,7 +77,6 @@ import {
   type ElenaSlashCommand,
 } from '@/lib/luxorElenaSlashCommands'
 import type { PortalRole } from '@/lib/luxorPortalAccess'
-import { usePortalDeveloperMode } from '@/components/portal/PortalDeveloperMode'
 import { focusElenaLauncher, focusElenaPanelEntry } from '@/lib/luxorPortalElenaFocus'
 
 type ExecutedQuery = {
@@ -567,7 +566,6 @@ export function PortalElenaChat({ isOpen, onClose, launcherRef, activePath, port
   const activeSessionRef = useRef<string | null>(null)
   const isOpenRef = useRef(isOpen)
   const elenaPanelRef = useRef<HTMLElement>(null)
-  const developerMode = usePortalDeveloperMode()
   const elenaPanelHidden = !isOpen
 
   const elenaWasOpenRef = useRef(false)
