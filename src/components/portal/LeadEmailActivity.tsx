@@ -8,12 +8,12 @@ import type { LuxorInquiry } from '@/lib/luxorInquiryTypes'
 import { decodeHtmlEntities } from '@/lib/luxorTextUtils'
 import { EmailRichTextEditor } from './EmailRichTextEditor'
 import { LeadActivityDisclosure } from './LeadActivityDisclosure'
-import { PortalButton, PortalModal } from './PortalUI'
+import { PortalButton, PortalModal, PortalStatusBadge } from './PortalUI'
 import { PortalPdfViewer } from './PortalPdfViewer'
 
 function EmailLoading() {
-  return <div role="status" className="space-y-4 py-2 text-sm text-[color:var(--portal-muted)]">
-    <div className="flex items-center gap-2"><Loader2 size={15} className="animate-spin motion-reduce:animate-none" /> Loading email…</div>
+  return <div role="status" className="py-2">
+    <span className="sr-only">Loading email…</span>
     <div aria-hidden="true" className="space-y-3 rounded-xl bg-[color:var(--portal-soft)] p-4">
       <div className="h-2.5 w-2/3 rounded-full bg-[color:var(--portal-border)]" />
       <div className="h-2.5 w-full rounded-full bg-[color:var(--portal-border)]" />
@@ -49,8 +49,9 @@ function LeadEmailActivityContent({ email, inquiry, onReplySent }: Props) {
   const [detail, setDetail] = useState<EmailMessageItem | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [blockExternalImages, setBlockExternalImages] = useState(true)
+  const [blockExternalImages] = useState(false)
   const [replyOpen, setReplyOpen] = useState(false)
+  const [replyMode, setReplyMode] = useState<'reply' | 'reply_all' | 'forward'>('reply')
   const [replyHtml, setReplyHtml] = useState('')
   const [draftReady, setDraftReady] = useState(false)
   const [sending, setSending] = useState(false)
@@ -167,13 +168,32 @@ function LeadEmailActivityContent({ email, inquiry, onReplySent }: Props) {
       description={`${email.direction === 'outgoing' ? 'To' : 'From'} ${email.direction === 'outgoing' ? email.to : email.from}`}
       preview={previewText(email.summary)}
       timestamp={activityDate(email.receivedAt)}
-      badge={email.deliveryStatus ? <span className="rounded-md bg-[color:var(--portal-soft)] px-2 py-0.5 text-[10px] font-semibold capitalize text-[color:var(--portal-muted)]">{email.deliveryStatus.replaceAll('_', ' ')}</span> : undefined}
+      badge={email.deliveryStatus ? <PortalStatusBadge status={email.deliveryStatus} borderless /> : undefined}
       onExpand={() => { void loadDetail() }}
     >
       {loading || (!message && !error) ? <EmailLoading /> : error ? <div role="alert" className="space-y-3"><p className="text-sm text-[color:var(--portal-muted)]">{error}</p><PortalButton onClick={() => { void loadDetail() }}>Try again</PortalButton></div> : message ? <>
-        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-          <PortalButton variant="primary" onClick={() => { setReplyOpen(true); setReplyError(null); setSent(false) }}><Reply size={14} /> Reply</PortalButton>
-          {message.htmlContent ? <PortalButton variant="ghost" onClick={() => setBlockExternalImages((current) => !current)} aria-pressed={!blockExternalImages}>{blockExternalImages ? 'Load external images' : 'Block external images'}</PortalButton> : null}
+        <div className="mb-3 flex flex-wrap items-center gap-1.5 border-b border-[color:var(--portal-border)]/60 pb-3">
+          <button
+            type="button"
+            onClick={() => { setReplyMode('reply'); setReplyOpen(true); setReplyError(null); setSent(false) }}
+            className="inline-flex min-h-8 items-center gap-1.5 rounded-lg bg-[color:var(--portal-soft)] px-3 text-xs font-semibold text-[color:var(--portal-text)] transition-colors hover:bg-[#caa24c]/15 hover:text-[#8c6529] dark:hover:text-[#f1d27a] cursor-pointer"
+          >
+            <Reply size={13} /> Reply
+          </button>
+          <button
+            type="button"
+            onClick={() => { setReplyMode('reply_all'); setReplyOpen(true); setReplyError(null); setSent(false) }}
+            className="inline-flex min-h-8 items-center gap-1.5 rounded-lg bg-[color:var(--portal-soft)] px-3 text-xs font-semibold text-[color:var(--portal-text)] transition-colors hover:bg-[#caa24c]/15 hover:text-[#8c6529] dark:hover:text-[#f1d27a] cursor-pointer"
+          >
+            <Reply size={13} /> Reply all
+          </button>
+          <button
+            type="button"
+            onClick={() => { setReplyMode('forward'); setReplyOpen(true); setReplyError(null); setSent(false) }}
+            className="inline-flex min-h-8 items-center gap-1.5 rounded-lg bg-[color:var(--portal-soft)] px-3 text-xs font-semibold text-[color:var(--portal-text)] transition-colors hover:bg-[#caa24c]/15 hover:text-[#8c6529] dark:hover:text-[#f1d27a] cursor-pointer"
+          >
+            <Send size={13} /> Forward
+          </button>
         </div>
         {sent ? <p role="status" className="mb-3 text-sm text-[color:var(--portal-muted)]">Reply sent.</p> : null}
         <ThreadMessage message={message} expanded chat viewMode="html" blockExternalImages={blockExternalImages} inquiryByEmail={inquiryByEmail} onThreadInteraction={() => undefined} onOpenAttachment={(attachment, selectedMessage) => { void openAttachment(attachment, selectedMessage) }} openingAttachment={openingAttachment} />
@@ -181,9 +201,9 @@ function LeadEmailActivityContent({ email, inquiry, onReplySent }: Props) {
       </> : null}
     </LeadActivityDisclosure>
 
-    <PortalModal isOpen={replyOpen} onClose={() => { if (!sending) setReplyOpen(false) }} title="Reply to email" maxWidth="max-w-3xl" fullScreenOnCompact footer={<div className="flex flex-wrap items-center justify-end gap-2"><PortalButton variant="ghost" onClick={() => setReplyOpen(false)} disabled={sending}>Close draft</PortalButton><PortalButton variant="primary" onClick={() => { void sendReply() }} disabled={sending || !hasReply || !detail}>{sending ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}{sending ? 'Sending…' : 'Send reply'}</PortalButton></div>}>
+    <PortalModal isOpen={replyOpen} onClose={() => { if (!sending) setReplyOpen(false) }} title={replyMode === 'forward' ? 'Forward email' : replyMode === 'reply_all' ? 'Reply all' : 'Reply to email'} maxWidth="max-w-3xl" fullScreenOnCompact footer={<div className="flex flex-wrap items-center justify-end gap-2"><PortalButton variant="ghost" onClick={() => setReplyOpen(false)} disabled={sending}>Close draft</PortalButton><PortalButton variant="primary" onClick={() => { void sendReply() }} disabled={sending || !hasReply || !detail}>{sending ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}{sending ? 'Sending…' : replyMode === 'forward' ? 'Send forward' : 'Send reply'}</PortalButton></div>}>
       <div className="space-y-4">
-        <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-2 text-sm"><dt className="text-[color:var(--portal-muted)]">To</dt><dd className="break-words text-[color:var(--portal-text)]">{recipient}</dd><dt className="text-[color:var(--portal-muted)]">Subject</dt><dd className="break-words text-[color:var(--portal-text)]">Re: {decodeHtmlEntities(detail?.subject || email.subject).replace(/^(\s*re\s*:\s*)+/i, '') || '(No subject)'}</dd></dl>
+        <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-2 text-sm"><dt className="text-[color:var(--portal-muted)]">To</dt><dd className="break-words text-[color:var(--portal-text)]">{recipient}</dd><dt className="text-[color:var(--portal-muted)]">Subject</dt><dd className="break-words text-[color:var(--portal-text)]">{replyMode === 'forward' ? 'Fwd: ' : 'Re: '}{decodeHtmlEntities(detail?.subject || email.subject).replace(/^(\s*(re|fwd)\s*:\s*)+/i, '') || '(No subject)'}</dd></dl>
         <EmailRichTextEditor value={replyHtml} onChange={setReplyHtml} ariaLabel="Email reply" placeholder="Write your reply…" autoFocus readOnly={sending} compact basicFormatting className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)]" bodyClassName="min-h-48 text-sm leading-6 text-[color:var(--portal-text)]" />
         {replyError ? <p role="alert" className="text-sm text-rose-700 dark:text-rose-300">{replyError}</p> : null}
       </div>

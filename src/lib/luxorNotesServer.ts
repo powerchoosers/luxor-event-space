@@ -58,7 +58,7 @@ export async function createNote(
   inquiryId: string,
   content: string,
   noteType: LuxorNoteType = 'note',
-  author = 'Portal User',
+  author = 'Arianna Patterson',
   taskId?: string | null
 ) {
   if (!content.trim()) {

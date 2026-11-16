@@ -6,6 +6,7 @@ import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import { Plus, Loader2 } from '@/lib/icons/phosphor-compat'
 import { LuxorEventTypeCombobox } from '@/components/LuxorEventTypeCombobox'
 import { PortalCloseButton, PortalDatePicker } from '@/components/portal/PortalUI'
+import { formatPhoneDisplay } from '@/lib/luxorPhoneClient'
 import { formatLocalDateKey } from '@/lib/publicEventDate'
 import {
   LUXOR_MAX_GUESTS,
@@ -19,6 +20,7 @@ export interface NewLeadDrawerProps {
   onClose: () => void
   onCreated?: (inquiry?: LuxorInquiry) => void
   pagePath?: string
+  initialPhone?: string
 }
 
 export function NewLeadDrawer({
@@ -26,6 +28,7 @@ export function NewLeadDrawer({
   onClose,
   onCreated,
   pagePath = '/portal',
+  initialPhone,
 }: NewLeadDrawerProps) {
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
@@ -51,6 +54,12 @@ export function NewLeadDrawer({
   useEffect(() => {
     onCloseRef.current = onClose
   }, [onClose])
+
+  useEffect(() => {
+    if (isOpen && initialPhone && /\d/.test(initialPhone)) {
+      setPhone(formatPhoneDisplay(initialPhone))
+    }
+  }, [isOpen, initialPhone])
 
   useEffect(() => {
     if (!isOpen) return
@@ -208,8 +217,9 @@ export function NewLeadDrawer({
             key="new-lead-drawer-backdrop"
             type="button"
             tabIndex={-1}
+            data-portal-backdrop="true"
             aria-label="Close add client lead panel"
-            className="absolute inset-0 cursor-default bg-black/45 backdrop-blur-[2px]"
+            className="portal-modal-backdrop--sheet absolute inset-0 cursor-default"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
@@ -223,13 +233,13 @@ export function NewLeadDrawer({
             aria-modal="true"
             aria-labelledby={titleId}
             tabIndex={-1}
-            className="relative z-10 ml-auto flex h-full w-full max-w-[600px] flex-col overflow-hidden border-l border-[color:var(--portal-border)] bg-[color:var(--portal-card)] shadow-[-18px_0_48px_rgba(0,0,0,0.22)] outline-none"
+            className="portal-drawer bg-[color:var(--portal-card)] relative z-10 ml-auto flex h-full w-full max-w-[600px] flex-col overflow-hidden border-l border-[color:var(--portal-border)] shadow-[-18px_0_48px_rgba(0,0,0,0.22)] outline-none"
             initial={shouldReduceMotion ? { opacity: 0 } : { x: '100%' }}
             animate={shouldReduceMotion ? { opacity: 1 } : { x: 0 }}
             exit={shouldReduceMotion ? { opacity: 0 } : { x: '100%' }}
             transition={{ duration: shouldReduceMotion ? 0 : 0.32, ease: [0.23, 1, 0.32, 1] }}
           >
-            <header className="flex shrink-0 items-start justify-between gap-4 border-b border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-5 py-4 sm:px-6">
+            <header className="flex shrink-0 items-start justify-between gap-4 border-b border-[color:var(--portal-border)] px-5 py-4 sm:px-6">
               <div className="min-w-0">
                 <h2 id={titleId} className="text-base font-semibold tracking-tight text-[color:var(--portal-text)]">
                   Add new client / lead

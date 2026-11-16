@@ -258,12 +258,12 @@ export function LuxorAvailabilityCalendar({
                     aria-modal="true"
                     aria-labelledby={monthYearDialogTitleId}
                     tabIndex={-1}
-                    initial={{ opacity: 0, scale: 0.95, y: -6, filter: 'blur(6px)' }}
-                    animate={{ opacity: 1, scale: 1, y: 0, filter: 'blur(0px)' }}
-                    exit={{ opacity: 0, scale: 0.95, y: -6, filter: 'blur(6px)' }}
-                    transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0, pointerEvents: 'none' }}
+                    transition={{ duration: 0.16, ease: [0.22, 1, 0.36, 1] }}
                     onKeyDown={(event) => { if (event.key === 'Escape') { event.preventDefault(); closeMonthYear() } }}
-                    className="portal-scrollbar fixed z-[9995] overflow-y-auto overscroll-contain rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-4 shadow-2xl sm:rounded-xl backdrop-blur-md"
+                    className="portal-popover-surface portal-scrollbar fixed z-[9995] overflow-y-auto overscroll-contain rounded-2xl border border-[color:var(--portal-border)] p-4 shadow-2xl sm:rounded-xl"
                     style={{ top: monthYearPosition.top, left: monthYearPosition.left, width: monthYearPosition.width, maxHeight: `calc(${monthYearPosition.maxHeight}px - env(safe-area-inset-bottom, 0px))`, ...(monthYearPosition.bottom === undefined ? {} : { bottom: `calc(${monthYearPosition.bottom}px + env(safe-area-inset-bottom, 0px))` }) }}
                   >
                     <div className="mb-3 flex items-center justify-between">

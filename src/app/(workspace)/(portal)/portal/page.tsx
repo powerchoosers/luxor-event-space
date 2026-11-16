@@ -441,7 +441,7 @@ async function PortalOverviewContent() {
                 <h3 className="text-xs font-black uppercase tracking-[0.2em] text-[color:var(--portal-text)]">TODAY&apos;S PRIORITIES</h3>
               </div>
               {activePriorities.length > 0 && (
-                <span className="rounded-full bg-[#caa24c]/15 px-2 py-0.5 text-[10px] font-bold tabular-nums text-[#8f641e] dark:text-[#dfbd68]">
+                <span className="rounded-md bg-[#caa24c]/15 px-2 py-0.5 text-[10px] font-bold tabular-nums text-[#8f641e] dark:text-[#dfbd68]">
                   {activePriorities.length}
                 </span>
               )}

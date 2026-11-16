@@ -420,11 +420,11 @@ export function PortalSettingsModal({
                         <motion.div
                           key="modal-settings-search-popover-mobile"
                           data-portal-popover="true"
-                          initial={reduceMotion ? { opacity: 0 } : { opacity: 0, y: -4, scale: 0.99 }}
-                          animate={{ opacity: 1, y: 0, scale: 1 }}
-                          exit={reduceMotion ? { opacity: 0 } : { opacity: 0, y: -4, scale: 0.99 }}
+                          initial={{ opacity: 0 }}
+                          animate={{ opacity: 1 }}
+                          exit={{ opacity: 0, pointerEvents: 'none' }}
                           transition={{ duration: reduceMotion ? 0.05 : 0.16, ease: PORTAL_MODAL_EASE }}
-                          className="portal-popover-surface absolute inset-x-4 top-[calc(100%+0.35rem)] z-30 max-h-[min(340px,calc(100dvh-11rem))] overflow-hidden rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] shadow-2xl"
+                          className="portal-popover-surface absolute inset-x-4 top-[calc(100%+0.35rem)] z-30 max-h-[min(340px,calc(100dvh-11rem))] overflow-hidden rounded-xl border border-[color:var(--portal-border)] shadow-2xl"
                         >
                           <SettingsSearchSuggestions
                             id="modal-settings-search-results-mobile"
@@ -717,9 +717,9 @@ export function PortalSettingsModal({
               ref={desktopPopoverRef}
               key="modal-settings-search-popover-desktop"
               data-portal-popover="true"
-              initial={reduceMotion ? { opacity: 0 } : { opacity: 0, y: -4, scale: 0.99 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={reduceMotion ? { opacity: 0 } : { opacity: 0, y: -4, scale: 0.99 }}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0, pointerEvents: 'none' }}
               transition={{ duration: reduceMotion ? 0.05 : 0.16, ease: PORTAL_MODAL_EASE }}
               style={{
                 top: popoverCoords.top,
@@ -727,7 +727,7 @@ export function PortalSettingsModal({
                 width: popoverCoords.width,
                 maxHeight: popoverCoords.maxHeight,
               }}
-              className="portal-popover-surface fixed z-[260] flex flex-col overflow-hidden rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] shadow-2xl"
+              className="portal-popover-surface fixed z-[260] flex flex-col overflow-hidden rounded-xl border border-[color:var(--portal-border)] shadow-2xl"
             >
               <SettingsSearchSuggestions
                 id="modal-settings-search-results"

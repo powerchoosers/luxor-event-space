@@ -73,7 +73,7 @@ export function BillsDueCard({ initialBills }: { initialBills: LuxorBill[] }) {
           <Receipt size={19} className="text-[#caa24c] shrink-0" strokeWidth={1.5} />
           <h3 className="text-xs font-black uppercase tracking-[0.2em] text-[color:var(--portal-text)]">Bills to review</h3>
           {open.length > 0 && (
-            <span className="rounded-full bg-[#caa24c]/15 px-2 py-0.5 text-[10px] font-bold tabular-nums text-[#8f641e] dark:text-[#dfbd68]">
+            <span className="rounded-md bg-[#caa24c]/15 px-2 py-0.5 text-[10px] font-bold tabular-nums text-[#8f641e] dark:text-[#dfbd68]">
               {open.length}
             </span>
           )}
@@ -110,11 +110,11 @@ export function BillsDueCard({ initialBills }: { initialBills: LuxorBill[] }) {
                     </span>
                   )}
                   {isOverdue ? (
-                    <span className="rounded-md border border-red-200/70 bg-red-50/90 px-2 py-0.5 text-[10px] font-semibold text-[#b93c3c] dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-300">
+                    <span className="rounded-md border-0 bg-rose-50/90 px-2 py-0.5 text-[10px] font-semibold text-rose-800 dark:bg-rose-500/10 dark:text-rose-300">
                       Overdue
                     </span>
                   ) : isDueToday ? (
-                    <span className="rounded-md border border-amber-200/70 bg-amber-50/90 px-2 py-0.5 text-[10px] font-semibold text-amber-800 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-300">
+                    <span className="rounded-md border-0 bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-950 dark:bg-amber-500/20 dark:text-amber-200">
                       Due today
                     </span>
                   ) : null}

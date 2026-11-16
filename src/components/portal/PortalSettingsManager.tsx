@@ -55,6 +55,7 @@ import { MailProviderSettings } from '@/components/portal/MailProviderSettings'
 import { TeamAccessManager } from '@/components/portal/TeamAccessManager'
 import { ElenaSettingsManager } from '@/components/portal/ElenaSettingsManager'
 import { ProposalPricingManager } from '@/components/portal/ProposalPricingManager'
+import { SiteContentSettings } from '@/components/portal/SiteContentSettings'
 import { BrochureSettings } from '@/components/portal/BrochureSettings'
 import { FunnelGoalsSettingsPanel } from '@/components/portal/FunnelGoalsSettingsPanel'
 
@@ -107,7 +108,7 @@ export const SETTINGS_NAVIGATION: Array<{ label: string; items: SettingsNavItem[
     label: 'Website',
     items: [
       { id: 'branding', label: 'Branding', description: 'Appearance, brochure, and assets', icon: <Image size={16} /> },
-      { id: 'content', label: 'Site content', description: 'Public page records', icon: <Building size={16} /> },
+      { id: 'content', label: 'Site content', description: 'Homepage and buttons', icon: <Building size={16} /> },
     ],
   },
 ]
@@ -122,7 +123,7 @@ export const SETTINGS_TAB_COPY: Record<Tab, { title: string; description: string
   pricing: { title: 'Pricing & line items', description: 'Manage the approved rates used across proposals and Elena.' },
   funnelGoals: { title: 'Funnel goals', description: 'Set shared targets for the Leads funnel dashboard and goal progress bars.' },
   branding: { title: 'Branding', description: 'Set your workspace appearance, venue brochure, and brand images.' },
-  content: { title: 'Site content', description: 'Edit saved content records for public Luxor pages.' },
+  content: { title: 'Site content', description: 'Edit your homepage introduction and website buttons.' },
   elena: { title: 'Elena AI', description: 'Manage Elena’s knowledge, flows, behavior, and website preview.' },
 }
 
@@ -213,13 +214,6 @@ export function PortalSettingsManager({
 
   // Integrations collapsible advanced section
   const [showMigrationTools, setShowMigrationTools] = useState(false)
-
-  // Site Content JSON Editor Modal
-  const [editingContentPage, setEditingContentPage] = useState<string | null>(null)
-  const [editingContentJson, setEditingContentJson] = useState('')
-  const [loadingContentPage, setLoadingContentPage] = useState(false)
-  const [savingContentPage, setSavingContentPage] = useState(false)
-  const [contentJsonError, setContentJsonError] = useState<string | null>(null)
 
   const isAgent = portalRole === 'agent'
 
@@ -451,52 +445,6 @@ export function PortalSettingsManager({
       notify({ title: err instanceof Error ? err.message : 'Profile image upload failed.', variant: 'error' })
     } finally {
       setUploadingProfileImage(false)
-    }
-  }
-
-  const openContentEditor = async (pageName: string) => {
-    setEditingContentPage(pageName)
-    setEditingContentJson('')
-    setContentJsonError(null)
-    setLoadingContentPage(true)
-    try {
-      const res = await fetch(`/api/public/content?page=${encodeURIComponent(pageName)}`)
-      const json = await res.json()
-      if (!res.ok) throw new Error(json.error || 'Could not load page content.')
-      setEditingContentJson(JSON.stringify(json, null, 2))
-    } catch (err) {
-      setContentJsonError(err instanceof Error ? err.message : 'Could not load page content.')
-    } finally {
-      setLoadingContentPage(false)
-    }
-  }
-
-  const saveContentEditor = async () => {
-    if (!editingContentPage) return
-    let parsed: unknown
-    try {
-      parsed = JSON.parse(editingContentJson)
-      setContentJsonError(null)
-    } catch {
-      setContentJsonError('Please enter valid JSON before saving.')
-      return
-    }
-
-    setSavingContentPage(true)
-    try {
-      const res = await fetch('/api/portal/content', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ page_name: editingContentPage, content: parsed }),
-      })
-      const payload = await res.json().catch(() => ({}))
-      if (!res.ok) throw new Error(payload.error || 'Could not save page content.')
-      notify({ title: `${editingContentPage} page content updated.`, variant: 'success' })
-      setEditingContentPage(null)
-    } catch (err) {
-      setContentJsonError(err instanceof Error ? err.message : 'Could not save page content.')
-    } finally {
-      setSavingContentPage(false)
     }
   }
 
@@ -1128,39 +1076,7 @@ export function PortalSettingsManager({
               <ChevronRight size={17} className="shrink-0 text-[#a8792f] dark:text-[#caa24c]" />
             </button>
 
-            <section className={`${CARD_CLASS} space-y-4`}>
-              <div>
-                <h3 className="font-sans text-base font-bold text-[color:var(--portal-text)]">Public page records</h3>
-                <p className="mt-1 text-xs text-[color:var(--portal-muted)]">
-                  Edit the saved content JSON for public website pages.
-                </p>
-              </div>
-
-              <div className="divide-y divide-[color:var(--portal-border)] overflow-hidden rounded-xl border border-[color:var(--portal-border)]">
-                {['home', 'events', 'gallery', 'visit'].map((pageName) => (
-                  <div
-                    key={pageName}
-                    className="flex flex-col gap-3 bg-[color:var(--portal-soft)]/35 p-4 sm:flex-row sm:items-center sm:justify-between"
-                  >
-                    <div>
-                      <p className="text-sm font-semibold capitalize text-[color:var(--portal-text)]">{pageName} page</p>
-                      <p className="mt-0.5 text-xs text-[color:var(--portal-muted)]">
-                        Saved content record for /{pageName === 'home' ? '' : pageName}
-                      </p>
-                    </div>
-                    <PortalButton
-                      type="button"
-                      variant="secondary"
-                      size="sm"
-                      onClick={() => void openContentEditor(pageName)}
-                      className="w-full shrink-0 sm:w-auto"
-                    >
-                      Edit content
-                    </PortalButton>
-                  </div>
-                ))}
-              </div>
-            </section>
+            <SiteContentSettings />
           </div>
         )}
 
@@ -1206,60 +1122,6 @@ export function PortalSettingsManager({
         </p>
       </PortalModal>
 
-      {/* Site Content JSON Editor Modal */}
-      <PortalModal
-        isOpen={Boolean(editingContentPage)}
-        onClose={() => !savingContentPage && setEditingContentPage(null)}
-        maxWidth="max-w-2xl"
-        title={editingContentPage ? `Edit ${editingContentPage} page content` : 'Edit page content'}
-        description="Update the structured JSON record stored for this page."
-        footer={
-          <div className="flex justify-end gap-2.5">
-            <PortalButton
-              type="button"
-              variant="secondary"
-              disabled={savingContentPage}
-              onClick={() => setEditingContentPage(null)}
-            >
-              Cancel
-            </PortalButton>
-            <PortalButton
-              type="button"
-              variant="primary"
-              disabled={loadingContentPage || savingContentPage}
-              onClick={() => void saveContentEditor()}
-            >
-              {savingContentPage ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
-              {savingContentPage ? 'Saving…' : 'Save content'}
-            </PortalButton>
-          </div>
-        }
-      >
-        <PortalSkeletonTransition
-          loading={loadingContentPage}
-          overlap
-          skeleton={<PortalSkeleton className="min-h-64 w-full rounded-xl" />}
-        >
-          <div className="space-y-3">
-            <textarea
-              value={editingContentJson}
-              onChange={(event) => {
-                setEditingContentJson(event.target.value)
-                if (contentJsonError) setContentJsonError(null)
-              }}
-              rows={14}
-              spellCheck={false}
-              aria-label="Page content JSON"
-              className="portal-scrollbar min-h-64 w-full rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-3.5 font-mono text-xs leading-5 text-[color:var(--portal-text)] outline-none transition-colors focus:border-[#caa24c]/50 focus:bg-[color:var(--portal-card)] focus:ring-2 focus:ring-[#caa24c]/15"
-            />
-            {contentJsonError ? (
-              <p role="alert" className="text-xs font-medium text-red-600 dark:text-red-300">
-                {contentJsonError}
-              </p>
-            ) : null}
-          </div>
-        </PortalSkeletonTransition>
-      </PortalModal>
     </div>
   )
 }

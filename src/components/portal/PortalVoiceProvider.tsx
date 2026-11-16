@@ -12,6 +12,7 @@ import {
   PhoneCall,
   PhoneIncoming,
   PhoneOff,
+  UserPlus,
   X,
 } from '@/lib/icons/phosphor-compat'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
@@ -19,8 +20,10 @@ import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
+import { NewLeadDrawer } from '@/components/portal/NewLeadDrawer'
 import { useToast } from '@/components/portal/ToastProvider'
 import { PortalContactAvatar, PortalCloseButton } from '@/components/portal/PortalUI'
+import type { LuxorInquiry } from '@/lib/luxorInquiryTypes'
 import { formatPhoneDisplay, formatUsDialInput, removeLastDialDigit, toUsE164 } from '@/lib/luxorPhoneClient'
 
 type PhoneState = 'disabled' | 'starting' | 'ready' | 'error'
@@ -79,6 +82,7 @@ type VoiceContextValue = {
   dismissBridgeNotice: () => void
   minimizeCall: () => void
   openCallView: (options?: { showKeypad?: boolean }) => void
+  openAddContactForActiveCall: () => void
 }
 
 const VoiceContext = createContext<VoiceContextValue | null>(null)
@@ -102,6 +106,8 @@ export function PortalVoiceProvider({ children, canUsePhone, canViewLeadDetails,
   const [dialMatch, setDialMatch] = useState<DialMatch | null>(null)
   const [isLookingUpNumber, setIsLookingUpNumber] = useState(false)
   const [unreadCount, setUnreadCount] = useState(0)
+  const [isAddContactOpen, setIsAddContactOpen] = useState(false)
+  const [addContactPhone, setAddContactPhone] = useState('')
   const unreadCountRequestRef = useRef<Promise<void> | null>(null)
   const deviceRef = useRef<Device | null>(null)
   const currentCallRef = useRef<Call | null>(null)
@@ -690,6 +696,37 @@ export function PortalVoiceProvider({ children, canUsePhone, canViewLeadDetails,
   const openPanel = useCallback(() => setIsPanelOpen(true), [])
   const closePanel = useCallback(() => setIsPanelOpen(false), [])
 
+  const openAddContactForActiveCall = useCallback(() => {
+    if (!canViewLeadDetails) return
+    const phone = activeCall?.phoneNumber || startingCallTarget?.phoneNumber || dialNumber || ''
+    setAddContactPhone(phone)
+    setIsAddContactOpen(true)
+  }, [activeCall?.phoneNumber, canViewLeadDetails, dialNumber, startingCallTarget?.phoneNumber])
+
+  const handleLeadCreatedFromCall = useCallback((inquiry?: LuxorInquiry) => {
+    if (!inquiry?.id) return
+    const nextName = inquiry.full_name?.trim() || 'Saved contact'
+    setActiveCall((current) => current ? { ...current, contactName: nextName, inquiryId: inquiry.id } : current)
+    setIncomingCall((current) => current ? { ...current, contactName: nextName, inquiryId: inquiry.id } : current)
+    setStartingCallTarget((current) => current ? { ...current, contactName: nextName, inquiryId: inquiry.id } : current)
+    const normalizedInquiryPhone = inquiry.phone ? toUsE164(inquiry.phone) : null
+    const normalizedDial = dialNumber ? toUsE164(dialNumber) : null
+    if (normalizedInquiryPhone && normalizedDial && normalizedInquiryPhone === normalizedDial) {
+      setDialMatch({
+        id: inquiry.id,
+        fullName: nextName,
+        eventType: inquiry.event_type || null,
+        phoneNumber: inquiry.phone || null,
+      })
+    }
+    window.dispatchEvent(new Event('luxor-call-history-refresh'))
+    notify({
+      title: 'Contact saved',
+      description: `${nextName} is now linked to this call.`,
+      variant: 'success',
+    })
+  }, [dialNumber, notify])
+
   const contextValue = useMemo<VoiceContextValue>(() => ({
     canViewLeadDetails,
     canText,
@@ -713,18 +750,21 @@ export function PortalVoiceProvider({ children, canUsePhone, canViewLeadDetails,
     dismissBridgeNotice,
     minimizeCall,
     openCallView,
-  }), [activeCall, callQuality, canEmail, canText, canViewLeadDetails, closePanel, dismissBridgeNotice, enablePhone, hangUp, isMuted, isPanelOpen, isStartingCall, minimizeCall, openCallView, openPanel, phoneState, sendDigit, startCall, startingCallTarget, toggleMute, unreadCount])
+    openAddContactForActiveCall,
+  }), [activeCall, callQuality, canEmail, canText, canViewLeadDetails, closePanel, dismissBridgeNotice, enablePhone, hangUp, isMuted, isPanelOpen, isStartingCall, minimizeCall, openAddContactForActiveCall, openCallView, openPanel, phoneState, sendDigit, startCall, startingCallTarget, toggleMute, unreadCount])
 
   return (
     <VoiceContext.Provider value={contextValue}>
       {children}
       <PortalPhonePanel
         activeCall={activeCall?.mode === 'browser' ? activeCall : null}
+        canAddContact={canViewLeadDetails}
         dialNumber={dialNumber}
         isMuted={isMuted}
         isOpen={isPanelOpen && !(pathname === '/portal/calls' && (activeCall || isStartingCall))}
         phoneError={phoneError}
         phoneState={phoneState}
+        onAddContact={openAddContactForActiveCall}
         onClose={() => setIsPanelOpen(false)}
         dialMatch={dialMatch}
         isLookingUpNumber={isLookingUpNumber}
@@ -738,6 +778,13 @@ export function PortalVoiceProvider({ children, canUsePhone, canViewLeadDetails,
         onHangUp={hangUp}
         onSendDigit={sendDigit}
         onToggleMute={toggleMute}
+      />
+      <NewLeadDrawer
+        isOpen={isAddContactOpen}
+        onClose={() => setIsAddContactOpen(false)}
+        onCreated={handleLeadCreatedFromCall}
+        pagePath={pathname || '/portal/calls'}
+        initialPhone={addContactPhone}
       />
       {incomingCall && typeof document !== 'undefined'
         ? createPortal(
@@ -1081,6 +1128,7 @@ export function PortalPhoneButton({
 
 function PortalPhonePanel({
   activeCall,
+  canAddContact = false,
   dialMatch,
   dialNumber,
   isMuted,
@@ -1088,6 +1136,7 @@ function PortalPhonePanel({
   isLookingUpNumber,
   phoneError,
   phoneState,
+  onAddContact,
   onClose,
   onDial,
   onDialNumberChange,
@@ -1097,6 +1146,7 @@ function PortalPhonePanel({
   onToggleMute,
 }: {
   activeCall: ActiveCall | null
+  canAddContact?: boolean
   dialMatch: DialMatch | null
   dialNumber: string
   isMuted: boolean
@@ -1104,6 +1154,7 @@ function PortalPhonePanel({
   isLookingUpNumber: boolean
   phoneError: string | null
   phoneState: PhoneState
+  onAddContact?: () => void
   onClose: () => void
   onDial: () => void
   onDialNumberChange: (value: string) => void
@@ -1151,18 +1202,38 @@ function PortalPhonePanel({
             transition={{ duration: activeCall.phase === 'active' ? 1.8 : 1, repeat: Infinity }}
             className="mx-auto flex items-center justify-center"
           >
-            <PortalContactAvatar name={activeCall.contactName} size="xl" className="shadow-[0_0_24px_rgba(202,162,76,0.15)]" />
+            <AnimatePresence mode="wait" initial={false}>
+              <motion.div
+                key={`panel-avatar-${activeCall.inquiryId || 'unlinked'}-${activeCall.contactName}`}
+                initial={reduceMotion ? { opacity: 0 } : { opacity: 0, filter: 'blur(8px)', scale: 0.94 }}
+                animate={{ opacity: 1, filter: 'blur(0px)', scale: 1 }}
+                exit={reduceMotion ? { opacity: 0 } : { opacity: 0, filter: 'blur(6px)', scale: 0.96 }}
+                transition={{ duration: reduceMotion ? 0 : 0.26, ease: [0.22, 1, 0.36, 1] }}
+              >
+                <PortalContactAvatar name={activeCall.contactName} size="xl" className="shadow-[0_0_24px_rgba(202,162,76,0.15)]" />
+              </motion.div>
+            </AnimatePresence>
           </motion.div>
-          {activeCall.inquiryId ? (
-            <Link
-              href={`/portal/leads/${activeCall.inquiryId}`}
-              className="mt-4 inline-block text-lg font-black text-[color:var(--portal-text)] hover:text-[#a8792f] dark:hover:text-[#caa24c] hover:underline transition-colors"
+          <AnimatePresence mode="wait" initial={false}>
+            <motion.div
+              key={`panel-name-${activeCall.inquiryId || 'unlinked'}-${activeCall.contactName}`}
+              initial={reduceMotion ? { opacity: 0 } : { opacity: 0, filter: 'blur(8px)', y: 4 }}
+              animate={{ opacity: 1, filter: 'blur(0px)', y: 0 }}
+              exit={reduceMotion ? { opacity: 0 } : { opacity: 0, filter: 'blur(6px)', y: -4 }}
+              transition={{ duration: reduceMotion ? 0 : 0.28, ease: [0.22, 1, 0.36, 1] }}
             >
-              {activeCall.contactName}
-            </Link>
-          ) : (
-            <p className="mt-4 text-lg font-black text-[color:var(--portal-text)]">{activeCall.contactName}</p>
-          )}
+              {activeCall.inquiryId ? (
+                <Link
+                  href={`/portal/leads/${activeCall.inquiryId}`}
+                  className="mt-4 inline-block text-lg font-black text-[color:var(--portal-text)] hover:text-[#a8792f] dark:hover:text-[#caa24c] hover:underline transition-colors"
+                >
+                  {activeCall.contactName}
+                </Link>
+              ) : (
+                <p className="mt-4 text-lg font-black text-[color:var(--portal-text)]">{activeCall.contactName}</p>
+              )}
+            </motion.div>
+          </AnimatePresence>
           <p className="mt-1 font-mono text-xs text-[color:var(--portal-muted)]">{formatPhoneDisplay(activeCall.phoneNumber)}</p>
           <p className="mt-3 font-mono text-[10px] uppercase tracking-widest text-emerald-600 dark:text-emerald-400">
             {activeCall.phase === 'active' ? formatDuration(Math.floor((Math.max(now, activeCall.startedAt) - activeCall.startedAt) / 1000)) : activeCall.phase}
@@ -1172,6 +1243,28 @@ function PortalPhonePanel({
               {[0, 1, 2, 3, 4].map((bar) => <motion.span key={bar} className="w-1 rounded-full bg-emerald-500/70 dark:bg-emerald-400/70" animate={{ height: [4, 14 - Math.abs(2 - bar) * 2, 5] }} transition={{ duration: 0.7, repeat: Infinity, delay: bar * 0.08 }} />)}
             </div>
           )}
+
+          <AnimatePresence initial={false}>
+            {!activeCall.inquiryId && canAddContact && onAddContact ? (
+              <motion.div
+                key="panel-add-contact"
+                initial={reduceMotion ? { opacity: 0 } : { opacity: 0, filter: 'blur(6px)', y: 4 }}
+                animate={{ opacity: 1, filter: 'blur(0px)', y: 0 }}
+                exit={reduceMotion ? { opacity: 0 } : { opacity: 0, filter: 'blur(6px)', y: -4 }}
+                transition={{ duration: reduceMotion ? 0 : 0.22, ease: [0.22, 1, 0.36, 1] }}
+                className="mt-4 flex justify-center"
+              >
+                <button
+                  type="button"
+                  onClick={onAddContact}
+                  className="inline-flex min-h-9 items-center gap-1.5 rounded-full border border-[#caa24c]/30 bg-[#caa24c]/10 px-3.5 py-1.5 text-xs font-semibold text-[#8c6424] transition-colors hover:bg-[#caa24c]/18 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 dark:border-[#caa24c]/35 dark:bg-[#caa24c]/15 dark:text-[#f1d27a] dark:hover:bg-[#caa24c]/25 cursor-pointer"
+                >
+                  <UserPlus size={14} />
+                  Add contact
+                </button>
+              </motion.div>
+            ) : null}
+          </AnimatePresence>
 
           {activeCall.phase === 'active' && showKeypad && (
             <div className="mt-5 grid grid-cols-3 gap-2">

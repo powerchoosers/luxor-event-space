@@ -1,12 +1,14 @@
 'use client'
 
-import { ArrowDown, ArrowRight } from '@/lib/icons/phosphor-compat'
+import { ArrowRight } from '@/lib/icons/phosphor-compat'
 import { motion } from 'framer-motion'
 import Image from 'next/image'
 import Link from 'next/link'
 import { Reveal } from '@/components/Reveal'
 import { StaggerCards, StaggerCard } from '@/components/StaggerCards'
 import { VenueFilm } from '@/components/VenueFilm'
+import { PublicHomeIntroduction } from '@/components/PublicHomeIntroduction'
+import { PublicSiteAction } from '@/components/PublicSiteAction'
 import { LuxorBrochureForm } from '@/components/LuxorBrochureForm'
 import { LuxorCustomTimeStartingPrices } from '@/components/LuxorCustomTimeStartingPrices'
 
@@ -40,16 +42,7 @@ export default function Home() {
       <section id="hero" className="venue-film-hero relative isolate overflow-hidden pt-28">
         <VenueFilm autoPlay hero>
           <div className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center">
-            <motion.a
-              href="#brochure-form"
-              data-conversion="brochure_hero_click"
-              className="hero-brochure-cta pointer-events-auto group relative inline-flex w-48 items-center justify-center gap-2 rounded-2xl px-4 py-3 text-center font-serif text-[11px] uppercase leading-snug tracking-[0.16em] sm:w-auto sm:gap-3 sm:rounded-full sm:px-10 sm:py-5 sm:text-base sm:tracking-[0.2em]"
-            >
-              <span className="relative z-10">
-                Get your free <span className="block sm:inline">venue brochure.</span>
-              </span>
-              <ArrowDown className="relative z-10 hidden h-4 w-4 transition-transform duration-300 group-hover:translate-y-0.5 sm:block" />
-            </motion.a>
+            <PublicSiteAction placement="hero" className="hero-brochure-cta pointer-events-auto group relative inline-flex w-48 items-center justify-center gap-2 rounded-2xl px-4 py-3 text-center font-serif text-[11px] uppercase leading-snug tracking-[0.16em] sm:w-auto sm:gap-3 sm:rounded-full sm:px-10 sm:py-5 sm:text-base sm:tracking-[0.2em]" />
           </div>
         </VenueFilm>
       </section>
@@ -62,13 +55,7 @@ export default function Home() {
             Luxor at Las Palmas Events
           </p>
 
-          <h1 className="mt-5 font-serif text-5xl leading-[0.92] text-[#fffaf3] sm:text-6xl lg:text-7xl">
-            A Beautiful Setting for Life’s <span className="italic text-[#f1d27a]">Biggest</span> Moments.
-          </h1>
-
-          <p className="mx-auto mt-6 max-w-2xl text-base sm:text-lg leading-relaxed text-[#d7c29a]/80">
-            A modern San Antonio venue created for weddings, quinceañeras, and private celebrations.
-          </p>
+          <PublicHomeIntroduction />
 
           <div className="mt-8 flex items-center justify-center gap-6">
             <span className="h-px w-12 bg-[#caa24c]/40" />

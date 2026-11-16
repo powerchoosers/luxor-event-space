@@ -28,6 +28,7 @@ import {
   Tags,
   Trash2,
   User,
+  UserPlus,
   Voicemail,
   X,
 } from '@/lib/icons/phosphor-compat'
@@ -1479,7 +1480,7 @@ function StartingPhoneCall({ target }: { target: ReturnType<typeof usePortalVoic
 }
 
 function LivePhoneCall({ call }: { call: NonNullable<ReturnType<typeof usePortalVoice>['activeCall']> }) {
-  const { isMuted, toggleMute, hangUp, sendDigit, dismissBridgeNotice, minimizeCall, canViewLeadDetails } = usePortalVoice()
+  const { isMuted, toggleMute, hangUp, sendDigit, dismissBridgeNotice, minimizeCall, canViewLeadDetails, openAddContactForActiveCall } = usePortalVoice()
   const [showKeypad, setShowKeypad] = useState(false)
   const [showLeadDetails, setShowLeadDetails] = useState(false)
   const leadDetailsId = useId()
@@ -1510,11 +1511,52 @@ function LivePhoneCall({ call }: { call: NonNullable<ReturnType<typeof usePortal
         <button type="button" onClick={minimizeCall} aria-label="Collapse call view" className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-soft)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/50 md:hidden"><ChevronDown size={19} /></button>
       </div>
       <div className="flex w-full flex-1 flex-col items-center justify-center py-6">
-        <CallAvatar name={call.contactName} />
-        {call.inquiryId && canViewLeadDetails ? (
-          <Link href={`/portal/leads/${call.inquiryId}?from=/portal/calls`} className="mt-5 text-2xl sm:text-3xl font-bold tracking-tight leading-tight text-[color:var(--portal-text)] hover:text-[#a8792f] dark:hover:text-[#f1d27a]">{call.contactName}</Link>
-        ) : <p className="mt-5 text-2xl sm:text-3xl font-bold tracking-tight leading-tight text-[color:var(--portal-text)]">{call.contactName}</p>}
+        <AnimatePresence mode="wait" initial={false}>
+          <motion.div
+            key={`live-avatar-${call.inquiryId || 'unlinked'}-${call.contactName}`}
+            initial={reduceMotion ? { opacity: 0 } : { opacity: 0, filter: 'blur(8px)', scale: 0.94 }}
+            animate={{ opacity: 1, filter: 'blur(0px)', scale: 1 }}
+            exit={reduceMotion ? { opacity: 0 } : { opacity: 0, filter: 'blur(6px)', scale: 0.96 }}
+            transition={{ duration: reduceMotion ? 0 : 0.26, ease: [0.22, 1, 0.36, 1] }}
+          >
+            <CallAvatar name={call.contactName} />
+          </motion.div>
+        </AnimatePresence>
+        <AnimatePresence mode="wait" initial={false}>
+          <motion.div
+            key={`live-name-${call.inquiryId || 'unlinked'}-${call.contactName}`}
+            initial={reduceMotion ? { opacity: 0 } : { opacity: 0, filter: 'blur(8px)', y: 4 }}
+            animate={{ opacity: 1, filter: 'blur(0px)', y: 0 }}
+            exit={reduceMotion ? { opacity: 0 } : { opacity: 0, filter: 'blur(6px)', y: -4 }}
+            transition={{ duration: reduceMotion ? 0 : 0.28, ease: [0.22, 1, 0.36, 1] }}
+          >
+            {call.inquiryId && canViewLeadDetails ? (
+              <Link href={`/portal/leads/${call.inquiryId}?from=/portal/calls`} className="mt-5 inline-block text-2xl sm:text-3xl font-bold tracking-tight leading-tight text-[color:var(--portal-text)] hover:text-[#a8792f] dark:hover:text-[#f1d27a]">{call.contactName}</Link>
+            ) : <p className="mt-5 text-2xl sm:text-3xl font-bold tracking-tight leading-tight text-[color:var(--portal-text)]">{call.contactName}</p>}
+          </motion.div>
+        </AnimatePresence>
         <p className="mt-1 text-sm tabular-nums text-[color:var(--portal-muted)]">{formatPhoneDisplay(call.phoneNumber)}</p>
+        <AnimatePresence initial={false}>
+          {!call.inquiryId && canViewLeadDetails ? (
+            <motion.div
+              key="live-add-contact"
+              initial={reduceMotion ? { opacity: 0 } : { opacity: 0, filter: 'blur(6px)', y: 4 }}
+              animate={{ opacity: 1, filter: 'blur(0px)', y: 0 }}
+              exit={reduceMotion ? { opacity: 0 } : { opacity: 0, filter: 'blur(6px)', y: -4 }}
+              transition={{ duration: reduceMotion ? 0 : 0.22, ease: [0.22, 1, 0.36, 1] }}
+              className="mt-4 flex justify-center"
+            >
+              <button
+                type="button"
+                onClick={openAddContactForActiveCall}
+                className="inline-flex min-h-9 items-center gap-1.5 rounded-full border border-[#caa24c]/30 bg-[#caa24c]/10 px-3.5 py-1.5 text-xs font-semibold text-[#8c6424] transition-colors hover:bg-[#caa24c]/18 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 dark:border-[#caa24c]/35 dark:bg-[#caa24c]/15 dark:text-[#f1d27a] dark:hover:bg-[#caa24c]/25 cursor-pointer"
+              >
+                <UserPlus size={14} />
+                Add contact
+              </button>
+            </motion.div>
+          ) : null}
+        </AnimatePresence>
         {!isBrowserCall && <p className="mt-3 max-w-64 text-sm leading-5 text-[color:var(--portal-muted)]">{call.bridgeStatusUnavailable ? 'Unable to refresh call status. Check your phone.' : call.bridgeStage === 'calling_phone' ? `Answer ${call.ringToNumber ? formatPhoneDisplay(call.ringToNumber) : 'your phone'} to connect this call.` : call.phase === 'active' ? 'Continue this call on your phone.' : call.phase === 'ringing' ? 'Waiting for the client to answer.' : 'Connecting the client now.'}</p>}
         {incomingRinging && <p className="mt-3 text-sm text-[color:var(--portal-muted)]">Use the incoming call prompt to answer or decline.</p>}
 
@@ -1532,10 +1574,21 @@ function LivePhoneCall({ call }: { call: NonNullable<ReturnType<typeof usePortal
           <button type="button" onClick={hangUp} aria-label="End call" className="flex h-14 w-14 items-center justify-center rounded-full bg-red-600 text-white transition-colors hover:bg-red-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500/50"><PhoneOff size={21} /></button>
         </div>
       ) : !isBrowserCall && call.bridgeStatusUnavailable ? <button type="button" onClick={dismissBridgeNotice} className="mb-4 min-h-11 rounded-lg bg-[color:var(--portal-soft)] px-6 text-sm font-semibold text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/50">Dismiss status</button> : null}
-      {call.inquiryId && canViewLeadDetails && <div className="w-full pb-2 text-left">
-        <button type="button" aria-expanded={showLeadDetails} aria-controls={leadDetailsId} onClick={() => setShowLeadDetails(current => !current)} className="flex min-h-11 w-full items-center justify-between rounded-xl bg-[color:var(--portal-soft)] px-4 text-sm font-semibold text-[color:var(--portal-text)] transition-colors hover:bg-[color:var(--portal-border)]/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/50">Lead details <ChevronDown size={16} className={`text-[color:var(--portal-muted)] transition-transform motion-reduce:transition-none ${showLeadDetails ? 'rotate-180' : ''}`} /></button>
-        <AnimatePresence initial={false}>{showLeadDetails && <motion.div id={leadDetailsId} key={call.inquiryId} initial={reduceMotion ? false : { height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={reduceMotion ? { opacity: 1 } : { height: 0, opacity: 0 }} transition={{ duration: reduceMotion ? 0 : 0.22, ease: 'easeOut' }} className="overflow-hidden"><CallLeadDetails inquiryId={call.inquiryId} /></motion.div>}</AnimatePresence>
-      </div>}
+      <AnimatePresence initial={false}>
+        {call.inquiryId && canViewLeadDetails ? (
+          <motion.div
+            key={`live-lead-details-${call.inquiryId}`}
+            initial={reduceMotion ? { opacity: 0 } : { opacity: 0, filter: 'blur(6px)', y: 6 }}
+            animate={{ opacity: 1, filter: 'blur(0px)', y: 0 }}
+            exit={reduceMotion ? { opacity: 0 } : { opacity: 0, filter: 'blur(6px)', y: 6 }}
+            transition={{ duration: reduceMotion ? 0 : 0.28, ease: [0.22, 1, 0.36, 1] }}
+            className="w-full pb-2 text-left"
+          >
+            <button type="button" aria-expanded={showLeadDetails} aria-controls={leadDetailsId} onClick={() => setShowLeadDetails(current => !current)} className="flex min-h-11 w-full items-center justify-between rounded-xl bg-[color:var(--portal-soft)] px-4 text-sm font-semibold text-[color:var(--portal-text)] transition-colors hover:bg-[color:var(--portal-border)]/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/50">Lead details <ChevronDown size={16} className={`text-[color:var(--portal-muted)] transition-transform motion-reduce:transition-none ${showLeadDetails ? 'rotate-180' : ''}`} /></button>
+            <AnimatePresence initial={false}>{showLeadDetails && <motion.div id={leadDetailsId} key={call.inquiryId} initial={reduceMotion ? false : { height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={reduceMotion ? { opacity: 1 } : { height: 0, opacity: 0 }} transition={{ duration: reduceMotion ? 0 : 0.22, ease: 'easeOut' }} className="overflow-hidden"><CallLeadDetails inquiryId={call.inquiryId} /></motion.div>}</AnimatePresence>
+          </motion.div>
+        ) : null}
+      </AnimatePresence>
     </div>
   )
 }

@@ -285,20 +285,16 @@ export function FinanceBrowseViews({
           role="dialog"
           aria-modal="true"
           aria-labelledby="finance-browse-views-title"
-          className="fixed inset-x-3 bottom-[calc(4.5rem+env(safe-area-inset-bottom))] z-[70] mx-auto flex max-h-[calc(100dvh-6rem-env(safe-area-inset-bottom))] w-auto max-w-lg flex-col overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] shadow-2xl will-change-transform sm:inset-0 sm:m-auto sm:h-fit"
-          initial={reduceMotion ? { opacity: 0 } : { opacity: 0, y: 44, scale: 0.985 }}
+          className="portal-sheet bg-[color:var(--portal-card)] fixed inset-x-3 bottom-[calc(4.5rem+env(safe-area-inset-bottom))] z-[70] mx-auto flex max-h-[calc(100dvh-6rem-env(safe-area-inset-bottom))] w-auto max-w-lg flex-col overflow-hidden rounded-2xl border border-[color:var(--portal-border)] shadow-2xl sm:inset-0 sm:m-auto sm:h-fit"
+          initial={{ opacity: 0 }}
           animate={{
             opacity: 1,
-            y: 0,
-            scale: 1,
             transition: { duration: reduceMotion ? 0.06 : PORTAL_SHEET_OPEN_DURATION, ease: PORTAL_SIDE_PANEL_EASE },
           }}
-          exit={reduceMotion
-            ? { opacity: 0, pointerEvents: 'none', transition: { duration: 0.05 } }
-            : { opacity: 0, y: 36, scale: 0.985, pointerEvents: 'none', transition: { duration: PORTAL_SHEET_CLOSE_DURATION, ease: PORTAL_SIDE_PANEL_EASE } }}
+          exit={{ opacity: 0, pointerEvents: 'none', transition: { duration: reduceMotion ? 0.05 : PORTAL_SHEET_CLOSE_DURATION, ease: PORTAL_SIDE_PANEL_EASE } }}
           onMouseDown={(event) => event.stopPropagation()}
         >
-            <div className="sticky top-0 z-10 flex shrink-0 items-center justify-between border-b border-[color:var(--portal-border)] bg-[color:var(--portal-card)]/95 px-5 py-4 backdrop-blur-xl">
+            <div className="sticky top-0 z-10 flex shrink-0 items-center justify-between border-b border-[color:var(--portal-border)] px-5 py-4">
               <div>
                 <h2 id="finance-browse-views-title" className="text-base font-bold text-[color:var(--portal-text)]">
                   Browse views

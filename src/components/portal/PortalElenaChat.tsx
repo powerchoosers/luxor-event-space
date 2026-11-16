@@ -44,7 +44,7 @@ import Image from 'next/image'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { AnimatePresence, LayoutGroup, motion, useMotionValue, useReducedMotion, useSpring, useTransform } from 'framer-motion'
-import { PortalCloseButton, PortalContactAvatar, PortalModal, PortalSelect, PortalConstellationLoader } from './PortalUI'
+import { PortalCloseButton, PortalContactAvatar, PortalGhostIconButton, PortalModal, PortalSelect, PortalConstellationLoader } from './PortalUI'
 import { PortalPdfViewer } from '@/components/portal/PortalPdfViewer'
 import { ElenaLiveVoiceClient, type ElenaVoiceState } from '@/lib/elenaLiveVoiceClient'
 import { ElenaSilkOrb } from './ElenaSilkOrb'
@@ -482,6 +482,160 @@ function getQueryIndicatorText(sql: string) {
   return `${action} ${tableName}`
 }
 
+function getElenaContextLabel(path: string): string {
+  if (path.startsWith('/portal/leads')) return 'Leads'
+  if (path.startsWith('/portal/calendar') || path.startsWith('/portal/planner')) return 'Calendar'
+  if (path.startsWith('/portal/finances') || path.startsWith('/portal/invoices')) return 'Finances'
+  if (path.startsWith('/portal/marketing')) return 'Marketing'
+  if (path.startsWith('/portal/operations')) return 'Operations'
+  if (path.startsWith('/portal/emails')) return 'Inbox'
+  if (path.startsWith('/portal/calls') || path.startsWith('/portal/messages')) return 'Calls & SMS'
+  return 'Workspace'
+}
+
+function ElenaInitializationChecklist({
+  activePath,
+  stage,
+  reduceMotion,
+}: {
+  activePath: string
+  stage: 0 | 1 | 2 | 3
+  reduceMotion: boolean
+}) {
+  const steps = [
+    { id: 'crm', label: 'CRM' },
+    { id: 'context', label: getElenaContextLabel(activePath) },
+    { id: 'memory', label: 'Memory' },
+  ]
+
+  return (
+    <div
+      className="portal-elena-welcome my-auto flex w-full flex-col items-center justify-center px-2 py-4 text-center space-y-4"
+      role="status"
+      aria-live="polite"
+      aria-label="Opening Elena"
+    >
+      {/* Avatar with delicate gold orbital arc */}
+      <div className="portal-elena-avatar-wrap relative flex items-center justify-center shrink-0">
+        {!reduceMotion && (
+          <svg
+            aria-hidden="true"
+            viewBox="0 0 72 72"
+            className="pointer-events-none absolute -inset-2 h-[72px] w-[72px] overflow-visible"
+          >
+            <circle
+              cx="36"
+              cy="36"
+              r="32"
+              fill="none"
+              stroke="rgba(202, 162, 76, 0.14)"
+              strokeWidth="1"
+            />
+            <motion.circle
+              cx="36"
+              cy="36"
+              r="32"
+              fill="none"
+              stroke="#caa24c"
+              strokeWidth="1.25"
+              strokeLinecap="round"
+              strokeDasharray="36 165"
+              animate={{ rotate: 360 }}
+              transition={{ duration: 2.8, repeat: Infinity, ease: 'linear' }}
+              style={{ transformOrigin: '36px 36px' }}
+            />
+          </svg>
+        )}
+        <div className="portal-elena-avatar relative h-14 w-14 overflow-hidden rounded-full border border-[#caa24c]/40 ring-4 ring-[#caa24c]/10 shadow-lg">
+          <Image src="/luxor-concierge.png" alt="Elena AI" fill sizes="56px" className="object-cover" />
+        </div>
+        <span
+          className={`absolute bottom-0.5 right-0.5 h-3 w-3 rounded-full border-2 border-[color:var(--portal-bg)] transition-colors duration-300 ${
+            stage >= 3 ? 'bg-emerald-500' : 'bg-[#caa24c]'
+          }`}
+        />
+      </div>
+
+      {/* Minimal 3-step checklist */}
+      <ol
+        className="inline-flex flex-col items-start gap-2"
+        role="list"
+        aria-label="Initialization steps"
+      >
+        {steps.map((step, index) => {
+          const isComplete = stage > index
+          const isActive = stage === index
+          return (
+            <motion.li
+              key={step.id}
+              role="listitem"
+              aria-current={isActive ? 'step' : undefined}
+              initial={reduceMotion ? false : { opacity: 0, y: 4 }}
+              animate={{
+                opacity: isComplete || isActive ? 1 : 0.42,
+                y: 0,
+              }}
+              transition={{
+                duration: reduceMotion ? 0 : 0.28,
+                delay: reduceMotion ? 0 : index * 0.04,
+                ease: [0.22, 1, 0.36, 1],
+              }}
+              className="flex items-center gap-2.5 text-xs"
+            >
+              <span
+                aria-hidden="true"
+                className="inline-flex h-4 w-4 shrink-0 items-center justify-center"
+              >
+                <AnimatePresence mode="wait" initial={false}>
+                  {isComplete ? (
+                    <motion.span
+                      key="done"
+                      initial={reduceMotion ? false : { scale: 0.6, opacity: 0 }}
+                      animate={{ scale: 1, opacity: 1 }}
+                      exit={{ scale: 0.6, opacity: 0 }}
+                      transition={{ duration: reduceMotion ? 0 : 0.18, ease: [0.22, 1, 0.36, 1] }}
+                      className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-[#caa24c]/15 text-[#a8792f] dark:text-[#e3bc65]"
+                    >
+                      <Check size={10} strokeWidth={2.8} />
+                    </motion.span>
+                  ) : isActive ? (
+                    <motion.span
+                      key="active"
+                      initial={reduceMotion ? false : { scale: 0.75, opacity: 0 }}
+                      animate={{ scale: 1, opacity: 1 }}
+                      exit={{ scale: 0.75, opacity: 0 }}
+                      transition={{ duration: reduceMotion ? 0 : 0.15 }}
+                      className="inline-flex items-center justify-center"
+                    >
+                      <PortalConstellationLoader size={12} tone="gold" label={step.label} />
+                    </motion.span>
+                  ) : (
+                    <motion.span
+                      key="pending"
+                      className="h-1.5 w-1.5 rounded-full bg-[color:var(--portal-muted)] opacity-45"
+                    />
+                  )}
+                </AnimatePresence>
+              </span>
+              <span
+                className={`font-medium tracking-wide transition-colors duration-200 ${
+                  isActive
+                    ? 'elena-working-shimmer'
+                    : isComplete
+                      ? 'text-[color:var(--portal-text)]'
+                      : 'text-[color:var(--portal-muted)]'
+                }`}
+              >
+                {step.label}
+              </span>
+            </motion.li>
+          )
+        })}
+      </ol>
+    </div>
+  )
+}
+
 const ELENA_MAX_PDF_BYTES = 8 * 1024 * 1024
 const ELENA_MAX_IMAGE_BYTES = 5 * 1024 * 1024
 const ELENA_MAX_TEXT_BYTES = 512 * 1024
@@ -560,6 +714,8 @@ export function PortalElenaChat({ isOpen, onClose, launcherRef, activePath, port
   const [isElenaResponding, setIsElenaResponding] = useState(false)
   const [isConfirmingAction, setIsConfirmingAction] = useState(false)
   const [isSessionBootstrapping, setIsSessionBootstrapping] = useState(false)
+  const [isBootSequenceActive, setIsBootSequenceActive] = useState(false)
+  const [bootStage, setBootStage] = useState<0 | 1 | 2 | 3>(0)
   const [loadingActivities, setLoadingActivities] = useState<string[]>([])
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
@@ -1014,7 +1170,21 @@ export function PortalElenaChat({ isOpen, onClose, launcherRef, activePath, port
       setMessages([])
       setLoadedSessionId(null)
       setIsSessionBootstrapping(true)
+      setIsBootSequenceActive(true)
+      setBootStage(reduceVoiceMotion ? 2 : 0)
       void loadSessionsList(undefined, true)
+      if (!reduceVoiceMotion) {
+        const step1Timer = window.setTimeout(() => {
+          setBootStage((prev) => (prev < 1 ? 1 : prev))
+        }, 150)
+        const step2Timer = window.setTimeout(() => {
+          setBootStage((prev) => (prev < 2 ? 2 : prev))
+        }, 310)
+        return () => {
+          window.clearTimeout(step1Timer)
+          window.clearTimeout(step2Timer)
+        }
+      }
     } else {
       sessionRequestRef.current += 1
       messageRequestRef.current += 1
@@ -1022,6 +1192,8 @@ export function PortalElenaChat({ isOpen, onClose, launcherRef, activePath, port
       setMessages([])
       setLoadedSessionId(null)
       setIsSessionBootstrapping(false)
+      setIsBootSequenceActive(false)
+      setBootStage(0)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen])
@@ -1256,7 +1428,15 @@ export function PortalElenaChat({ isOpen, onClose, launcherRef, activePath, port
   useEffect(() => {
     if (activeSlashCommand) {
       hadActiveSlashRef.current = true
-      return
+      // When entering active slash command mode (e.g. /ticket), automatically focus the details input
+      // so the cursor remains active without requiring an extra click
+      requestAnimationFrame(() => {
+        slashDetailsInputRef.current?.focus()
+      })
+      const timer = setTimeout(() => {
+        slashDetailsInputRef.current?.focus()
+      }, 50)
+      return () => clearTimeout(timer)
     }
     if (!hadActiveSlashRef.current) return
     hadActiveSlashRef.current = false
@@ -1325,10 +1505,29 @@ export function PortalElenaChat({ isOpen, onClose, launcherRef, activePath, port
 
   const isSessionHydrating =
     isSessionBootstrapping || Boolean(currentSessionId && loadedSessionId !== currentSessionId)
-  const isComposerLocked = isElenaResponding || isConfirmingAction || isSessionHydrating
+  const isElenaInitializing = isBootSequenceActive || isSessionHydrating
+  const isComposerLocked = isElenaResponding || isConfirmingAction || isElenaInitializing
+
+  useEffect(() => {
+    if (!isOpen || !isBootSequenceActive) return
+    if (isSessionHydrating || bootStage < 2) return
+    if (reduceVoiceMotion) {
+      setBootStage(3)
+      setIsBootSequenceActive(false)
+      return
+    }
+    if (bootStage < 3) {
+      setBootStage(3)
+      return
+    }
+    const revealTimer = window.setTimeout(() => {
+      setIsBootSequenceActive(false)
+    }, 120)
+    return () => window.clearTimeout(revealTimer)
+  }, [isOpen, isBootSequenceActive, isSessionHydrating, bootStage, reduceVoiceMotion])
 
   const handleSend = async (textToSend: string, onVoiceReply?: (reply: string) => void): Promise<string | null> => {
-    if ((!textToSend.trim() && attachments.length === 0) || isElenaResponding || isSessionHydrating) return null
+    if ((!textToSend.trim() && attachments.length === 0) || isElenaResponding || isElenaInitializing) return null
     const requestId = ++messageRequestRef.current
     elenaChatAbortRef.current?.abort()
     const abortController = new AbortController()
@@ -1384,8 +1583,9 @@ export function PortalElenaChat({ isOpen, onClose, launcherRef, activePath, port
           setIsElenaResponding(false)
           return null
         }
-        const ticketReply =
-          'I opened a developer ticket for Braxton in the cloud. Review the card below, add screenshots if you need to, then tap Review ticket and Send to developer.'
+        const ticketReply = ticketFromSlash.title
+          ? `I prepared a developer ticket for "${ticketFromSlash.title}" on ${ticketFromSlash.pagePath}. Review the details below, add screenshots or PDFs if needed, then click Review ticket to send to Braxton.`
+          : `I opened a developer ticket card for ${ticketFromSlash.pagePath}. Fill in what needs fixing below, add screenshots or PDFs if needed, and send to Braxton.`
         const withCard: Message[] = [
           ...updatedMessages,
           {
@@ -1646,36 +1846,45 @@ export function PortalElenaChat({ isOpen, onClose, launcherRef, activePath, port
           </div>
           <div>
             <h3 className="font-serif text-base font-medium leading-none text-[color:var(--portal-text)]">Elena AI</h3>
-            <span className="mt-1 flex items-center gap-1.5 text-[10px] font-medium tracking-wide text-green-500">
-              <span className="h-1.5 w-1.5 rounded-full bg-green-500 animate-pulse" />
-              Connected
+            <span
+              className={`mt-1 flex items-center gap-1.5 text-[10px] font-medium tracking-wide transition-colors ${
+                isElenaInitializing
+                  ? 'text-[#a8792f] dark:text-[#e3bc65]'
+                  : 'text-emerald-600 dark:text-green-500'
+              }`}
+            >
+              <span
+                className={`h-1.5 w-1.5 rounded-full animate-pulse transition-colors ${
+                  isElenaInitializing ? 'bg-[#caa24c]' : 'bg-emerald-500 dark:bg-green-500'
+                }`}
+              />
+              {isElenaInitializing ? 'Syncing…' : 'Connected'}
             </span>
           </div>
         </div>
         <div className="flex items-center gap-0.5">
-          {!voiceActive && !historyUnavailable && <button
-            type="button"
-            onClick={() => setShowSessionsList(curr => !curr)}
-            className={`inline-flex h-8 w-8 items-center justify-center rounded-xl p-0 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 cursor-pointer ${
-              showSessionsList 
-                ? 'bg-[#caa24c]/15 text-[#a8792f] dark:text-[#f1d27a]' 
-                : 'text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)]'
-            }`}
-            title="Chat History Sessions"
-            aria-label="Chat History Sessions"
-          >
-            <History size={15} />
-          </button>}
-          {!voiceActive && <button
-            type="button"
-            onClick={() => void handleCreateSession()}
-            className="inline-flex h-8 w-8 items-center justify-center rounded-xl p-0 text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 cursor-pointer"
-            title="Start New Chat Session"
-            aria-label="Start New Chat Session"
-          >
-            <SquarePen size={15} />
-          </button>}
-          {!voiceActive && <div className="mx-1.5 h-5 w-px shrink-0 self-center bg-[color:var(--portal-border)]" aria-hidden="true" />}
+          {!voiceActive && !historyUnavailable && (
+            <PortalGhostIconButton
+              onClick={() => setShowSessionsList(curr => !curr)}
+              active={showSessionsList}
+              title="Chat History Sessions"
+              aria-label="Chat History Sessions"
+              aria-pressed={showSessionsList}
+              className={showSessionsList ? '!bg-[#caa24c]/15 !text-[#a8792f] dark:!text-[#f1d27a]' : ''}
+            >
+              <History size={15} />
+            </PortalGhostIconButton>
+          )}
+          {!voiceActive && (
+            <PortalGhostIconButton
+              onClick={() => void handleCreateSession()}
+              title="Start New Chat Session"
+              aria-label="Start New Chat Session"
+            >
+              <SquarePen size={15} />
+            </PortalGhostIconButton>
+          )}
+          {!voiceActive && <div className="mx-1 h-4 w-px shrink-0 self-center bg-[color:var(--portal-border)]" aria-hidden="true" />}
           <PortalCloseButton onClick={onClose} aria-label="Close Elena Chat" />
         </div>
       </div>
@@ -1842,18 +2051,19 @@ export function PortalElenaChat({ isOpen, onClose, launcherRef, activePath, port
         <motion.div layoutScroll className={`portal-scrollbar min-h-0 flex-1 overflow-y-auto p-3 sm:p-4 ${voiceActive && !voiceHasResults && !isElenaResponding ? 'hidden' : ''}`}>
           <AnimatePresence mode="wait">
             <motion.div
-              key={currentSessionId || 'empty-session'}
-              initial={{ opacity: 0, y: 16, scale: 0.98 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: -12, scale: 0.98 }}
-              transition={{ duration: 0.28, ease: [0.23, 1, 0.32, 1] }}
-              className={messages.length === 0 && !voiceActive ? 'min-h-full flex flex-col justify-center [justify-content:safe_center]' : 'min-h-full flex flex-col justify-between space-y-4'}
+              key={isElenaInitializing ? 'elena-initializing-sequence' : (currentSessionId || 'empty-session')}
+              initial={reduceVoiceMotion ? false : { opacity: 0, y: 12, scale: 0.985, filter: 'blur(6px)' }}
+              animate={{ opacity: 1, y: 0, scale: 1, filter: 'blur(0px)' }}
+              exit={reduceVoiceMotion ? { opacity: 0 } : { opacity: 0, y: -10, scale: 0.985, filter: 'blur(6px)' }}
+              transition={{ duration: reduceVoiceMotion ? 0 : 0.28, ease: [0.23, 1, 0.32, 1] }}
+              className={(isElenaInitializing || (messages.length === 0 && !voiceActive)) ? 'min-h-full flex flex-col justify-center items-center' : 'min-h-full flex flex-col justify-between space-y-4'}
             >
-              {isSessionHydrating ? (
-                <div className="flex flex-col items-center justify-center gap-3 text-center text-zinc-500" role="status" aria-live="polite">
-                  <PortalConstellationLoader size={20} tone="gold" />
-                  <p className="text-xs">Opening Elena’s conversation…</p>
-                </div>
+              {isElenaInitializing ? (
+                <ElenaInitializationChecklist
+                  activePath={activePath}
+                  stage={isBootSequenceActive ? bootStage : 2}
+                  reduceMotion={Boolean(reduceVoiceMotion)}
+                />
               ) : voiceActive && !voiceHasResults ? isElenaResponding ? (
                 <motion.div
                   key="voice-tool-progress"
@@ -1931,10 +2141,13 @@ export function PortalElenaChat({ isOpen, onClose, launcherRef, activePath, port
                             {[1, 2, 3, 4].map((i) => (
                               <div
                                 key={i}
-                                className="portal-elena-card portal-suggestion-card flex items-center justify-between rounded-xl border-0 bg-zinc-950/40 p-3 shadow-sm animate-pulse"
+                                className="portal-elena-card portal-suggestion-card flex items-center justify-between rounded-xl border-0 bg-zinc-950/40 p-3 shadow-sm"
                               >
-                                <div className="h-3.5 w-3/4 rounded bg-zinc-800/60 luxor-skeleton" />
-                                <Radar size={13} className="shrink-0 text-zinc-700/50" />
+                                <div className="min-w-0 flex-1 space-y-1.5 pr-3">
+                                  <div className="h-2.5 w-24 rounded luxor-skeleton" />
+                                  <div className="h-3.5 w-4/5 rounded luxor-skeleton" />
+                                </div>
+                                <Radar size={13} className="shrink-0 text-[color:var(--portal-muted)] opacity-45" />
                               </div>
                             ))}
                           </motion.div>
@@ -2250,7 +2463,12 @@ export function PortalElenaChat({ isOpen, onClose, launcherRef, activePath, port
                         )}
 
                         {msg.developerSupportCard && (
-                          <div className="w-[96%] mt-2 pl-8">
+                          <motion.div
+                            initial={reduceVoiceMotion ? false : { opacity: 0, y: 16, scale: 0.98, filter: 'blur(6px)' }}
+                            animate={{ opacity: 1, y: 0, scale: 1, filter: 'blur(0px)' }}
+                            transition={{ duration: reduceVoiceMotion ? 0 : 0.42, delay: reduceVoiceMotion ? 0 : 0.08, ease: [0.22, 1, 0.36, 1] }}
+                            className="w-[96%] mt-2 pl-8 origin-top"
+                          >
                             <ElenaDeveloperSupportCard
                               payload={msg.developerSupportCard}
                               chatId={currentSessionId}
@@ -2263,7 +2481,7 @@ export function PortalElenaChat({ isOpen, onClose, launcherRef, activePath, port
                                 ])
                               }}
                             />
-                          </div>
+                          </motion.div>
                         )}
                       </motion.div>
                     ))}
@@ -2300,7 +2518,9 @@ export function PortalElenaChat({ isOpen, onClose, launcherRef, activePath, port
                   </AnimatePresence>
                 </div>
               )}
-              <div className="min-h-28 shrink-0" aria-hidden="true" />
+              {(!isElenaInitializing && (messages.length > 0 || voiceActive)) && (
+                <div className="min-h-28 shrink-0" aria-hidden="true" />
+              )}
               <div ref={messagesEndRef} />
             </motion.div>
           </AnimatePresence>

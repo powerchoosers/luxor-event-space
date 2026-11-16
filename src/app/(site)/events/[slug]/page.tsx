@@ -1,3 +1,4 @@
+import { PublicSiteAction } from '@/components/PublicSiteAction'
 import type { Metadata } from 'next'
 import Image from 'next/image'
 import Link from 'next/link'
@@ -42,7 +43,7 @@ export default async function EventDetailPage({ params }: { params: Promise<{ sl
               <Link href={visitHref} data-conversion="visit_cta_click" data-conversion-label={`${event.name} hero`} className="luxor-gold-raised inline-flex min-h-12 items-center justify-center gap-2 rounded-md px-6 py-3 text-sm uppercase tracking-[.14em]">
                 Schedule a Visit <ArrowRight className="h-4 w-4" />
               </Link>
-              <Link href="/#brochure-form" className="inline-flex min-h-12 items-center justify-center rounded-md border border-[#caa24c]/40 bg-black/35 px-6 py-3 text-sm font-semibold uppercase tracking-[.14em] text-[#f7efe3] hover:border-[#caa24c]">Get Venue Brochure</Link>
+              <PublicSiteAction placement="other" className="inline-flex min-h-12 items-center justify-center rounded-md border border-[#caa24c]/40 bg-black/35 px-6 py-3 text-sm font-semibold uppercase tracking-[.14em] text-[#f7efe3] hover:border-[#caa24c]" />
             </div>
           </div>
         </div>

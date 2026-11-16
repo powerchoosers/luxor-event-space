@@ -1315,7 +1315,12 @@ export function ElenaDeveloperSupportCard({
   const setSelectedAttachmentKeysSynced = (updater: (prev: Set<string>) => Set<string>) => {
     setSelectedAttachmentKeys((prev) => {
       const next = updater(prev)
-      developerMode?.setSelectedAttachmentKeys(Array.from(next))
+      if (developerMode) {
+        const nextArr = Array.from(next)
+        queueMicrotask(() => {
+          developerMode.setSelectedAttachmentKeys(nextArr)
+        })
+      }
       return next
     })
   }
@@ -1590,12 +1595,33 @@ export function ElenaDeveloperSupportCard({
 
   return (
     <div className="mt-3 w-full overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)]">
-      <motion.div layout="position" className="flex items-center gap-2 border-b border-[color:var(--portal-border)] px-4 py-3">
-        <Wrench size={16} className="text-[#a8792f] dark:text-[#f1d27a]" aria-hidden="true" />
-        <div>
-          <h4 className="font-sans text-sm font-bold text-[color:var(--portal-text)]">Developer support</h4>
-          <p className="text-[10px] text-[color:var(--portal-muted)]">Sends a fix to Braxton in the cloud</p>
+      <motion.div layout="position" className="flex items-start justify-between gap-2 border-b border-[color:var(--portal-border)] px-4 py-3">
+        <div className="flex items-start gap-2 min-w-0">
+          <Wrench size={16} className="shrink-0 text-[#a8792f] dark:text-[#f1d27a] mt-0.5" aria-hidden="true" />
+          <div className="min-w-0">
+            <h4 className="font-sans text-sm font-bold leading-5 text-[color:var(--portal-text)]">Developer support</h4>
+            <p className="text-[10px] leading-4 text-[color:var(--portal-muted)]">Sends a fix to Braxton in the cloud</p>
+          </div>
         </div>
+        {developerMode && supportCardPhase === 'compose' ? (
+          <button
+            type="button"
+            disabled={isSaving}
+            onClick={() => developerMode.setElementSelectMode(!developerMode.elementSelectMode)}
+            className={`group inline-flex shrink-0 items-center gap-1.5 border-0 bg-transparent p-0 text-xs font-semibold leading-5 transition-all disabled:opacity-50 cursor-pointer ${
+              developerMode.elementSelectMode
+                ? 'text-[#a8792f] dark:text-[#f1d27a]'
+                : 'text-[color:var(--portal-muted)] hover:text-[#a8792f] dark:hover:text-[#f1d27a] active:scale-95'
+            }`}
+          >
+            <MousePointerClick
+              size={13}
+              aria-hidden="true"
+              className="shrink-0 transition-transform group-hover:scale-110 group-active:scale-90"
+            />
+            <span>{developerMode.elementSelectMode ? 'Cancel annotate' : 'Annotate'}</span>
+          </button>
+        ) : null}
       </motion.div>
       <div className="space-y-3 p-4">
         <AnimatePresence mode="popLayout" initial={false}>
@@ -1722,18 +1748,8 @@ export function ElenaDeveloperSupportCard({
                       disabled={isSaving}
                       onEdit={(id, trigger) => developerMode?.beginEditAnnotation(id, trigger)}
                       onRemove={(id) => developerMode?.removeAnnotation(id)}
+                      onRemoveAll={() => developerMode?.removeAllAnnotations()}
                     />
-                    {developerMode ? (
-                      <button
-                        type="button"
-                        disabled={isSaving}
-                        onClick={() => developerMode.setElementSelectMode(!developerMode.elementSelectMode)}
-                        className="inline-flex min-h-9 items-center gap-2 rounded-lg border border-[color:var(--portal-border)] px-3 text-xs font-semibold text-[color:var(--portal-text)] disabled:opacity-50"
-                      >
-                        <MousePointerClick size={14} aria-hidden="true" />
-                        {developerMode.elementSelectMode ? 'Cancel element select' : 'Annotate page element'}
-                      </button>
-                    ) : null}
                   </motion.div>
                 </>
               )}

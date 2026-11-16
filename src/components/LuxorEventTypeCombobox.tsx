@@ -317,17 +317,13 @@ export function LuxorEventTypeCombobox({
                 role="listbox"
                 aria-label={`${label} suggestions`}
                 data-portal-popover="true"
-                initial={reduceMotion ? { opacity: 0 } : { opacity: 0, y: -6, scale: 0.985 }}
+                initial={{ opacity: 0 }}
                 animate={{
                   opacity: 1,
-                  y: 0,
-                  scale: 1,
                   transition: { duration: reduceMotion ? 0.04 : 0.16, ease: PORTAL_MODAL_EASE },
                 }}
                 exit={reduceMotion ? { opacity: 0, pointerEvents: 'none', transition: { duration: 0.04 } } : {
                   opacity: 0,
-                  y: -5,
-                  scale: 0.985,
                   pointerEvents: 'none',
                   transition: { duration: 0.14, ease: PORTAL_MODAL_EXIT_EASE },
                 }}
@@ -337,7 +333,6 @@ export function LuxorEventTypeCombobox({
                   left: coords.left,
                   width: coords.width,
                   maxHeight: coords.maxHeight,
-                  transformOrigin: 'top center',
                 }}
               >
                 {suggestionItems}

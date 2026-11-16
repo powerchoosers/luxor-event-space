@@ -526,9 +526,6 @@ export function PortalMarketingSalesSection({
                       </p>
                     </div>
                     <div className="flex items-center gap-1 shrink-0">
-                      <span className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-[#caa24c] text-[8px] text-white font-bold">
-                        ★
-                      </span>
                       <div className="relative group/tip cursor-help">
                         <Info size={13} className="text-[#caa24c] hover:text-[#dfbd68] transition-colors" />
                         <div className="absolute right-0 top-5 z-50 hidden w-60 rounded-xl border border-[#caa24c]/30 bg-[color:var(--portal-card)] p-3 text-[11px] font-normal leading-relaxed text-[color:var(--portal-text)] shadow-2xl backdrop-blur-xl group-hover/tip:block">

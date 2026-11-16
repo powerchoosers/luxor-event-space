@@ -12,6 +12,7 @@ import {
 import Link from 'next/link'
 import { isLuxorInquiryArchived, LuxorInquiry, LuxorInquiryStatus, LuxorNote } from '@/lib/luxorInquiryTypes'
 import { decodeHtmlEntities } from '@/lib/luxorTextUtils'
+import { formatActivityAuthor } from '@/lib/luxorActivityAuthor'
 import { PortalPageFrame, PortalPageHeader, PortalSelect, PortalStatusBadge, PortalContactAvatar, PortalSkeleton, PortalSkeletonTransition } from '@/components/portal/PortalUI'
 
 const INQUIRY_STATUS_OPTIONS: { value: LuxorInquiryStatus; label: string }[] = [
@@ -157,7 +158,7 @@ export default function CommunicationsPage() {
           inquiryId: selectedId,
           content: noteContent,
           noteType,
-          author: 'Admin Owner',
+          author: 'Arianna Patterson',
         }),
       })
 
@@ -206,7 +207,7 @@ export default function CommunicationsPage() {
           inquiryId: selectedInquiry.id,
           content: `Email sent from ${sendFrom} to ${selectedInquiry.email}\nSubject: ${emailSubject}\n\n${emailContent}`,
           noteType: 'email_log',
-          author: 'Admin Owner',
+          author: 'Arianna Patterson',
         }),
       })
 
@@ -604,7 +605,7 @@ export default function CommunicationsPage() {
                             <div key={note.id} className="relative">
                               <div className="absolute -left-[32px] top-1 h-3 w-3 rounded-full bg-zinc-950 border-2 border-zinc-850" />
                               <div className="flex items-center justify-between gap-3 flex-wrap text-[10px] font-bold uppercase tracking-wider text-zinc-550 mb-1.5">
-                                <span>{note.author}</span>
+                                <span>{formatActivityAuthor(note.author, selectedInquiry?.full_name)}</span>
                                 <div className="flex items-center gap-2">
                                   <span className={`text-[8px] font-bold tracking-widest px-2 py-0.5 rounded border ${typeColor}`}>{typeLabel}</span>
                                   <span className="text-[9px] font-mono text-zinc-600">{new Date(note.created_at).toLocaleDateString('en-US', { dateStyle: 'long' })}</span>

@@ -44,12 +44,42 @@ export function filterElenaSlashCommands(commands: ElenaSlashCommand[], query: s
 export function parseTicketSlashCommand(raw: string, pagePath: string) {
   const trimmed = raw.trim()
   if (!/^\/ticket(\s|$)/i.test(trimmed)) return null
-  const details = trimmed.replace(/^\/ticket\s*/i, '').trim()
+  const rawDetails = trimmed.replace(/^\/ticket\s*/i, '').trim()
   const page = pagePath || '/portal'
-  const title = details
-    ? (details.length > 140 ? `${details.slice(0, 137)}…` : details)
-    : 'Portal issue'
-  const description = details || `Issue on ${page}. Arianna opened this with /ticket.`
+
+  let title = ''
+  let description = ''
+
+  if (rawDetails) {
+    // If the input has multiple sentences or line breaks, extract a punchy summary for title
+    // and put the detailed description or extra context into description
+    const lines = rawDetails.split(/\r?\n/).map((l) => l.trim()).filter(Boolean)
+    const firstLine = lines[0] || ''
+
+    if (lines.length > 1) {
+      title = firstLine.length > 100 ? `${firstLine.slice(0, 97)}…` : firstLine
+      description = lines.slice(1).join('\n\n')
+    } else {
+      // Single line text: extract title up to first period/semicolon or first 70 characters
+      const sentenceMatch = /^([^.?!;]+[.?!;]?)/.exec(firstLine)
+      const primaryPhrase = (sentenceMatch ? sentenceMatch[1] : firstLine).trim()
+      const remainder = firstLine.slice(primaryPhrase.length).trim().replace(/^[.,;:\s-]+/, '').trim()
+
+      if (remainder.length > 10) {
+        title = primaryPhrase.length > 90 ? `${primaryPhrase.slice(0, 87)}…` : primaryPhrase
+        description = remainder
+      } else {
+        title = firstLine.length > 100 ? `${firstLine.slice(0, 97)}…` : firstLine
+        // If there are no additional distinct details known from the short phrase, leave description empty
+        // so "What needs fixing?" and "Extra details" don't duplicate each other
+        description = ''
+      }
+    }
+  } else {
+    title = ''
+    description = ''
+  }
+
   return {
     title,
     description,

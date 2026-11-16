@@ -138,7 +138,7 @@ export function LeadLifecycleActionsMenu({
           ref={menuRef}
           id={menuId}
           role="menu"
-          className="portal-dropdown fixed z-[130] w-56 max-w-[calc(100vw-1rem)] overflow-y-auto overscroll-contain rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-1.5 shadow-2xl shadow-black/25 backdrop-blur-xl"
+          className="portal-dropdown portal-popover-surface fixed z-[130] w-56 max-w-[calc(100vw-1rem)] overflow-y-auto overscroll-contain rounded-xl border border-[color:var(--portal-border)] p-1.5 shadow-2xl shadow-black/25"
           style={{ top: position.top, left: position.left, maxHeight: position.maxHeight }}
         >
           {cancellableTour ? (

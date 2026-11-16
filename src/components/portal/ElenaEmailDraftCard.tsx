@@ -367,8 +367,8 @@ export function ElenaEmailDraftCard({ draft, onSendSuccess, onRegenerateRequest 
 
       {/* HTML Render Preview Modal */}
       {isPreviewOpen && typeof document !== 'undefined' && createPortal(
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/35 p-3 backdrop-blur-sm dark:bg-black/70 sm:p-6">
-          <div role="dialog" aria-modal="true" aria-label="Outgoing email preview" className="relative flex h-[min(92dvh,56rem)] w-full max-w-4xl flex-col overflow-hidden rounded-[1.5rem] border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] shadow-[0_28px_90px_-34px_rgba(37,26,10,0.65)] sm:h-[min(90dvh,54rem)]">
+        <div data-portal-backdrop="true" className="portal-modal-backdrop fixed inset-0 z-[100] flex items-center justify-center p-3 sm:p-6">
+          <div role="dialog" aria-modal="true" aria-label="Outgoing email preview" className="portal-overlay-surface relative flex h-[min(92dvh,56rem)] w-full max-w-4xl flex-col overflow-hidden rounded-[1.5rem] border border-[color:var(--portal-border)] shadow-[0_28px_90px_-34px_rgba(37,26,10,0.65)] sm:h-[min(90dvh,54rem)]">
             {/* Modal Header */}
             <div className="flex shrink-0 items-center justify-between border-b border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-4 py-3.5 sm:px-5">
               <div className="flex items-center gap-2">

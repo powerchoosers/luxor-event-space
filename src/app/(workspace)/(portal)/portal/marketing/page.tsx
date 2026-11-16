@@ -696,7 +696,7 @@ function MarketingPageContent() {
           inquiryId,
           content,
           noteType: 'general',
-          author: 'Portal Owner'
+          author: 'Arianna Patterson'
         })
       })
       if (!res.ok) {
@@ -1135,7 +1135,8 @@ function MarketingMobileViewPicker({
         <AnimatePresence initial={false}>
           {open ? (
             <motion.div
-              className="fixed inset-0 z-[70] flex items-end justify-center bg-black/45 p-3 pb-[calc(4.5rem+env(safe-area-inset-bottom))] sm:items-center sm:p-6"
+              data-portal-backdrop="true"
+              className="portal-modal-backdrop fixed inset-0 z-[70] flex items-end justify-center p-3 pb-[calc(4.5rem+env(safe-area-inset-bottom))] sm:items-center sm:p-6"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
@@ -1146,14 +1147,14 @@ function MarketingMobileViewPicker({
                 role="dialog"
                 aria-modal="true"
                 aria-labelledby="marketing-view-menu-title"
-                className="flex max-h-[calc(100dvh-6rem-env(safe-area-inset-bottom))] w-full max-w-lg flex-col overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] shadow-2xl"
-                initial={{ opacity: 0, y: 56, scale: 0.985 }}
-                animate={{ opacity: 1, y: 0, scale: 1 }}
-                exit={{ opacity: 0, y: 40, scale: 0.985 }}
-                transition={{ duration: 0.32, ease: [0.23, 1, 0.32, 1] }}
+                className="portal-sheet bg-[color:var(--portal-card)] flex max-h-[calc(100dvh-6rem-env(safe-area-inset-bottom))] w-full max-w-lg flex-col overflow-hidden rounded-2xl border border-[color:var(--portal-border)] shadow-2xl"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0, pointerEvents: 'none' }}
+                transition={{ duration: 0.22, ease: [0.23, 1, 0.32, 1] }}
                 onMouseDown={(event) => event.stopPropagation()}
               >
-                <div className="sticky top-0 z-10 flex shrink-0 items-center justify-between border-b border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-5 py-4">
+                <div className="sticky top-0 z-10 flex shrink-0 items-center justify-between border-b border-[color:var(--portal-border)] px-5 py-4">
                   <div>
                     <h2 id="marketing-view-menu-title" className="text-base font-bold text-[color:var(--portal-text)]">Browse views</h2>
                     <p className="mt-0.5 text-xs text-[color:var(--portal-muted)]">Choose a marketing view.</p>

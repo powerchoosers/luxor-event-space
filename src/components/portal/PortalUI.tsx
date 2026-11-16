@@ -442,20 +442,16 @@ export function PortalMobileTabPicker<T extends string>({
               role="dialog"
               aria-modal="true"
               aria-labelledby="portal-mobile-tab-picker-title"
-              className="fixed inset-x-3 bottom-[calc(4.5rem+env(safe-area-inset-bottom))] z-[70] mx-auto flex max-h-[calc(100dvh-6rem-env(safe-area-inset-bottom))] w-auto max-w-lg flex-col overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] shadow-2xl will-change-transform sm:inset-0 sm:m-auto sm:h-fit"
-              initial={reduceMotion ? { opacity: 0 } : { opacity: 0, y: 44, scale: 0.985 }}
+              className="portal-sheet bg-[color:var(--portal-card)] fixed inset-x-3 bottom-[calc(4.5rem+env(safe-area-inset-bottom))] z-[70] mx-auto flex max-h-[calc(100dvh-6rem-env(safe-area-inset-bottom))] w-auto max-w-lg flex-col overflow-hidden rounded-2xl border border-[color:var(--portal-border)] shadow-2xl sm:inset-0 sm:m-auto sm:h-fit"
+              initial={{ opacity: 0 }}
               animate={{
                 opacity: 1,
-                y: 0,
-                scale: 1,
-                transition: { duration: reduceMotion ? 0.06 : PORTAL_SHEET_OPEN_DURATION, ease: PORTAL_SIDE_PANEL_EASE },
+                transition: { duration: reduceMotion ? 0.06 : PORTAL_MODAL_OPEN_DURATION, ease: PORTAL_MODAL_EASE },
               }}
-              exit={reduceMotion
-                ? { opacity: 0, pointerEvents: 'none', transition: { duration: 0.05 } }
-                : { opacity: 0, y: 36, scale: 0.985, pointerEvents: 'none', transition: { duration: PORTAL_SHEET_CLOSE_DURATION, ease: PORTAL_SIDE_PANEL_EASE } }}
+              exit={{ opacity: 0, pointerEvents: 'none', transition: { duration: reduceMotion ? 0.05 : PORTAL_MODAL_CLOSE_DURATION, ease: PORTAL_MODAL_EXIT_EASE } }}
               onMouseDown={(event) => event.stopPropagation()}
             >
-                <div className="sticky top-0 z-10 flex shrink-0 items-center justify-between border-b border-[color:var(--portal-border)] bg-[color:var(--portal-card)]/95 px-5 py-4 backdrop-blur-xl">
+                <div className="sticky top-0 z-10 flex shrink-0 items-center justify-between border-b border-[color:var(--portal-border)] px-5 py-4">
                   <div>
                     <h2 id="portal-mobile-tab-picker-title" className="text-base font-bold text-[color:var(--portal-text)]">{title}</h2>
                     <p className="mt-0.5 text-xs text-[color:var(--portal-muted)]">{subtitle}</p>
@@ -925,11 +921,11 @@ export function PortalFilterOverflowMenu({
               id={menuId}
               role="menu"
               data-portal-dropdown="true"
-              initial={{ opacity: 0, y: reduceMotion ? 0 : -4, scale: reduceMotion ? 1 : 0.98 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: reduceMotion ? 0 : -4, scale: reduceMotion ? 1 : 0.98 }}
-              transition={{ duration: 0.16, ease: [0.23, 1, 0.32, 1] }}
-              className="portal-dropdown absolute right-0 top-full z-[61] mt-1.5 w-44 min-w-[10rem] rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-1.5 shadow-2xl backdrop-blur-xl [&_[role=menuitem]]:min-h-10 [&_[role=menuitem]]:text-xs [&_[role=menuitem]]:font-semibold"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0, pointerEvents: 'none' }}
+              transition={{ duration: reduceMotion ? 0.05 : 0.16, ease: PORTAL_MODAL_EASE }}
+              className="portal-dropdown portal-popover-surface absolute right-0 top-full z-[61] mt-1.5 w-44 min-w-[10rem] rounded-xl border border-[color:var(--portal-border)] p-1.5 shadow-2xl [&_[role=menuitem]]:min-h-10 [&_[role=menuitem]]:text-xs [&_[role=menuitem]]:font-semibold"
             >
               {items.map((item) => (
                 <button
@@ -1334,7 +1330,7 @@ const STATUS_TONES: Record<string, PortalStatusTone> = {
 const STATUS_TONE_STYLES: Record<PortalStatusTone, string> = {
   red: 'bg-rose-50/90 text-rose-800 dark:bg-rose-500/10 dark:text-rose-300',
   blue: 'bg-sky-50/90 text-sky-800 dark:bg-sky-500/10 dark:text-sky-300',
-  gold: 'bg-[#fbf5e7] text-[#76591f] dark:bg-[#caa24c]/10 dark:text-[#f1d27a]',
+  gold: 'bg-[#caa24c]/15 text-[#8c6424] dark:bg-[#caa24c]/20 dark:text-[#f1d27a]',
   green: 'bg-emerald-50/90 text-emerald-800 dark:bg-emerald-500/10 dark:text-emerald-300',
   purple: 'bg-violet-50/90 text-violet-800 dark:bg-violet-500/10 dark:text-violet-300',
   neutral: 'bg-[color:var(--portal-soft)] text-[color:var(--portal-muted)]',
@@ -1551,6 +1547,7 @@ export function PortalModal({
   sidePanel = false,
   headerIcon,
   headerBack = false,
+  headerBackResponsive = false,
   headerAction,
 }: {
   isOpen: boolean
@@ -1573,6 +1570,8 @@ export function PortalModal({
   sidePanel?: boolean
   headerIcon?: React.ReactNode
   headerBack?: boolean
+  /** When true with headerBack, shows back button only on mobile and shows close 'X' button on desktop & tablet. */
+  headerBackResponsive?: boolean
   headerAction?: React.ReactNode
 }) {
   void _animateClose
@@ -1609,7 +1608,7 @@ export function PortalModal({
       ? { x: '100%' }
       : isSheetSlideUp
         ? { y: '100%' }
-        : { opacity: 0, scale: 0.965, y: 10 }
+        : { opacity: 0 }
 
   const dialogAnimate = reduceMotion
     ? { opacity: 1, transition: { duration: 0.06 } }
@@ -1617,7 +1616,7 @@ export function PortalModal({
       ? { opacity: 1, x: 0, transition: { duration: PORTAL_SIDE_PANEL_DURATION, ease: PORTAL_SIDE_PANEL_EASE } }
       : isSheetSlideUp
         ? { opacity: 1, y: 0, transition: { duration: PORTAL_SHEET_OPEN_DURATION, ease: PORTAL_SIDE_PANEL_EASE } }
-        : { opacity: 1, scale: 1, y: 0, transition: { duration: PORTAL_MODAL_OPEN_DURATION, ease: PORTAL_MODAL_EASE } }
+        : { opacity: 1, transition: { duration: PORTAL_MODAL_OPEN_DURATION, ease: PORTAL_MODAL_EASE } }
 
   const dialogExit = reduceMotion
     ? { opacity: 0, pointerEvents: 'none' as const, transition: { duration: 0.05 } }
@@ -1625,7 +1624,7 @@ export function PortalModal({
       ? { x: '100%', pointerEvents: 'none' as const, transition: { duration: PORTAL_SIDE_PANEL_EXIT_DURATION, ease: PORTAL_SIDE_PANEL_EASE } }
       : isSheetSlideUp
         ? { y: '100%', pointerEvents: 'none' as const, transition: { duration: PORTAL_SHEET_CLOSE_DURATION, ease: PORTAL_SIDE_PANEL_EASE } }
-        : { opacity: 0, scale: 0.965, y: 10, pointerEvents: 'none' as const, transition: { duration: PORTAL_MODAL_CLOSE_DURATION, ease: PORTAL_MODAL_EXIT_EASE } }
+        : { opacity: 0, pointerEvents: 'none' as const, transition: { duration: PORTAL_MODAL_CLOSE_DURATION, ease: PORTAL_MODAL_EXIT_EASE } }
 
   const backdropOpenTransition = reduceMotion
     ? { duration: 0.06 }
@@ -1765,16 +1764,24 @@ export function PortalModal({
           initial={dialogInitial}
           animate={dialogAnimate}
           exit={dialogExit}
-          style={{ zIndex: computedZIndex, contain: 'layout style' }}
+          style={{ zIndex: computedZIndex }}
           className={sidePanel
-            ? `fixed inset-y-0 right-0 flex h-dvh w-full ${maxWidth} ${className} will-change-[transform,opacity] flex-col overflow-hidden border-l border-[color:var(--portal-border)] bg-[color:var(--portal-card)] shadow-[-18px_0_48px_rgba(0,0,0,0.22)] outline-none`
-            : `fixed inset-x-0 top-[calc(env(safe-area-inset-top)+0.75rem)] bottom-[calc(env(safe-area-inset-bottom)+0.75rem)] sm:inset-0 m-auto flex h-fit max-h-[calc(100dvh-env(safe-area-inset-top)-env(safe-area-inset-bottom)-1.5rem)] w-[calc(100%-1.5rem)] sm:w-[calc(100%-2rem)] ${maxWidth} ${className} transform-gpu will-change-[transform,opacity] flex-col overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-bg)] shadow-2xl outline-none sm:max-h-[90vh] ${fullScreenOnCompact ? 'max-lg:!inset-0 max-lg:!m-0 max-lg:!w-full max-lg:!max-w-none max-lg:!h-dvh max-lg:!max-h-dvh max-lg:!min-h-0 max-lg:!rounded-none max-lg:!border-0 max-lg:!shadow-none' : ''} ${fullScreenOnMobile ? 'max-md:!inset-0 max-md:!m-0 max-md:!w-full max-md:!max-w-none max-md:!h-dvh max-md:!max-h-dvh max-md:!min-h-0 max-md:!rounded-none max-md:!border-0 max-md:!shadow-none' : ''}`}
+            ? `portal-drawer bg-[color:var(--portal-card)] fixed inset-y-0 right-0 flex h-dvh w-full ${maxWidth} ${className} flex-col overflow-hidden border-l border-[color:var(--portal-border)] shadow-[-18px_0_48px_rgba(0,0,0,0.22)] outline-none`
+            : `portal-overlay-surface fixed inset-x-0 top-[calc(env(safe-area-inset-top)+0.75rem)] bottom-[calc(env(safe-area-inset-bottom)+0.75rem)] sm:inset-0 m-auto flex h-fit max-h-[calc(100dvh-env(safe-area-inset-top)-env(safe-area-inset-bottom)-1.5rem)] w-[calc(100%-1.5rem)] sm:w-[calc(100%-2rem)] ${maxWidth} ${className} flex-col overflow-hidden rounded-2xl border border-[color:var(--portal-border)] shadow-2xl outline-none sm:max-h-[90vh] ${fullScreenOnCompact ? 'max-lg:!inset-0 max-lg:!m-0 max-lg:!w-full max-lg:!max-w-none max-lg:!h-dvh max-lg:!max-h-dvh max-lg:!min-h-0 max-lg:!rounded-none max-lg:!border-0 max-lg:!shadow-none' : ''} ${fullScreenOnMobile ? 'max-md:!inset-0 max-md:!m-0 max-md:!w-full max-md:!max-w-none max-md:!h-dvh max-md:!max-h-dvh max-md:!min-h-0 max-md:!rounded-none max-md:!border-0 max-md:!shadow-none' : ''}`}
         >
           <ModalDepthContext.Provider value={depth + 1}>
             {title ? (
-              <div className={`sticky top-0 z-10 flex shrink-0 items-start justify-between gap-4 border-b border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-4 py-3.5 sm:px-6 sm:py-4 ${fullScreenOnCompact ? 'max-lg:!pt-[calc(env(safe-area-inset-top)+0.75rem)]' : ''} ${fullScreenOnMobile ? 'max-md:!pt-[calc(env(safe-area-inset-top)+0.75rem)]' : ''}`}>
+              <div className={`sticky top-0 z-10 flex shrink-0 items-start justify-between gap-4 border-b border-[color:var(--portal-border)] px-4 py-3.5 sm:px-6 sm:py-4 ${fullScreenOnCompact ? 'max-lg:!pt-[calc(env(safe-area-inset-top)+0.75rem)]' : ''} ${fullScreenOnMobile ? 'max-md:!pt-[calc(env(safe-area-inset-top)+0.75rem)]' : ''}`}>
                 <div className="flex min-w-0 items-center gap-3">
-                  {headerBack ? <PortalGhostIconButton onClick={onClose} aria-label="Back to previous panel" className="!h-10 !w-10"><ArrowLeft size={18} /></PortalGhostIconButton> : headerIcon}
+                  {headerBack ? (
+                    <PortalGhostIconButton
+                      onClick={onClose}
+                      aria-label="Back to previous panel"
+                      className={`!h-10 !w-10 ${headerBackResponsive ? 'md:hidden' : ''}`}
+                    >
+                      <ArrowLeft size={18} />
+                    </PortalGhostIconButton>
+                  ) : headerIcon}
                   {headerBack && headerIcon ? headerIcon : null}
                   <div className="min-w-0">
                     <h3 id={titleId} className="text-base font-semibold tracking-tight text-[color:var(--portal-text)]">{title}</h3>
@@ -1783,7 +1790,11 @@ export function PortalModal({
                 </div>
                 <div className="flex shrink-0 items-center gap-2">
                   {headerAction}
-                  {!headerBack ? <PortalCloseButton onClick={onClose} aria-label={`Close ${title}`} /> : null}
+                  {!headerBack ? (
+                    <PortalCloseButton onClick={onClose} aria-label={`Close ${title}`} />
+                  ) : headerBackResponsive ? (
+                    <PortalCloseButton onClick={onClose} aria-label={`Close ${title}`} className="hidden md:inline-flex" />
+                  ) : null}
                 </div>
               </div>
             ) : null}
@@ -1797,7 +1808,7 @@ export function PortalModal({
                 </div>
                 {footer ? (
                   <div
-                    className={`shrink-0 border-t border-[color:var(--portal-border)] bg-[color:var(--portal-bg)] p-4 sm:px-6 sm:py-4 ${fullScreenOnCompact ? 'max-lg:pb-[calc(1rem+env(safe-area-inset-bottom))]' : ''} ${fullScreenOnMobile ? 'max-md:pb-[calc(1rem+env(safe-area-inset-bottom))]' : ''}`}
+                    className={`shrink-0 border-t border-[color:var(--portal-border)] p-4 sm:px-6 sm:py-4 ${fullScreenOnCompact ? 'max-lg:pb-[calc(1rem+env(safe-area-inset-bottom))]' : ''} ${fullScreenOnMobile ? 'max-md:pb-[calc(1rem+env(safe-area-inset-bottom))]' : ''}`}
                   >
                     {footer}
                   </div>
@@ -2075,17 +2086,13 @@ export function PortalSelect({
                   data-portal-popover="true"
                   data-scroll-lock="true"
                   onKeyDown={handleListKeyDown}
-                  initial={reduceMotion ? { opacity: 0 } : { opacity: 0, y: coords.opensAbove ? 6 : -6, scale: 0.985 }}
+                  initial={{ opacity: 0 }}
                   animate={{
                     opacity: 1,
-                    y: 0,
-                    scale: 1,
                     transition: { duration: reduceMotion ? 0.05 : 0.16, ease: PORTAL_MODAL_EASE },
                   }}
                   exit={reduceMotion ? { opacity: 0, pointerEvents: 'none', transition: { duration: 0.04 } } : {
                     opacity: 0,
-                    y: coords.opensAbove ? 5 : -5,
-                    scale: 0.985,
                     pointerEvents: 'none',
                     transition: { duration: 0.14, ease: PORTAL_MODAL_EXIT_EASE },
                   }}
@@ -2095,7 +2102,6 @@ export function PortalSelect({
                     left: `${coords.left}px`,
                     width: `${coords.width}px`,
                     maxHeight: `${coords.maxHeight}px`,
-                    transformOrigin: coords.opensAbove ? 'bottom center' : 'top center',
                   }}
                 >
                   <div className="space-y-0.5">

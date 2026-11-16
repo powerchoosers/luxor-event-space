@@ -426,6 +426,7 @@ export function LogCallOutcomeModal({
             inquiryId: lead.id,
             content: `Manual call outcome: ${callOutcome.replaceAll('_', ' ')}.${callNote.trim() ? ` ${callNote.trim()}` : ''}`,
             noteType: 'status_change',
+            author: 'Arianna Patterson',
             taskId: task?.id,
           }),
         })

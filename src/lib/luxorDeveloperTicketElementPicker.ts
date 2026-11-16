@@ -111,8 +111,30 @@ export function buildDeveloperTicketElementDescriptor(element: Element): Develop
   }
 }
 
+export function isPointOverDeveloperIgnoredSurface(clientX: number, clientY: number): boolean {
+  if (typeof document === 'undefined') return false
+  const topElement = document.elementFromPoint(clientX, clientY)
+  if (topElement && topElement.closest(DEV_IGNORE)) return true
+  const stack = document.elementsFromPoint(clientX, clientY)
+  for (const node of stack) {
+    if (node instanceof HTMLElement && node.closest(DEV_IGNORE)) {
+      const rect = node.getBoundingClientRect()
+      if (
+        clientX >= rect.left &&
+        clientX <= rect.right &&
+        clientY >= rect.top &&
+        clientY <= rect.bottom
+      ) {
+        return true
+      }
+    }
+  }
+  return false
+}
+
 export function pickDeveloperTicketElementAtPoint(clientX: number, clientY: number): HTMLElement | null {
   if (typeof document === 'undefined') return null
+  if (isPointOverDeveloperIgnoredSurface(clientX, clientY)) return null
   const stack = document.elementsFromPoint(clientX, clientY)
   for (const node of stack) {
     if (!(node instanceof HTMLElement)) continue

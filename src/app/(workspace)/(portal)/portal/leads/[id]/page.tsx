@@ -67,14 +67,16 @@ import {
   Upload,
   Languages,
   Menu,
+  SquarePen,
   X,
 } from '@/lib/icons/phosphor-compat'
 import { isLuxorInquiryArchived, isLuxorTestInquiry, LUXOR_INQUIRY_PACKAGE_INTEREST_OPTIONS, LUXOR_MAX_GUESTS, LuxorBooking, LuxorDocument, LuxorEmailJob, LuxorInquiry, LuxorLeadEvent, LuxorNote, LuxorTask, LuxorInvoice, LuxorInvoiceLineItem, LuxorPayment, LuxorPaymentInstallment, LuxorVendor, normalizeLuxorEventType } from '@/lib/luxorInquiryTypes'
 import { LUXOR_DEFAULT_SECURITY_DEPOSIT } from '@/lib/luxorBookingMoney'
 import { saveRecentLead } from '@/lib/luxorRecentLeads'
 import { decodeHtmlEntities } from '@/lib/luxorTextUtils'
+import { formatActivityAuthor } from '@/lib/luxorActivityAuthor'
 import { LUXOR_TIME_DROPDOWN_OPTIONS, normalizeLuxorTimeDropdownValue } from '@/lib/luxorTimeOptions'
-import { PortalPageFrame, PortalStatusBadge, PortalSelect, PortalDatePicker, PortalModal, PortalContactAvatar, PortalCloseButton, PortalFilterBar, PortalAnimatedTabs, PortalButton, PortalSkeleton } from '@/components/portal/PortalUI'
+import { PortalPageFrame, PortalBadge, PortalStatusBadge, PortalSelect, PortalDatePicker, PortalModal, PortalContactAvatar, PortalCloseButton, PortalGhostIconButton, PortalFilterBar, PortalAnimatedTabs, PortalButton, PortalSkeleton } from '@/components/portal/PortalUI'
 import { PackagesWebsiteInquiryPanel } from '@/components/portal/PackagesWebsiteInquiryPanel'
 import { MagicCard } from '@/components/ui/magic-card'
 import { AnimatedCircularProgressBar } from '@/components/ui/animated-circular-progress-bar'
@@ -2581,7 +2583,7 @@ export default function LeadDetailPage({
           inquiryId: id,
           content: noteContent,
           noteType,
-          author: 'Admin Owner',
+          author: 'Arianna Patterson',
         }),
       })
       if (!res.ok) throw new Error('Failed to post note.')
@@ -3398,7 +3400,7 @@ export default function LeadDetailPage({
         inquiryId: id,
         content,
         noteType,
-        author: 'Admin Owner',
+        author: 'Arianna Patterson',
       }),
     })
     if (!res.ok) throw new Error('Failed to write activity note.')
@@ -5364,13 +5366,13 @@ export default function LeadDetailPage({
                     <AnimatePresence>
                       {showEventPicker ? (
                         <motion.div
-                          initial={{ opacity: 0, y: reduceMotion ? 0 : -4, scale: reduceMotion ? 1 : 0.98 }}
-                          animate={{ opacity: 1, y: 0, scale: 1 }}
-                          exit={{ opacity: 0, y: reduceMotion ? 0 : -4, scale: reduceMotion ? 1 : 0.98 }}
-                          transition={{ duration: 0.16, ease: [0.23, 1, 0.32, 1] }}
+                          initial={{ opacity: 0 }}
+                          animate={{ opacity: 1 }}
+                          exit={{ opacity: 0, pointerEvents: 'none' }}
+                          transition={{ duration: reduceMotion ? 0.05 : 0.16, ease: [0.23, 1, 0.32, 1] }}
                           role="listbox"
                           ref={eventPickerMenuRef}
-                          className="portal-dropdown absolute left-0 top-full mt-1.5 z-[71] w-[min(340px,calc(100vw-4rem))] max-h-80 overflow-y-auto overscroll-contain rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-1.5 shadow-2xl backdrop-blur-xl"
+                          className="portal-dropdown portal-popover-surface absolute left-0 top-full mt-1.5 z-[71] w-[min(340px,calc(100vw-4rem))] max-h-80 overflow-y-auto overscroll-contain rounded-xl border border-[color:var(--portal-border)] p-1.5 shadow-2xl"
                         >
                           <div className="px-2.5 pb-1.5 pt-1 text-[9px] font-black uppercase tracking-[0.16em] text-[color:var(--portal-muted)]">Events under this lead</div>
                           {leadEvents.map((event) => (
@@ -5444,19 +5446,15 @@ export default function LeadDetailPage({
                   <>
                     <div className="fixed inset-0 z-[70]" onClick={() => setShowActionsMenu(false)} />
                     <motion.div
-                      ref={(node) => {
-                        actionsMenuRef.current = node
-                        node?.style.setProperty('box-shadow', '0 4px 12px -5px rgba(0, 0, 0, 0.14)', 'important')
-                        node?.style.setProperty('backdrop-filter', 'none', 'important')
-                      }}
-                      initial={{ opacity: 0, y: reduceMotion ? 0 : -4, scale: reduceMotion ? 1 : 0.98 }}
-                      animate={{ opacity: 1, y: 0, scale: 1 }}
-                      exit={{ opacity: 0, y: reduceMotion ? 0 : -4, scale: reduceMotion ? 1 : 0.98 }}
-                      transition={{ duration: 0.16, ease: [0.23, 1, 0.32, 1] }}
+                      ref={actionsMenuRef}
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      exit={{ opacity: 0, pointerEvents: 'none' }}
+                      transition={{ duration: reduceMotion ? 0.05 : 0.16, ease: [0.23, 1, 0.32, 1] }}
                       role="menu"
                       data-portal-dropdown="true"
                       data-contact-actions-menu
-                      className="portal-dropdown absolute right-0 top-full mt-2 z-[71] w-72 max-w-[calc(100vw-3rem)] max-h-[calc(100vh-8rem)] overflow-y-auto portal-scrollbar rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-1.5 pb-2.5 shadow-2xl backdrop-blur-xl [&_[role=menuitem]]:min-h-11 [&_[role=menuitem]]:text-xs [&_[role=menuitem]]:font-semibold [&_[role=menuitem]]:normal-case [&_[role=menuitem]]:tracking-normal"
+                      className="portal-dropdown portal-popover-surface absolute right-0 top-full mt-2 z-[71] w-72 max-w-[calc(100vw-3rem)] max-h-[calc(100vh-8rem)] overflow-y-auto portal-scrollbar rounded-xl border border-[color:var(--portal-border)] p-1.5 pb-2.5 shadow-2xl [&_[role=menuitem]]:min-h-11 [&_[role=menuitem]]:text-xs [&_[role=menuitem]]:font-semibold [&_[role=menuitem]]:normal-case [&_[role=menuitem]]:tracking-normal"
                     >
                       {['closed_lost', 'new', 'tour_confirmed'].includes(derivedLeadStatus) ? (
                         <button type="button" role="menuitem" disabled={updatingStatus} onClick={() => { setShowActionsMenu(false); actionsMenuTriggerRef.current?.focus(); void handleGuidedStatusChange(derivedLeadStatus === 'closed_lost' ? 'new' : derivedLeadStatus === 'new' ? 'contacted' : 'proposal_sent') }} className="flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left text-xs font-semibold text-[color:var(--portal-text)] hover:bg-[color:var(--portal-soft)] disabled:opacity-50">
@@ -6512,108 +6510,156 @@ export default function LeadDetailPage({
                       gradientOpacity={0.22}
                     >
                       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-                        <div className="flex items-start gap-3">
-                          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#caa24c]/10 text-[#a8792f] dark:text-[#caa24c]"><Send size={18} /></span>
-                          <div>
-                            <p className="text-[9px] font-black uppercase tracking-[0.22em] text-[#a8792f] dark:text-[#caa24c]">Next Move</p>
-                            <h4 className="mt-1 text-sm font-black text-[color:var(--portal-text)]">
-                              {!proposalInvoice ? 'Build final proposal' : !proposalSentAt && proposalPublicationBlocker ? 'Set payment plan' : proposalDeliveryPrepared ? 'Retry final proposal delivery' : !proposalSentAt ? 'Send final proposal' : !proposalAcceptedAt ? proposalReviewTogetherReady ? 'Ready to review together' : 'Await final proposal acceptance' : !agreementBooking ? 'Agreement delivery pending' : agreementBooking.contract_status !== 'signed' ? agreementDeliveryConfirmed ? 'Await agreement signature' : 'Agreement delivery pending' : depositPaidTotal <= 0 ? 'Stripe link sent after signature' : 'Date officially reserved'}
-                            </h4>
-                            <p className="mt-1 text-[10px] leading-4 text-[color:var(--portal-muted)]">
+                        <div className="flex items-start gap-3.5">
+                          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#caa24c]/12 text-[#a8792f] dark:text-[#caa24c]"><Send size={18} /></span>
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="min-w-0">
+                                <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#a8792f] dark:text-[#caa24c]">Next Move</p>
+                                <h4 className="mt-1 text-base font-bold text-[color:var(--portal-text)]">
+                                  {!proposalInvoice ? 'Build final proposal' : !proposalSentAt && proposalPublicationBlocker ? 'Set payment plan' : proposalDeliveryPrepared ? 'Retry final proposal delivery' : !proposalSentAt ? 'Send final proposal' : !proposalAcceptedAt ? proposalReviewTogetherReady ? 'Ready to review together' : 'Await final proposal acceptance' : !agreementBooking ? 'Agreement delivery pending' : agreementBooking.contract_status !== 'signed' ? agreementDeliveryConfirmed ? 'Await agreement signature' : 'Agreement delivery pending' : depositPaidTotal <= 0 ? 'Stripe link sent after signature' : 'Date officially reserved'}
+                                </h4>
+                              </div>
+                              {proposalInvoice ? (
+                                <div className="flex shrink-0 items-center gap-0.5 md:hidden">
+                                  {!(proposalSentAt && !proposalAcceptedAt) ? (
+                                    <PortalGhostIconButton
+                                      size="md"
+                                      onClick={() => openProposalDeliveryPreview(proposalInvoice)}
+                                      aria-label="Preview delivery"
+                                      title="Preview delivery"
+                                    >
+                                      <Eye size={16} />
+                                    </PortalGhostIconButton>
+                                  ) : null}
+                                  <PortalGhostIconButton
+                                    size="md"
+                                    onClick={() => openProposalBuilder(proposalInvoice)}
+                                    aria-label="Edit proposal"
+                                    title="Edit proposal"
+                                  >
+                                    <SquarePen size={16} />
+                                  </PortalGhostIconButton>
+                                </div>
+                              ) : null}
+                            </div>
+                            <p className="mt-1 text-xs leading-5 text-[color:var(--portal-muted)]">
                               {!proposalInvoice ? 'Choose the event facts and package to calculate the exact price.' : !proposalSentAt && proposalPublicationBlocker ? 'The package price is already calculated. Set the owner-approved payment plan before publishing.' : proposalDeliveryPrepared ? 'The private proposal is safely prepared, but email delivery was not confirmed. Review it, correct the lead details if needed, then retry the same locked version.' : !proposalSentAt ? 'Publish the final proposal with its locked itemized price.' : !proposalAcceptedAt ? proposalReviewTogetherReady ? 'Open the client handoff to review the selected package, accept it, sign, and choose payment on the spot.' : 'The client accepts through the private proposal page.' : !agreementBooking ? 'The proposal is accepted, but the matching agreement record has not been confirmed yet. Prepare the agreement before asking the client to sign.' : agreementBooking.contract_status !== 'signed' ? agreementDeliveryConfirmed ? 'The Event Agreement was delivered after proposal acceptance. Stripe is not available until it is signed.' : 'The agreement is not confirmed as delivered yet. Do not treat it as sent until delivery is confirmed.' : depositPaidTotal <= 0 ? 'The signed agreement triggered the Stripe email for the initial booking payment and refundable security deposit.' : 'The signed agreement and initial booking payment are both recorded.'}
                             </p>
                           </div>
                         </div>
-                        <div className="flex flex-nowrap items-center justify-end gap-2">
+                        <div className="flex w-full shrink-0 flex-nowrap items-center justify-end gap-1.5 md:w-auto">
                           {proposalInvoice && proposalSentAt && !proposalAcceptedAt ? (
                             <>
-                              <button type="button" onClick={() => openClientProposalHandoff(proposalInvoice)} className="inline-flex min-h-11 shrink-0 items-center gap-2 rounded-xl bg-[#caa24c] px-4 text-[10px] font-black uppercase tracking-wider text-white shadow-md transition-colors hover:bg-[#dfbd68]">
-                                <Users size={14} /> Review together
-                              </button>
-                              <button type="button" onClick={() => openProposalBuilder(proposalInvoice)} className="inline-flex min-h-11 shrink-0 items-center gap-2 rounded-xl border border-[#caa24c]/40 bg-[#caa24c]/10 px-4 text-[10px] font-black uppercase tracking-wider text-[#8c6529] transition-all hover:bg-[#caa24c]/15 dark:text-[#f1d27a]">
-                                <Pencil size={13} /> Edit proposal
+                              <div className="hidden shrink-0 items-center gap-1.5 md:flex">
+                                <PortalGhostIconButton
+                                  size="lg"
+                                  onClick={() => openProposalBuilder(proposalInvoice)}
+                                  aria-label="Edit proposal"
+                                  title="Edit proposal"
+                                >
+                                  <SquarePen size={16} />
+                                </PortalGhostIconButton>
+                                <div className="mx-1 h-5 w-px shrink-0 self-center bg-[color:var(--portal-border)]" aria-hidden="true" />
+                              </div>
+                              <button type="button" onClick={() => openClientProposalHandoff(proposalInvoice)} className="luxor-gold-raised inline-flex min-h-10 w-full shrink-0 items-center justify-center gap-2 rounded-xl px-4 text-xs font-bold text-white shadow-sm transition-all cursor-pointer md:w-auto">
+                                <Users size={15} /> Review together
                               </button>
                             </>
                           ) : <>
                             {proposalInvoice ? (
-                              <button type="button" onClick={() => openProposalDeliveryPreview(proposalInvoice)} className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-4 text-[10px] font-black uppercase tracking-wider text-[color:var(--portal-text)] transition-all hover:border-[#caa24c]/40 hover:text-[#8c6529] dark:hover:text-[#f1d27a] cursor-pointer"><Eye size={14} /> Preview delivery</button>
-                            ) : null}
-                            {proposalInvoice ? (
-                              <button type="button" onClick={() => openProposalBuilder(proposalInvoice)} className="min-h-11 rounded-xl border border-[#caa24c]/40 bg-[#caa24c]/10 px-5 text-[10px] font-black uppercase tracking-wider text-[#8c6529] dark:text-[#f1d27a] transition-all hover:bg-[#caa24c]/15 cursor-pointer">Edit Proposal</button>
+                              <div className="hidden shrink-0 items-center gap-1.5 md:flex">
+                                <PortalGhostIconButton
+                                  size="lg"
+                                  onClick={() => openProposalDeliveryPreview(proposalInvoice)}
+                                  aria-label="Preview delivery"
+                                  title="Preview delivery"
+                                >
+                                  <Eye size={16} />
+                                </PortalGhostIconButton>
+                                <PortalGhostIconButton
+                                  size="lg"
+                                  onClick={() => openProposalBuilder(proposalInvoice)}
+                                  aria-label="Edit proposal"
+                                  title="Edit proposal"
+                                >
+                                  <SquarePen size={16} />
+                                </PortalGhostIconButton>
+                                <div className="mx-1 h-5 w-px shrink-0 self-center bg-[color:var(--portal-border)]" aria-hidden="true" />
+                              </div>
                             ) : null}
                             {!proposalInvoice ? (
-                              <button type="button" onClick={() => openProposalBuilder()} className="min-h-11 rounded-xl bg-[#caa24c] px-5 text-[10px] font-black uppercase tracking-wider text-white shadow-md hover:bg-[#dfbd68] transition-all cursor-pointer">Build Proposal</button>
+                              <button type="button" onClick={() => openProposalBuilder()} className="luxor-gold-raised inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-xl px-4 text-xs font-bold text-white shadow-sm transition-all cursor-pointer md:w-auto">Build proposal</button>
                             ) : !proposalSentAt && proposalPublicationBlocker ? (
-                              <button type="button" onClick={() => openProposalBuilder(proposalInvoice)} className="min-h-11 rounded-xl bg-[#caa24c] px-5 text-[10px] font-black uppercase tracking-wider text-white shadow-md hover:bg-[#dfbd68] transition-all cursor-pointer">Set payment plan</button>
+                              <button type="button" onClick={() => openProposalBuilder(proposalInvoice)} className="luxor-gold-raised inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-xl px-4 text-xs font-bold text-white shadow-sm transition-all cursor-pointer md:w-auto">Set payment plan</button>
                             ) : !proposalSentAt ? (
-                              <button type="button" onClick={() => handleSendFinalProposal(proposalInvoice)} disabled={!lead.email || sendingInvoiceId === proposalInvoice.id} className="min-h-11 rounded-xl bg-[#caa24c] px-5 text-[10px] font-black uppercase tracking-wider text-white shadow-md hover:bg-[#dfbd68] transition-all disabled:opacity-40 cursor-pointer">{sendingInvoiceId === proposalInvoice.id ? 'Sending…' : proposalDeliveryPrepared ? 'Retry delivery' : 'Send final proposal'}</button>
+                              <button type="button" onClick={() => handleSendFinalProposal(proposalInvoice)} disabled={!lead.email || sendingInvoiceId === proposalInvoice.id} className="luxor-gold-raised inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-xl px-4 text-xs font-bold text-white shadow-sm transition-all disabled:cursor-not-allowed disabled:opacity-45 cursor-pointer md:w-auto">
+                                {sendingInvoiceId === proposalInvoice.id ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
+                                {sendingInvoiceId === proposalInvoice.id ? 'Sending…' : proposalDeliveryPrepared ? 'Retry delivery' : 'Send final proposal'}
+                              </button>
                             ) : !agreementBooking ? (
-                              <button type="button" onClick={() => handlePrepareAgreement(proposalInvoice)} disabled={preparingAgreementInvoiceId === proposalInvoice.id} className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-[#caa24c] px-5 text-[10px] font-black uppercase tracking-wider text-white shadow-md transition-colors hover:bg-[#dfbd68] disabled:cursor-not-allowed disabled:opacity-45">
-                                {preparingAgreementInvoiceId === proposalInvoice.id ? <Loader2 size={13} className="animate-spin" /> : <FileSignature size={13} />}
-                                {preparingAgreementInvoiceId === proposalInvoice.id ? 'Preparing…' : 'Prepare Agreement'}
+                              <button type="button" onClick={() => handlePrepareAgreement(proposalInvoice)} disabled={preparingAgreementInvoiceId === proposalInvoice.id} className="luxor-gold-raised inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-xl px-4 text-xs font-bold text-white shadow-sm transition-all disabled:cursor-not-allowed disabled:opacity-45 cursor-pointer md:w-auto">
+                                {preparingAgreementInvoiceId === proposalInvoice.id ? <Loader2 size={14} className="animate-spin" /> : <FileSignature size={14} />}
+                                {preparingAgreementInvoiceId === proposalInvoice.id ? 'Preparing…' : 'Prepare agreement'}
                               </button>
                             ) : agreementBooking.contract_status !== 'signed' ? (
-                              <span className="min-h-11 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-5 py-3 text-[10px] font-black uppercase tracking-wider text-[color:var(--portal-muted)]">{agreementDeliveryConfirmed ? 'Agreement awaiting signature' : agreementDeliveryPending ? 'Agreement delivery pending' : 'Agreement not confirmed'}</span>
+                              <PortalBadge tone="neutral" className="min-h-8 w-full justify-center px-3 text-xs md:w-auto">
+                                {agreementDeliveryConfirmed ? 'Agreement awaiting signature' : agreementDeliveryPending ? 'Agreement delivery pending' : 'Agreement not confirmed'}
+                              </PortalBadge>
                             ) : (
-                              <button type="button" onClick={() => depositInvoice && openPaymentRequest(depositInvoice)} disabled={!depositInvoice || depositBalance <= 0} className="min-h-11 rounded-xl bg-[#caa24c] px-5 text-[10px] font-black uppercase tracking-wider text-white shadow-md hover:bg-[#dfbd68] transition-all disabled:opacity-40 cursor-pointer">{depositInvoice?.status === 'draft' ? 'Finalize & Send Payment Link' : 'Resend Payment Link'}</button>
+                              <button type="button" onClick={() => depositInvoice && openPaymentRequest(depositInvoice)} disabled={!depositInvoice || depositBalance <= 0} className="luxor-gold-raised inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-xl px-4 text-xs font-bold text-white shadow-sm transition-all disabled:cursor-not-allowed disabled:opacity-45 cursor-pointer md:w-auto">{depositInvoice?.status === 'draft' ? 'Finalize & Send Payment Link' : 'Resend Payment Link'}</button>
                             )}
                           </>}
                         </div>
                       </div>
-                      {agreementBooking ? <div className="mt-4 grid gap-3 border-t border-[color:var(--portal-border)] pt-4 md:grid-cols-2"><div><p className="mb-1 text-[9px] font-black uppercase tracking-widest text-[color:var(--portal-muted)]">Suggested payment method</p><PortalSelect value={String((agreementBooking.metadata?.client_payment_preference as { method?: string } | undefined)?.method || 'card')} onChange={(value) => void saveBookingPaymentPreference(agreementBooking, { method: value as 'card' | 'zelle' | 'cash' | 'check' })} options={[{ value: 'card', label: 'Card via Stripe' }, { value: 'zelle', label: 'Zelle' }, { value: 'cash', label: 'Cash' }, { value: 'check', label: 'Check' }]} className="w-full" /><p className="mt-1.5 text-[10px] leading-4 text-[color:var(--portal-muted)]">The client starts with this after signing and can change it.</p></div><div><p className="mb-1 text-[9px] font-black uppercase tracking-widest text-[color:var(--portal-muted)]">Suggested payment amount</p><PortalSelect value={String((agreementBooking.metadata?.client_payment_preference as { amount?: string } | undefined)?.amount || 'deposit')} onChange={(value) => void saveBookingPaymentPreference(agreementBooking, { amount: value as 'deposit' | 'full' })} options={[{ value: 'deposit', label: 'Reservation deposit to hold date' }, { value: 'full', label: 'Full event balance' }]} className="w-full" /><p className="mt-1.5 text-[10px] leading-4 text-[color:var(--portal-muted)]">Use this to guide the handoff, not to mark payment received.</p></div></div> : null}
+                      {agreementBooking ? <div className="mt-4 grid gap-3 border-t border-[color:var(--portal-border)] pt-4 md:grid-cols-2"><div><p className="mb-1 text-[10px] font-bold uppercase tracking-wider text-[color:var(--portal-muted)]">Suggested payment method</p><PortalSelect value={String((agreementBooking.metadata?.client_payment_preference as { method?: string } | undefined)?.method || 'card')} onChange={(value) => void saveBookingPaymentPreference(agreementBooking, { method: value as 'card' | 'zelle' | 'cash' | 'check' })} options={[{ value: 'card', label: 'Card via Stripe' }, { value: 'zelle', label: 'Zelle' }, { value: 'cash', label: 'Cash' }, { value: 'check', label: 'Check' }]} className="w-full" /><p className="mt-1.5 text-[11px] leading-4 text-[color:var(--portal-muted)]">The client starts with this after signing and can change it.</p></div><div><p className="mb-1 text-[10px] font-bold uppercase tracking-wider text-[color:var(--portal-muted)]">Suggested payment amount</p><PortalSelect value={String((agreementBooking.metadata?.client_payment_preference as { amount?: string } | undefined)?.amount || 'deposit')} onChange={(value) => void saveBookingPaymentPreference(agreementBooking, { amount: value as 'deposit' | 'full' })} options={[{ value: 'deposit', label: 'Reservation deposit to hold date' }, { value: 'full', label: 'Full event balance' }]} className="w-full" /><p className="mt-1.5 text-[11px] leading-4 text-[color:var(--portal-muted)]">Use this to guide the handoff, not to mark payment received.</p></div></div> : null}
                     </MagicCard>
 
                     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
                       {/* Card 1: Sent & Delivery */}
-                      <div className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-4 shadow-sm flex flex-col justify-between">
-                        <div className="flex items-center justify-between">
-                          <span className="text-[9px] font-black uppercase tracking-[0.2em] text-[color:var(--portal-muted)]">Delivery Status</span>
-                          <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider ${
-                            proposalSentAt ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20' : proposalDeliveryPrepared ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20' : 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20'
-                          }`}>
+                      <div className="flex flex-col justify-between rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-4 shadow-sm">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--portal-muted)]">Delivery status</span>
+                          <PortalBadge tone={proposalSentAt ? 'green' : 'warning'}>
                             <Send size={10} />
                             {proposalSentAt ? proposalReviewTogetherReady ? 'In person' : 'Sent' : proposalDeliveryPrepared ? 'Delivery pending' : 'Draft'}
-                          </span>
+                          </PortalBadge>
                         </div>
                         <div className="mt-3">
-                          <p className="text-sm font-bold text-[color:var(--portal-text)]">{proposalSentAt ? formatDisplayDate(proposalSentAt) : proposalDeliveryPrepared ? 'Retry required' : 'Not Sent Yet'}</p>
-                          <p className="mt-0.5 text-[10px] text-[color:var(--portal-muted)]">{proposalSentAt ? proposalReviewTogetherReady ? 'Ready for review on this device' : 'Client delivery completed' : proposalDeliveryPrepared ? 'Private link is saved; email delivery was not confirmed' : 'Send proposal to advance lead'}</p>
+                          <p className="text-base font-bold text-[color:var(--portal-text)]">{proposalSentAt ? formatDisplayDate(proposalSentAt) : proposalDeliveryPrepared ? 'Retry required' : 'Not sent yet'}</p>
+                          <p className="mt-0.5 text-xs text-[color:var(--portal-muted)]">{proposalSentAt ? proposalReviewTogetherReady ? 'Ready for review on this device' : 'Client delivery completed' : proposalDeliveryPrepared ? 'Private link is saved; email delivery was not confirmed' : 'Send proposal to advance lead'}</p>
                         </div>
                       </div>
 
                       {/* Card 2: Client Engagement / Opened */}
-                      <div className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-4 shadow-sm flex flex-col justify-between">
-                        <div className="flex items-center justify-between">
-                          <span className="text-[9px] font-black uppercase tracking-[0.2em] text-[color:var(--portal-muted)]">Client Views</span>
-                          <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider ${
-                            proposalViewedAt ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20' : 'bg-[color:var(--portal-card)] text-[color:var(--portal-muted)] border border-[color:var(--portal-border)]'
-                          }`}>
+                      <div className="flex flex-col justify-between rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-4 shadow-sm">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--portal-muted)]">Client views</span>
+                          <PortalBadge tone={proposalViewedAt ? 'green' : 'neutral'}>
                             <Eye size={10} />
                             {proposalViewedAt ? 'Opened' : 'Unread'}
-                          </span>
+                          </PortalBadge>
                         </div>
                         <div className="mt-3">
-                          <p className="text-sm font-bold text-[color:var(--portal-text)]">{proposalViewedAt ? formatDisplayDate(proposalViewedAt) : 'Not Opened Yet'}</p>
-                          <p className="mt-0.5 text-[10px] text-[color:var(--portal-muted)]">{proposalViewedAt ? 'Secure view recorded' : proposalSentAt ? 'Awaiting client view' : 'Available after send'}</p>
+                          <p className="text-base font-bold text-[color:var(--portal-text)]">{proposalViewedAt ? formatDisplayDate(proposalViewedAt) : 'Not opened yet'}</p>
+                          <p className="mt-0.5 text-xs text-[color:var(--portal-muted)]">{proposalViewedAt ? 'Secure view recorded' : proposalSentAt ? 'Awaiting client view' : 'Available after send'}</p>
                         </div>
                       </div>
 
                       {/* Card 3: Financial Summary / Total & Balance */}
-                      <div className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-4 shadow-sm flex items-center justify-between gap-3">
+                      <div className="flex items-center justify-between gap-3 rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-4 shadow-sm">
                         <div className="min-w-0 flex-1">
-                          <div className="flex items-center gap-2">
-                            <span className="text-[9px] font-black uppercase tracking-[0.2em] text-[color:var(--portal-muted)]">Final Event Price</span>
-                            <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider ${
-                              proposalBalance <= 0 && proposalAmount > 0 ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20' : proposalPaidTotal > 0 ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20' : 'bg-[#caa24c]/10 text-[#a8792f] dark:text-[#f1d27a] border border-[#caa24c]/20'
-                            }`}>
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--portal-muted)]">Final price</span>
+                            <PortalBadge tone={proposalBalance <= 0 && proposalAmount > 0 ? 'green' : proposalPaidTotal > 0 ? 'warning' : 'gold'}>
                               <DollarSign size={10} />
                               {proposalBalance <= 0 && proposalAmount > 0 ? 'Paid' : proposalPaidTotal > 0 ? 'Partial' : 'Unpaid'}
-                            </span>
+                            </PortalBadge>
                           </div>
                           <div className="mt-2.5">
-                            <p className="text-lg font-bold tabular-nums text-[color:var(--portal-text)]">{proposalAmount > 0 ? formatMoney(proposalAmount) : '$0.00'}</p>
-                            <p className="mt-0.5 text-[10px] tabular-nums text-[color:var(--portal-muted)]">
-                              {proposalInvoice ? (proposalPaidTotal > 0 ? `${formatMoney(proposalPaidTotal)} paid · ${formatMoney(proposalBalance)} left` : `${formatMoney(proposalBalance)} balance remaining`) : 'No saved proposal'}
+                            <p className="text-xl font-bold tabular-nums text-[color:var(--portal-text)]">{proposalAmount > 0 ? formatMoney(proposalAmount) : '$0.00'}</p>
+                            <p className="mt-0.5 text-xs tabular-nums text-[color:var(--portal-muted)]">
+                              {proposalInvoice ? (proposalPaidTotal > 0 ? `${formatMoney(proposalPaidTotal)} paid · ${formatMoney(proposalBalance)} left` : `${formatMoney(proposalBalance)} remaining`) : 'No saved proposal'}
                             </p>
                           </div>
                         </div>
@@ -6621,7 +6667,7 @@ export default function LeadDetailPage({
                           value={proposalAmount > 0 ? Math.min(100, Math.round((proposalPaidTotal / proposalAmount) * 100)) : 0}
                           max={100}
                           min={0}
-                          size={48}
+                          size={46}
                           strokeWidth={4.5}
                           gaugePrimaryColor={proposalBalance <= 0 && proposalAmount > 0 ? '#10b981' : '#caa24c'}
                           gaugeSecondaryColor="rgba(202, 162, 76, 0.14)"
@@ -6630,19 +6676,19 @@ export default function LeadDetailPage({
                       </div>
 
                       {/* Card 4: Automations / Reminders */}
-                      <div className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-4 shadow-sm flex flex-col justify-between">
-                        <div className="flex items-center justify-between">
-                          <span className="text-[9px] font-black uppercase tracking-[0.2em] text-[color:var(--portal-muted)]">Reminders</span>
-                          <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider bg-[color:var(--portal-card)] text-[color:var(--portal-muted)] border border-[color:var(--portal-border)]">
+                      <div className="flex flex-col justify-between rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-4 shadow-sm">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--portal-muted)]">Reminders</span>
+                          <PortalBadge tone={queuedProposalReminders.length ? 'gold' : 'neutral'}>
                             <Clock size={10} />
                             {queuedProposalReminders.length ? `${queuedProposalReminders.length} Active` : 'Idle'}
-                          </span>
+                          </PortalBadge>
                         </div>
                         <div className="mt-3">
-                          <p className="text-sm font-bold text-[color:var(--portal-text)]">
-                            {queuedProposalReminders.length ? `${queuedProposalReminders.length} Pending` : 'No Reminder Pending'}
+                          <p className="text-base font-bold text-[color:var(--portal-text)]">
+                            {queuedProposalReminders.length ? `${queuedProposalReminders.length} Pending` : 'No reminder pending'}
                           </p>
-                          <p className="mt-0.5 text-[10px] text-[color:var(--portal-muted)]">
+                          <p className="mt-0.5 text-xs text-[color:var(--portal-muted)]">
                             {queuedProposalReminders[0] ? `Next ${formatRelativeTime(queuedProposalReminders[0].scheduled_for)}` : 'Reminders pause on payment'}
                           </p>
                         </div>
@@ -6650,40 +6696,68 @@ export default function LeadDetailPage({
                     </div>
 
                     <section className="overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] shadow-sm luxor-soft-enter">
-                      <div className="flex flex-col gap-3 border-b border-[color:var(--portal-border)] p-5 sm:flex-row sm:items-center sm:justify-between">
-                        <div>
-                          <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[color:var(--portal-muted)]">Final proposal line items</p>
-                          <p className="mt-1 text-xs text-[color:var(--portal-muted)]">The exact services and numbers stored on the latest sent proposal.</p>
+                      <div className="flex items-center justify-between gap-3 border-b border-[color:var(--portal-border)] px-5 py-4">
+                        <div className="min-w-0">
+                          <h4 className="text-sm font-bold text-[color:var(--portal-text)]">Final proposal line items</h4>
+                          <p className="mt-0.5 text-xs text-[color:var(--portal-muted)]">The exact services and numbers stored on the latest proposal.</p>
                         </div>
                         {proposalInvoice ? (
-                          <div className="flex items-center gap-2">
-                            <button type="button" onClick={() => openProposalBuilder(proposalInvoice)} className="rounded-lg border border-[#caa24c]/35 bg-[#caa24c]/10 px-3 py-2 text-[9px] font-black uppercase tracking-wider text-[#8c6529] dark:text-[#f1d27a] hover:bg-[#caa24c]/15 transition-all cursor-pointer">Edit Proposal</button>
-                            <button type="button" onClick={() => openProposalDeliveryPreview(proposalInvoice)} className="inline-flex items-center gap-1.5 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-2 text-[9px] font-black uppercase tracking-wider text-[color:var(--portal-text)] transition-all hover:border-[#caa24c]/30 hover:text-[#8c6529] dark:hover:text-[#f1d27a] cursor-pointer"><Eye size={12} /> Preview delivery</button>
+                          <div className="flex shrink-0 items-center gap-1">
+                            <PortalGhostIconButton
+                              size="md"
+                              onClick={() => openProposalBuilder(proposalInvoice)}
+                              aria-label="Edit proposal"
+                              title="Edit proposal"
+                            >
+                              <SquarePen size={15} />
+                            </PortalGhostIconButton>
+                            <PortalGhostIconButton
+                              size="md"
+                              onClick={() => openProposalDeliveryPreview(proposalInvoice)}
+                              aria-label="Preview delivery"
+                              title="Preview delivery"
+                            >
+                              <Eye size={15} />
+                            </PortalGhostIconButton>
                           </div>
                         ) : null}
                       </div>
                       {proposalInvoice?.line_items?.length ? (
                         <>
-                          <div className="divide-y divide-[color:var(--portal-border)]">
+                          <div className="hidden border-b border-[color:var(--portal-border)]/70 bg-[color:var(--portal-soft)]/45 px-5 py-2.5 text-[10px] font-bold uppercase tracking-[0.14em] text-[color:var(--portal-muted)] sm:grid sm:grid-cols-[minmax(0,1fr)_64px_104px_104px] sm:items-center">
+                            <span>Service</span>
+                            <span className="text-right">Qty</span>
+                            <span className="text-right">Rate</span>
+                            <span className="text-right">Amount</span>
+                          </div>
+                          <div className="divide-y divide-[color:var(--portal-border)]/60">
                             {proposalInvoice.line_items.map((item, index) => (
-                              <div key={`${item.description}-${index}`} className="grid gap-2 px-5 py-3 text-xs sm:grid-cols-[minmax(0,1fr)_70px_110px_110px] sm:items-center">
-                                <div className="min-w-0"><p className="font-bold text-[color:var(--portal-text)]">{item.description}</p><p className="mt-1 text-[9px] uppercase tracking-wider text-[color:var(--portal-muted)]">{item.category || 'Custom service'}</p></div>
-                                <div><span className="text-[9px] uppercase text-[color:var(--portal-muted)] sm:hidden">Qty </span><span className="tabular-nums font-semibold text-[color:var(--portal-muted)]">{item.quantity}</span></div>
-                                <div className="tabular-nums font-medium text-[color:var(--portal-muted)] sm:text-right">{item.included ? <span className="rounded-full bg-emerald-500/10 px-2 py-1 text-[9px] font-bold uppercase text-emerald-600 dark:text-emerald-400">Included</span> : formatMoney(item.unitPrice)}</div>
-                                <div className="tabular-nums font-bold text-[color:var(--portal-text)] sm:text-right">{item.included ? '—' : formatMoney(item.total)}</div>
+                              <div key={`${item.description}-${index}`} className="grid gap-1.5 px-5 py-3.5 text-xs transition-colors hover:bg-[color:var(--portal-soft)]/30 sm:grid-cols-[minmax(0,1fr)_64px_104px_104px] sm:items-center">
+                                <div className="min-w-0">
+                                  <p className="text-sm font-semibold text-[color:var(--portal-text)]">{item.description}</p>
+                                  <p className="mt-0.5 text-[11px] text-[color:var(--portal-muted)]">{item.category || 'Custom service'}</p>
+                                </div>
+                                <div className="sm:text-right"><span className="text-[11px] text-[color:var(--portal-muted)] sm:hidden">Qty </span><span className="tabular-nums font-medium text-[color:var(--portal-muted)]">{item.quantity}</span></div>
+                                <div className="tabular-nums font-medium text-[color:var(--portal-muted)] sm:text-right">{item.included ? <PortalBadge tone="green">Included</PortalBadge> : formatMoney(item.unitPrice)}</div>
+                                <div className="tabular-nums text-sm font-bold text-[color:var(--portal-text)] sm:text-right">{item.included ? '—' : formatMoney(item.total)}</div>
                               </div>
                             ))}
                           </div>
-                          <div className="grid gap-2 border-t border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-5 py-4 text-xs sm:ml-auto sm:w-80">
-                            <div className="flex justify-between text-[color:var(--portal-muted)]"><span>Subtotal</span><span className="tabular-nums font-semibold text-[color:var(--portal-text)]">{formatMoney(proposalInvoice.subtotal)}</span></div>
-                            <div className="flex justify-between text-[color:var(--portal-muted)]"><span>Tax ({(Number(proposalInvoice.tax_rate) * 100).toFixed(2)}%)</span><span className="tabular-nums font-semibold text-[color:var(--portal-text)]">{formatMoney(Number(proposalInvoice.total) - Number(proposalInvoice.subtotal))}</span></div>
-                            <div className="flex justify-between border-t border-[color:var(--portal-border)] pt-2 text-sm font-black text-[color:var(--portal-text)]"><span>Total</span><span className="font-bold tabular-nums text-base text-[#a8792f] dark:text-[#f1d27a]">{formatMoney(proposalInvoice.total)}</span></div>
-                            <div className="flex justify-between text-emerald-600 dark:text-emerald-400 font-semibold"><span>Paid</span><span className="tabular-nums">{formatMoney(proposalPaidTotal)}</span></div>
-                            <div className="flex justify-between font-bold text-[color:var(--portal-text)]"><span>Balance</span><span className="tabular-nums">{formatMoney(proposalBalance)}</span></div>
+                          <div className="border-t border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/40 px-5 py-4">
+                            <div className="grid gap-2 text-xs sm:ml-auto sm:w-72">
+                              <div className="flex justify-between text-[color:var(--portal-muted)]"><span>Subtotal</span><span className="tabular-nums font-semibold text-[color:var(--portal-text)]">{formatMoney(proposalInvoice.subtotal)}</span></div>
+                              <div className="flex justify-between text-[color:var(--portal-muted)]"><span>Tax ({(Number(proposalInvoice.tax_rate) * 100).toFixed(2)}%)</span><span className="tabular-nums font-semibold text-[color:var(--portal-text)]">{formatMoney(Number(proposalInvoice.total) - Number(proposalInvoice.subtotal))}</span></div>
+                              <div className="flex items-baseline justify-between border-t border-[color:var(--portal-border)] pt-2.5 text-sm font-bold text-[color:var(--portal-text)]"><span>Total</span><span className="tabular-nums text-base font-bold text-[#a8792f] dark:text-[#f1d27a]">{formatMoney(proposalInvoice.total)}</span></div>
+                              <div className="flex justify-between font-semibold text-emerald-700 dark:text-emerald-400"><span>Paid</span><span className="tabular-nums">{formatMoney(proposalPaidTotal)}</span></div>
+                              <div className="flex justify-between font-bold text-[color:var(--portal-text)]"><span>Balance</span><span className="tabular-nums">{formatMoney(proposalBalance)}</span></div>
+                            </div>
                           </div>
                         </>
                       ) : (
-                        <div className="p-8 text-center"><p className="text-xs font-bold text-[color:var(--portal-muted)]">No proposal line items yet.</p><button type="button" onClick={() => proposalInvoice ? openProposalBuilder(proposalInvoice) : openProposalBuilder()} className="mt-4 rounded-lg bg-[#caa24c] px-4 py-2 text-[9px] font-black uppercase tracking-wider text-white shadow-md hover:bg-[#dfbd68] transition-all cursor-pointer">{proposalInvoice ? 'Edit Proposal' : 'Build Proposal'}</button></div>
+                        <div className="p-8 text-center">
+                          <p className="text-xs font-semibold text-[color:var(--portal-muted)]">No proposal line items yet.</p>
+                          <button type="button" onClick={() => proposalInvoice ? openProposalBuilder(proposalInvoice) : openProposalBuilder()} className="luxor-gold-raised mt-4 inline-flex min-h-10 items-center justify-center rounded-xl px-4 text-xs font-bold text-white shadow-sm transition-all cursor-pointer">{proposalInvoice ? 'Edit proposal' : 'Build proposal'}</button>
+                        </div>
                       )}
                     </section>
                   </>
@@ -7620,7 +7694,7 @@ export default function LeadDetailPage({
             ) : null}
 
             {activeLeadTab !== 'messages' && activeLeadTab !== 'delivery' ? <>
-              <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-4 shadow-xl shadow-black/10">
+              <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-4 shadow-sm">
                 <PortalFilterBar
                   searchValue={activitySearch}
                   onSearchChange={setActivitySearch}
@@ -7674,7 +7748,21 @@ export default function LeadDetailPage({
                 <div className="min-w-0 space-y-3">
                   {visibleActivityEntries.map((entry) => {
                     if (entry.kind === 'task') {
-                      return <LeadTaskActivity key={entry.id} task={entry.task} timestamp={formatActivityDate(entry.createdAt)} onOpenTasks={() => setActiveLeadTab('tasks')} />
+                      return (
+                        <LeadTaskActivity
+                          key={entry.id}
+                          task={entry.task}
+                          timestamp={formatActivityDate(entry.createdAt)}
+                          onOpenTasks={() => setActiveLeadTab('tasks')}
+                          onToggleTask={(task) => {
+                            if (task.status !== 'completed' && task.workflow_name) {
+                              setOutcomeDraftTask(task)
+                            } else {
+                              void handleToggleTask(task)
+                            }
+                          }}
+                        />
+                      )
                     }
                     if (entry.kind === 'call') {
                       const call = entry.call
@@ -7791,24 +7879,27 @@ export default function LeadDetailPage({
                       .replace(/<\/?(?:div|p|span|b|strong|i|em|u|ul|ol|li|a)(?:\s[^>]*)?>/gi, ''))
                       .replace(/\n{3,}/g, '\n\n').trim()
                     const noteContent = compactActivityText(readableNote, 180)
-                    let badgeColor = 'bg-[color:var(--portal-soft)] text-[color:var(--portal-muted)]'
                     let typeLabel = 'System Log'
                     if (note.note_type === 'note') {
-                      badgeColor = 'bg-blue-500/10 text-blue-700 dark:text-blue-300'
                       typeLabel = 'Note'
                     } else if (note.note_type === 'call_log') {
-                      badgeColor = 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
                       typeLabel = 'Call Log'
                     } else if (note.note_type === 'email_log') {
-                      badgeColor = 'bg-purple-500/10 text-purple-700 dark:text-purple-300'
                       typeLabel = 'Email'
                     } else if (note.note_type === 'status_change') {
-                      badgeColor = 'bg-amber-500/10 text-amber-800 dark:text-amber-300'
                       typeLabel = 'Status'
                     }
 
                     return (
-                      <LeadActivityDisclosure key={note.id} icon={<FileText size={16} />} label={typeLabel} title={compactActivityText(readableNote.split('\n')[0], 90) || typeLabel} description={note.author} preview={readableNote.includes('\n') ? noteContent.replace(/\n+/g, ' ') : undefined} timestamp={formatActivityDate(note.created_at)} badge={<span className={`rounded-md px-2 py-0.5 text-[11px] font-medium ${badgeColor}`}>{typeLabel}</span>}>
+                      <LeadActivityDisclosure
+                        key={note.id}
+                        icon={<FileText size={16} />}
+                        label={typeLabel}
+                        title={compactActivityText(readableNote.split('\n')[0], 90) || typeLabel}
+                        description={formatActivityAuthor(note.author, lead?.full_name)}
+                        preview={readableNote.includes('\n') ? noteContent.replace(/\n+/g, ' ') : undefined}
+                        timestamp={formatActivityDate(note.created_at)}
+                      >
                         <p className="whitespace-pre-wrap break-words text-sm leading-6 text-[color:var(--portal-text)]">{readableNote}</p>
                       </LeadActivityDisclosure>
                     )
@@ -7818,7 +7909,7 @@ export default function LeadDetailPage({
                       <button
                         type="button"
                         onClick={() => setVisibleActivityCount((count) => count + ACTIVITY_BATCH_SIZE)}
-                        className="w-full rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-4 py-3 text-[10px] font-black uppercase tracking-[0.18em] text-[#caa24c] transition-colors hover:border-[#caa24c]/25 hover:bg-[#caa24c]/10"
+                        className="w-full rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-4 py-2.5 text-xs font-semibold text-[color:var(--portal-text)] shadow-xs transition-colors hover:border-[#caa24c]/35 hover:bg-[color:var(--portal-soft)] cursor-pointer"
                       >
                         Show {Math.min(ACTIVITY_BATCH_SIZE, hiddenActivityCount)} more activity items
                       </button>
@@ -7936,9 +8027,6 @@ export default function LeadDetailPage({
                     {sortedTasks.map((task) => {
                       const isCompleted = task.status === 'completed'
                       const isHighlightedTask = searchParams?.get('highlightTask') === task.id
-                      let prioColor = 'bg-[color:var(--portal-soft)] text-[color:var(--portal-muted)]'
-                      if (task.priority === 'high') prioColor = 'bg-amber-500/10 text-amber-800 dark:text-amber-300'
-                      else if (task.priority === 'urgent') prioColor = 'bg-rose-500/10 text-rose-700 dark:text-rose-300'
                       const cleanDescription = (task.description || '').replace(/^\[follow-up:(?:email|phone)\]\s*/i, '').replace(/^\[post-tour\]\s*/i, '').trim()
                       const hasPhone = Boolean(lead?.phone?.trim())
                       const hasEmail = Boolean(lead?.email?.trim())
@@ -7950,38 +8038,54 @@ export default function LeadDetailPage({
                             isHighlightedTask ? 'border-[#caa24c] bg-[#caa24c]/8' : 'border-[color:var(--portal-border)]'
                           }`}
                         >
-                          <div className="flex min-w-0 flex-1 items-start gap-3">
-                            <button
-                              type="button"
-                              onClick={() => {
-                                if (!isCompleted && task.workflow_name) {
-                                  setOutcomeDraftTask(task)
-                                } else {
-                                  void handleToggleTask(task)
-                                }
-                              }}
-                              aria-label={isCompleted ? `Mark ${task.title} as pending` : `Complete ${task.title}`}
-                              aria-pressed={isCompleted}
-                              className="inline-flex min-h-10 min-w-10 shrink-0 items-center justify-center rounded-lg text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-soft)] hover:text-[#a8792f] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45"
-                            >
-                              {isCompleted ? (
-                                <CheckCircle2 size={17} className="text-emerald-500" />
-                              ) : (
-                                <Circle size={18} className="text-[color:var(--portal-muted)]" />
-                              )}
-                            </button>
+                          <div className="flex min-w-0 flex-1 items-start gap-3.5">
+                            <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center">
+                              <button
+                                type="button"
+                                role="checkbox"
+                                aria-checked={isCompleted}
+                                onClick={() => {
+                                  if (!isCompleted && task.workflow_name) {
+                                    setOutcomeDraftTask(task)
+                                  } else {
+                                    void handleToggleTask(task)
+                                  }
+                                }}
+                                aria-label={isCompleted ? `Mark "${task.title}" as pending` : `Complete "${task.title}"`}
+                                title={isCompleted ? 'Mark as incomplete' : 'Mark as complete'}
+                                className={`portal-checkbox portal-inline-action relative flex !h-5 !w-5 !min-h-0 !min-w-0 shrink-0 items-center justify-center rounded-full border transition-all duration-200 cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#caa24c] ${
+                                  isCompleted
+                                    ? 'border-[#caa24c] bg-[#caa24c] text-white shadow-xs'
+                                    : 'border-[color:var(--portal-muted)]/45 bg-[color:var(--portal-card)] hover:border-[#caa24c] hover:bg-[#caa24c]/10'
+                                }`}
+                              >
+                                <AnimatePresence>
+                                  {isCompleted && (
+                                    <motion.span
+                                      initial={{ scale: 0, opacity: 0 }}
+                                      animate={{ scale: 1, opacity: 1 }}
+                                      exit={{ scale: 0, opacity: 0 }}
+                                      transition={{ duration: 0.15 }}
+                                      className="flex items-center justify-center"
+                                    >
+                                      <Check className="!h-3 !w-3 stroke-[3]" />
+                                    </motion.span>
+                                  )}
+                                </AnimatePresence>
+                              </button>
+                            </div>
                             <div className="min-w-0 flex-1 py-0.5">
                               <div className="flex flex-wrap items-center gap-2">
                                 <div className="relative inline-block max-w-full">
-                                  <p className={`break-words text-sm leading-5 ${isCompleted ? 'font-normal text-[color:var(--portal-muted)] opacity-60' : 'font-semibold text-[color:var(--portal-text)]'}`}>
+                                  <p className={`break-words text-sm leading-5 transition-colors duration-200 ${isCompleted ? 'font-medium text-[color:var(--portal-muted)] opacity-55' : 'font-semibold text-[color:var(--portal-text)]'}`}>
                                     {task.title}
                                   </p>
                                   <PortalTaskCrossOff isDone={isCompleted} />
                                 </div>
                                 <WorkflowBadge workflowName={task.workflow_name} workflowType={task.workflow_type} />
-                                <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold capitalize ${prioColor}`}>
+                                <PortalBadge tone={task.priority === 'urgent' ? 'red' : task.priority === 'high' ? 'warning' : 'neutral'} className="capitalize">
                                   {task.priority}
-                                </span>
+                                </PortalBadge>
                               </div>
                               {cleanDescription ? (
                                 <p className="mt-1 break-words text-xs leading-5 text-[color:var(--portal-muted)]">

@@ -322,12 +322,12 @@ function PaymentScheduleDrawer({
           exit={reduceMotion
             ? { opacity: 0, pointerEvents: 'none', transition: { duration: 0.05 } }
             : { x: '100%', pointerEvents: 'none', transition: { duration: PORTAL_SIDE_PANEL_EXIT_DURATION, ease: PORTAL_SIDE_PANEL_EASE } }}
-          className="fixed inset-y-0 right-0 z-[200] h-full w-full max-w-[600px] overflow-hidden border-l border-[color:var(--portal-border)] bg-[color:var(--portal-card)] shadow-[-18px_0_48px_rgba(0,0,0,0.22)] will-change-transform"
+          className="portal-drawer bg-[color:var(--portal-card)] fixed inset-y-0 right-0 z-[200] h-full w-full max-w-[600px] overflow-hidden border-l border-[color:var(--portal-border)] shadow-[-18px_0_48px_rgba(0,0,0,0.22)]"
         >
             {plan && (
               <div className="flex h-full flex-col">
                 {/* Header */}
-                <div className="sticky top-0 z-10 flex shrink-0 items-start justify-between gap-4 border-b border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-4 py-3.5 sm:px-6 sm:py-4">
+                <div className="sticky top-0 z-10 flex shrink-0 items-start justify-between gap-4 border-b border-[color:var(--portal-border)] px-4 py-3.5 sm:px-6 sm:py-4">
                   <div className="flex min-w-0 items-start gap-3">
                     {plan.inquiryId ? (
                       <Link href={`/portal/leads/${encodeURIComponent(plan.inquiryId)}`} aria-label={`Open ${plan.clientName} contact`} className="shrink-0 rounded-full transition-transform duration-200 hover:scale-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/50 motion-reduce:transition-none motion-reduce:hover:scale-100">

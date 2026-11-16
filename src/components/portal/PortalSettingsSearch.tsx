@@ -54,7 +54,7 @@ export const SETTINGS_SEARCH_ITEMS: SettingsSearchItem[] = [
   { tab: 'branding', section: 'Branding', title: 'Theme & sidebar layout', description: 'Switch light or dark mode and expanded or compact sidebar.', keywords: 'appearance color theme dark light sidebar compact expanded navigation layout' },
   { tab: 'branding', section: 'Branding', title: 'Venue brochure', description: 'Upload or update the downloadable venue brochure PDF.', keywords: 'brochure pdf packet upload document flyer' },
   { tab: 'branding', section: 'Branding', title: 'Brand assets', description: 'Upload and manage logos, banners, and email images.', keywords: 'image logo banner signature upload photo branding assets' },
-  { tab: 'content', section: 'Site content', title: 'Website content', description: 'Edit saved content records for public Luxor pages.', keywords: 'site pages home events gallery pricing visit copy text json' },
+  { tab: 'content', section: 'Site content', title: 'Website buttons', description: 'Choose destinations for website buttons.', keywords: 'site home brochure packages visit button' },
 ]
 
 export const SETTINGS_TAB_ICONS: Record<SettingsTab, typeof Bell> = {
@@ -255,11 +255,11 @@ export function PortalSettingsSearch({ onSelect, allowedTabs }: { onSelect: (tab
           <motion.div
             id="settings-search-results"
             role="listbox"
-            initial={reduceMotion ? { opacity: 0 } : { opacity: 0, y: -4, scale: 0.99 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={reduceMotion ? { opacity: 0 } : { opacity: 0, y: -4, scale: 0.99 }}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0, pointerEvents: 'none' }}
             transition={{ duration: reduceMotion ? 0.05 : 0.16, ease: PORTAL_MODAL_EASE }}
-            className="portal-popover-surface absolute inset-x-0 top-[calc(100%+0.5rem)] overflow-hidden rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] shadow-xl"
+            className="portal-popover-surface absolute inset-x-0 top-[calc(100%+0.5rem)] overflow-hidden rounded-xl border border-[color:var(--portal-border)] shadow-xl"
           >
             {results.length ? (
               <div className="p-1.5">

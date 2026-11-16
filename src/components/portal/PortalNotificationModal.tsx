@@ -241,11 +241,11 @@ export function PortalNotificationModal({ isOpen, triggerRef, onClose, items, un
       <motion.section
         key="notification-panel"
         ref={containerRef}
-        initial={reduceMotion ? { opacity: 0 } : { opacity: 0, y: -8, scale: 0.98 }}
-        animate={{ opacity: 1, y: 0, scale: 1, transition: { duration: reduceMotion ? 0.06 : PORTAL_MODAL_OPEN_DURATION, ease: PORTAL_MODAL_EASE } }}
-        exit={reduceMotion ? { opacity: 0, pointerEvents: 'none', transition: { duration: 0.05 } } : { opacity: 0, y: -6, scale: 0.98, pointerEvents: 'none', transition: { duration: PORTAL_MODAL_CLOSE_DURATION, ease: PORTAL_MODAL_EXIT_EASE } }}
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1, transition: { duration: reduceMotion ? 0.06 : PORTAL_MODAL_OPEN_DURATION, ease: PORTAL_MODAL_EASE } }}
+        exit={{ opacity: 0, pointerEvents: 'none', transition: { duration: reduceMotion ? 0.05 : PORTAL_MODAL_CLOSE_DURATION, ease: PORTAL_MODAL_EXIT_EASE } }}
         role="dialog" aria-modal="true" aria-label="Notifications"
-        className="portal-modal-body fixed inset-x-3 top-[calc(env(safe-area-inset-top)+4.5rem)] bottom-[calc(env(safe-area-inset-bottom)+4.5rem)] z-[210] flex w-auto flex-col overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] text-[color:var(--portal-text)] shadow-2xl sm:inset-x-auto sm:bottom-auto sm:right-4 sm:top-20 sm:h-[min(42rem,calc(100vh-6rem))] sm:w-[min(27rem,calc(100vw-2rem))]"
+        className="portal-modal-body portal-overlay-surface fixed inset-x-3 top-[calc(env(safe-area-inset-top)+4.5rem)] bottom-[calc(env(safe-area-inset-bottom)+4.5rem)] z-[210] flex w-auto flex-col overflow-hidden rounded-2xl border border-[color:var(--portal-border)] text-[color:var(--portal-text)] shadow-2xl sm:inset-x-auto sm:bottom-auto sm:right-4 sm:top-20 sm:h-[min(42rem,calc(100vh-6rem))] sm:w-[min(27rem,calc(100vw-2rem))]"
       >
       <header className="flex items-start justify-between border-b border-[color:var(--portal-border)] px-4 py-4">
         <div>

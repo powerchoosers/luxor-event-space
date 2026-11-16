@@ -225,8 +225,8 @@ export function LuxorTestLeadPanel({ leadId }: { leadId: string }) {
         <button type="button" disabled={!resetRun || busy} onClick={() => void reset()} className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-rose-500/25 bg-[color:var(--portal-card)] px-3 text-xs font-semibold text-rose-700 disabled:cursor-not-allowed disabled:opacity-45 dark:text-rose-300"><RotateCcw size={13} /> Reset</button>
       </div>
       {notice && !view ? <span role="status" className="max-w-xs text-xs text-[color:var(--portal-muted)]">{notice}</span> : null}
-      {view ? <div className="fixed inset-0 z-[100] overflow-y-auto bg-black/50 p-3 backdrop-blur-sm sm:p-8">
-        <section aria-label={view === 'history' ? 'Test History' : 'Test Settings'} aria-modal="true" role="dialog" className="mx-auto flex max-h-full max-w-6xl flex-col overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] shadow-2xl">
+      {view ? <div data-portal-backdrop="true" className="portal-modal-backdrop fixed inset-0 z-[100] overflow-y-auto p-3 sm:p-8">
+        <section aria-label={view === 'history' ? 'Test History' : 'Test Settings'} aria-modal="true" role="dialog" className="portal-overlay-surface mx-auto flex max-h-full max-w-6xl flex-col overflow-hidden rounded-2xl border border-[color:var(--portal-border)] shadow-2xl">
           <header className="flex shrink-0 items-center justify-between gap-4 border-b border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-4 py-3 sm:px-6">
             <h2 className="text-sm font-bold text-[color:var(--portal-text)]">{view === 'history' ? 'Test History' : 'Test Settings'}</h2>
             <PortalCloseButton onClick={() => setView(null)} aria-label="Close test panel" />

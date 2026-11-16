@@ -5,10 +5,9 @@ import {
   ChevronDown,
   Plus,
   Workflow,
-  MessageCircleMore,
+  CreditCard,
   Phone,
   Zap,
-  X,
   GripVertical,
 } from '@/lib/icons/phosphor-compat'
 import Link from 'next/link'
@@ -138,20 +137,17 @@ export function PortalHomeActionBar() {
               <Workflow size={16} className="shrink-0 text-[#a8792f] dark:text-[#dfbd68]" /> Flow
             </span>
           </Link>
-          <button
-            type="button"
-            onClick={() => {
-              setExpanded(false)
-              window.dispatchEvent(new CustomEvent('luxor-open-elena'))
-            }}
+          <Link
+            href="/portal/invoices"
+            onClick={() => setExpanded(false)}
             className={actionButton}
-            aria-label="Open Elena AI Assistant"
-            title="Elena AI Assistant"
+            aria-label="Invoices & Payments"
+            title="Invoices & Payments"
           >
             <span className={actionSurface}>
-              <MessageCircleMore size={16} className="shrink-0 text-[#a8792f] dark:text-[#dfbd68]" /> Elena
+              <CreditCard size={16} className="shrink-0 text-[#a8792f] dark:text-[#dfbd68]" /> Invoices
             </span>
-          </button>
+          </Link>
         </div>
       </motion.div>
 
@@ -220,7 +216,7 @@ function DesktopQuickActions() {
         <button type="button" className={action} onClick={() => { setOpen(false); setInquiryOpen(true) }}><Plus size={17} className="text-[#a8792f]" /> New inquiry</button>
         <Link className={action} href="/portal/leads?view=followups"><Phone size={17} className="text-[#a8792f]" /> Follow Ups</Link>
         <Link className={action} href="/portal/marketing?tab=automations"><Workflow size={17} className="text-[#a8792f]" /> Flow</Link>
-        <button type="button" className={action} onClick={() => { setOpen(false); window.dispatchEvent(new CustomEvent('luxor-open-elena')) }}><MessageCircleMore size={17} className="text-[#a8792f]" /> Elena</button>
+        <Link className={action} href="/portal/invoices"><CreditCard size={17} className="text-[#a8792f]" /> Invoices &amp; Payments</Link>
       </motion.div> : null}
     </AnimatePresence>
     <NewLeadDrawer isOpen={inquiryOpen} onClose={() => setInquiryOpen(false)} onCreated={() => router.push('/portal/leads')} pagePath="/portal" />

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getLuxorPortalSession, getVerifiedLuxorPortalSession, isAuthorizedLuxorPortalEmail } from '@/lib/luxorPortalAuth'
+import { getLuxorPortalSession } from '@/lib/luxorPortalAuth'
 import { getLuxorPortalMember, memberCan } from '@/lib/luxorPortalAccess'
 import { getFunnelPeriod, getFunnelPeriodFromRange } from '@/lib/luxorFunnelPeriods'
 import { getFunnelAnalytics } from '@/lib/luxorFunnelAnalyticsServer'
@@ -7,8 +7,8 @@ export const dynamic = 'force-dynamic'
 export async function GET(request: NextRequest) {
   const headers = { 'Cache-Control': 'no-store' }
   try {
-    const verified = await getVerifiedLuxorPortalSession(), session = verified ? await getLuxorPortalSession() : null
-    if (!verified || !session || verified.email !== session.email || !isAuthorizedLuxorPortalEmail(session.email)) return NextResponse.json({ error: 'Authorized staff session required.' }, { status: 401, headers })
+    const session = await getLuxorPortalSession()
+    if (!session) return NextResponse.json({ error: 'Authorized staff session required.' }, { status: 401, headers })
     const member = await getLuxorPortalMember(session.email)
     if (!member || member.status !== 'active' || !memberCan(member, 'leads')) return NextResponse.json({ error: 'Active staff with lead access required.' }, { status: 403, headers })
     const start = request.nextUrl.searchParams.get('start'), end = request.nextUrl.searchParams.get('end')

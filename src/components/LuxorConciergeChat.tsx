@@ -1,5 +1,7 @@
 'use client'
 
+import { PublicSiteAction } from '@/components/PublicSiteAction'
+
 import { useEffect, useMemo, useRef, useState } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
@@ -734,12 +736,7 @@ export function LuxorConciergeChat() {
                   >
                     Tell Elena what you’re planning
                   </button>
-                  <Link
-                    href="/#brochure-form"
-                    className="block rounded-xl px-3 py-2 text-center text-xs font-semibold text-[#805b1f] underline underline-offset-4 transition hover:text-[#5f441b]"
-                  >
-                    Get venue brochure
-                  </Link>
+                  <PublicSiteAction placement="other" className="block rounded-xl px-3 py-2 text-center text-xs font-semibold text-[#805b1f] underline underline-offset-4 transition hover:text-[#5f441b]" />
                 </div>
               ) : null}
 

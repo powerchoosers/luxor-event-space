@@ -261,8 +261,8 @@ export function EmailBuilderTab({
   return (
     <div className="relative space-y-4 flex flex-col h-full min-h-0 overflow-hidden">
       {showStartModal && (
-        <div className="absolute inset-0 z-30 flex items-center justify-center bg-[color:var(--portal-bg)]/80 p-4 backdrop-blur-[2px] sm:p-8">
-          <div role="dialog" aria-modal="true" aria-labelledby="email-start-title" className="w-full max-w-2xl overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] shadow-[0_24px_80px_rgba(15,12,8,0.2)]">
+        <div className="portal-modal-backdrop absolute inset-0 z-30 flex items-center justify-center p-4 sm:p-8">
+          <div role="dialog" aria-modal="true" aria-labelledby="email-start-title" className="portal-overlay-surface w-full max-w-2xl overflow-hidden rounded-2xl border border-[color:var(--portal-border)] shadow-[0_24px_80px_rgba(15,12,8,0.2)]">
             <div className="border-b border-[color:var(--portal-border)] px-6 py-5 sm:px-8">
               <div className="flex items-start justify-between gap-4">
                 <div>

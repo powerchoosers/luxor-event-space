@@ -180,7 +180,8 @@ export function PortalFixNotice({ notice }: { notice: PortalFixNoticeData | null
           {open ? (
             <motion.div
               key="portal-fix-notice-modal"
-              className="fixed inset-0 z-[200] flex h-[100dvh] w-screen items-stretch justify-center bg-black/55 p-2 sm:items-center sm:p-6 md:p-10"
+              data-portal-backdrop="true"
+              className="portal-modal-backdrop fixed inset-0 z-[200] flex h-[100dvh] w-screen items-stretch justify-center p-2 sm:items-center sm:p-6 md:p-10"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
@@ -192,11 +193,11 @@ export function PortalFixNotice({ notice }: { notice: PortalFixNoticeData | null
                 aria-modal="true"
                 aria-labelledby={titleId}
                 onClick={(event) => event.stopPropagation()}
-                initial={reduceMotion ? false : { opacity: 0, y: 16, scale: 0.98 }}
-                animate={{ opacity: 1, y: 0, scale: 1 }}
-                exit={reduceMotion ? { opacity: 0 } : { opacity: 0, y: 10, scale: 0.99 }}
-                transition={reduceMotion ? { duration: 0 } : { type: 'spring', stiffness: 380, damping: 34 }}
-                className="flex h-full w-full max-w-3xl flex-col overflow-hidden rounded-[22px] border border-[color:var(--portal-border)] bg-[color:var(--portal-bg)] text-[color:var(--portal-text)] shadow-[0_30px_80px_-24px_rgba(0,0,0,0.55)] sm:h-auto sm:max-h-[min(860px,100%)]"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0, pointerEvents: 'none' }}
+                transition={{ duration: reduceMotion ? 0 : 0.18 }}
+                className="portal-overlay-surface flex h-full w-full max-w-3xl flex-col overflow-hidden rounded-[22px] border border-[color:var(--portal-border)] text-[color:var(--portal-text)] shadow-[0_30px_80px_-24px_rgba(0,0,0,0.55)] sm:h-auto sm:max-h-[min(860px,100%)]"
               >
                 <div className="flex h-11 shrink-0 items-center gap-3 border-b border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3">
                   <div className="flex items-center gap-1.5" aria-hidden="true">

@@ -171,46 +171,21 @@ function SettingsPageContent() {
 
   return (
     <PortalPageFrame className="gap-5 pb-[calc(5.5rem+env(safe-area-inset-bottom))] sm:gap-6 lg:pb-8">
-      <PortalPageHeader
-        icon={<Settings size={18} />}
-        title="Settings"
-        titleAccessory={
-          <kbd className="hidden rounded-md border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-2 py-1 text-[10px] font-semibold text-[color:var(--portal-muted)] sm:block">
-            /
-          </kbd>
-        }
-      />
-
-      <div className="space-y-2.5">
-        <PortalSettingsSearch
-          onSelect={selectSettingsTab}
-          allowedTabs={portalRole === null ? [] : isAgent ? AGENT_TABS : undefined}
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between sm:gap-6">
+        <PortalPageHeader
+          icon={<Settings size={18} />}
+          title="Settings"
+          titleAccessory={
+            <kbd className="hidden rounded-md border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-2 py-1 text-[10px] font-semibold text-[color:var(--portal-muted)] sm:block">
+              /
+            </kbd>
+          }
         />
-        <div className="hidden min-h-5 flex-wrap items-center gap-x-4 gap-y-1.5 text-xs sm:flex">
-          <span className="text-[11px] font-semibold text-[color:var(--portal-muted)]">Quick links</span>
-          {portalRole === null ? (
-            <div className="flex items-center gap-3">
-              <PortalSkeleton className="h-3.5 w-20 rounded" />
-              <PortalSkeleton className="h-3.5 w-16 rounded" />
-              <PortalSkeleton className="h-3.5 w-14 rounded" />
-              <PortalSkeleton className="h-3.5 w-20 rounded" />
-            </div>
-          ) : isAgent ? (
-            <>
-              <button type="button" onClick={() => selectSettingsTab('team')} className="rounded-sm font-medium text-[color:var(--portal-muted)] transition-colors hover:text-[#9a6d26] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 dark:hover:text-[#f1d27a] cursor-pointer">Update my profile</button>
-              <button type="button" onClick={() => selectSettingsTab('notifications')} className="rounded-sm font-medium text-[color:var(--portal-muted)] transition-colors hover:text-[#9a6d26] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 dark:hover:text-[#f1d27a] cursor-pointer">Manage my alerts</button>
-              <button type="button" onClick={() => selectSettingsTab('branding')} className="rounded-sm font-medium text-[color:var(--portal-muted)] transition-colors hover:text-[#9a6d26] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 dark:hover:text-[#f1d27a] cursor-pointer">Change appearance</button>
-            </>
-          ) : (
-            <>
-              <button type="button" onClick={() => selectSettingsTab('business')} className="rounded-sm font-medium text-[color:var(--portal-muted)] transition-colors hover:text-[#9a6d26] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 dark:hover:text-[#f1d27a] cursor-pointer">Venue details</button>
-              <button type="button" onClick={() => selectSettingsTab('hours')} className="rounded-sm font-medium text-[color:var(--portal-muted)] transition-colors hover:text-[#9a6d26] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 dark:hover:text-[#f1d27a] cursor-pointer">Tour hours</button>
-              <button type="button" onClick={() => selectSettingsTab('pricing')} className="rounded-sm font-medium text-[color:var(--portal-muted)] transition-colors hover:text-[#9a6d26] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 dark:hover:text-[#f1d27a] cursor-pointer">Pricing</button>
-              <button type="button" onClick={() => selectSettingsTab('elena')} className="rounded-sm font-medium text-[color:var(--portal-muted)] transition-colors hover:text-[#9a6d26] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 dark:hover:text-[#f1d27a] cursor-pointer">Elena</button>
-              <button type="button" onClick={() => selectSettingsTab('notifications')} className="rounded-sm font-medium text-[color:var(--portal-muted)] transition-colors hover:text-[#9a6d26] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 dark:hover:text-[#f1d27a] cursor-pointer">Alerts</button>
-              <button type="button" onClick={() => selectSettingsTab('integrations')} className="rounded-sm font-medium text-[color:var(--portal-muted)] transition-colors hover:text-[#9a6d26] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 dark:hover:text-[#f1d27a] cursor-pointer">Email & connections</button>
-            </>
-          )}
+        <div className="min-w-0 w-full sm:max-w-md">
+          <PortalSettingsSearch
+            onSelect={selectSettingsTab}
+            allowedTabs={portalRole === null ? [] : isAgent ? AGENT_TABS : undefined}
+          />
         </div>
       </div>
 

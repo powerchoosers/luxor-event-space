@@ -94,69 +94,207 @@ body[data-portal-theme='dark'] .portal-login-card-frosted {
   }
 }
 
-/* Elevated portal surfaces: sheets, modals, drawers, inspectors, popovers, and floating overlays */
+/* Elevated portal surfaces: modals, inspectors, popovers, and floating overlays */
 .portal-overlay-surface,
-.portal-sheet,
-.portal-drawer,
-.portal-drawer-surface,
 .portal-inspector-surface,
 .portal-elevated-surface,
 .portal-popover-surface {
-  background-color: rgba(255, 253, 249, 0.94);
-  backdrop-filter: blur(24px);
-  -webkit-backdrop-filter: blur(24px);
+  background-color: color-mix(in srgb, #fffdf9 86%, transparent);
+  -webkit-backdrop-filter: blur(28px) saturate(148%);
+  backdrop-filter: blur(28px) saturate(148%);
 }
 
 body[data-portal-theme='dark'] .portal-overlay-surface,
-body[data-portal-theme='dark'] .portal-sheet,
-body[data-portal-theme='dark'] .portal-drawer,
-body[data-portal-theme='dark'] .portal-drawer-surface,
 body[data-portal-theme='dark'] .portal-inspector-surface,
 body[data-portal-theme='dark'] .portal-elevated-surface,
 body[data-portal-theme='dark'] .portal-popover-surface {
-  background-color: rgba(14, 13, 11, 0.90);
-  backdrop-filter: blur(24px);
-  -webkit-backdrop-filter: blur(24px);
+  background-color: color-mix(in srgb, #0e0d0b 86%, transparent);
+  -webkit-backdrop-filter: blur(28px) saturate(148%);
+  backdrop-filter: blur(28px) saturate(148%);
+}
+
+/* Drawers, side panels, and sheets: solid opaque background to keep them clean, readable, and fast */
+.portal-drawer,
+.portal-drawer-surface,
+.portal-sheet {
+  background-color: var(--portal-card) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+body[data-portal-theme='dark'] .portal-drawer,
+body[data-portal-theme='dark'] .portal-drawer-surface,
+body[data-portal-theme='dark'] .portal-sheet {
+  background-color: var(--portal-card) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+@keyframes portal-dev-gold-shimmer-light {
+  0%, 100% {
+    box-shadow:
+      inset 0 0 0 1.5px rgba(181, 131, 40, 0.46),
+      inset 0 0 22px 0px rgba(202, 162, 76, 0.30),
+      inset 0 0 54px -8px rgba(181, 131, 40, 0.22);
+  }
+  50% {
+    box-shadow:
+      inset 0 0 0 2px rgba(173, 121, 30, 0.78),
+      inset 0 0 34px 2px rgba(202, 162, 76, 0.48),
+      inset 0 0 76px -4px rgba(218, 178, 92, 0.36);
+  }
+}
+
+@keyframes portal-dev-gold-shimmer-dark {
+  0%, 100% {
+    box-shadow:
+      inset 0 0 0 1px color-mix(in srgb, #caa24c 36%, transparent),
+      inset 0 0 18px -2px color-mix(in srgb, #caa24c 24%, transparent),
+      inset 0 0 44px -12px color-mix(in srgb, #f1d27a 20%, transparent);
+  }
+  50% {
+    box-shadow:
+      inset 0 0 0 1.5px color-mix(in srgb, #f1d27a 62%, transparent),
+      inset 0 0 28px 0px color-mix(in srgb, #caa24c 40%, transparent),
+      inset 0 0 60px -8px color-mix(in srgb, #f1d27a 30%, transparent);
+  }
+}
+
+@keyframes portal-dev-top-shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+.portal-dev-glow-frame {
+  box-shadow:
+    inset 0 0 0 1.5px rgba(181, 131, 40, 0.46),
+    inset 0 0 22px 0px rgba(202, 162, 76, 0.30),
+    inset 0 0 54px -8px rgba(181, 131, 40, 0.22);
+  animation: portal-dev-gold-shimmer-light 3.4s ease-in-out infinite;
+}
+
+body[data-portal-theme='dark'] .portal-dev-glow-frame {
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, #caa24c 36%, transparent),
+    inset 0 0 18px -2px color-mix(in srgb, #caa24c 24%, transparent),
+    inset 0 0 44px -12px color-mix(in srgb, #f1d27a 20%, transparent);
+  animation: portal-dev-gold-shimmer-dark 3.4s ease-in-out infinite;
+}
+
+.portal-dev-glow-topline {
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(181, 131, 40, 0.55) 25%,
+    rgba(218, 178, 92, 0.98) 50%,
+    rgba(181, 131, 40, 0.55) 75%,
+    transparent 100%
+  );
+  background-size: 200% 100%;
+  box-shadow: 0 0 14px 1px rgba(181, 131, 40, 0.45);
+  animation: portal-dev-top-shimmer 4s linear infinite;
+}
+
+body[data-portal-theme='dark'] .portal-dev-glow-topline {
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    color-mix(in srgb, #caa24c 45%, transparent) 25%,
+    color-mix(in srgb, #f1d27a 95%, white 10%) 50%,
+    color-mix(in srgb, #caa24c 45%, transparent) 75%,
+    transparent 100%
+  );
+  background-size: 200% 100%;
+  box-shadow: 0 0 14px 1px color-mix(in srgb, #caa24c 48%, transparent);
 }
 
 body[data-portal-developer-mode='true'] .portal-main {
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, #caa24c 30%, transparent);
+  box-shadow: none;
+}
+
+body[data-portal-annotate-cursor='true'] * {
+  cursor: none !important;
+}
+
+body[data-portal-annotate-cursor='true'] iframe {
+  pointer-events: none !important;
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .portal-dev-glow-frame,
+  body[data-portal-theme='dark'] .portal-dev-glow-frame {
+    animation: none;
+  }
+  .portal-dev-glow-frame {
+    box-shadow:
+      inset 0 0 0 1.5px rgba(181, 131, 40, 0.52),
+      inset 0 0 24px 0px rgba(202, 162, 76, 0.30);
+  }
+  body[data-portal-theme='dark'] .portal-dev-glow-frame {
+    box-shadow:
+      inset 0 0 0 1px color-mix(in srgb, #caa24c 42%, transparent),
+      inset 0 0 20px -2px color-mix(in srgb, #caa24c 24%, transparent);
+  }
+  .portal-dev-glow-topline {
+    animation: none;
+    background: linear-gradient(
+      90deg,
+      transparent 0%,
+      rgba(181, 131, 40, 0.78) 50%,
+      transparent 100%
+    );
+  }
+  body[data-portal-theme='dark'] .portal-dev-glow-topline {
+    background: linear-gradient(
+      90deg,
+      transparent 0%,
+      color-mix(in srgb, #caa24c 72%, transparent) 50%,
+      transparent 100%
+    );
+  }
   body[data-portal-developer-mode='true'] .portal-main {
-    box-shadow: inset 0 0 0 1px color-mix(in srgb, #caa24c 36%, transparent);
+    box-shadow: none;
   }
 }
 
 /* Elena slash menu + public packages pickers: frosted popover (portaled; no transformed ancestors) */
 .elena-slash-command-popover,
-.luxor-public-glass-popover {
+.luxor-public-glass-popover,
+.portal-dev-glass-surface {
   background-color: color-mix(in srgb, #fffdf9 76%, transparent);
   -webkit-backdrop-filter: blur(28px) saturate(148%);
   backdrop-filter: blur(28px) saturate(148%);
 }
 
-body[data-portal-theme='dark'] .elena-slash-command-popover {
+/* Keep the public month picker warm and light over its dimmed backdrop. */
+.luxor-public-glass-popover.luxor-calendar-month-dialog {
+  background-color: rgba(255, 253, 249, 0.94);
+}
+
+body[data-portal-theme='dark'] .elena-slash-command-popover,
+body[data-portal-theme='dark'] .portal-dev-glass-surface {
   background-color: color-mix(in srgb, #0e0d0b 78%, transparent);
 }
 
-/* PortalSelect listbox (portaled): near-opaque in light so lead rows never bleed through the filter popover. */
+/* PortalSelect listbox (portaled): frosted glass popover */
 .portal-select-frosted-popover {
-  background-color: rgba(255, 253, 249, 0.98);
+  background-color: color-mix(in srgb, #fffdf9 88%, transparent);
   -webkit-backdrop-filter: blur(28px) saturate(148%);
   backdrop-filter: blur(28px) saturate(148%);
 }
 
 body[data-portal-theme='dark'] .portal-select-frosted-popover {
-  background-color: color-mix(in srgb, #0e0d0b 90%, transparent);
+  background-color: color-mix(in srgb, #0e0d0b 88%, transparent);
+  -webkit-backdrop-filter: blur(28px) saturate(148%);
+  backdrop-filter: blur(28px) saturate(148%);
 }
 
 /* Inside elevated surfaces in dark mode, adjust nested card tokens so nested elements aren't see-through */
 body[data-portal-theme='dark'] .portal-overlay-surface,
-body[data-portal-theme='dark'] .portal-sheet,
-body[data-portal-theme='dark'] .portal-drawer,
-body[data-portal-theme='dark'] .portal-drawer-surface,
 body[data-portal-theme='dark'] .portal-inspector-surface,
 body[data-portal-theme='dark'] .portal-elevated-surface {
   --portal-card: rgba(24, 22, 19, 0.78);
@@ -165,27 +303,27 @@ body[data-portal-theme='dark'] .portal-elevated-surface {
 
 /* Canonical portal modal and sheet backdrops across light and dark themes */
 .portal-modal-backdrop {
-  background-color: rgba(12, 10, 8, 0.56);
+  background-color: rgba(12, 10, 8, 0.52);
 }
 
 body[data-portal-theme='dark'] .portal-modal-backdrop {
-  background-color: rgba(4, 3, 2, 0.72);
+  background-color: rgba(4, 3, 2, 0.68);
 }
 
 .portal-modal-backdrop--sheet {
-  background-color: rgba(12, 10, 8, 0.34);
+  background-color: rgba(12, 10, 8, 0.38);
 }
 
 body[data-portal-theme='dark'] .portal-modal-backdrop--sheet {
-  background-color: rgba(4, 3, 2, 0.48);
+  background-color: rgba(4, 3, 2, 0.52);
 }
 
 .portal-modal-backdrop--compact {
-  background-color: rgba(12, 10, 8, 0.34);
+  background-color: rgba(12, 10, 8, 0.38);
 }
 
 body[data-portal-theme='dark'] .portal-modal-backdrop--compact {
-  background-color: rgba(4, 3, 2, 0.46);
+  background-color: rgba(4, 3, 2, 0.52);
 }
 
 .portal-close-button::before,

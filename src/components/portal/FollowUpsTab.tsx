@@ -8,7 +8,7 @@ import type { LuxorInquiry, LuxorTask } from '@/lib/luxorInquiryTypes'
 import { isLuxorInquiryArchived } from '@/lib/luxorInquiryTypes'
 import { getCompletedTourLeads, getLuxorPostTourFollowUpStatus } from '@/lib/luxorTourMetrics'
 import { buildFollowUpTaskPatch, getLuxorFollowUpTaskChannel, isLuxorFollowUpTask } from '@/lib/luxorFollowUpTaskPolicy'
-import { PortalButton, PortalCloseButton, PortalDatePicker, PortalFilterBar, type PortalActiveFilter, PortalModal, PortalPagination, PortalSelect, PortalSkeleton, PortalSkeletonTransition, PortalTableCard, PortalTourCardSkeleton, PortalStatusBadge, type PortalStatusTone } from '@/components/portal/PortalUI'
+import { PortalButton, PortalCloseButton, PortalDatePicker, PortalFilterBar, type PortalActiveFilter, PortalModal, PortalPagination, PortalSelect, PortalSkeleton, PortalSkeletonTransition, PortalTableCard, PortalStatusBadge, type PortalStatusTone } from '@/components/portal/PortalUI'
 import { LuxorCrmRecordCard } from '@/components/portal/LuxorCrmRecordCard'
 import { FollowUpLeadPicker } from '@/components/portal/FollowUpLeadPicker'
 import { WorkflowBadge } from '@/components/portal/WorkflowBadge'
@@ -119,6 +119,49 @@ function isCurrentNewLead(lead: LuxorInquiry) {
   if (lead.metadata?.followUpStage === 'nurture' || isPostTour(lead)) return false
   if (['booked', 'closed_lost', 'tour_confirmed', 'proposal_sent'].includes(lead.status)) return false
   return isNewLead(lead)
+}
+
+function FollowUpCardSkeleton() {
+  return (
+    <article className="portal-card-surface relative rounded-xl border border-[color:var(--portal-border)] p-4 shadow-sm">
+      <div className="grid min-w-0 grid-cols-[2.5rem_minmax(0,1fr)] items-start gap-x-3">
+        <PortalSkeleton className="col-start-1 row-start-1 h-10 w-10 shrink-0 rounded-full" />
+        <div className="min-w-0">
+          <div className="flex min-w-0 flex-wrap items-start justify-between gap-x-3 gap-y-1">
+            <div className="min-w-0 flex-1 space-y-1.5">
+              <PortalSkeleton className="h-4 w-36 rounded" />
+              <PortalSkeleton className="h-3 w-52 max-w-full rounded" />
+            </div>
+            <div className="flex shrink-0 items-center gap-1.5">
+              <PortalSkeleton className="h-5 w-16 rounded-md" />
+              <PortalSkeleton className="h-9 w-9 rounded-lg" />
+            </div>
+          </div>
+        </div>
+        <div className="col-span-2 min-w-0 sm:col-start-2 sm:col-span-1">
+          <div className="mt-3 flex min-w-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div className="min-w-0 flex-1 space-y-2">
+              <div className="flex items-center gap-1.5">
+                <PortalSkeleton className="h-3.5 w-3.5 shrink-0 rounded" />
+                <PortalSkeleton className="h-4 w-56 max-w-full rounded" />
+              </div>
+              <div className="flex flex-wrap items-center gap-1.5">
+                <PortalSkeleton className="h-5 w-16 rounded-md" />
+                <PortalSkeleton className="h-5 w-28 rounded-md" />
+                <PortalSkeleton className="h-3 w-24 rounded" />
+              </div>
+            </div>
+            <div className="flex flex-wrap items-center gap-1.5 sm:shrink-0">
+              <PortalSkeleton className="h-9 w-24 rounded-lg lg:hidden" />
+              <PortalSkeleton className="h-9 w-9 rounded-lg" />
+              <PortalSkeleton className="h-9 w-9 rounded-lg" />
+              <PortalSkeleton className="h-9 w-9 rounded-lg" />
+            </div>
+          </div>
+        </div>
+      </div>
+    </article>
+  )
 }
 
 export default function FollowUpsTab({ leads, onLeadsRefresh }: { leads: LuxorInquiry[]; onLeadsRefresh: () => Promise<void> }) {
@@ -514,7 +557,7 @@ export default function FollowUpsTab({ leads, onLeadsRefresh }: { leads: LuxorIn
   }
 
   async function addNote(inquiryId: string, content: string, noteType = 'note', taskId?: string) {
-    const response = await fetch('/api/notes', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ inquiryId, content, noteType, taskId }) })
+    const response = await fetch('/api/notes', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ inquiryId, content, noteType, author: 'Arianna Patterson', taskId }) })
     if (!response.ok) throw new Error('The note could not be saved.')
     await Promise.all([loadHistory(inquiryId), loadExpandedCardDetails(inquiryId, 0, false, true)])
   }
@@ -884,7 +927,7 @@ export default function FollowUpsTab({ leads, onLeadsRefresh }: { leads: LuxorIn
           skeleton={
             <div className="space-y-3 p-4 sm:p-6 pb-20 md:pb-6">
               {Array.from({ length: 6 }).map((_, i) => (
-                <PortalTourCardSkeleton key={i} />
+                <FollowUpCardSkeleton key={i} />
               ))}
             </div>
           }

@@ -101,7 +101,7 @@ export default function BillDetailsPanel({ billId, onClose, onOpenExpense, onCre
     }
   }
   const field = 'mt-1 min-h-11 w-full rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 text-sm text-[color:var(--portal-text)] outline-none focus:border-[#caa24c]/40 focus:bg-[color:var(--portal-card)] focus:ring-2 focus:ring-[#caa24c]/10'
-  return <PortalModal isOpen={open} onClose={back} title={draft ? 'Edit bill details' : 'Bill details'} description={bill?.service} headerBack sidePanel maxWidth="max-w-[600px]" animateClose>
+  return <PortalModal isOpen={open} onClose={back} title={draft ? 'Edit bill details' : 'Bill details'} description={bill?.service} headerBack headerBackResponsive sidePanel maxWidth="max-w-[600px]" animateClose>
     {error ? <div role="alert" className="space-y-3 text-sm text-[color:var(--portal-text)]"><p>{error}</p><PortalButton onClick={() => setRetry((value) => value + 1)}>Try again</PortalButton></div> : !records ? (
       <div className="space-y-6 pt-1" aria-busy="true" aria-label="Loading bill details">
         <div className="flex items-center justify-between gap-3">

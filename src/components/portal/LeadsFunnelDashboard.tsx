@@ -53,6 +53,92 @@ function FunnelKpiCard({
     </button>
   )
 }
+
+function FunnelGoalItem({
+  metric,
+  actual,
+  goal,
+  loading,
+}: {
+  metric: FunnelGoalMetric
+  actual: number | null
+  goal: number | null
+  loading: boolean
+}) {
+  const reduceMotion = useReducedMotion()
+  const progress = funnelGoalProgress(actual, goal)
+  const label = LABELS[metric]
+
+  return (
+    <li className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/30 px-3.5 py-3">
+      <PortalSkeletonTransition
+        loading={loading}
+        overlap
+        skeleton={
+          <div className="flex flex-col">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-[color:var(--portal-muted)]">
+                {label}
+              </span>
+              <div className="flex items-center gap-2">
+                <div className="flex h-5 items-center">
+                  <PortalSkeleton className="h-3.5 w-14 rounded" />
+                </div>
+                <PortalSkeleton className="h-5 w-11 rounded-md" />
+              </div>
+            </div>
+            <div className="mt-2.5 h-1.5 overflow-hidden rounded-full bg-[color:var(--portal-border)]/50">
+              <div className="h-full w-1/3 rounded-full bg-[color:var(--portal-border)]/60 animate-pulse" />
+            </div>
+          </div>
+        }
+      >
+        <div className="flex flex-col">
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-[color:var(--portal-muted)]">
+              {label}
+            </span>
+            <div className="flex items-center gap-2">
+              <div className="flex items-baseline gap-1 text-sm tabular-nums">
+                <span className="font-semibold text-[color:var(--portal-text)]">{funnelNumber(actual, metric)}</span>
+                <span className="text-xs font-normal text-[color:var(--portal-muted)]">/ {funnelNumber(goal, metric)}</span>
+              </div>
+              {progress.percent !== null ? (
+                <span className="inline-flex min-w-[2.75rem] items-center justify-center rounded-md bg-[#caa24c]/12 px-1.5 py-0.5 text-[11px] font-bold tabular-nums text-[#9a712e] dark:bg-[#caa24c]/15 dark:text-[#f1d27a]">
+                  {Math.round(progress.percent)}%
+                </span>
+              ) : (
+                <span className="inline-flex min-w-[2.75rem] items-center justify-center rounded-md bg-[color:var(--portal-soft)] px-1.5 py-0.5 text-[11px] font-medium tabular-nums text-[color:var(--portal-muted)]">
+                  —
+                </span>
+              )}
+            </div>
+          </div>
+          <div
+            className="mt-2.5 h-1.5 overflow-hidden rounded-full bg-[color:var(--portal-border)]/70"
+            role="progressbar"
+            aria-label={`${label} goal progress`}
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={progress.percent === null ? undefined : progress.barPercent}
+            aria-valuetext={progress.percent === null ? 'Actual or goal unavailable' : `${Math.round(progress.percent)} percent of goal`}
+          >
+            <motion.div
+              className="h-full rounded-full bg-gradient-to-r from-[#caa24c] to-[#dfbd68]"
+              initial={reduceMotion ? false : { width: 0 }}
+              animate={{ width: `${progress.barPercent}%` }}
+              transition={
+                reduceMotion
+                  ? { duration: 0 }
+                  : { duration: 0.75, ease: [0.16, 1, 0.3, 1], delay: 0.08 }
+              }
+            />
+          </div>
+        </div>
+      </PortalSkeletonTransition>
+    </li>
+  )
+}
 function record(v: unknown): v is Record<string, unknown> { return Boolean(v && typeof v === 'object' && !Array.isArray(v)) }
 export function parseGoalSnapshot(value: unknown): GoalSnapshot | null {
   if (!record(value) || value.available !== true || !Number.isSafeInteger(value.revision) || (value.revision as number) < 0 || typeof value.canEdit !== 'boolean') return null
@@ -103,7 +189,7 @@ export function funnelNumber(value: number | null | undefined, kind?: string): s
   return new Intl.NumberFormat('en-US', kind === 'revenue' ? { style: 'currency', currency: 'USD', maximumFractionDigits: 2 } : { maximumFractionDigits: 0 }).format(value)
 }
 
-export function FunnelDailyChart({ period, days, dailyGoal, total, periodGoal }: { period: FunnelPeriod; days: FunnelAnalytics['dailyLeads']; dailyGoal: number | null; total: number | null; periodGoal: number | null }) {
+export function FunnelDailyChart({ period, days, dailyGoal, total, periodGoal, loading = false }: { period: FunnelPeriod; days: FunnelAnalytics['dailyLeads']; dailyGoal: number | null; total: number | null; periodGoal: number | null; loading?: boolean }) {
   const reduceMotion = useReducedMotion()
   const [activeTooltipDate, setActiveTooltipDate] = useState<string | null>(null)
   const scale = Math.max(1, Math.ceil(Math.max(dailyGoal || 0, ...days.map(d => d.count || 0)) / 5) * 5)
@@ -161,7 +247,26 @@ export function FunnelDailyChart({ period, days, dailyGoal, total, periodGoal }:
         <div className="mt-2 flex">{days.map(d => <span key={d.date} className="flex-1 text-center text-[10px] tabular-nums text-[color:var(--portal-muted)]">{new Intl.DateTimeFormat('en-US', { timeZone: 'UTC', ...(period.kind === 'weekly' ? { weekday: 'short' } : { month: 'numeric', day: 'numeric' }) }).format(new Date(`${d.date}T12:00:00Z`))}</span>)}</div>
       </div>
     </div>
-    <dl className="mt-4 grid grid-cols-3 gap-3 border-t border-[color:var(--portal-border)] pt-4 text-xs"><div><dt className="text-[color:var(--portal-muted)]">Total leads</dt><dd className="mt-1 font-bold tabular-nums">{funnelNumber(total)}</dd></div><div><dt className="text-[color:var(--portal-muted)]">Period goal</dt><dd className="mt-1 font-bold tabular-nums">{funnelNumber(periodGoal)}</dd></div><div><dt className="text-[color:var(--portal-muted)]">Goal achieved</dt><dd className="mt-1 font-bold tabular-nums">{progress.percent === null ? '—' : `${Math.round(progress.percent)}%`}</dd></div></dl>
+    <dl className="mt-4 grid grid-cols-3 gap-3 border-t border-[color:var(--portal-border)] pt-4 text-xs">
+      <div>
+        <dt className="text-[color:var(--portal-muted)]">Total leads</dt>
+        <dd className="mt-1 font-bold tabular-nums">
+          {loading ? <PortalSkeleton className="mt-0.5 h-4 w-12 rounded" /> : funnelNumber(total)}
+        </dd>
+      </div>
+      <div>
+        <dt className="text-[color:var(--portal-muted)]">Period goal</dt>
+        <dd className="mt-1 font-bold tabular-nums">
+          {loading ? <PortalSkeleton className="mt-0.5 h-4 w-12 rounded" /> : funnelNumber(periodGoal)}
+        </dd>
+      </div>
+      <div>
+        <dt className="text-[color:var(--portal-muted)]">Goal achieved</dt>
+        <dd className="mt-1 font-bold tabular-nums">
+          {loading ? <PortalSkeleton className="mt-0.5 h-4 w-12 rounded" /> : (progress.percent === null ? '—' : `${Math.round(progress.percent)}%`)}
+        </dd>
+      </div>
+    </dl>
     <table className="sr-only"><caption>Daily new inquiries for {period.label}</caption><thead><tr><th>Date</th><th>Leads</th></tr></thead><tbody>{days.map(d => <tr key={d.date}><th>{d.date}</th><td>{d.count === null ? 'Unavailable' : d.count}</td></tr>)}</tbody></table>
   </section>
 }
@@ -205,6 +310,7 @@ export function LeadsFunnelDashboard({ range, onSelectTab, onPeriodChange }: { r
     return () => { active = false; controller.abort() }
   }, [reload])
   const visible = analytics?.period.startDate === period.startDate && analytics.period.endDate === period.endDate ? analytics : null
+  const isMetricsLoading = loading || !visible || snapshot === null
   return <section className="space-y-5" aria-label="Funnel performance dashboard">
     <div className="grid grid-cols-2 gap-px overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-border)] sm:grid-cols-3 xl:grid-cols-6" aria-busy={loading}>
       {KPIS.map(([key, label, tab]) => (
@@ -220,8 +326,55 @@ export function LeadsFunnelDashboard({ range, onSelectTab, onPeriodChange }: { r
       ))}
     </div>
     {(dataError || goalNotice) ? <div className="text-xs text-[color:var(--portal-muted)]" aria-live="polite">{dataError ? <p>{dataError} <button type="button" className="underline" onClick={() => setReload(n => n + 1)}>Retry</button></p> : null}{goalNotice ? <p>{goalNotice} <button type="button" className="underline" onClick={() => setReload(n => n + 1)}>Reload</button></p> : null}</div> : null}
-    <div className="grid grid-cols-1 gap-4 xl:grid-cols-3"><section className={`${panel} p-5`} aria-label="Sales Funnel Analysis"><div className="flex flex-wrap items-start justify-between gap-2"><div><h3 className="text-lg font-bold">Sales Funnel Analysis</h3><p className="mt-0.5 text-xs text-[color:var(--portal-muted)]">Period activity against saved goals</p></div>{snapshot?.canEdit ? <Link href="/portal/settings?tab=funnelGoals" onClick={event => { if (window.innerWidth >= 1024 && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey) { event.preventDefault(); window.dispatchEvent(new Event('luxor:open-funnel-goals')) } }} className="rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/60 px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.12em] text-[#9a712e] transition-colors hover:border-[#caa24c]/40 hover:bg-[#caa24c]/10 dark:text-[#f1d27a]">Manage goals</Link> : null}</div><ol className="mt-5 space-y-3">{FUNNEL_GOAL_METRICS.map(metric => { const actual = visible?.metrics[metric] ?? null; const goal = snapshot ? getFunnelGoal(snapshot.goals[metric], period) : null; const progress = funnelGoalProgress(actual, goal); return <li key={metric} className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/30 px-3.5 py-3"><div className="flex flex-wrap items-baseline justify-between gap-2"><span className="text-[10px] font-bold uppercase tracking-[0.14em] text-[color:var(--portal-muted)]">{LABELS[metric]}</span><span className="text-sm font-semibold tabular-nums text-[color:var(--portal-text)]">{funnelNumber(actual, metric)}<span className="font-medium text-[color:var(--portal-muted)]"> / {funnelNumber(goal, metric)}</span>{progress.percent === null ? null : <span className="ml-1 text-xs font-bold text-[#a37d2c] dark:text-[#f1d27a]">{Math.round(progress.percent)}%</span>}</span></div><div className="mt-2.5 h-2 overflow-hidden rounded-full bg-[color:var(--portal-border)]/80" role="progressbar" aria-label={`${LABELS[metric]} goal progress`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={progress.percent === null ? undefined : progress.barPercent} aria-valuetext={progress.percent === null ? 'Actual or goal unavailable' : `${Math.round(progress.percent)} percent of goal`}><div className="h-full rounded-full bg-gradient-to-r from-[#caa24c] to-[#dfbd68]" style={{ width: `${progress.barPercent}%` }} /></div></li> })}</ol><p className="mt-4 border-t border-[color:var(--portal-border)] pt-3 text-[11px] text-[color:var(--portal-muted)]">Activity counts are not a single-lead cohort. A dash means data or a goal is unavailable.</p></section>
-      <FunnelDailyChart period={period} days={visible?.dailyLeads || period.days.map(date => ({ date, count: null }))} dailyGoal={snapshot?.goals.newInquiries.daily ?? null} total={visible?.metrics.newInquiries ?? null} periodGoal={snapshot ? getFunnelGoal(snapshot.goals.newInquiries, period) : null} />
+    <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
+      <section className={`${panel} p-5`} aria-label="Sales Funnel Analysis">
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <div>
+            <h3 className="text-lg font-bold">Sales Funnel Analysis</h3>
+            <p className="mt-0.5 text-xs text-[color:var(--portal-muted)]">Period activity against saved goals</p>
+          </div>
+          {snapshot?.canEdit ? (
+            <Link
+              href="/portal/settings?tab=funnelGoals"
+              onClick={event => {
+                if (window.innerWidth >= 1024 && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey) {
+                  event.preventDefault()
+                  window.dispatchEvent(new Event('luxor:open-funnel-goals'))
+                }
+              }}
+              className="rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/60 px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.12em] text-[#9a712e] transition-colors hover:border-[#caa24c]/40 hover:bg-[#caa24c]/10 dark:text-[#f1d27a]"
+            >
+              Manage goals
+            </Link>
+          ) : null}
+        </div>
+        <ol className="mt-5 space-y-3">
+          {FUNNEL_GOAL_METRICS.map(metric => {
+            const actual = visible?.metrics[metric] ?? null
+            const goal = snapshot ? getFunnelGoal(snapshot.goals[metric], period) : null
+            return (
+              <FunnelGoalItem
+                key={metric}
+                metric={metric}
+                actual={actual}
+                goal={goal}
+                loading={isMetricsLoading}
+              />
+            )
+          })}
+        </ol>
+        <p className="mt-4 border-t border-[color:var(--portal-border)] pt-3 text-[11px] text-[color:var(--portal-muted)]">
+          Activity counts are not a single-lead cohort. A dash means data or a goal is unavailable.
+        </p>
+      </section>
+      <FunnelDailyChart
+        period={period}
+        days={visible?.dailyLeads || period.days.map(date => ({ date, count: null }))}
+        dailyGoal={snapshot?.goals.newInquiries.daily ?? null}
+        total={visible?.metrics.newInquiries ?? null}
+        periodGoal={snapshot ? getFunnelGoal(snapshot.goals.newInquiries, period) : null}
+        loading={isMetricsLoading}
+      />
     </div>
   </section>
 }

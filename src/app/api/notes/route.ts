@@ -45,7 +45,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Invalid task id.' }, { status: 400 })
     }
 
-    const note = await createNote(inquiryId, content, noteType, author, taskId)
+    let authorName = typeof author === 'string' && author.trim() ? author.trim() : ''
+    if (!authorName || ['admin owner', 'portal user', 'portal owner', 'admin', 'owner'].includes(authorName.toLowerCase())) {
+      authorName = 'Arianna Patterson'
+    }
+
+    const note = await createNote(inquiryId, content, noteType, authorName, taskId)
     return NextResponse.json(note, { status: 201 })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to create note.'

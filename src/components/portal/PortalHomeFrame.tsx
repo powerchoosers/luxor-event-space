@@ -2,7 +2,7 @@
 
 import React, { createContext, useContext, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { Activity } from '@/lib/icons/phosphor-compat'
+import { PortalHarmonicDotMatrix } from './PortalHarmonicDotMatrix'
 import { PortalPageFrame, PortalPageHeader, PortalSkeleton } from './PortalUI'
 
 const DateSlot = createContext<{ mobile: HTMLElement | null; desktop: HTMLElement | null; setMobile: (node: HTMLDivElement | null) => void; setDesktop: (node: HTMLDivElement | null) => void }>({ mobile: null, desktop: null, setMobile: () => {}, setDesktop: () => {} })
@@ -21,7 +21,7 @@ export function PortalHomeFrame({ children }: { children: React.ReactNode }) {
   return <DateSlot.Provider value={{ mobile: mobileDateSlot, desktop: desktopDateSlot, setMobile: setMobileDateSlot, setDesktop: setDesktopDateSlot }}>
     <PortalPageFrame className="min-h-full group/portal !gap-2.5 sm:!gap-6">
       <PortalPageHeader
-        icon={<Activity size={18} />}
+        icon={<PortalHarmonicDotMatrix size={20} duration={4.6} />}
         title="Luxor Operations Hub"
         description="Your daily view of bookings, revenue, and venue operations."
         actions={

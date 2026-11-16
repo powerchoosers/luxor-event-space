@@ -921,21 +921,28 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
   }, [])
 
   const selectSearchResult = useCallback((id: string) => {
-    const targetLead = inquiries.find((inq) => inq.id === id)
-    if (targetLead) {
-      saveRecentLead({
-        id: targetLead.id,
-        fullName: targetLead.full_name,
-        email: targetLead.email,
-        phone: targetLead.phone,
-        eventType: targetLead.event_type,
-        status: targetLead.status,
-        avatarUrl: typeof targetLead.metadata?.avatar_url === 'string' ? targetLead.metadata.avatar_url : undefined,
-      })
-    }
-    setSearchQuery('')
+    // 1. Immediately dismiss search focus and clear search query
     setSearchFocused(false)
-    router.push(`/portal/leads/${id}`)
+    setSearchQuery('')
+    searchInputRef.current?.blur()
+
+    // 2. Defer saving recent lead and navigating so the dropdown exit animation completes cleanly
+    // without prematurely re-rendering the 'Recently opened' list item to the top
+    window.setTimeout(() => {
+      const targetLead = inquiries.find((inq) => inq.id === id)
+      if (targetLead) {
+        saveRecentLead({
+          id: targetLead.id,
+          fullName: targetLead.full_name,
+          email: targetLead.email,
+          phone: targetLead.phone,
+          eventType: targetLead.event_type,
+          status: targetLead.status,
+          avatarUrl: typeof targetLead.metadata?.avatar_url === 'string' ? targetLead.metadata.avatar_url : undefined,
+        })
+      }
+      router.push(`/portal/leads/${id}`)
+    }, 180)
   }, [inquiries, router])
 
   return (
@@ -1200,7 +1207,11 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
                 onBlur={() => setAccountHovered(false)}
                 aria-label="Open account menu"
                 aria-expanded={accountMenuOpen}
-                className="group relative flex w-full items-center rounded-xl border border-transparent px-1.5 py-2 transition-colors duration-200 hover:bg-[color:var(--portal-soft)]/40 cursor-pointer"
+                className={`group relative flex items-center rounded-xl border border-transparent transition-colors duration-200 hover:bg-[color:var(--portal-soft)]/40 cursor-pointer ${
+                  sidebarIsCollapsed
+                    ? 'h-10 w-10 mx-auto justify-center p-0'
+                    : 'w-full px-1.5 py-2'
+                }`}
               >
                 <div
                   className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full border border-[#caa24c]/25 bg-gradient-to-br from-[#f1d27a] via-[#caa24c] to-[#9b6d24] bg-cover bg-center font-serif text-[11px] font-bold text-[#18130d] ring-2 ring-[color:var(--portal-soft)] transition-transform duration-200 ease-out group-hover:scale-110"
@@ -1341,10 +1352,10 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
                             key={result.id}
                             className="group/item flex items-center justify-between rounded-lg p-2 hover:bg-[color:var(--portal-soft)] transition-colors"
                           >
-                            <Link
-                              href={`/portal/leads/${result.id}`}
+                            <button
+                              type="button"
                               onClick={() => selectSearchResult(result.id)}
-                              className="flex flex-1 items-center gap-2.5 min-w-0 outline-none cursor-pointer"
+                              className="flex flex-1 items-center gap-2.5 min-w-0 outline-none cursor-pointer text-left"
                             >
                               <PortalContactAvatar
                                 name={result.full_name}
@@ -1359,7 +1370,7 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
                                   {result.email || result.phone || 'No contact details registered'}
                                 </p>
                               </div>
-                            </Link>
+                            </button>
                             <div className="flex items-center gap-1.5 pl-2 shrink-0">
                               {result.email && (
                                 <button
@@ -1413,10 +1424,10 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
                             key={item.id}
                             className="group/item flex items-center justify-between rounded-lg p-2 hover:bg-[color:var(--portal-soft)] transition-colors"
                           >
-                            <Link
-                              href={`/portal/leads/${item.id}`}
+                            <button
+                              type="button"
                               onClick={() => selectSearchResult(item.id)}
-                              className="flex flex-1 items-center gap-2.5 min-w-0 outline-none cursor-pointer"
+                              className="flex flex-1 items-center gap-2.5 min-w-0 outline-none cursor-pointer text-left"
                             >
                               <PortalContactAvatar
                                 name={item.fullName}
@@ -1431,7 +1442,7 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
                                   {item.email || item.phone || 'Lead Dossier'}
                                 </p>
                               </div>
-                            </Link>
+                            </button>
                             <div className="flex items-center gap-1.5 pl-2 shrink-0">
                               {item.email && (
                                 <button
@@ -1693,6 +1704,7 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
               <button
                 ref={elenaLauncherRef}
                 type="button"
+                data-portal-dev-ignore
                 onClick={() => setElenaOpen((open) => !open)}
                 className={`relative flex h-9 w-9 shrink-0 overflow-hidden rounded-full border transition-all hover:scale-105 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/50 cursor-pointer ${
                   elenaOpen 
@@ -1823,14 +1835,14 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
                         </div>
                         {searchResults.length > 0 ? (
                           searchResults.map((result) => (
-                            <Link
+                            <button
                               key={result.id}
-                              href={`/portal/leads/${result.id}`}
+                              type="button"
                               onClick={() => {
                                 selectSearchResult(result.id)
                                 setMobileSearchOpen(false)
                               }}
-                              className="flex items-center justify-between p-2.5 hover:bg-[color:var(--portal-soft)] active:bg-[#caa24c]/10 transition-colors"
+                              className="flex w-full items-center justify-between p-2.5 hover:bg-[color:var(--portal-soft)] active:bg-[#caa24c]/10 transition-colors text-left"
                             >
                               <div className="flex items-center gap-2.5 min-w-0 flex-1">
                                 <PortalContactAvatar
@@ -1850,7 +1862,7 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
                               <span className="text-[8px] font-bold uppercase tracking-widest text-[#caa24c] bg-[#caa24c]/10 border border-[#caa24c]/20 px-2 py-0.5 rounded shrink-0 ml-2">
                                 {result.event_type || 'Lead'}
                               </span>
-                            </Link>
+                            </button>
                           ))
                         ) : (
                           <div className="px-3 py-6 text-center text-xs text-[color:var(--portal-muted)]">
@@ -1880,14 +1892,14 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
                         </div>
                         {displayRecentLeads.length > 0 ? (
                           displayRecentLeads.map((item) => (
-                            <Link
+                            <button
                               key={item.id}
-                              href={`/portal/leads/${item.id}`}
+                              type="button"
                               onClick={() => {
                                 selectSearchResult(item.id)
                                 setMobileSearchOpen(false)
                               }}
-                              className="flex items-center justify-between p-2.5 hover:bg-[color:var(--portal-soft)] active:bg-[#caa24c]/10 transition-colors"
+                              className="flex w-full items-center justify-between p-2.5 hover:bg-[color:var(--portal-soft)] active:bg-[#caa24c]/10 transition-colors text-left"
                             >
                               <div className="flex items-center gap-2.5 min-w-0 flex-1">
                                 <PortalContactAvatar
@@ -1907,7 +1919,7 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
                               <span className="text-[8px] font-bold uppercase tracking-widest text-[#caa24c] bg-[#caa24c]/10 border border-[#caa24c]/20 px-2 py-0.5 rounded shrink-0 ml-2">
                                 {item.eventType || item.status || 'Lead'}
                               </span>
-                            </Link>
+                            </button>
                           ))
                         ) : (
                           <div className="px-3 py-6 text-center text-xs text-[color:var(--portal-muted)]">
@@ -1997,7 +2009,8 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
       <AnimatePresence>
         {mobileMoreOpen && (
           <motion.div
-            className="portal-modal-layer fixed inset-0 z-[70] flex items-end justify-center bg-black/45 px-3 pb-[calc(var(--portal-mobile-nav-height)+0.75rem)] pt-[max(0.75rem,env(safe-area-inset-top))] backdrop-blur-sm lg:hidden"
+            data-portal-backdrop="true"
+            className="portal-modal-layer portal-modal-backdrop--sheet fixed inset-0 z-[70] flex items-end justify-center px-3 pb-[calc(var(--portal-mobile-nav-height)+0.75rem)] pt-[max(0.75rem,env(safe-area-inset-top))] lg:hidden"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
@@ -2007,11 +2020,11 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
               role="dialog"
               aria-modal="true"
               aria-label="More portal sections"
-              className="portal-overlay-surface portal-sheet backdrop-blur-2xl max-h-full w-full overflow-y-auto rounded-2xl border border-[color:var(--portal-border)] p-4 shadow-2xl sm:max-w-xl"
-              initial={reduceMotion ? false : { opacity: 0, y: 28 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={reduceMotion ? { opacity: 0 } : { opacity: 0, y: 28 }}
-              transition={{ duration: 0.2, ease: [0.23, 1, 0.32, 1] }}
+              className="portal-sheet bg-[color:var(--portal-card)] max-h-full w-full overflow-y-auto rounded-2xl border border-[color:var(--portal-border)] p-4 shadow-2xl sm:max-w-xl"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0, pointerEvents: 'none' }}
+              transition={{ duration: reduceMotion ? 0.05 : 0.2, ease: [0.23, 1, 0.32, 1] }}
               onClick={(event) => event.stopPropagation()}
             >
               <div className="mb-3 flex items-center justify-between">
@@ -2065,6 +2078,7 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
                 ) : null}
                 <button
                   type="button"
+                  data-portal-dev-ignore
                   onClick={() => {
                     setMobileMoreOpen(false)
                     setElenaOpen(true)
@@ -2220,7 +2234,11 @@ function SidebarLink({
       onFocus={() => setIsHovered(true)}
       onBlur={() => setIsHovered(false)}
       aria-label={label}
-      className={`group relative flex h-10 w-full items-center justify-start rounded-xl border border-transparent px-3.5 text-sm font-medium transition-colors ${
+      className={`group relative flex h-10 items-center rounded-xl border border-transparent text-sm font-medium transition-[width,padding,background-color,color] ${
+        collapsed
+          ? 'w-10 mx-auto justify-center px-0'
+          : 'w-full px-3.5 justify-start'
+      } ${
         isSelected
           ? 'text-[#18130d] dark:text-[#f1d27a] font-semibold'
           : 'text-[color:var(--portal-muted)] hover:bg-[#caa24c]/[0.08] hover:text-[#18130d] dark:hover:bg-[#caa24c]/[0.06] dark:hover:text-[#f4f4f5]'

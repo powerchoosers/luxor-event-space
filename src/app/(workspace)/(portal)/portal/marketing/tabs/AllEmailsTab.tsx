@@ -1982,7 +1982,7 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
           animate={{ x: 0 }}
           exit={{ x: '-100%' }}
           transition={reduceMotion ? { duration: 0 } : { type: 'spring', bounce: 0, duration: 0.32 }}
-          className="portal-overlay-surface absolute inset-y-0 left-0 z-50 flex w-full flex-col overflow-y-auto border-r border-[color:var(--portal-border)] pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] shadow-2xl lg:hidden"
+          className="portal-drawer bg-[color:var(--portal-card)] absolute inset-y-0 left-0 z-50 flex w-full flex-col overflow-y-auto border-r border-[color:var(--portal-border)] pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] shadow-2xl lg:hidden"
         >
           {renderMailboxNav(true)}
         </motion.aside>
@@ -2689,7 +2689,8 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
 
         {previewAttachment && typeof document !== 'undefined' ? createPortal(
             <motion.div
-              className="fixed inset-0 z-[300] flex items-center justify-center bg-black/55 p-4 backdrop-blur-sm"
+              data-portal-backdrop="true"
+              className="portal-modal-backdrop fixed inset-0 z-[300] flex items-center justify-center p-4"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               onClick={closeAttachmentPreview}
@@ -2698,10 +2699,10 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
                 role="dialog"
                 aria-modal="true"
                 aria-label={`${previewAttachment.filename} preview`}
-                className="flex h-[min(88vh,760px)] w-[min(94vw,1100px)] flex-col overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] shadow-2xl"
-                initial={reduceMotion ? { opacity: 0 } : { opacity: 0, y: 14, scale: 0.985 }}
-                animate={{ opacity: 1, y: 0, scale: 1 }}
-                exit={reduceMotion ? { opacity: 0 } : { opacity: 0, y: 8, scale: 0.99 }}
+                className="portal-overlay-surface flex h-[min(88vh,760px)] w-[min(94vw,1100px)] flex-col overflow-hidden rounded-2xl border border-[color:var(--portal-border)] shadow-2xl"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0, pointerEvents: 'none' }}
                 onClick={(event) => event.stopPropagation()}
               >
                 <div className="flex shrink-0 items-center justify-between gap-3 border-b border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/55 px-4 py-3">
