@@ -42,7 +42,7 @@ export default function Home() {
       <section id="hero" className="venue-film-hero relative isolate overflow-hidden pt-28">
         <VenueFilm autoPlay hero>
           <div className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center">
-            <PublicSiteAction placement="hero" className="hero-brochure-cta pointer-events-auto group relative inline-flex w-48 items-center justify-center gap-2 rounded-2xl px-4 py-3 text-center font-serif text-[11px] uppercase leading-snug tracking-[0.16em] sm:w-auto sm:gap-3 sm:rounded-full sm:px-10 sm:py-5 sm:text-base sm:tracking-[0.2em]" />
+            <PublicSiteAction placement="hero" className="hero-brochure-cta pointer-events-auto group relative inline-flex max-w-[13rem] flex-wrap items-center justify-center gap-x-2 gap-y-1 rounded-2xl px-4 py-3 text-center font-serif text-[11px] uppercase leading-snug tracking-[0.16em] sm:max-w-none sm:flex-nowrap sm:gap-3 sm:rounded-full sm:px-10 sm:py-5 sm:text-base sm:tracking-[0.2em]" />
           </div>
         </VenueFilm>
       </section>
