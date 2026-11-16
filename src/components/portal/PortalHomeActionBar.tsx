@@ -5,6 +5,7 @@ import {
   ChevronDown,
   Plus,
   Workflow,
+  MessageCircleMore,
   CreditCard,
   Phone,
   Zap,
@@ -137,17 +138,20 @@ export function PortalHomeActionBar() {
               <Workflow size={16} className="shrink-0 text-[#a8792f] dark:text-[#dfbd68]" /> Flow
             </span>
           </Link>
-          <Link
-            href="/portal/invoices"
-            onClick={() => setExpanded(false)}
+          <button
+            type="button"
+            onClick={() => {
+              setExpanded(false)
+              window.dispatchEvent(new CustomEvent('luxor-open-elena'))
+            }}
             className={actionButton}
-            aria-label="Invoices & Payments"
-            title="Invoices & Payments"
+            aria-label="Open Elena AI Assistant"
+            title="Elena AI Assistant"
           >
             <span className={actionSurface}>
-              <CreditCard size={16} className="shrink-0 text-[#a8792f] dark:text-[#dfbd68]" /> Invoices
+              <MessageCircleMore size={16} className="shrink-0 text-[#a8792f] dark:text-[#dfbd68]" /> Elena
             </span>
-          </Link>
+          </button>
         </div>
       </motion.div>
 
