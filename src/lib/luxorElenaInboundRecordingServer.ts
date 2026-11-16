@@ -85,7 +85,7 @@ async function startElenaRecordingSessions(callSid: string, sessionId: string, c
     try {
       const transcription = await client.calls(callSid).transcriptions.create({
         name: `Luxor ${callSid}`, statusCallbackUrl: `${BASE}/api/twilio/transcriptions?recordCallSid=${callSid}`, statusCallbackMethod: 'POST',
-        track: 'both_tracks', inboundTrackLabel: 'caller', outboundTrackLabel: 'luxor_agent', transcriptionEngine: 'deepgram',
+        track: 'both_tracks', inboundTrackLabel: 'luxor_agent', outboundTrackLabel: 'caller', transcriptionEngine: 'deepgram',
         speechModel: 'nova-3', languageCode: 'multi', partialResults: true, hints: ELENA_TRANSCRIPTION_HINTS, enableAutomaticPunctuation: true,
         enableProviderData: true,
       })

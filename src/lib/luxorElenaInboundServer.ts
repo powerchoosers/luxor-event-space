@@ -67,6 +67,9 @@ export function getElenaLiveConfig() {
 
 export function elenaLiveInboundReady() { try { getElenaLiveConfig(); return true } catch { return false } }
 
+/** Upper bound for signed live-claim `exp` (seconds from issuance). Worker and MCP tokens must stay within this window. */
+export const ELENA_LIVE_CLAIM_MAX_SECONDS = 1800
+
 export function signElenaLiveClaim(claim: LiveClaim, secret: string) {
   if (secret.length < 32) throw new Error('Live voice signing is unavailable.')
   const content = Buffer.from(JSON.stringify(claim)).toString('base64url')
@@ -83,7 +86,7 @@ export function verifyElenaLiveClaim(token: string, secret: string, now = Date.n
   try {
     const claim = JSON.parse(Buffer.from(content, 'base64url').toString()) as LiveClaim
     if (!['call', 'capture', 'transfer', 'booking', 'recording', 'lead_update', 'email'].includes(claim.kind) || !CALL_SID.test(claim.callSid) || !SESSION_ID.test(claim.sessionId)
-      || !Number.isSafeInteger(claim.exp) || claim.exp <= Math.floor(now / 1000) || claim.exp > Math.floor(now / 1000) + 1800
+      || !Number.isSafeInteger(claim.exp) || claim.exp <= Math.floor(now / 1000) || claim.exp > Math.floor(now / 1000) + ELENA_LIVE_CLAIM_MAX_SECONDS
       || (claim.kind !== 'call' && !/^[0-9a-f-]{36}$/.test(claim.nonce || ''))
       || (claim.kind === 'transfer' && !/^[0-9a-f]{64}$/.test(claim.targetHash || ''))) return null
     return claim
@@ -328,7 +331,7 @@ export async function acceptElenaLiveEvent(raw: unknown) {
   }
   const callSid = row.twilio_call_sid
   const [settings, venue] = await Promise.all([getElenaInboundSettings(), getLuxorAiVenueContext()])
-  const claim: LiveClaim = { kind: 'call', callSid, sessionId, exp: Math.floor(Date.now() / 1000) + 1800 }
+  const claim: LiveClaim = { kind: 'call', callSid, sessionId, exp: Math.floor(Date.now() / 1000) + ELENA_LIVE_CLAIM_MAX_SECONDS }
   const instructions = `${LIVE_INSTRUCTIONS}\nCurrent server-supplied venue reference:\n${venue}`
   const response = await fetch(`https://api.openai.com/v1/live/sessions/${encodeURIComponent(sessionId)}/accept`, {
     method: 'POST', headers: { Authorization: `Bearer ${config.apiKey}`, 'OpenAI-Project': config.projectId, 'Content-Type': 'application/json' },

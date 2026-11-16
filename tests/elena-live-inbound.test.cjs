@@ -93,6 +93,7 @@ const status = compile('src/app/api/elena-inbound/status/route.ts', {
   '@/lib/supabaseRestServer': integrations['./supabaseRestServer'],
   '@/lib/luxorElenaInboundNotificationServer': integrations['./luxorElenaInboundNotificationServer'],
   '@/lib/luxorElenaInboundRecordingServer': integrations['./luxorElenaInboundRecordingServer'],
+  '@/lib/luxorElenaInboundAgentTranscriptServer': { triggerElenaInboundAgentTranscriptSideband: () => undefined },
   '@/lib/luxorElenaInboundFinalizeServer': { syncElenaInboundAnsweredAt: async () => null, finalizeElenaInboundCall: async () => ({ status: 'skipped' }) },
   '@/lib/luxorTwilioServer': { ...integrations['./luxorTwilioServer'], normalizeTwilioCallStatus: (value) => value === 'answered' ? 'in-progress' : value, parseTwilioInteger: (value) => /^\d+$/.test(value || '') ? Number(value) : null },
 })
@@ -161,6 +162,13 @@ test('call claims reject tampering, expiry and wrong domain', () => {
   assert.equal(service.verifyElenaLiveClaim(token, secret).callSid, callSid)
   assert.equal(service.verifyElenaLiveClaim(token + 'x', secret), null)
   assert.equal(service.verifyElenaLiveClaim(token, secret, Date.now() + 700_000), null)
+})
+test('agent transcript worker tokens must not exceed the live claim max TTL', () => {
+  const nowSec = Math.floor(Date.now() / 1000)
+  const within = service.signElenaLiveClaim({ ...claim(), exp: nowSec + service.ELENA_LIVE_CLAIM_MAX_SECONDS }, secret)
+  assert.equal(service.verifyElenaLiveClaim(within, secret)?.callSid, callSid)
+  const over = service.signElenaLiveClaim({ ...claim(), exp: nowSec + service.ELENA_LIVE_CLAIM_MAX_SECONDS + 5400 }, secret)
+  assert.equal(service.verifyElenaLiveClaim(over, secret), null)
 })
 test('rehearsal scope and another live session cannot call capture or transfer', async () => {
   state.row.metadata.scope = 'elena_phone_test'; assert.equal((await tool('prepare_contact_capture', contact)).error, true)

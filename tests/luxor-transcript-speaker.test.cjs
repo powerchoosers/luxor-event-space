@@ -30,6 +30,14 @@ test('elena sip bridge normalizes storage tracks for new transcript rows', () =>
   assert.equal(types.luxorTranscriptStorageTrack('luxor_agent', metadata), 'luxor_agent')
 })
 
+test('elena parent-leg custom track labels map to storage without extra swap', () => {
+  const metadata = { scope: 'elena_live_inbound' }
+  assert.equal(types.luxorTranscriptStorageTrack('luxor_agent', metadata), 'luxor_agent')
+  assert.equal(types.luxorTranscriptStorageTrack('caller', metadata), 'caller')
+  assert.equal(types.luxorTranscriptSpeaker('luxor_agent', { elenaSipBridge: true }), 'luxor')
+  assert.equal(types.luxorTranscriptSpeaker('caller', { elenaSipBridge: true }), 'caller')
+})
+
 test('elena sip bridge maps labeled tracks to the correct speaker', () => {
   assert.equal(types.luxorTranscriptSpeaker('caller', { elenaSipBridge: true }), 'caller')
   assert.equal(types.luxorTranscriptSpeaker('luxor_agent', { elenaSipBridge: true }), 'luxor')
