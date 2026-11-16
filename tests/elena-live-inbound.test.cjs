@@ -217,6 +217,16 @@ test('callback details require best time plus email or explicit refusal', () => 
   assert.throws(() => service.parseElenaLiveContact({ ...contact, purpose: 'callback', best_callback_time: 'Tomorrow afternoon' }))
   assert.equal(service.parseElenaLiveContact({ ...contact, purpose: 'callback', best_callback_time: 'Tomorrow afternoon', email_declined: true }).email, null)
 })
+test('non-event callback can save with call note without best time or email', () => {
+  const parsed = service.parseElenaLiveContact({
+    full_name: 'Sarah',
+    purpose: 'callback',
+    caller_category: 'other_non_event',
+    call_note: 'Returning Arianna\'s call about a business line of credit.',
+  }, '+15559876543')
+  assert.equal(parsed.phone, '+15559876543')
+  assert.equal(parsed.call_note, 'Returning Arianna\'s call about a business line of credit.')
+})
 test('caller id can stand in for an unstated callback number', () => {
   const parsed = service.parseElenaLiveContact({ full_name: 'Synthetic Caller', purpose: 'callback', caller_category: 'event_inquiry', best_callback_time: 'Tomorrow afternoon', email_declined: true }, '+15559876543')
   assert.equal(parsed.phone, '+15559876543')
