@@ -17,6 +17,8 @@ export function LuxorPublicCheckboxField({
   children,
   variant = 'consent',
   disabled,
+  invalid,
+  errorId,
 }: {
   id?: string
   checked: boolean
@@ -24,6 +26,8 @@ export function LuxorPublicCheckboxField({
   children: ReactNode
   variant?: 'consent' | 'tile'
   disabled?: boolean
+  invalid?: boolean
+  errorId?: string
 }) {
   if (variant === 'tile') {
     return (
@@ -54,6 +58,8 @@ export function LuxorPublicCheckboxField({
         checked={checked}
         onChange={(event) => onChange(event.target.checked)}
         disabled={disabled}
+        aria-invalid={invalid ? true : undefined}
+        aria-describedby={invalid && errorId ? errorId : undefined}
         className={LUXOR_PUBLIC_CHECKBOX_INPUT_CLASS}
       />
       <span className="leading-6">{children}</span>
