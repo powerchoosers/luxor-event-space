@@ -16,6 +16,18 @@ export type LuxorDeveloperSupportWebhookAttachment = {
   textExcerpt: string | null
 }
 
+export type LuxorDeveloperSupportWebhookAnnotation = {
+  id: string
+  note: string
+  pagePath: string
+  selector: string
+  role: string | null
+  elementLabel: string
+  visibleText: string | null
+  viewportWidth: number
+  viewportHeight: number
+}
+
 export type LuxorDeveloperSupportWebhookPayload = {
   context: string
   pagePath: string
@@ -24,6 +36,7 @@ export type LuxorDeveloperSupportWebhookPayload = {
   priority: string
   ticketId: string
   attachments: LuxorDeveloperSupportWebhookAttachment[]
+  annotations: LuxorDeveloperSupportWebhookAnnotation[]
 }
 
 function parseDispatchBody(value: unknown): LuxorCursorAutomationDispatch {
@@ -74,6 +87,17 @@ export async function triggerLuxorCursorAutomation(
           signedUrl: attachment.signedUrl,
           expiresAt: attachment.expiresAt,
           textExcerpt: attachment.textExcerpt ? attachment.textExcerpt.slice(0, 12_000) : null,
+        })),
+        annotations: payload.annotations.slice(0, 25).map((annotation) => ({
+          id: annotation.id.slice(0, 64),
+          note: annotation.note.slice(0, 2_000),
+          pagePath: annotation.pagePath.slice(0, 2048),
+          selector: annotation.selector.slice(0, 512),
+          role: annotation.role ? annotation.role.slice(0, 64) : null,
+          elementLabel: annotation.elementLabel.slice(0, 120),
+          visibleText: annotation.visibleText ? annotation.visibleText.slice(0, 120) : null,
+          viewportWidth: annotation.viewportWidth,
+          viewportHeight: annotation.viewportHeight,
         })),
       }),
       cache: 'no-store',

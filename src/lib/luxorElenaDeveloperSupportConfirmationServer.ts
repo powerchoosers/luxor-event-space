@@ -27,6 +27,12 @@ import {
   LUXOR_DEVELOPER_SUPPORT_DESCRIPTION_MAX,
   LUXOR_DEVELOPER_SUPPORT_TITLE_MAX,
 } from '@/lib/luxorDeveloperSupportLimits'
+import {
+  developerSupportAnnotationsForWebhook,
+  formatDeveloperSupportAnnotationsContext,
+  parseDeveloperSupportAnnotations,
+  type DeveloperTicketAnnotation,
+} from '@/lib/luxorDeveloperTicketAnnotations'
 
 export class DeveloperSupportConfirmationExpiredError extends Error {
   readonly code = 'confirmation_expired' as const
@@ -44,12 +50,17 @@ export type DeveloperSupportTicket = {
   pagePath: string | null
 }
 
-export function parseDeveloperSupportTicket(input: unknown): DeveloperSupportTicket & { attachments: ReturnType<typeof parseDeveloperSupportAttachmentInputs> } {
+export function parseDeveloperSupportTicket(
+  input: unknown,
+): DeveloperSupportTicket & {
+  attachments: ReturnType<typeof parseDeveloperSupportAttachmentInputs>
+  annotations: DeveloperTicketAnnotation[]
+} {
   if (!input || typeof input !== 'object' || Array.isArray(input)) {
     throw new Error('The ticket form was incomplete. Add a title and try again.')
   }
   const value = input as Record<string, unknown>
-  if (Object.keys(value).some((key) => !['title', 'description', 'priority', 'pagePath', 'attachments'].includes(key))) {
+  if (Object.keys(value).some((key) => !['title', 'description', 'priority', 'pagePath', 'attachments', 'annotations'].includes(key))) {
     throw new Error('The ticket could not be read. Refresh Elena and open the developer support card again.')
   }
   if (typeof value.title !== 'string' || !value.title.trim()) {
@@ -83,12 +94,24 @@ export function parseDeveloperSupportTicket(input: unknown): DeveloperSupportTic
         : detail,
     )
   }
+  let annotations: DeveloperTicketAnnotation[]
+  try {
+    annotations = parseDeveloperSupportAnnotations(value.annotations)
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : 'Invalid ticket annotations.'
+    throw new Error(
+      detail.includes('Invalid ticket annotations')
+        ? 'One or more page notes could not be included. Edit the notes and try again.'
+        : detail,
+    )
+  }
   return {
     title: value.title.trim(),
     description: typeof value.description === 'string' ? value.description.trim() || null : null,
     priority,
     pagePath,
     attachments,
+    annotations,
   }
 }
 
@@ -142,9 +165,11 @@ export function buildDeveloperSupportWebhookPayload(input: {
   reporterName: string
   attachmentContext: string | null
   attachments: DeveloperSupportWebhookAttachment[]
+  annotations?: DeveloperTicketAnnotation[]
 }): LuxorDeveloperSupportWebhookPayload {
   const pagePath = normalizeDeveloperSupportPagePath(input.pagePath)
   const pageArea = getDeveloperSupportPageArea(pagePath)
+  const annotationContext = formatDeveloperSupportAnnotationsContext(input.annotations || [])
   const context = buildCursorContext({
     title: input.title,
     description: input.description,
@@ -153,7 +178,7 @@ export function buildDeveloperSupportWebhookPayload(input: {
     confirmationId: input.confirmationId,
     reporterEmail: input.reporterEmail,
     reporterName: input.reporterName,
-    attachmentContext: input.attachmentContext,
+    attachmentContext: [input.attachmentContext, annotationContext].filter(Boolean).join('\n\n') || null,
   })
   return {
     context,
@@ -163,6 +188,7 @@ export function buildDeveloperSupportWebhookPayload(input: {
     priority: input.priority,
     ticketId: input.confirmationId,
     attachments: input.attachments,
+    annotations: developerSupportAnnotationsForWebhook(input.annotations || []),
   }
 }
 
@@ -218,6 +244,7 @@ export async function issueElenaDeveloperSupportConfirmation(input: unknown) {
         p_priority: ticket.priority,
         p_page_path: ticket.pagePath,
         p_context_attachments: contextAttachments,
+        p_element_annotations: ticket.annotations,
       }),
     })
   } catch (error) {
@@ -275,6 +302,7 @@ export async function consumeElenaDeveloperSupportConfirmation(input: unknown) {
     priority: string
     page_path: string | null
     context_attachments: DeveloperSupportStoredAttachment[] | null
+    element_annotations: unknown
     reporter_email: string
     reporter_name: string
   }
@@ -335,6 +363,12 @@ export async function consumeElenaDeveloperSupportConfirmation(input: unknown) {
   const priority = (consumed.priority === 'low' || consumed.priority === 'medium' || consumed.priority === 'high' || consumed.priority === 'urgent')
     ? consumed.priority
     : 'medium'
+  let storedAnnotations: DeveloperTicketAnnotation[] = []
+  try {
+    storedAnnotations = parseDeveloperSupportAnnotations(consumed.element_annotations)
+  } catch {
+    storedAnnotations = []
+  }
   const webhookPayload = buildDeveloperSupportWebhookPayload({
     confirmationId: consumed.confirmation_id,
     title: consumed.title,
@@ -345,6 +379,7 @@ export async function consumeElenaDeveloperSupportConfirmation(input: unknown) {
     reporterName: typeof consumed.reporter_name === 'string' ? consumed.reporter_name : consumed.reporter_email,
     attachmentContext,
     attachments: webhookAttachments,
+    annotations: storedAnnotations,
   })
 
   try {

@@ -79,6 +79,7 @@ import {
   type ElenaSlashCommand,
 } from '@/lib/luxorElenaSlashCommands'
 import type { PortalRole } from '@/lib/luxorPortalAccess'
+import { focusElenaLauncher, focusElenaPanelEntry } from '@/lib/luxorPortalElenaFocus'
 
 type ExecutedQuery = {
   query: string
@@ -398,6 +399,7 @@ interface ChatSession {
 interface PortalElenaChatProps {
   isOpen: boolean
   onClose: () => void
+  launcherRef: React.RefObject<HTMLButtonElement | null>
   activePath: string
   portalRole: PortalRole
   userEmail: string
@@ -548,7 +550,7 @@ const ElenaGrowingTextarea = React.forwardRef<HTMLTextAreaElement, {
   },
 )
 
-export function PortalElenaChat({ isOpen, onClose, activePath, portalRole, userEmail }: PortalElenaChatProps) {
+export function PortalElenaChat({ isOpen, onClose, launcherRef, activePath, portalRole, userEmail }: PortalElenaChatProps) {
   const router = useRouter()
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState('')
@@ -568,6 +570,27 @@ export function PortalElenaChat({ isOpen, onClose, activePath, portalRole, userE
   const [loadedSessionId, setLoadedSessionId] = useState<string | null>(null)
   const activeSessionRef = useRef<string | null>(null)
   const isOpenRef = useRef(isOpen)
+  const elenaPanelRef = useRef<HTMLElement>(null)
+  const elenaPanelHidden = !isOpen
+
+  const elenaWasOpenRef = useRef(false)
+
+  useEffect(() => {
+    if (isOpen) {
+      elenaWasOpenRef.current = true
+      const frame = requestAnimationFrame(() => {
+        focusElenaPanelEntry(elenaPanelRef.current)
+      })
+      return () => window.cancelAnimationFrame(frame)
+    }
+    if (!elenaWasOpenRef.current) return
+    elenaWasOpenRef.current = false
+    const frame = requestAnimationFrame(() => {
+      focusElenaLauncher(launcherRef.current)
+    })
+    return () => window.cancelAnimationFrame(frame)
+  }, [isOpen, launcherRef])
+
   const [showSessionsList, setShowSessionsList] = useState(false)
   const [editingSessionId, setEditingSessionId] = useState<string | null>(null)
   const [editTitleInput, setEditTitleInput] = useState('')
@@ -1602,12 +1625,12 @@ export function PortalElenaChat({ isOpen, onClose, activePath, portalRole, userE
 
   return (
     <motion.aside 
+      ref={elenaPanelRef}
       initial={{ x: '100%' }}
       animate={{ x: isOpen ? 0 : '100%' }}
       transition={{ duration: 0.3, ease: [0.23, 1, 0.32, 1] }}
       className="portal-elena-chat-panel fixed right-0 top-0 z-[65] flex w-full flex-col border-l-0 border-[color:var(--portal-border)] bg-[color:var(--portal-bg)] text-[color:var(--portal-text)] shadow-[-24px_0_60px_-36px_rgba(0,0,0,0.85)] max-lg:bottom-[var(--portal-mobile-nav-height)] max-lg:h-[calc(100dvh-var(--portal-mobile-nav-height))] lg:bottom-0 lg:h-full lg:w-[420px] lg:border-l"
-      aria-hidden={!isOpen}
-      inert={!isOpen}
+      {...(elenaPanelHidden ? { inert: true } : {})}
     >
       {/* Header */}
       <div className="flex h-16 shrink-0 items-center justify-between border-b border-[color:var(--portal-border)] px-4">

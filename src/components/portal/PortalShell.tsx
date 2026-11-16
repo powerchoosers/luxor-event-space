@@ -58,6 +58,7 @@ import type { EmailComposeDraft } from '@/components/portal/EmailComposeDrawer'
 import type { Tab as SettingsTabType } from '@/components/portal/PortalSettingsManager'
 import { getRecentLeads, getRecentLeadsServerSnapshot, subscribeRecentLeads, saveRecentLead, clearRecentLeads, type RecentLeadItem } from '@/lib/luxorRecentLeads'
 import { PortalFloatingScrollbar } from '@/components/portal/PortalFloatingScrollbar'
+import { PortalDeveloperModeProvider } from '@/components/portal/PortalDeveloperMode'
 
 type PortalUserProfile = {
   displayName: string
@@ -365,6 +366,11 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
   }, [pathname, router, searchParams])
   const [sidebarCollapsed, setSidebarCollapsed] = useState(initialSidebarCollapsed)
   const [elenaOpen, setElenaOpen] = useState(false)
+  const elenaLauncherRef = useRef<HTMLButtonElement>(null)
+
+  const closeElenaChat = useCallback(() => {
+    setElenaOpen(false)
+  }, [setElenaOpen])
   const [accountMenuOpen, setAccountMenuOpen] = useState(false)
   const accountContainerRef = useRef<HTMLDivElement>(null)
 
@@ -934,6 +940,7 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
 
   return (
     <>
+      <PortalDeveloperModeProvider userEmail={session.email} portalRole={role} activePath={pathname} elenaOpen={elenaOpen}>
       <PortalVoiceProvider canUsePhone={canAccess('calls')} canViewLeadDetails={canAccess('leads')} canText={canAccess('messages')} canEmail={canAccess('emails')}>
       <aside
         onWheelCapture={handOffWheelToPage}
@@ -1684,8 +1691,9 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
 
               {/* 4. Elena AI Concierge */}
               <button
+                ref={elenaLauncherRef}
                 type="button"
-                onClick={() => setElenaOpen((current) => !current)}
+                onClick={() => setElenaOpen((open) => !open)}
                 className={`relative flex h-9 w-9 shrink-0 overflow-hidden rounded-full border transition-all hover:scale-105 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/50 cursor-pointer ${
                   elenaOpen 
                     ? 'border-[#caa24c] ring-2 ring-[#caa24c]/30' 
@@ -1978,7 +1986,14 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
             <span className="relative z-10">More</span>
           </button>
         </nav>
-      <PortalElenaChat isOpen={elenaOpen} onClose={() => setElenaOpen(false)} activePath={pathname} portalRole={role} userEmail={session.email} />
+      <PortalElenaChat
+        isOpen={elenaOpen}
+        onClose={closeElenaChat}
+        launcherRef={elenaLauncherRef}
+        activePath={pathname}
+        portalRole={role}
+        userEmail={session.email}
+      />
       <AnimatePresence>
         {mobileMoreOpen && (
           <motion.div
@@ -2163,6 +2178,7 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
       ) : null}
       <PortalGlobalTooltip />
       </PortalVoiceProvider>
+      </PortalDeveloperModeProvider>
     </>
   )
 }
