@@ -48,6 +48,8 @@ test('confirmation starts recording and transcript once for the bound live call'
   assert.deepEqual(calls.map((item) => item[0]), ['recording', 'transcription'])
   assert.equal(calls[0][1].recordingChannels, 'dual')
   assert.equal(calls[1][1].track, 'both_tracks')
+  assert.equal(calls[1][1].inboundTrackLabel, 'luxor_agent')
+  assert.equal(calls[1][1].outboundTrackLabel, 'caller')
   assert.equal(calls[1][1].partialResults, true)
   assert.match(calls[1][1].hints, /quinceañera/)
   assert.match(calls[1][1].hints, /luxoratlaspalmas\.com/)

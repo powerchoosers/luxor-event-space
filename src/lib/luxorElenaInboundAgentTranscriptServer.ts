@@ -1,7 +1,7 @@
 import 'server-only'
 
 import WebSocket from 'ws'
-import { getElenaLiveConfig, signElenaLiveClaim, verifyElenaLiveClaim } from './luxorElenaInboundServer'
+import { ELENA_LIVE_CLAIM_MAX_SECONDS, getElenaLiveConfig, signElenaLiveClaim, verifyElenaLiveClaim } from './luxorElenaInboundServer'
 import { ELENA_LIVE_AGENT_TRANSCRIPTION_SID, saveLuxorElenaAgentTranscriptSegment } from './luxorCallsServer'
 import { supabaseRestStrict } from './supabaseRestServer'
 
@@ -181,8 +181,15 @@ export async function runElenaInboundAgentTranscriptSideband(callSid: string, se
       if (type === 'session.closed') finish('completed')
       if (Date.now() - startedAt > 5_000) pollTerminalCall()
     })
-    socket.on('unexpected-response', (_req, response) => { response.resume(); finish('failed') })
-    socket.on('error', () => finish('failed'))
+    socket.on('unexpected-response', (_req, response) => {
+      console.warn('[Elena Inbound] Agent transcript sideband attach failed.', { callSid, statusCode: response.statusCode })
+      response.resume()
+      finish('failed')
+    })
+    socket.on('error', () => {
+      console.warn('[Elena Inbound] Agent transcript sideband socket error.', { callSid })
+      finish('failed')
+    })
     socket.on('close', () => { if (!closed) finish(finishStatus) })
   })
 
@@ -194,13 +201,22 @@ export function triggerElenaInboundAgentTranscriptSideband(callSid: string, sess
   if (!CALL_SID.test(callSid) || !SESSION_ID.test(sessionId)) return
   const secret = process.env.OPENAI_VOICE_WEBHOOK_SECRET || ''
   if (secret.length < 32) return
-  const token = signElenaLiveClaim({ kind: 'call', callSid, sessionId, exp: Math.floor(Date.now() / 1000) + 7200 }, secret)
+  const token = signElenaLiveClaim({ kind: 'call', callSid, sessionId, exp: Math.floor(Date.now() / 1000) + ELENA_LIVE_CLAIM_MAX_SECONDS }, secret)
   void fetch(`${BASE}/api/elena-inbound/agent-transcript`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({ callSid, sessionId }),
     cache: 'no-store',
-  }).catch(() => console.warn('[Elena Inbound] Agent transcript worker could not be requested.'))
+  }).then(async (response) => {
+    if (!response.ok) {
+      console.warn('[Elena Inbound] Agent transcript worker request failed.', { callSid, status: response.status })
+    }
+  }).catch((error) => {
+    console.warn('[Elena Inbound] Agent transcript worker could not be requested.', {
+      callSid,
+      message: error instanceof Error ? error.message : 'unknown',
+    })
+  })
 }
 
 export function authorizeElenaInboundAgentTranscriptRequest(request: Request) {
