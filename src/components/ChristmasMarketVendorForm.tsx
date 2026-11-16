@@ -1,7 +1,8 @@
 'use client'
 
 import Link from 'next/link'
-import { FormEvent, useMemo, useRef, useState } from 'react'
+import { FormEvent, useId, useMemo, useRef, useState } from 'react'
+import { LuxorPublicCheckboxField } from '@/components/LuxorPublicCheckbox'
 import {
   Check,
   CheckCircle2,
@@ -36,6 +37,10 @@ const fieldClass =
 const labelClass = 'block text-xs font-semibold uppercase tracking-[0.14em] text-[#8d672b]'
 
 export function ChristmasMarketVendorForm() {
+  const fieldIds = {
+    guidelinesAck: useId(),
+    finalAck: useId(),
+  }
   const formStartedAt = useMemo(() => Date.now(), [])
   const submissionKeyRef = useRef(crypto.randomUUID())
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -307,10 +312,10 @@ export function ChristmasMarketVendorForm() {
                 key={key}
                 type="button"
                 onClick={() => setSelectedSpace(key)}
-                className={`relative flex h-full flex-col rounded-2xl border p-5 text-left transition ${
+                className={`package-tier-option relative flex h-full flex-col rounded-2xl border p-5 text-left text-sm font-semibold transition ${
                   selected
-                    ? 'border-[#caa24c] bg-[#fff8ea] ring-2 ring-[#caa24c]/25'
-                    : 'border-[#caa24c]/25 bg-white hover:border-[#caa24c]/45'
+                    ? 'border-[#caa24c] bg-[#caa24c]/16 text-[#241d17]'
+                    : 'border-[#d8c4a4] bg-white text-[#665a4e]'
                 }`}
                 aria-pressed={selected}
               >
@@ -348,27 +353,19 @@ export function ChristmasMarketVendorForm() {
         </label>
         <fieldset className="mt-6">
           <legend className={labelClass}>Will you bring additional displays?</legend>
-          <div className="mt-3 flex flex-wrap gap-3">
-            {LUXOR_MARKET_VENDOR_DISPLAY_OPTIONS.map((option) => {
-              const checked = additionalDisplays.includes(option)
-              return (
-                <label
-                  key={option}
-                  className={`inline-flex min-h-10 cursor-pointer items-center gap-2 rounded-lg border px-3 text-sm ${
-                    checked ? 'border-[#caa24c] bg-[#fff8ea]' : 'border-[#caa24c]/25 bg-white'
-                  }`}
+          <ul className="mt-3 grid gap-2 sm:grid-cols-2">
+            {LUXOR_MARKET_VENDOR_DISPLAY_OPTIONS.map((option) => (
+              <li key={option}>
+                <LuxorPublicCheckboxField
+                  variant="tile"
+                  checked={additionalDisplays.includes(option)}
+                  onChange={() => toggleDisplay(option)}
                 >
-                  <input
-                    type="checkbox"
-                    className="accent-[#caa24c]"
-                    checked={checked}
-                    onChange={() => toggleDisplay(option)}
-                  />
                   {option}
-                </label>
-              )
-            })}
-          </div>
+                </LuxorPublicCheckboxField>
+              </li>
+            ))}
+          </ul>
         </fieldset>
       </section>
 
@@ -377,30 +374,26 @@ export function ChristmasMarketVendorForm() {
           <ClipboardList className="h-5 w-5" aria-hidden />
           <h2 className="font-serif text-xl text-[#241d17]">Acknowledgment</h2>
         </header>
-        <label className="flex items-start gap-3 text-sm leading-6 text-[#665a4e]">
-          <input
-            type="checkbox"
-            className="mt-1 accent-[#caa24c]"
-            checked={guidelinesAcknowledged}
-            onChange={(event) => setGuidelinesAcknowledged(event.target.checked)}
-          />
-          <span>
-            I have read and agree to the{' '}
-            <a href="#vendor-guidelines-heading" className="font-semibold text-[#8d672b] underline">
-              Vendor Guidelines
-            </a>
-            , including the food, cooking, and alcohol restrictions.
-          </span>
-        </label>
-        <label className="mt-4 flex items-start gap-3 text-sm leading-6 text-[#665a4e]">
-          <input
-            type="checkbox"
-            className="mt-1 accent-[#caa24c]"
+        <LuxorPublicCheckboxField
+          id={fieldIds.guidelinesAck}
+          checked={guidelinesAcknowledged}
+          onChange={setGuidelinesAcknowledged}
+        >
+          I have read and agree to the{' '}
+          <a href="#vendor-guidelines-heading" className="font-semibold text-[#8d672b] underline">
+            Vendor Guidelines
+          </a>
+          , including the food, cooking, and alcohol restrictions.
+        </LuxorPublicCheckboxField>
+        <div className="mt-3">
+          <LuxorPublicCheckboxField
+            id={fieldIds.finalAck}
             checked={finalAcknowledged}
-            onChange={(event) => setFinalAcknowledged(event.target.checked)}
-          />
-          <span>I confirm this information is accurate and understand approval is required before securing a market space.</span>
-        </label>
+            onChange={setFinalAcknowledged}
+          >
+            I confirm this information is accurate and understand approval is required before securing a market space.
+          </LuxorPublicCheckboxField>
+        </div>
       </section>
 
       {error ? (
