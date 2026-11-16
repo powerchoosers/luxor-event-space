@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { defaultWebsiteContent, parseWebsiteContent } from '@/lib/publicWebsiteContent'
+import { defaultWebsiteContent, HERO_BUTTON_TEXT_MAX, parseWebsiteContent } from '@/lib/publicWebsiteContent'
 import { PortalButton, PortalSelect } from '@/components/portal/PortalUI'
 
 type Destination = 'brochure' | 'packages' | 'visit'
@@ -35,7 +35,28 @@ export function SiteContentSettings() {
   }
   return <section className="space-y-5 rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5">
     <div><h3 className="text-base font-bold text-[color:var(--portal-text)]">Website buttons</h3><p className="mt-1 text-sm text-[color:var(--portal-muted)]">Choose where visitors go when they select these actions.</p></div>
-    <div className="space-y-2"><label className="block text-sm font-semibold text-[color:var(--portal-text)]">Homepage video button</label><PortalSelect aria-label="Homepage video button destination" value={actions.hero} options={options} onChange={(value) => { if (valid(value)) setActions({ ...actions, hero: value }); setMessage('') }} disabled={loading || saving} /><p className="text-xs text-[color:var(--portal-muted)]">The brochure choice scrolls to the form at the bottom of the homepage.</p></div>
+    <div className="space-y-3">
+      <div className="space-y-2">
+        <label className="block text-sm font-semibold text-[color:var(--portal-text)]">Homepage video button</label>
+        <PortalSelect aria-label="Homepage video button destination" value={actions.hero} options={options} onChange={(value) => { if (valid(value)) setActions({ ...actions, hero: value }); setMessage('') }} disabled={loading || saving} />
+        <p className="text-xs text-[color:var(--portal-muted)]">The brochure choice scrolls to the form at the bottom of the homepage.</p>
+      </div>
+      <label className="block space-y-2 text-sm font-semibold text-[color:var(--portal-text)]">
+        Homepage video button text
+        <input
+          value={actions.heroText ?? ''}
+          maxLength={HERO_BUTTON_TEXT_MAX}
+          placeholder="Uses the default label when left blank"
+          disabled={loading || saving}
+          onChange={(event) => {
+            setActions({ ...actions, heroText: event.target.value })
+            setMessage('')
+          }}
+          className="block min-h-11 w-full rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 text-base font-normal text-[color:var(--portal-text)] focus:outline-2 focus:outline-[#caa24c]"
+        />
+        <span className="block text-xs font-normal text-[color:var(--portal-muted)]">{(actions.heroText ?? '').length}/{HERO_BUTTON_TEXT_MAX} characters. Shown in uppercase on the homepage.</span>
+      </label>
+    </div>
     <div className="space-y-2"><label className="block text-sm font-semibold text-[color:var(--portal-text)]">Other brochure links</label><PortalSelect aria-label="Other brochure links destination" value={actions.other} options={options} onChange={(value) => { if (valid(value)) setActions({ ...actions, other: value }); setMessage('') }} disabled={loading || saving} /><p className="text-xs text-[color:var(--portal-muted)]">Applies to the event page and Elena’s welcome actions.</p></div>
     <div className="border-t border-[color:var(--portal-border)] pt-5 space-y-4">
       <div><h3 className="text-base font-bold text-[color:var(--portal-text)]">Homepage introduction</h3><p className="mt-1 text-sm text-[color:var(--portal-muted)]">Shown below the homepage video. Changes apply to the English homepage.</p></div>
