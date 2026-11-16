@@ -32,6 +32,7 @@ language sql immutable set search_path='' as $$
 $$;
 grant execute on function public.luxor_workflow_normalize_phone(text) to service_role;
 \ir ../../supabase/migrations/20261114200000_elena_inbound_post_call_reconcile.sql
+\ir ../../supabase/migrations/20261116154500_elena_inbound_non_event_post_call.sql
 insert into public.luxor_calls(twilio_call_sid,direction,status,to_number,caller_number,metadata,summary_status,summary_text)
 values('CA99999999999999999999999999999999','inbound','completed','+15559990000','+15550001234',
   jsonb_build_object('scope','elena_live_inbound','ingress_mode','programmable_sip','rehearsal_only',false,'accepted',true),
@@ -46,4 +47,18 @@ select case when count(*)=1 and min(full_name)='Maria Lopez' and min(event_type)
   then 'ok' else 'fail' end as inquiry_created from public.luxor_inquiries;
 select case when inquiry_id is not null and metadata->'post_call_reconcile'->>'saved_at' is not null
   then 'ok' else 'fail' end as call_linked from public.luxor_calls where twilio_call_sid='CA99999999999999999999999999999999';
+insert into public.luxor_calls(twilio_call_sid,direction,status,to_number,caller_number,metadata,summary_status,summary_text)
+values('CA88888888888888888888888888888888','inbound','completed','+15559990000','+15550009999',
+  jsonb_build_object('scope','elena_live_inbound','ingress_mode','programmable_sip','rehearsal_only',false,'accepted',true),
+  'completed','Sarah returning Arianna business line of credit callback');
+set local role service_role;
+select public.luxor_reconcile_elena_inbound_after_call('CA88888888888888888888888888888888',
+  jsonb_build_object('full_name','Sarah','phone','+15550009999','caller_category','other_non_event',
+    'call_note','Returning Arianna''s call about a business line of credit.','purpose','callback','source','summary'));
+reset role;
+select case when inquiry_id is null and metadata->'inbound_capture'->>'confirmed'='true'
+  and metadata->>'caller_category'='other_non_event' and metadata->'post_call_reconcile'->>'non_event'='true'
+  then 'ok' else 'fail' end as non_event_saved from public.luxor_calls where twilio_call_sid='CA88888888888888888888888888888888';
+select case when count(*)=0 then 'ok' else 'fail' end as no_extra_inquiry
+  from public.luxor_inquiries where phone='+15550009999';
 rollback;

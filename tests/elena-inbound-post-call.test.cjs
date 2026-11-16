@@ -52,6 +52,55 @@ test('parseElenaInboundPostCallExtract returns null without a name', () => {
   assert.equal(postCall.parseElenaInboundPostCallExtract('General venue question only.', '+15551234567'), null)
 })
 
+test('parseElenaInboundPostCallExtract recovers a non-event callback from summary', () => {
+  const summary = 'Caller Sarah returned Arianna\'s call about a business line of credit and asked for a callback.'
+  const extract = postCall.parseElenaInboundPostCallExtract(summary, '+15559876543')
+  assert.equal(extract.full_name, 'Sarah')
+  assert.equal(extract.phone, '+15559876543')
+  assert.equal(extract.caller_category, 'other_non_event')
+  assert.match(extract.call_note, /business line of credit/i)
+  assert.equal(postCall.postCallExtractIsSufficient(extract), true)
+})
+
+test('reconcile runs RPC for non-event post-call recovery', async () => {
+  let rpcBody = null
+  const reconcile = compile('src/lib/luxorElenaInboundPostCallServer.ts', {
+    'server-only': {},
+    './luxorCallsServer': {
+      normalizePhoneNumber: (value) => {
+        const digits = String(value || '').replace(/\D/g, '')
+        return digits.length === 10 ? '+1' + digits : digits.length === 11 && digits[0] === '1' ? '+' + digits : null
+      },
+      getLuxorCallBySid: async () => ({
+        id: 'call', inquiry_id: null,
+        twilio_call_sid: 'CA' + '2'.repeat(32),
+        caller_number: '+15559876543',
+        summary_status: 'completed',
+        summary_text: 'Caller Sarah returned Arianna\'s call about a business line of credit.',
+        metadata: { scope: 'elena_live_inbound', accepted: true, ingress_mode: 'programmable_sip' },
+      }),
+      getLuxorTranscriptSegments: async () => [],
+    },
+    './luxorCallTypes': compile('src/lib/luxorCallTypes.ts', {}),
+    './supabaseRestServer': {
+      supabaseRestStrict: async (path, options) => {
+        if (path === 'rpc/luxor_reconcile_elena_inbound_after_call') rpcBody = JSON.parse(options.body)
+        return { saved: true, non_event: true, inquiry_id: null }
+      },
+    },
+    './luxorElenaCallerEventType': compile('src/lib/luxorElenaCallerEventType.ts', { './luxorInquiryTypes': { filterLuxorEventTypes: () => [], normalizeLuxorEventType: () => null } }),
+    './luxorBrochureDeliveryQueue': {},
+    './luxorInquiryTypes': {},
+    './luxorElenaInboundServer': { ELENA_LIVE_SCOPE: 'elena_live_inbound' },
+    './luxorElenaInboundNonEventServer': compile('src/lib/luxorElenaInboundNonEventServer.ts', { 'server-only': {}, './luxorCallsServer': {}, './supabaseRestServer': {} }),
+  })
+  const result = await reconcile.reconcileElenaInboundAfterSummary('CA' + '2'.repeat(32))
+  assert.equal(result.status, 'completed')
+  assert.equal(result.nonEvent, true)
+  assert.equal(rpcBody.p_fields.caller_category, 'other_non_event')
+  assert.match(rpcBody.p_fields.call_note, /business line of credit/i)
+})
+
 test('reconcile skips when call already has inquiry_id', async () => {
   const reconcile = compile('src/lib/luxorElenaInboundPostCallServer.ts', {
     'server-only': {},

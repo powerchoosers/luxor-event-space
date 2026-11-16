@@ -8,11 +8,16 @@ import { resolveElenaCallerEventType } from './luxorElenaCallerEventType'
 import { queueBrochureDelivery } from './luxorBrochureDeliveryQueue'
 import type { LuxorInquiry } from './luxorInquiryTypes'
 import { ELENA_LIVE_SCOPE } from './luxorElenaInboundServer'
+import type { ElenaCallerCategory } from './luxorElenaInboundNonEventServer'
 
 const EMAIL = /[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/i
 const ISO_DATE = /\b(20\d{2})-(\d{2})-(\d{2})\b/
 const GUEST_COUNT = /\b(?:about\s+|approximately\s+|around\s+)?(\d{2,3})\s+guests?\b/i
 const PACKAGE_PROMISE = /\b(?:email|send).{0,40}\b(?:package|brochure|pricing|information|details)\b/i
+const NAME =
+  /\b(?:caller(?:'s)?\s+name|name(?:\s+is)?|identified as)[:\s]+([A-Z][a-z]+(?:\s+[A-Z][a-z'-]+)*)\b/i
+const CALLER_NAME = /\bCaller\s+([A-Z][a-z]+(?:\s+[A-Z][a-z'-]+)*)\b/
+const ACTION_NAME = /\b([A-Z][a-z]+(?:\s+[A-Z][a-z'-]+)*)\s+(?:called|is planning|planned|requested|returned|is returning)\b/
 
 export type ElenaInboundPostCallExtract = {
   full_name: string | null
@@ -21,8 +26,45 @@ export type ElenaInboundPostCallExtract = {
   event_type: string | null
   target_date: string | null
   guest_count: number | null
+  call_note: string | null
+  caller_category: ElenaCallerCategory | null
+  purpose: 'transfer' | 'callback' | 'tour' | null
   package_email_promised: boolean
   source: 'summary' | 'transcript' | 'llm'
+}
+
+export function isElenaInboundPostCallNonEvent(extract: ElenaInboundPostCallExtract) {
+  return Boolean(extract.caller_category && extract.caller_category !== 'event_inquiry')
+}
+
+export function postCallExtractIsSufficient(extract: ElenaInboundPostCallExtract) {
+  if (!extract.full_name || !extract.phone) return false
+  if (isElenaInboundPostCallNonEvent(extract)) return Boolean(extract.call_note?.trim())
+  const hasEvent = extract.event_type || extract.target_date || extract.guest_count
+  if (!hasEvent) return false
+  return Boolean(extract.email || extract.event_type)
+}
+
+function inferCallerCategory(text: string, eventType: string | null): ElenaCallerCategory | null {
+  const lower = text.toLowerCase()
+  if (eventType) return 'event_inquiry'
+  if (/\b(wrong number|misdial|wrong line)\b/.test(lower)) return 'wrong_number'
+  if (/\b(vendor|supplier|security company|dj service|caterer|florist)\b/.test(lower)) return 'vendor'
+  if (/\b(job|hiring|employment|resume)\b/.test(lower)) return 'job_seeker'
+  if (/\b(partner|partnership|collaborat)\b/.test(lower)) return 'partner'
+  if (/\b(solicitor|soliciting|marketing call)\b/.test(lower)) return 'solicitor'
+  if (/\b(callback|returning.{0,40}call|message for arianna|line of credit|bank|loan|personal)\b/.test(lower)) return 'other_non_event'
+  return null
+}
+
+function inferCallNote(text: string, eventType: string | null) {
+  if (eventType) return null
+  const returnedCall = text.match(/\breturn(?:ing|ed).{0,40}call about\s+([^.!\n]{8,240})/i)
+  if (returnedCall?.[1]) return returnedCall[1].trim().slice(0, 1500)
+  const topic = text.match(/\b(?:regarding|about|re:|message about|regarding a)\s+([^.!\n]{8,240})/i)
+  if (topic?.[1]) return topic[1].trim().slice(0, 1500)
+  const callback = text.match(/\b(?:callback request|left a message|wants arianna|returning).{0,200}/i)
+  return callback?.[0]?.trim().slice(0, 1500) || null
 }
 
 export function parseElenaInboundPostCallExtract(text: string, defaultPhone: string | null = null): ElenaInboundPostCallExtract | null {
@@ -32,10 +74,10 @@ export function parseElenaInboundPostCallExtract(text: string, defaultPhone: str
   const dateMatch = source.match(ISO_DATE)
   const guestMatch = source.match(GUEST_COUNT)
   const eventType = resolveElenaCallerEventType(source, source)
-  const nameMatch = source.match(/\b(?:caller(?:'s)?\s+name|name(?:\s+is)?)[:\s]+([A-Z][a-z]+(?:\s+[A-Z][a-z'-]+)+)/i)
-    || source.match(/\bCaller\s+([A-Z][a-z]+(?:\s+[A-Z][a-z'-]+)+)\b/)
-    || source.match(/\b([A-Z][a-z]+(?:\s+[A-Z][a-z'-]+)+)\s+(?:called|is planning|planned|requested)\b/)
+  const nameMatch = source.match(NAME) || source.match(CALLER_NAME) || source.match(ACTION_NAME)
   const phone = defaultPhone && defaultPhone !== 'anonymous' ? normalizePhoneNumber(defaultPhone) : null
+  const callerCategory = inferCallerCategory(source, eventType)
+  const callNote = inferCallNote(source, eventType)
   const extract: ElenaInboundPostCallExtract = {
     full_name: nameMatch?.[1]?.trim().slice(0, 120) || null,
     phone,
@@ -43,13 +85,13 @@ export function parseElenaInboundPostCallExtract(text: string, defaultPhone: str
     event_type: eventType,
     target_date: dateMatch ? `${dateMatch[1]}-${dateMatch[2]}-${dateMatch[3]}` : null,
     guest_count: guestMatch ? Number(guestMatch[1]) : null,
+    call_note: callNote,
+    caller_category: callerCategory,
+    purpose: callerCategory && callerCategory !== 'event_inquiry' ? 'callback' : null,
     package_email_promised: PACKAGE_PROMISE.test(source),
     source: 'summary',
   }
-  const hasEvent = extract.event_type || extract.target_date || extract.guest_count
-  if (!extract.full_name || !extract.phone || !hasEvent) return null
-  if (!extract.email && !extract.event_type) return null
-  return extract
+  return postCallExtractIsSufficient(extract) ? extract : null
 }
 
 async function buildTranscriptText(call: LuxorCall) {
@@ -95,16 +137,22 @@ async function extractWithLlm(content: string): Promise<ElenaInboundPostCallExtr
                 event_type: { type: ['string', 'null'] },
                 target_date: { type: ['string', 'null'], description: 'YYYY-MM-DD when known' },
                 guest_count: { type: ['integer', 'null'] },
+                call_note: { type: ['string', 'null'] },
+                caller_category: {
+                  type: ['string', 'null'],
+                  enum: ['event_inquiry', 'vendor', 'job_seeker', 'partner', 'solicitor', 'wrong_number', 'other_non_event', null],
+                },
+                purpose: { type: ['string', 'null'], enum: ['transfer', 'callback', 'tour', null] },
                 package_email_promised: { type: 'boolean' },
               },
-              required: ['full_name', 'phone', 'email', 'event_type', 'target_date', 'guest_count', 'package_email_promised'],
+              required: ['full_name', 'phone', 'email', 'event_type', 'target_date', 'guest_count', 'call_note', 'caller_category', 'purpose', 'package_email_promised'],
             },
           },
         },
         messages: [
           {
             role: 'system',
-            content: 'Extract only caller-confirmed facts from a Luxor inbound Elena phone call. Return null fields when unsure. Use Quinceañera spelling when appropriate. package_email_promised is true only when Elena clearly committed to emailing package, brochure, or pricing details.',
+            content: 'Extract caller-confirmed facts from a Luxor inbound Elena phone call. Return null when unsure. Use Quinceañera spelling when appropriate. For vendors, job seekers, personal or business callbacks, and other non-event callers, set caller_category accordingly, set call_note to the message or reason, and leave event fields null. First names alone are valid when that is what the caller gave. package_email_promised is true only when Elena clearly committed to emailing package, brochure, or pricing details.',
           },
           { role: 'user', content: content.slice(0, 50_000) },
         ],
@@ -126,8 +174,12 @@ function needsReconcile(call: LuxorCall) {
   if (call.metadata?.scope !== ELENA_LIVE_SCOPE || call.metadata?.accepted !== true) return false
   if (call.inquiry_id) return false
   const receipt = call.metadata?.lead_update_receipt as { saved_at?: string } | undefined
-  const capture = call.metadata?.inbound_capture as { confirmed?: boolean } | undefined
-  if (capture?.confirmed === true && receipt?.saved_at) return false
+  const capture = call.metadata?.inbound_capture as { confirmed?: boolean; caller_category?: ElenaCallerCategory } | undefined
+  const category = (typeof call.metadata?.caller_category === 'string' ? call.metadata.caller_category : capture?.caller_category) as ElenaCallerCategory | undefined
+  if (capture?.confirmed === true) {
+    if (category && category !== 'event_inquiry') return false
+    if (receipt?.saved_at) return false
+  }
   return !capture?.confirmed || !receipt?.saved_at
 }
 
@@ -159,12 +211,12 @@ export async function reconcileElenaInboundAfterSummary(callSid: string) {
       extract = extract ? { ...extract, ...fromTranscript, email: extract.email || fromTranscript.email, full_name: extract.full_name || fromTranscript.full_name, source: 'transcript' } : fromTranscript
     }
   }
-  if (!extract?.full_name || !extract.phone || !extract.email) {
+  if (!postCallExtractIsSufficient(extract || { full_name: null, phone: null, email: null, event_type: null, target_date: null, guest_count: null, call_note: null, caller_category: null, purpose: null, package_email_promised: false, source: 'summary' })) {
     const transcript = await buildTranscriptText(call)
     const llm = await extractWithLlm([call.summary_text, transcript].filter(Boolean).join('\n\n'))
-    if (llm) extract = extract ? { ...extract, ...llm } : llm
+    if (llm) extract = extract ? { ...extract, ...llm, full_name: extract.full_name || llm.full_name, call_note: extract.call_note || llm.call_note } : llm
   }
-  if (!extract?.full_name || !extract.phone || (!extract.email && !extract.event_type)) {
+  if (!extract || !postCallExtractIsSufficient(extract)) {
     console.warn('[Elena Inbound] Post-call reconcile skipped: insufficient extracted fields', {
       callSid,
       fingerprint: createHash('sha256').update(call.summary_text).digest('hex').slice(0, 12),
@@ -173,7 +225,7 @@ export async function reconcileElenaInboundAfterSummary(callSid: string) {
   }
 
   try {
-    const result = await supabaseRestStrict<{ saved: boolean; duplicate?: boolean; inquiry_id?: string }>(
+    const result = await supabaseRestStrict<{ saved: boolean; duplicate?: boolean; non_event?: boolean; inquiry_id?: string | null }>(
       'rpc/luxor_reconcile_elena_inbound_after_call',
       {
         method: 'POST',
@@ -186,17 +238,25 @@ export async function reconcileElenaInboundAfterSummary(callSid: string) {
             event_type: extract.event_type,
             target_date: extract.target_date,
             guest_count: extract.guest_count,
+            call_note: extract.call_note,
+            caller_category: extract.caller_category,
+            purpose: extract.purpose,
             package_email_promised: extract.package_email_promised,
             source: extract.source,
           },
         }),
       },
     )
-    if (!result.saved || !result.inquiry_id) {
+    if (!result.saved) {
+      console.error('[Elena Inbound] Post-call reconcile RPC returned without save', { callSid, result })
+      return { status: 'failed' as const, reason: 'rpc_not_saved' }
+    }
+    const nonEvent = isElenaInboundPostCallNonEvent(extract) || result.non_event === true
+    if (!nonEvent && !result.inquiry_id) {
       console.error('[Elena Inbound] Post-call reconcile RPC returned without inquiry', { callSid, result })
       return { status: 'failed' as const, reason: 'rpc_not_saved' }
     }
-    if (extract.package_email_promised && extract.email) {
+    if (extract.package_email_promised && extract.email && result.inquiry_id) {
       const inquiryQueued = await hasBrochureJob(result.inquiry_id)
       if (!inquiryQueued) {
         const [inquiry] = await supabaseRestStrict<LuxorInquiry[]>(
@@ -208,13 +268,14 @@ export async function reconcileElenaInboundAfterSummary(callSid: string) {
         }
       }
     }
-    console.info('[Elena Inbound] Post-call reconcile saved inquiry details', {
+    console.info('[Elena Inbound] Post-call reconcile saved call details', {
       callSid,
-      inquiryId: result.inquiry_id,
+      inquiryId: result.inquiry_id || null,
+      nonEvent,
       packageEmailPromised: extract.package_email_promised,
       source: extract.source,
     })
-    return { status: 'completed' as const, inquiryId: result.inquiry_id }
+    return { status: 'completed' as const, inquiryId: result.inquiry_id || undefined, nonEvent }
   } catch (error) {
     console.error('[Elena Inbound] Post-call reconcile failed', {
       callSid,
