@@ -66,6 +66,8 @@ async function main() {
   try {
     await page.waitForSelector(launcherSelector, { timeout: 60_000 })
   } catch (error) {
+    const finalUrl = page.url()
+    const title = await page.title()
     await browser.close()
     console.log(
       JSON.stringify(
@@ -74,8 +76,8 @@ async function main() {
           skipped: true,
           reason: 'Signed-in portal shell not reachable (login or protection).',
           baseUrl,
-          finalUrl: page.url(),
-          title: await page.title(),
+          finalUrl,
+          title,
           consoleErrors,
           error: String(error?.message || error),
         },
