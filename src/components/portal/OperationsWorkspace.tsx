@@ -65,6 +65,7 @@ import { AnimatedCircularProgressBar } from '@/components/ui/animated-circular-p
 import { MagicCard } from '@/components/ui/magic-card'
 import { OperationsLoadingSkeleton } from '@/app/(workspace)/(portal)/portal/operations/OperationsLoadingSkeleton'
 import { NeedsAttentionNow } from '@/components/portal/NeedsAttentionNow'
+import { PartnerApplicationsPanel } from '@/components/portal/PartnerApplicationsPanel'
 
 type SubTab =
   | 'dashboard'
@@ -263,6 +264,7 @@ export function OperationsPageContent({ embeddedBills = false }: { embeddedBills
   const [vendorRating, setVendorRating] = useState('')
   const [vendorCoi, setVendorCoi] = useState('false')
   const [vendorSearchQuery, setVendorSearchQuery] = useState('')
+  const vendorWorkspaceView = searchParams.get('vendorView') === 'applications' ? 'applications' : 'roster'
   const [vendorTypeFilter, setVendorTypeFilter] = useState('all')
 
   // State for interactive features
@@ -753,7 +755,7 @@ export function OperationsPageContent({ embeddedBills = false }: { embeddedBills
               <PortalButton variant="primary" onClick={() => setIsTaskModalOpen(true)}><Plus size={14} /> New Ticket</PortalButton>
             ) : activeTab === 'inventory' ? (
               <PortalButton variant="primary" onClick={() => setIsInventoryModalOpen(true)}><Plus size={14} /> Audit Stock</PortalButton>
-            ) : activeTab === 'vendors' ? (
+            ) : activeTab === 'vendors' && vendorWorkspaceView === 'roster' ? (
               <PortalButton variant="primary" onClick={() => setIsVendorModalOpen(true)}><Plus size={14} /> Add Vendor</PortalButton>
             ) : null}
           </div>
@@ -1071,6 +1073,26 @@ export function OperationsPageContent({ embeddedBills = false }: { embeddedBills
       )}      {/* PREFERRED VENDORS TAB */}
       {activeTab === 'vendors' && (
         <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-hidden">
+          <div className="flex shrink-0 flex-wrap items-center gap-2">
+            <PortalButton
+              type="button"
+              variant={vendorWorkspaceView === 'roster' ? 'primary' : 'secondary'}
+              onClick={() => router.push('/portal/operations?tab=vendors')}
+            >
+              Preferred roster
+            </PortalButton>
+            <PortalButton
+              type="button"
+              variant={vendorWorkspaceView === 'applications' ? 'primary' : 'secondary'}
+              onClick={() => router.push('/portal/operations?tab=vendors&vendorView=applications')}
+            >
+              Applications
+            </PortalButton>
+          </div>
+          {vendorWorkspaceView === 'applications' ? (
+            <PartnerApplicationsPanel />
+          ) : (
+          <>
           <div className="shrink-0">
             <OperationsArchivePanel type="vendor" records={vendors.map((vendor) => ({ id: vendor.id, updated_at: vendor.updated_at, archived_at: vendor.archived_at, label: vendor.name }))} onUpdated={() => void loadOperationsData(false)} />
           </div>
@@ -1182,6 +1204,8 @@ export function OperationsPageContent({ embeddedBills = false }: { embeddedBills
               )}
             </div>
           </PortalTableCard>
+          </>
+          )}
         </div>
       )}
 
