@@ -26,7 +26,13 @@ import {
   Globe,
   LayoutDashboard,
 } from '@/lib/icons/phosphor-compat'
-import { PortalDatePicker, PortalSelect, PORTAL_MODAL_EASE } from './PortalUI'
+import { PortalBadge, PortalDatePicker, PortalSelect, PORTAL_MODAL_EASE } from './PortalUI'
+import {
+  developerSupportConfirmResult,
+  parseDeveloperSupportSubmittedSnapshot,
+  truncateDeveloperSupportSummary,
+  type DeveloperSupportSubmittedSnapshot,
+} from '@/lib/luxorDeveloperSupportSubmittedCard'
 import { readPortalActionResponse } from '@/lib/portalActionFetch'
 import {
   developerSupportPagesForArea,
@@ -665,7 +671,11 @@ export interface DeveloperSupportCardPayload {
   pagePath?: string
   reporterName?: string
   savedAttachments?: DeveloperSupportSavedAttachment[]
+  /** Persisted after the owner sends the ticket (stored in luxor_elena_chats message JSON). */
+  submitted?: DeveloperSupportSubmittedSnapshot
 }
+
+export type { DeveloperSupportSubmittedSnapshot }
 
 export type DeveloperSupportAttachmentCandidate = {
   key: string
@@ -1005,6 +1015,92 @@ function DeveloperSupportPagePicker({
   )
 }
 
+function DeveloperSupportTicketSubmittedSummary({
+  snapshot,
+  reduceMotion,
+}: {
+  snapshot: DeveloperSupportSubmittedSnapshot
+  reduceMotion: boolean | null
+}) {
+  const layoutEase = PORTAL_MODAL_EASE
+  const layoutDuration = reduceMotion ? 0 : 0.32
+  const contentDuration = reduceMotion ? 0 : 0.26
+  const pagePath = normalizeDeveloperSupportPagePath(snapshot.pagePath || undefined)
+  const summaryText = truncateDeveloperSupportSummary(snapshot.description)
+
+  return (
+    <motion.div
+      layout
+      initial={{ opacity: 0, y: reduceMotion ? 0 : 6 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: contentDuration, ease: layoutEase, layout: { duration: layoutDuration, ease: layoutEase } }}
+      className="space-y-3"
+      aria-live="polite"
+    >
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div className="min-w-0">
+          <p className="text-sm font-bold leading-snug text-[color:var(--portal-text)]">{snapshot.title}</p>
+          <p className="mt-1 text-[11px] leading-relaxed text-[color:var(--portal-muted)] line-clamp-2">{summaryText}</p>
+        </div>
+        <PortalBadge tone="green">Sent</PortalBadge>
+      </div>
+      <dl className="grid grid-cols-1 gap-2 text-[11px] sm:grid-cols-3">
+        <div>
+          <dt className="text-[10px] font-bold uppercase tracking-[0.12em] text-[color:var(--portal-muted)]">Priority</dt>
+          <dd className="mt-1">
+            <span className={`inline-flex rounded-md border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${DEVELOPER_SUPPORT_PRIORITY_CLASS[snapshot.priority]}`}>
+              {DEVELOPER_SUPPORT_PRIORITY_LABEL[snapshot.priority]}
+            </span>
+          </dd>
+        </div>
+        <div className="min-w-0 sm:col-span-2">
+          <dt className="text-[10px] font-bold uppercase tracking-[0.12em] text-[color:var(--portal-muted)]">Page</dt>
+          <dd className="mt-1 truncate font-mono text-[10px] text-[color:var(--portal-text)]" title={pagePath}>
+            {pagePath}
+          </dd>
+        </div>
+      </dl>
+      <p className="text-[10px] tabular-nums text-[color:var(--portal-muted)]">
+        {snapshot.attachmentCount === 0
+          ? 'No files attached'
+          : `${snapshot.attachmentCount} file${snapshot.attachmentCount === 1 ? '' : 's'} attached`}
+      </p>
+      <ul className="space-y-1.5 border-t border-[color:var(--portal-border)]/70 pt-3 text-[11px]">
+        {[
+          { key: 'sent', label: 'Sent', done: true },
+          { key: 'approved', label: 'Approved', done: true },
+          { key: 'team', label: 'With the team', done: snapshot.withTeam, pending: !snapshot.withTeam },
+        ].map((step) => (
+          <li key={step.key} className="flex items-center gap-2">
+            <span
+              className={`inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-md ${
+                step.done
+                  ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300'
+                  : 'bg-[color:var(--portal-soft)] text-[color:var(--portal-muted)]'
+              }`}
+              aria-hidden="true"
+            >
+              {step.done ? <Check size={12} /> : <Loader2 size={12} className={step.pending && !reduceMotion ? 'animate-spin' : ''} />}
+            </span>
+            <span className={`font-semibold ${step.done ? 'text-[color:var(--portal-text)]' : 'text-[color:var(--portal-muted)]'}`}>
+              {step.label}
+            </span>
+          </li>
+        ))}
+      </ul>
+      {!snapshot.withTeam ? (
+        <p className="text-[10px] leading-snug text-[color:var(--portal-muted)]">
+          Your ticket is saved. The cloud worker is not running yet — Lewis can check automation settings if this stays pending.
+        </p>
+      ) : (
+        <p className="text-[10px] leading-snug text-[color:var(--portal-muted)]">
+          Braxton is working from this ticket in the cloud. You cannot edit it after send.
+        </p>
+      )}
+    </motion.div>
+  )
+}
+
 function DeveloperSupportTicketReview({
   reporterName,
   title,
@@ -1250,12 +1346,14 @@ export function ElenaDeveloperSupportCard({
   attachmentCandidates = [],
   chatId = null,
   onSavedAttachments,
+  onSubmitted,
   onSuccess,
 }: {
   payload: DeveloperSupportCardPayload
   attachmentCandidates?: DeveloperSupportAttachmentCandidate[]
   chatId?: string | null
   onSavedAttachments?: (items: DeveloperSupportSavedAttachment[]) => void | Promise<void>
+  onSubmitted?: (snapshot: DeveloperSupportSubmittedSnapshot, successMessage: string) => void | Promise<void>
   onSuccess?: (msg: string) => void
 }) {
   const developerMode = usePortalDeveloperMode()
@@ -1270,7 +1368,12 @@ export function ElenaDeveloperSupportCard({
   ))
   const [confirmation, setConfirmation] = useState<{ token: string; expiresAt: string; summary: string; reporterName: string } | null>(null)
   const [isSaving, setIsSaving] = useState(false)
-  const [isSent, setIsSent] = useState(false)
+  const initialSubmitted = useMemo(
+    () => parseDeveloperSupportSubmittedSnapshot(payload.submitted),
+    [payload.submitted],
+  )
+  const [submittedSnapshot, setSubmittedSnapshot] = useState<DeveloperSupportSubmittedSnapshot | null>(initialSubmitted)
+  const [isSent, setIsSent] = useState(Boolean(initialSubmitted))
   const [uncertain, setUncertain] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [localAttachments, setLocalAttachments] = useState<DeveloperSupportAttachmentCandidate[]>(() => candidatesFromSavedAttachments(payload.savedAttachments, chatId))
@@ -1471,11 +1574,18 @@ export function ElenaDeveloperSupportCard({
 
   const developerTicketStartedRef = useRef(false)
   useEffect(() => {
-    if (developerTicketStartedRef.current || !developerMode) return
+    if (developerTicketStartedRef.current || !developerMode || isSent) return
     developerTicketStartedRef.current = true
     developerMode.startDeveloperTicket(payload, chatId)
     developerMode.setChatId(chatId || null)
-  }, [developerMode, payload, chatId])
+  }, [developerMode, payload, chatId, isSent])
+
+  useEffect(() => {
+    const parsed = parseDeveloperSupportSubmittedSnapshot(payload.submitted)
+    if (!parsed) return
+    setSubmittedSnapshot(parsed)
+    setIsSent(true)
+  }, [payload.submitted])
 
   useEffect(() => {
     if (!developerBound || !developerMode) return
@@ -1583,9 +1693,22 @@ export function ElenaDeveloperSupportCard({
         return
       }
       setConfirmation(null)
+      const snapshot = developerSupportConfirmResult({
+        title: title.trim(),
+        description,
+        priority,
+        pagePath: ticketPagePath || null,
+        attachmentCount: selectedAttachments.length,
+        result: data.result,
+      })
+      setSubmittedSnapshot(snapshot)
       setIsSent(true)
       developerMode?.finishDeveloperTicketSent()
-      onSuccess?.('Support ticket sent to Braxton. The cloud worker will pick it up.')
+      const successMessage = snapshot.withTeam
+        ? 'Support ticket sent to Braxton. The cloud worker will pick it up.'
+        : 'Support ticket saved. The cloud worker has not started yet — Lewis can check automation if it stays pending.'
+      await onSubmitted?.(snapshot, successMessage)
+      onSuccess?.(successMessage)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'The ticket was not sent. Check your connection, then try Send again.')
     } finally {
@@ -1593,14 +1716,25 @@ export function ElenaDeveloperSupportCard({
     }
   }
 
+  const activeSubmitted = submittedSnapshot || initialSubmitted
+
   return (
-    <div className="mt-3 w-full overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)]">
-      <motion.div layout="position" className="flex items-start justify-between gap-2 border-b border-[color:var(--portal-border)] px-4 py-3">
+    <motion.div
+      layout
+      transition={{ duration: layoutDuration, ease: layoutEase, layout: { duration: layoutDuration, ease: layoutEase } }}
+      className={`mt-3 w-full overflow-hidden border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] ${isSent ? 'rounded-xl' : 'rounded-2xl'}`}
+    >
+      <motion.div
+        layout="position"
+        className={`flex items-start justify-between gap-2 border-[color:var(--portal-border)] px-4 py-3 ${isSent ? '' : 'border-b'}`}
+      >
         <div className="flex items-start gap-2 min-w-0">
           <Wrench size={16} className="shrink-0 text-[#a8792f] dark:text-[#f1d27a] mt-0.5" aria-hidden="true" />
           <div className="min-w-0">
             <h4 className="font-sans text-sm font-bold leading-5 text-[color:var(--portal-text)]">Developer support</h4>
-            <p className="text-[10px] leading-4 text-[color:var(--portal-muted)]">Sends a fix to Braxton in the cloud</p>
+            <p className="text-[10px] leading-4 text-[color:var(--portal-muted)]">
+              {isSent ? 'Ticket sent — view only' : 'Sends a fix to Braxton in the cloud'}
+            </p>
           </div>
         </div>
         {developerMode && supportCardPhase === 'compose' ? (
@@ -1623,9 +1757,12 @@ export function ElenaDeveloperSupportCard({
           </button>
         ) : null}
       </motion.div>
-      <div className="space-y-3 p-4">
+      <div className={`space-y-3 ${isSent ? 'px-3.5 py-3 sm:px-4' : 'p-4'}`}>
         <AnimatePresence mode="popLayout" initial={false}>
-          {(supportCardPhase === 'review' || supportCardPhase === 'compose') ? (
+          {isSent && activeSubmitted ? (
+            <DeveloperSupportTicketSubmittedSummary snapshot={activeSubmitted} reduceMotion={reduceMotion} />
+          ) : null}
+          {!isSent && (supportCardPhase === 'review' || supportCardPhase === 'compose') ? (
             <motion.div
               key={supportCardPhase}
               layout
@@ -1754,10 +1891,10 @@ export function ElenaDeveloperSupportCard({
                 </>
               )}
             </motion.div>
-          ) : null}
+            ) : null}
         </AnimatePresence>
         <AnimatePresence initial={false}>
-          {error ? (
+          {error && !isSent ? (
             <motion.p
               key="dev-support-error"
               role="alert"
@@ -1772,6 +1909,7 @@ export function ElenaDeveloperSupportCard({
             </motion.p>
           ) : null}
         </AnimatePresence>
+        {!isSent ? (
         <div className="flex items-stretch justify-end gap-2">
           <input
             ref={fileInputRef}
@@ -1833,21 +1971,10 @@ export function ElenaDeveloperSupportCard({
                 {confirmation ? 'Send to developer' : 'Review ticket'}
               </button>
             ) : null}
-            {isSent ? (
-              <motion.span
-                key="sent"
-                layout
-                initial={{ opacity: 0, scale: reduceMotion ? 1 : 0.95 }}
-                animate={{ opacity: 1, scale: 1 }}
-                transition={{ duration: reduceMotion ? 0 : 0.28, ease: layoutEase, layout: { duration: layoutDuration, ease: layoutEase } }}
-                className="inline-flex items-center gap-1 text-xs font-semibold text-green-700 dark:text-green-400"
-              >
-                <Check size={13} /> Ticket sent
-              </motion.span>
-            ) : null}
           </AnimatePresence>
         </div>
+        ) : null}
       </div>
-    </div>
+    </motion.div>
   )
 }
