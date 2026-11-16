@@ -65,6 +65,7 @@ import {
   DeveloperSupportCardPayload,
   collectDeveloperSupportAttachmentCandidates,
   type DeveloperSupportSavedAttachment,
+  type DeveloperSupportSubmittedSnapshot,
 } from './ElenaCRMContainers'
 import { ElenaSlashCommandMenu, ElenaSlashTriggerBadge } from '@/components/portal/ElenaSlashCommandMenu'
 import {
@@ -1735,6 +1736,25 @@ export function PortalElenaChat({ isOpen, onClose, launcherRef, activePath, port
     return persistSessionMessages(updatedMessages)
   }
 
+  const handleDeveloperSupportSubmitted = (messageIndex: number, snapshot: DeveloperSupportSubmittedSnapshot) => {
+    const updatedMessages = messages.map((message, index) => {
+      if (index !== messageIndex || !message.developerSupportCard) return message
+      return {
+        ...message,
+        developerSupportCard: {
+          ...message.developerSupportCard,
+          title: snapshot.title,
+          description: snapshot.description || undefined,
+          priority: snapshot.priority,
+          pagePath: snapshot.pagePath || undefined,
+          submitted: snapshot,
+        },
+      }
+    })
+    setMessages(updatedMessages)
+    void persistSessionMessages(updatedMessages).catch(() => undefined)
+  }
+
   const handleFunnelGoalsSaved = (msgIndex: number, savedAt: string | null) => {
     const updatedMessages = messages.map((message, index) => index === msgIndex && message.funnelGoalsCard
       ? { ...message, funnelGoalsCard: { ...message.funnelGoalsCard, savedAt: savedAt || new Date().toISOString() } }
@@ -2474,6 +2494,7 @@ export function PortalElenaChat({ isOpen, onClose, launcherRef, activePath, port
                               chatId={currentSessionId}
                               attachmentCandidates={collectDeveloperSupportAttachmentCandidates(messages, attachments, currentSessionId)}
                               onSavedAttachments={(saved) => persistTicketAttachments(index, saved)}
+                              onSubmitted={(snapshot) => handleDeveloperSupportSubmitted(index, snapshot)}
                               onSuccess={(successMsg) => {
                                 setMessages((prev) => [
                                   ...prev,
