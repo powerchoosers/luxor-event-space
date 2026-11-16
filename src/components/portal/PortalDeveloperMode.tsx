@@ -30,6 +30,11 @@ import {
   readDeveloperTicketViewport,
 } from '@/lib/luxorDeveloperTicketElementPicker'
 import { normalizeDeveloperSupportPagePath } from '@/lib/luxorDeveloperSupportPagePaths'
+import {
+  getPortalClientMountedServerSnapshot,
+  getPortalClientMountedSnapshot,
+  subscribePortalClientMounted,
+} from '@/lib/luxorPortalClientMount'
 
 type DeveloperModeContextValue = {
   developerModeActive: boolean
@@ -71,10 +76,10 @@ export function usePortalDeveloperMode() {
 }
 
 export function PortalDeveloperModeElenaSync({ elenaOpen }: { elenaOpen: boolean }) {
-  const developerMode = usePortalDeveloperMode()
+  const setElenaChatOpen = usePortalDeveloperMode()?.setElenaChatOpen
   useEffect(() => {
-    developerMode?.setElenaChatOpen(elenaOpen)
-  }, [developerMode, elenaOpen])
+    setElenaChatOpen?.(elenaOpen)
+  }, [elenaOpen, setElenaChatOpen])
   return null
 }
 
@@ -90,7 +95,11 @@ export function PortalDeveloperModeProvider({
   children: React.ReactNode
 }) {
   const owner = portalRole === 'owner'
-  const isClient = useSyncExternalStore(() => () => {}, () => true, () => false)
+  const isClient = useSyncExternalStore(
+    subscribePortalClientMounted,
+    getPortalClientMountedSnapshot,
+    getPortalClientMountedServerSnapshot,
+  )
   const [draft, setDraft] = useState<DeveloperTicketDraft>(DEVELOPER_TICKET_DRAFT_EMPTY)
   const [elementSelectMode, setElementSelectMode] = useState(false)
   const [panelExpanded, setPanelExpanded] = useState(false)

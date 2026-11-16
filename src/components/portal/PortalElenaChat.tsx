@@ -78,6 +78,7 @@ import {
 } from '@/lib/luxorElenaSlashCommands'
 import type { PortalRole } from '@/lib/luxorPortalAccess'
 import { usePortalDeveloperMode } from '@/components/portal/PortalDeveloperMode'
+import { handleElenaPanelCloseKeyDown } from '@/lib/luxorPortalElenaClose'
 
 type ExecutedQuery = {
   query: string
@@ -564,6 +565,7 @@ export function PortalElenaChat({ isOpen, onClose, activePath, portalRole, userE
   const [loadedSessionId, setLoadedSessionId] = useState<string | null>(null)
   const activeSessionRef = useRef<string | null>(null)
   const isOpenRef = useRef(isOpen)
+  const elenaCloseKeyboardArmedRef = useRef(false)
   const elenaPanelRef = useRef<HTMLElement>(null)
   const developerMode = usePortalDeveloperMode()
   const elenaPanelHidden = !isOpen
@@ -1210,6 +1212,20 @@ export function PortalElenaChat({ isOpen, onClose, activePath, portalRole, userE
     setLoadingActivities([])
   }, [])
 
+  const handleElenaCloseClick = useCallback(() => {
+    if (elenaCloseKeyboardArmedRef.current) {
+      elenaCloseKeyboardArmedRef.current = false
+      return
+    }
+    onClose()
+  }, [onClose])
+
+  const handleElenaCloseKeyDown = useCallback((event: React.KeyboardEvent<HTMLButtonElement>) => {
+    handleElenaPanelCloseKeyDown(event, onClose, () => {
+      elenaCloseKeyboardArmedRef.current = true
+    })
+  }, [onClose])
+
   useEffect(() => {
     if (!isOpen) {
       setAttachMenuOpen(false)
@@ -1649,7 +1665,11 @@ export function PortalElenaChat({ isOpen, onClose, activePath, portalRole, userE
             <SquarePen size={15} />
           </button>}
           {!voiceActive && <div className="mx-1.5 h-5 w-px shrink-0 self-center bg-[color:var(--portal-border)]" aria-hidden="true" />}
-          <PortalCloseButton onClick={onClose} aria-label="Close Elena Chat" />
+          <PortalCloseButton
+            onClick={handleElenaCloseClick}
+            onKeyDown={handleElenaCloseKeyDown}
+            aria-label="Close Elena Chat"
+          />
         </div>
       </div>
 

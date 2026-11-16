@@ -59,6 +59,7 @@ import type { Tab as SettingsTabType } from '@/components/portal/PortalSettingsM
 import { getRecentLeads, getRecentLeadsServerSnapshot, subscribeRecentLeads, saveRecentLead, clearRecentLeads, type RecentLeadItem } from '@/lib/luxorRecentLeads'
 import { PortalFloatingScrollbar } from '@/components/portal/PortalFloatingScrollbar'
 import { PortalDeveloperModeElenaSync, PortalDeveloperModeProvider } from '@/components/portal/PortalDeveloperMode'
+import { createPortalElenaCloseController } from '@/lib/luxorPortalElenaClose'
 
 type PortalUserProfile = {
   displayName: string
@@ -366,21 +367,38 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
   }, [pathname, router, searchParams])
   const [sidebarCollapsed, setSidebarCollapsed] = useState(initialSidebarCollapsed)
   const [elenaOpen, setElenaOpen] = useState(false)
+  const elenaOpenRef = useRef(elenaOpen)
   const elenaLauncherRef = useRef<HTMLButtonElement>(null)
+  const elenaCloseControllerRef = useRef(createPortalElenaCloseController())
+  const pendingElenaFocusReturnRef = useRef(false)
+
+  useEffect(() => {
+    elenaOpenRef.current = elenaOpen
+  }, [elenaOpen])
 
   const focusAfterElenaClose = useCallback(() => {
     const devToggle = document.getElementById('portal-developer-ticket-panel-toggle')
     if (devToggle instanceof HTMLElement && devToggle.offsetParent !== null) {
-      devToggle.focus()
+      devToggle.focus({ preventScroll: true })
       return
     }
-    elenaLauncherRef.current?.focus()
+    elenaLauncherRef.current?.focus({ preventScroll: true })
   }, [])
 
   const closeElenaChat = useCallback(() => {
+    const controller = elenaCloseControllerRef.current
+    if (!controller.requestClose(elenaOpenRef.current, 'programmatic')) return
+    pendingElenaFocusReturnRef.current = true
+    setElenaOpen(false)
+  }, [setElenaOpen])
+
+  useLayoutEffect(() => {
+    if (elenaOpen) return
+    if (!pendingElenaFocusReturnRef.current) return
+    pendingElenaFocusReturnRef.current = false
     focusAfterElenaClose()
-    window.requestAnimationFrame(() => setElenaOpen(false))
-  }, [focusAfterElenaClose, setElenaOpen])
+    elenaCloseControllerRef.current.finishClose()
+  }, [elenaOpen, focusAfterElenaClose])
   const [accountMenuOpen, setAccountMenuOpen] = useState(false)
   const accountContainerRef = useRef<HTMLDivElement>(null)
 
@@ -1704,6 +1722,7 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
                 ref={elenaLauncherRef}
                 type="button"
                 onClick={() => {
+                  if (elenaCloseControllerRef.current.shouldIgnoreLauncherActivation()) return
                   if (elenaOpen) closeElenaChat()
                   else setElenaOpen(true)
                 }}
