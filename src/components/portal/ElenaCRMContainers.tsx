@@ -1340,9 +1340,11 @@ function candidatesFromSavedAttachments(
   }))
 }
 
+const EMPTY_DEVELOPER_SUPPORT_ATTACHMENT_CANDIDATES: DeveloperSupportAttachmentCandidate[] = []
+
 export function ElenaDeveloperSupportCard({
   payload,
-  attachmentCandidates = [],
+  attachmentCandidates = EMPTY_DEVELOPER_SUPPORT_ATTACHMENT_CANDIDATES,
   chatId = null,
   onSavedAttachments,
   onSubmitted,
