@@ -78,7 +78,7 @@ import {
 } from '@/lib/luxorElenaSlashCommands'
 import type { PortalRole } from '@/lib/luxorPortalAccess'
 import { usePortalDeveloperMode } from '@/components/portal/PortalDeveloperMode'
-import { handleElenaPanelCloseKeyDown } from '@/lib/luxorPortalElenaClose'
+import { focusElenaLauncher, focusElenaPanelEntry } from '@/lib/luxorPortalElenaFocus'
 
 type ExecutedQuery = {
   query: string
@@ -395,6 +395,7 @@ interface ChatSession {
 interface PortalElenaChatProps {
   isOpen: boolean
   onClose: () => void
+  launcherRef: React.RefObject<HTMLButtonElement | null>
   activePath: string
   portalRole: PortalRole
   userEmail: string
@@ -545,7 +546,7 @@ const ElenaGrowingTextarea = React.forwardRef<HTMLTextAreaElement, {
   },
 )
 
-export function PortalElenaChat({ isOpen, onClose, activePath, portalRole, userEmail }: PortalElenaChatProps) {
+export function PortalElenaChat({ isOpen, onClose, launcherRef, activePath, portalRole, userEmail }: PortalElenaChatProps) {
   const router = useRouter()
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState('')
@@ -565,22 +566,27 @@ export function PortalElenaChat({ isOpen, onClose, activePath, portalRole, userE
   const [loadedSessionId, setLoadedSessionId] = useState<string | null>(null)
   const activeSessionRef = useRef<string | null>(null)
   const isOpenRef = useRef(isOpen)
-  const elenaCloseKeyboardArmedRef = useRef(false)
   const elenaPanelRef = useRef<HTMLElement>(null)
   const developerMode = usePortalDeveloperMode()
   const elenaPanelHidden = !isOpen
 
-  useLayoutEffect(() => {
-    const panel = elenaPanelRef.current
-    if (!panel) return
-    if (elenaPanelHidden) {
-      panel.inert = true
-      panel.setAttribute('aria-hidden', 'true')
-    } else {
-      panel.inert = false
-      panel.removeAttribute('aria-hidden')
+  const elenaWasOpenRef = useRef(false)
+
+  useEffect(() => {
+    if (isOpen) {
+      elenaWasOpenRef.current = true
+      const frame = requestAnimationFrame(() => {
+        focusElenaPanelEntry(elenaPanelRef.current)
+      })
+      return () => window.cancelAnimationFrame(frame)
     }
-  }, [elenaPanelHidden, developerMode?.developerModeActive])
+    if (!elenaWasOpenRef.current) return
+    elenaWasOpenRef.current = false
+    const frame = requestAnimationFrame(() => {
+      focusElenaLauncher(launcherRef.current)
+    })
+    return () => window.cancelAnimationFrame(frame)
+  }, [isOpen, launcherRef])
 
   const [showSessionsList, setShowSessionsList] = useState(false)
   const [editingSessionId, setEditingSessionId] = useState<string | null>(null)
@@ -1212,20 +1218,6 @@ export function PortalElenaChat({ isOpen, onClose, activePath, portalRole, userE
     setLoadingActivities([])
   }, [])
 
-  const handleElenaCloseClick = useCallback(() => {
-    if (elenaCloseKeyboardArmedRef.current) {
-      elenaCloseKeyboardArmedRef.current = false
-      return
-    }
-    onClose()
-  }, [onClose])
-
-  const handleElenaCloseKeyDown = useCallback((event: React.KeyboardEvent<HTMLButtonElement>) => {
-    handleElenaPanelCloseKeyDown(event, onClose, () => {
-      elenaCloseKeyboardArmedRef.current = true
-    })
-  }, [onClose])
-
   useEffect(() => {
     if (!isOpen) {
       setAttachMenuOpen(false)
@@ -1617,9 +1609,7 @@ export function PortalElenaChat({ isOpen, onClose, activePath, portalRole, userE
       animate={{ x: isOpen ? 0 : '100%' }}
       transition={{ duration: 0.3, ease: [0.23, 1, 0.32, 1] }}
       className="portal-elena-chat-panel fixed right-0 top-0 z-[65] flex w-full flex-col border-l-0 border-[color:var(--portal-border)] bg-[color:var(--portal-bg)] text-[color:var(--portal-text)] shadow-[-24px_0_60px_-36px_rgba(0,0,0,0.85)] max-lg:bottom-[var(--portal-mobile-nav-height)] max-lg:h-[calc(100dvh-var(--portal-mobile-nav-height))] lg:bottom-0 lg:h-full lg:w-[420px] lg:border-l"
-      aria-hidden={elenaPanelHidden}
       {...(elenaPanelHidden ? { inert: true } : {})}
-      tabIndex={elenaPanelHidden ? -1 : undefined}
     >
       {/* Header */}
       <div className="flex h-16 shrink-0 items-center justify-between border-b border-[color:var(--portal-border)] px-4">
@@ -1665,11 +1655,7 @@ export function PortalElenaChat({ isOpen, onClose, activePath, portalRole, userE
             <SquarePen size={15} />
           </button>}
           {!voiceActive && <div className="mx-1.5 h-5 w-px shrink-0 self-center bg-[color:var(--portal-border)]" aria-hidden="true" />}
-          <PortalCloseButton
-            onClick={handleElenaCloseClick}
-            onKeyDown={handleElenaCloseKeyDown}
-            aria-label="Close Elena Chat"
-          />
+          <PortalCloseButton onClick={onClose} aria-label="Close Elena Chat" />
         </div>
       </div>
 

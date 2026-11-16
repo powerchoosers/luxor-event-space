@@ -56,8 +56,6 @@ type DeveloperModeContextValue = {
   setElementSelectMode: (value: boolean) => void
   panelExpanded: boolean
   setPanelExpanded: (value: boolean) => void
-  elenaChatOpen: boolean
-  setElenaChatOpen: (open: boolean) => void
   beginEditAnnotation: (id: string, returnFocus: HTMLElement | null) => void
 }
 
@@ -75,23 +73,17 @@ export function usePortalDeveloperMode() {
   return useContext(DeveloperModeContext)
 }
 
-export function PortalDeveloperModeElenaSync({ elenaOpen }: { elenaOpen: boolean }) {
-  const setElenaChatOpen = usePortalDeveloperMode()?.setElenaChatOpen
-  useEffect(() => {
-    setElenaChatOpen?.(elenaOpen)
-  }, [elenaOpen, setElenaChatOpen])
-  return null
-}
-
 export function PortalDeveloperModeProvider({
   userEmail,
   portalRole,
   activePath,
+  elenaOpen,
   children,
 }: {
   userEmail: string
   portalRole: string
   activePath: string
+  elenaOpen: boolean
   children: React.ReactNode
 }) {
   const owner = portalRole === 'owner'
@@ -103,7 +95,6 @@ export function PortalDeveloperModeProvider({
   const [draft, setDraft] = useState<DeveloperTicketDraft>(DEVELOPER_TICKET_DRAFT_EMPTY)
   const [elementSelectMode, setElementSelectMode] = useState(false)
   const [panelExpanded, setPanelExpanded] = useState(false)
-  const [elenaChatOpen, setElenaChatOpen] = useState(false)
   const editAnnotationRequestRef = useRef<{ id: string; returnFocus: HTMLElement | null } | null>(null)
   const [editAnnotationSignal, setEditAnnotationSignal] = useState(0)
 
@@ -221,14 +212,11 @@ export function PortalDeveloperModeProvider({
     setElementSelectMode,
     panelExpanded,
     setPanelExpanded,
-    elenaChatOpen,
-    setElenaChatOpen,
     beginEditAnnotation,
   }), [
     developerModeActive,
     draft,
     elementSelectMode,
-    elenaChatOpen,
     exitDeveloperMode,
     finishDeveloperTicketSent,
     panelExpanded,
@@ -251,7 +239,7 @@ export function PortalDeveloperModeProvider({
           draft={draft}
           elementSelectMode={elementSelectMode}
           panelExpanded={panelExpanded}
-          elenaChatOpen={elenaChatOpen}
+          elenaOpen={elenaOpen}
           onExit={exitDeveloperMode}
           onTogglePanel={() => setPanelExpanded((value) => !value)}
           onToggleSelect={() => setElementSelectMode((value) => !value)}
@@ -272,7 +260,7 @@ function PortalDeveloperModeChrome({
   draft,
   elementSelectMode,
   panelExpanded,
-  elenaChatOpen,
+  elenaOpen,
   onExit,
   onTogglePanel,
   onToggleSelect,
@@ -287,7 +275,7 @@ function PortalDeveloperModeChrome({
   draft: DeveloperTicketDraft
   elementSelectMode: boolean
   panelExpanded: boolean
-  elenaChatOpen: boolean
+  elenaOpen: boolean
   onExit: () => void
   onTogglePanel: () => void
   onToggleSelect: () => void
@@ -502,7 +490,7 @@ function PortalDeveloperModeChrome({
     return () => window.cancelAnimationFrame(frame)
   }, [consumeEditAnnotationRequest, draft.annotations, editAnnotationSignal, openAnnotationEditor])
 
-  const showFloatingPanel = !elenaChatOpen && draft.phase !== 'sent'
+  const showFloatingPanel = !elenaOpen && draft.phase !== 'sent'
 
   return (
     <div className="portal-developer-mode-chrome" data-portal-dev-ignore>

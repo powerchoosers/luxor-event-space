@@ -58,8 +58,7 @@ import type { EmailComposeDraft } from '@/components/portal/EmailComposeDrawer'
 import type { Tab as SettingsTabType } from '@/components/portal/PortalSettingsManager'
 import { getRecentLeads, getRecentLeadsServerSnapshot, subscribeRecentLeads, saveRecentLead, clearRecentLeads, type RecentLeadItem } from '@/lib/luxorRecentLeads'
 import { PortalFloatingScrollbar } from '@/components/portal/PortalFloatingScrollbar'
-import { PortalDeveloperModeElenaSync, PortalDeveloperModeProvider } from '@/components/portal/PortalDeveloperMode'
-import { createPortalElenaCloseController } from '@/lib/luxorPortalElenaClose'
+import { PortalDeveloperModeProvider } from '@/components/portal/PortalDeveloperMode'
 
 type PortalUserProfile = {
   displayName: string
@@ -367,38 +366,11 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
   }, [pathname, router, searchParams])
   const [sidebarCollapsed, setSidebarCollapsed] = useState(initialSidebarCollapsed)
   const [elenaOpen, setElenaOpen] = useState(false)
-  const elenaOpenRef = useRef(elenaOpen)
   const elenaLauncherRef = useRef<HTMLButtonElement>(null)
-  const elenaCloseControllerRef = useRef(createPortalElenaCloseController())
-  const pendingElenaFocusReturnRef = useRef(false)
-
-  useEffect(() => {
-    elenaOpenRef.current = elenaOpen
-  }, [elenaOpen])
-
-  const focusAfterElenaClose = useCallback(() => {
-    const devToggle = document.getElementById('portal-developer-ticket-panel-toggle')
-    if (devToggle instanceof HTMLElement && devToggle.offsetParent !== null) {
-      devToggle.focus({ preventScroll: true })
-      return
-    }
-    elenaLauncherRef.current?.focus({ preventScroll: true })
-  }, [])
 
   const closeElenaChat = useCallback(() => {
-    const controller = elenaCloseControllerRef.current
-    if (!controller.requestClose(elenaOpenRef.current, 'programmatic')) return
-    pendingElenaFocusReturnRef.current = true
     setElenaOpen(false)
   }, [setElenaOpen])
-
-  useLayoutEffect(() => {
-    if (elenaOpen) return
-    if (!pendingElenaFocusReturnRef.current) return
-    pendingElenaFocusReturnRef.current = false
-    focusAfterElenaClose()
-    elenaCloseControllerRef.current.finishClose()
-  }, [elenaOpen, focusAfterElenaClose])
   const [accountMenuOpen, setAccountMenuOpen] = useState(false)
   const accountContainerRef = useRef<HTMLDivElement>(null)
 
@@ -968,7 +940,7 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
 
   return (
     <>
-      <PortalDeveloperModeProvider userEmail={session.email} portalRole={role} activePath={pathname}>
+      <PortalDeveloperModeProvider userEmail={session.email} portalRole={role} activePath={pathname} elenaOpen={elenaOpen}>
       <PortalVoiceProvider canUsePhone={canAccess('calls')} canViewLeadDetails={canAccess('leads')} canText={canAccess('messages')} canEmail={canAccess('emails')}>
       <aside
         onWheelCapture={handOffWheelToPage}
@@ -1721,11 +1693,7 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
               <button
                 ref={elenaLauncherRef}
                 type="button"
-                onClick={() => {
-                  if (elenaCloseControllerRef.current.shouldIgnoreLauncherActivation()) return
-                  if (elenaOpen) closeElenaChat()
-                  else setElenaOpen(true)
-                }}
+                onClick={() => setElenaOpen((open) => !open)}
                 className={`relative flex h-9 w-9 shrink-0 overflow-hidden rounded-full border transition-all hover:scale-105 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/50 cursor-pointer ${
                   elenaOpen 
                     ? 'border-[#caa24c] ring-2 ring-[#caa24c]/30' 
@@ -2018,8 +1986,14 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
             <span className="relative z-10">More</span>
           </button>
         </nav>
-      <PortalDeveloperModeElenaSync elenaOpen={elenaOpen} />
-      <PortalElenaChat isOpen={elenaOpen} onClose={closeElenaChat} activePath={pathname} portalRole={role} userEmail={session.email} />
+      <PortalElenaChat
+        isOpen={elenaOpen}
+        onClose={closeElenaChat}
+        launcherRef={elenaLauncherRef}
+        activePath={pathname}
+        portalRole={role}
+        userEmail={session.email}
+      />
       <AnimatePresence>
         {mobileMoreOpen && (
           <motion.div
