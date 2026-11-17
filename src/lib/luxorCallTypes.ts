@@ -3,7 +3,7 @@ export type LuxorCallDirection = 'inbound' | 'outbound'
 // Transcription runs on the customer-facing leg for both incoming and outgoing calls.
 // Twilio's inbound track is audio received from that leg; outbound is audio sent to it.
 // Elena live inbound records the parent PSTN leg with caller/luxor_agent labels (standard polarity).
-// Raw inbound_track/outbound_track on a SIP child leg still need the inbound/outbound remap below.
+// Raw inbound_track/outbound_track on Elena calls normalize to caller/luxor_agent (parent PSTN polarity).
 export function luxorElenaLiveInboundTranscriptUsesSipBridge(metadata: Record<string, unknown> | null | undefined) {
   return metadata?.scope === 'elena_live_inbound'
 }
@@ -16,8 +16,8 @@ function isTwilioInboundOutboundTrack(track: string) {
 export function luxorTranscriptSpeaker(track: string, options: { elenaSipBridge?: boolean } = {}): 'caller' | 'luxor' | 'unknown' {
   const lower = track.toLowerCase()
   if (options.elenaSipBridge && isTwilioInboundOutboundTrack(track)) {
-    if (lower === 'inbound_track' || lower === 'inbound') return 'luxor'
-    if (lower === 'outbound_track' || lower === 'outbound') return 'caller'
+    if (lower === 'inbound_track' || lower === 'inbound') return 'caller'
+    if (lower === 'outbound_track' || lower === 'outbound') return 'luxor'
   }
   switch (lower) {
     case 'inbound_track':
@@ -36,8 +36,8 @@ export function luxorTranscriptSpeaker(track: string, options: { elenaSipBridge?
 export function luxorTranscriptStorageTrack(track: string, metadata: Record<string, unknown> | null | undefined) {
   if (!luxorElenaLiveInboundTranscriptUsesSipBridge(metadata) || !isTwilioInboundOutboundTrack(track)) return track
   const lower = track.toLowerCase()
-  if (lower === 'inbound_track' || lower === 'inbound') return 'luxor_agent'
-  if (lower === 'outbound_track' || lower === 'outbound') return 'caller'
+  if (lower === 'inbound_track' || lower === 'inbound') return 'caller'
+  if (lower === 'outbound_track' || lower === 'outbound') return 'luxor_agent'
   return track
 }
 

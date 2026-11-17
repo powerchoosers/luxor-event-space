@@ -17,15 +17,15 @@ const types = (() => {
   return mod.exports
 })()
 
-test('elena sip bridge swaps inbound and outbound tracks for speaker mapping', () => {
-  assert.equal(types.luxorTranscriptSpeaker('inbound_track', { elenaSipBridge: true }), 'luxor')
-  assert.equal(types.luxorTranscriptSpeaker('outbound_track', { elenaSipBridge: true }), 'caller')
+test('elena live inbound maps raw twilio tracks to caller and luxor_agent labels', () => {
+  assert.equal(types.luxorTranscriptSpeaker('inbound_track', { elenaSipBridge: true }), 'caller')
+  assert.equal(types.luxorTranscriptSpeaker('outbound_track', { elenaSipBridge: true }), 'luxor')
 })
 
 test('elena sip bridge normalizes storage tracks for new transcript rows', () => {
   const metadata = { scope: 'elena_live_inbound' }
-  assert.equal(types.luxorTranscriptStorageTrack('inbound_track', metadata), 'luxor_agent')
-  assert.equal(types.luxorTranscriptStorageTrack('outbound_track', metadata), 'caller')
+  assert.equal(types.luxorTranscriptStorageTrack('inbound_track', metadata), 'caller')
+  assert.equal(types.luxorTranscriptStorageTrack('outbound_track', metadata), 'luxor_agent')
   assert.equal(types.luxorTranscriptStorageTrack('caller', metadata), 'caller')
   assert.equal(types.luxorTranscriptStorageTrack('luxor_agent', metadata), 'luxor_agent')
 })

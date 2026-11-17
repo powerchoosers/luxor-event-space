@@ -5,13 +5,9 @@ import { ELENA_LIVE_CLAIM_MAX_SECONDS, getElenaLiveConfig, signElenaLiveClaim, v
 import { ELENA_LIVE_AGENT_TRANSCRIPTION_SID, saveLuxorElenaAgentTranscriptSegment } from './luxorCallsServer'
 import { supabaseRestStrict } from './supabaseRestServer'
 
-function agentTranscriptWorkerOrigin() {
-  const productionHost = process.env.VERCEL_PROJECT_PRODUCTION_URL?.trim().replace(/^https?:\/\//, '')
-  if (productionHost) return `https://${productionHost}`
-  const publicSite = process.env.NEXT_PUBLIC_SITE_URL?.trim().replace(/\/$/, '')
-  if (publicSite) return publicSite
-  return 'https://www.luxoratlaspalmas.com'
-}
+/** Always hit www for worker POSTs; apex redirects can drop the body. Override only via NEXT_PUBLIC_SITE_URL. */
+export const ELENA_INBOUND_AGENT_TRANSCRIPT_WORKER_ORIGIN =
+  process.env.NEXT_PUBLIC_SITE_URL?.trim().replace(/\/$/, '') || 'https://www.luxoratlaspalmas.com'
 const CALL_SID = /^CA[0-9a-f]{32}$/i
 const SESSION_ID = /^[A-Za-z0-9][A-Za-z0-9_-]{1,180}$/
 const TERMINAL = new Set(['completed', 'busy', 'failed', 'no-answer', 'canceled'])
@@ -214,7 +210,7 @@ export function triggerElenaInboundAgentTranscriptSideband(callSid: string, sess
   }
   const protectionBypass = process.env.VERCEL_AUTOMATION_BYPASS_SECRET?.trim()
   if (protectionBypass) headers['x-vercel-protection-bypass'] = protectionBypass
-  void fetch(`${agentTranscriptWorkerOrigin()}/api/elena-inbound/agent-transcript`, {
+  void fetch(`${ELENA_INBOUND_AGENT_TRANSCRIPT_WORKER_ORIGIN}/api/elena-inbound/agent-transcript`, {
     method: 'POST',
     headers,
     body: JSON.stringify({ callSid, sessionId }),

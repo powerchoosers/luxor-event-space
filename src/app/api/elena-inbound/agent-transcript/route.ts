@@ -7,8 +7,8 @@ import { elenaLiveInboundReadyDetail } from '@/lib/luxorElenaInboundServer'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
-/** 11m worker socket + 90s flush; must be a route literal (see ELENA_INBOUND_AGENT_TRANSCRIPT_WORKER_MAX_MS). */
-export const maxDuration = 750
+/** 660s worker socket (ELENA_INBOUND_AGENT_TRANSCRIPT_WORKER_MAX_MS) + flush margin; Pro Fluid max 800. */
+export const maxDuration = 800
 
 const CALL_SID = /^CA[0-9a-f]{32}$/i
 const SESSION_ID = /^[A-Za-z0-9][A-Za-z0-9_-]{1,180}$/
