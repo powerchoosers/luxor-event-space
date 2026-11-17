@@ -3,11 +3,11 @@ import 'server-only'
 import WebSocket from 'ws'
 import { ELENA_LIVE_CLAIM_MAX_SECONDS, getElenaLiveConfig, signElenaLiveClaim, verifyElenaLiveClaim } from './luxorElenaInboundServer'
 import { ELENA_LIVE_AGENT_TRANSCRIPTION_SID, saveLuxorElenaAgentTranscriptSegment } from './luxorCallsServer'
-import { supabaseRestStrict } from './supabaseRestServer'
+import { agentTranscriptSidebandClaimQuerySuffix, resolveElenaInboundAgentTranscriptWorkerOrigin } from './luxorElenaInboundAgentTranscriptClaim'
+import { SupabaseRestError, supabaseRestStrict } from './supabaseRestServer'
 
-/** Always hit www for worker POSTs; apex redirects can drop the body. Override only via NEXT_PUBLIC_SITE_URL. */
 export const ELENA_INBOUND_AGENT_TRANSCRIPT_WORKER_ORIGIN =
-  process.env.NEXT_PUBLIC_SITE_URL?.trim().replace(/\/$/, '') || 'https://www.luxoratlaspalmas.com'
+  resolveElenaInboundAgentTranscriptWorkerOrigin(process.env.NEXT_PUBLIC_SITE_URL)
 const CALL_SID = /^CA[0-9a-f]{32}$/i
 const SESSION_ID = /^[A-Za-z0-9][A-Za-z0-9_-]{1,180}$/
 const TERMINAL = new Set(['completed', 'busy', 'failed', 'no-answer', 'canceled'])
@@ -73,24 +73,37 @@ async function claimAgentTranscriptSideband(row: LiveCall, sessionId: string) {
   if (status === 'completed') return 'already_completed'
   if (status === 'running' && !isStaleRunningSideband(row.metadata)) return 'already_running'
   const startedAt = new Date().toISOString()
-  const claimable = isStaleRunningSideband(row.metadata)
-    ? ''
-    : '&or=(metadata->>agent_transcript_sideband.is.null,metadata->>agent_transcript_sideband=eq.failed,metadata->>agent_transcript_sideband=eq.partial)'
-  const [claimed] = await supabaseRestStrict<LiveCall[]>(`luxor_calls?twilio_call_sid=eq.${encodeURIComponent(row.twilio_call_sid)}&metadata->>scope=eq.elena_live_inbound&updated_at=eq.${encodeURIComponent(row.updated_at)}${claimable}&select=id,twilio_call_sid,status,metadata,updated_at`, {
-    method: 'PATCH',
-    headers: { Prefer: 'return=representation' },
-    body: JSON.stringify({
-      metadata: {
-        ...row.metadata,
-        agent_transcript_sideband: 'running',
-        agent_transcript_sideband_started_at: startedAt,
-        agent_transcript_session_id: sessionId,
-        agent_transcript_sid: ELENA_LIVE_AGENT_TRANSCRIPTION_SID,
-      },
-      updated_at: new Date(Math.max(Date.now(), Date.parse(row.updated_at) + 1)).toISOString(),
-    }),
-  })
-  return claimed ? 'claimed' : 'lost_claim'
+  const claimable = isStaleRunningSideband(row.metadata) ? '' : agentTranscriptSidebandClaimQuerySuffix()
+  let claimed: LiveCall[] | undefined
+  try {
+    claimed = await supabaseRestStrict<LiveCall[]>(`luxor_calls?twilio_call_sid=eq.${encodeURIComponent(row.twilio_call_sid)}&metadata->>scope=eq.elena_live_inbound&updated_at=eq.${encodeURIComponent(row.updated_at)}${claimable}&select=id,twilio_call_sid,status,metadata,updated_at`, {
+      method: 'PATCH',
+      headers: { Prefer: 'return=representation' },
+      body: JSON.stringify({
+        metadata: {
+          ...row.metadata,
+          agent_transcript_sideband: 'running',
+          agent_transcript_sideband_started_at: startedAt,
+          agent_transcript_session_id: sessionId,
+          agent_transcript_sid: ELENA_LIVE_AGENT_TRANSCRIPTION_SID,
+        },
+        updated_at: new Date(Math.max(Date.now(), Date.parse(row.updated_at) + 1)).toISOString(),
+      }),
+    })
+  } catch (error) {
+    const message = error instanceof SupabaseRestError
+      ? error.message
+      : error instanceof Error
+        ? error.message
+        : 'unknown'
+    console.warn('[Elena Inbound] Agent transcript sideband claim failed.', {
+      callSid: row.twilio_call_sid,
+      message,
+      status: error instanceof SupabaseRestError ? error.status : undefined,
+    })
+    return 'claim_error'
+  }
+  return claimed?.[0] ? 'claimed' : 'lost_claim'
 }
 
 async function finishAgentTranscriptSideband(callSid: string, sessionId: string, status: SidebandFinishStatus) {
