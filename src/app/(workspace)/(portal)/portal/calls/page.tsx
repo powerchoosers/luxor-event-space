@@ -47,6 +47,7 @@ import { usePortalVoice } from '@/components/portal/PortalVoiceProvider'
 import { useToast } from '@/components/portal/ToastProvider'
 import { luxorCallLinkedContactName } from '@/lib/luxorCallContactLink'
 import { luxorElenaLiveInboundTranscriptUsesSipBridge, luxorTranscriptSpeaker, type LuxorCall } from '@/lib/luxorCallTypes'
+import { formatLuxorTranscriptElapsed, luxorTranscriptLineStartSeconds } from '@/lib/luxorTranscriptDisplay'
 import {
   formatPhoneDisplay,
   formatUsDialInput,
@@ -1229,7 +1230,7 @@ export default function CallsPage() {
 
                         {readerTab === 'transcript' &&
                           selectedCall.transcript_segments &&
-                          selectedCall.transcript_segments.some((segment) => segment.startSeconds != null) && (
+                          selectedCall.transcript_segments.some((segment) => luxorTranscriptLineStartSeconds(segment, selectedCall.recording_started_at) != null) && (
                             <span className="text-[11px] text-[color:var(--portal-muted)]">
                               Tap time to jump
                             </span>
@@ -1271,21 +1272,20 @@ export default function CallsPage() {
                         selectedCall.transcript_segments.length > 0 ? (
                         <div className="max-h-72 overflow-y-auto divide-y divide-[color:var(--portal-border)]/50 p-3 sm:p-4 portal-scrollbar">
                           {selectedCall.transcript_segments.map((segment) => {
+                            const lineStartSeconds = luxorTranscriptLineStartSeconds(segment, selectedCall.recording_started_at)
                             const isSpokenNow =
-                              segment.startSeconds != null &&
-                              currentPlayheadTime >= segment.startSeconds &&
-                              currentPlayheadTime < segment.startSeconds + 4
+                              lineStartSeconds != null &&
+                              currentPlayheadTime >= lineStartSeconds &&
+                              currentPlayheadTime < lineStartSeconds + 4
                             const speaker = luxorTranscriptSpeaker(segment.track, { elenaSipBridge: luxorElenaLiveInboundTranscriptUsesSipBridge(selectedCall.metadata) })
 
                             return (
                               <button
                                 key={segment.id}
                                 type="button"
-                                disabled={segment.startSeconds == null}
+                                disabled={lineStartSeconds == null}
                                 onClick={() => {
-                                  if (segment.startSeconds != null) {
-                                    setTargetSeekTime(segment.startSeconds)
-                                  }
+                                  if (lineStartSeconds != null) setTargetSeekTime(lineStartSeconds)
                                 }}
                                 className={`w-full flex items-start gap-3 rounded-xl px-3 py-2.5 text-left transition-colors enabled:cursor-pointer disabled:cursor-default ${
                                   isSpokenNow
@@ -1294,9 +1294,7 @@ export default function CallsPage() {
                                 }`}
                               >
                                 <span className="w-11 shrink-0 pt-0.5 text-xs tabular-nums font-medium text-[#a8792f] dark:text-[#f1d27a]">
-                                  {segment.startSeconds != null
-                                    ? formatDuration(Math.floor(segment.startSeconds))
-                                    : '—'}
+                                  {formatLuxorTranscriptElapsed(lineStartSeconds)}
                                 </span>
                                 <div className="min-w-0 flex-1">
                                   <span className="text-xs font-semibold text-[color:var(--portal-muted)]">

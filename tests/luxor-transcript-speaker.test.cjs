@@ -50,8 +50,16 @@ test('standard calls keep twilio track mapping', () => {
 
 test('dual channel index follows storage track labels', () => {
   const elena = { scope: 'elena_live_inbound' }
-  assert.equal(types.luxorDualChannelIndexForStorageTrack('luxor_agent', elena), 0)
-  assert.equal(types.luxorDualChannelIndexForStorageTrack('caller', elena), 1)
+  assert.equal(types.luxorDualChannelIndexForStorageTrack('caller', elena), 0)
+  assert.equal(types.luxorDualChannelIndexForStorageTrack('luxor_agent', elena), 1)
   assert.equal(types.luxorDualChannelIndexForStorageTrack('caller', {}), 0)
   assert.equal(types.luxorDualChannelIndexForStorageTrack('luxor_agent', {}), 1)
+})
+
+test('elena parent pstn labeled tracks keep caller on channel 0', () => {
+  const metadata = { scope: 'elena_live_inbound', ingress_mode: 'programmable_sip' }
+  assert.equal(types.luxorTranscriptStorageTrack('caller', metadata), 'caller')
+  assert.equal(types.luxorTranscriptStorageTrack('luxor_agent', metadata), 'luxor_agent')
+  assert.equal(types.luxorDualChannelIndexForStorageTrack('caller', metadata), 0)
+  assert.equal(types.luxorDualChannelIndexForStorageTrack('luxor_agent', metadata), 1)
 })

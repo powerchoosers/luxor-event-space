@@ -65,7 +65,21 @@ export function getElenaLiveConfig() {
   return { number, numberSid, projectId, webhookSecret, apiKey, accountSid, authToken }
 }
 
-export function elenaLiveInboundReady() { try { getElenaLiveConfig(); return true } catch { return false } }
+export function elenaLiveInboundReady() { return elenaLiveInboundReadyDetail().ready }
+
+export function elenaLiveInboundReadyDetail(): { ready: boolean; reason?: string } {
+  try {
+    getElenaLiveConfig()
+    return { ready: true }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'unknown'
+    const reason = message.includes('disabled') ? 'disabled'
+      : message.includes('incomplete') ? 'incomplete'
+        : message.includes('signing') ? 'signing_unavailable'
+          : 'config_invalid'
+    return { ready: false, reason }
+  }
+}
 
 /** Upper bound for signed live-claim `exp` (seconds from issuance). Worker and MCP tokens must stay within this window. */
 export const ELENA_LIVE_CLAIM_MAX_SECONDS = 1800

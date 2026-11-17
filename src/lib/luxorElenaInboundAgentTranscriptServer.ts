@@ -5,7 +5,13 @@ import { ELENA_LIVE_CLAIM_MAX_SECONDS, getElenaLiveConfig, signElenaLiveClaim, v
 import { ELENA_LIVE_AGENT_TRANSCRIPTION_SID, saveLuxorElenaAgentTranscriptSegment } from './luxorCallsServer'
 import { supabaseRestStrict } from './supabaseRestServer'
 
-const BASE = 'https://www.luxoratlaspalmas.com'
+function agentTranscriptWorkerOrigin() {
+  const productionHost = process.env.VERCEL_PROJECT_PRODUCTION_URL?.trim().replace(/^https?:\/\//, '')
+  if (productionHost) return `https://${productionHost}`
+  const publicSite = process.env.NEXT_PUBLIC_SITE_URL?.trim().replace(/\/$/, '')
+  if (publicSite) return publicSite
+  return 'https://www.luxoratlaspalmas.com'
+}
 const CALL_SID = /^CA[0-9a-f]{32}$/i
 const SESSION_ID = /^[A-Za-z0-9][A-Za-z0-9_-]{1,180}$/
 const TERMINAL = new Set(['completed', 'busy', 'failed', 'no-answer', 'canceled'])
@@ -202,14 +208,26 @@ export function triggerElenaInboundAgentTranscriptSideband(callSid: string, sess
   const secret = process.env.OPENAI_VOICE_WEBHOOK_SECRET || ''
   if (secret.length < 32) return
   const token = signElenaLiveClaim({ kind: 'call', callSid, sessionId, exp: Math.floor(Date.now() / 1000) + ELENA_LIVE_CLAIM_MAX_SECONDS }, secret)
-  void fetch(`${BASE}/api/elena-inbound/agent-transcript`, {
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${token}`,
+    'Content-Type': 'application/json',
+  }
+  const protectionBypass = process.env.VERCEL_AUTOMATION_BYPASS_SECRET?.trim()
+  if (protectionBypass) headers['x-vercel-protection-bypass'] = protectionBypass
+  void fetch(`${agentTranscriptWorkerOrigin()}/api/elena-inbound/agent-transcript`, {
     method: 'POST',
-    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    headers,
     body: JSON.stringify({ callSid, sessionId }),
     cache: 'no-store',
   }).then(async (response) => {
     if (!response.ok) {
-      console.warn('[Elena Inbound] Agent transcript worker request failed.', { callSid, status: response.status })
+      const bodyPreview = (await response.text()).slice(0, 240)
+      console.warn('[Elena Inbound] Agent transcript worker request failed.', {
+        callSid,
+        status: response.status,
+        vercelError: response.headers.get('x-vercel-error'),
+        bodyPreview,
+      })
     }
   }).catch((error) => {
     console.warn('[Elena Inbound] Agent transcript worker could not be requested.', {
