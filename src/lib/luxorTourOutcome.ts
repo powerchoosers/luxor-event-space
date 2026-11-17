@@ -1,4 +1,29 @@
-import type { LuxorTourAttendanceStatus } from '@/lib/luxorInquiryTypes'
+import type { LuxorInquiry, LuxorTourAttendanceStatus } from '@/lib/luxorInquiryTypes'
+import { isLuxorDateInUpcomingSchedule, luxorTodayKey } from '@/lib/luxorTourMetrics'
+
+export function canReopenLuxorTourCompletion(lead: Pick<LuxorInquiry, 'tour_attendance_status' | 'preferred_tour_date' | 'status'>, todayKey = luxorTodayKey()) {
+  if (lead.tour_attendance_status !== 'attended') return false
+  if (lead.status === 'closed_lost') return false
+  if (!lead.preferred_tour_date) return false
+  return isLuxorDateInUpcomingSchedule(lead.preferred_tour_date, todayKey)
+}
+
+export function createLuxorTourReopenPayload(input: {
+  inquiryId: string
+  expectedAttendance: LuxorTourAttendanceStatus | null
+  visitId?: string | null
+  visitVersion?: number
+  leadEventId?: string
+}) {
+  return {
+    inquiryId: input.inquiryId,
+    ...(input.leadEventId ? { leadEventId: input.leadEventId } : {}),
+    action: 'reopen-tour' as const,
+    expectedAttendance: input.expectedAttendance,
+    visitId: input.visitId ?? null,
+    expectedVisitVersion: input.visitVersion ?? 0,
+  }
+}
 
 export function createLuxorTourAttendancePayload(input: {
   inquiryId: string
