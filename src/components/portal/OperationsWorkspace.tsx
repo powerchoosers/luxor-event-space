@@ -66,6 +66,7 @@ import { MagicCard } from '@/components/ui/magic-card'
 import { OperationsLoadingSkeleton } from '@/app/(workspace)/(portal)/portal/operations/OperationsLoadingSkeleton'
 import { NeedsAttentionNow } from '@/components/portal/NeedsAttentionNow'
 import { PartnerApplicationsPanel } from '@/components/portal/PartnerApplicationsPanel'
+import { DocumentCreatorLibrary } from '@/components/portal/DocumentCreatorLibrary'
 
 type SubTab =
   | 'dashboard'
@@ -76,6 +77,7 @@ type SubTab =
   | 'utilities'
   | 'cleaning'
   | 'staff'
+  | 'documents'
 
 type ReadinessTask = {
   id: string
@@ -121,6 +123,7 @@ const operationsTabs: Array<{ id: SubTab; label: string; icon: React.ReactNode; 
   { id: 'utilities', label: 'Utility Sensors', icon: <Zap size={15} />, description: 'Real-time power, water, HVAC, and ambient readings', group: 'Facility & Environment' },
   { id: 'cleaning', label: 'Cleaning Checklists', icon: <Sparkles size={15} />, description: 'Sanitation rota, turn-down status, and audit logs', group: 'Facility & Environment' },
   { id: 'staff', label: 'Staff Rota', icon: <Clock size={15} />, description: 'Shift assignments, coordinator on-duty, and team schedule', group: 'Team & Staffing' },
+  { id: 'documents', label: 'Documents', icon: <FileText size={15} />, description: 'Draft agreements, templates, and branded PDFs', group: 'Team & Staffing' },
 ]
 
 type EditFormData = {
@@ -757,6 +760,8 @@ export function OperationsPageContent({ embeddedBills = false }: { embeddedBills
               <PortalButton variant="primary" onClick={() => setIsInventoryModalOpen(true)}><Plus size={14} /> Audit Stock</PortalButton>
             ) : activeTab === 'vendors' && vendorWorkspaceView === 'roster' ? (
               <PortalButton variant="primary" onClick={() => setIsVendorModalOpen(true)}><Plus size={14} /> Add Vendor</PortalButton>
+            ) : activeTab === 'documents' ? (
+              <PortalButton variant="primary" onClick={() => router.push('/portal/operations/documents/new')}><Plus size={14} /> New document</PortalButton>
             ) : null}
           </div>
         }
@@ -1273,6 +1278,12 @@ export function OperationsPageContent({ embeddedBills = false }: { embeddedBills
               <p className="mt-2 text-[10px] leading-relaxed text-[color:var(--portal-muted)]">The previous checklist and photo uploader were visual-only and did not save. Use maintenance tasks until cleaning records and attachments are tied to individual events.</p>
             </div>
           </div>
+        </div>
+      )}
+
+      {activeTab === 'documents' && (
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+          <DocumentCreatorLibrary />
         </div>
       )}
 

@@ -7,6 +7,20 @@ import path from 'node:path'
 import { PDFDocument, StandardFonts, rgb, type PDFImage, type PDFFont, type PDFPage } from 'pdf-lib'
 import type { LuxorBooking, LuxorSignatureRequest } from './luxorInquiryTypes'
 import { LUXOR_VENUE_ADDRESS } from './luxorVenue'
+import {
+  drawLuxorPdfHeader,
+  drawLuxorPdfStandardFooters,
+  luxorPdfContentWidth,
+  luxorPdfCream,
+  luxorPdfGold,
+  luxorPdfInk,
+  luxorPdfMargin,
+  luxorPdfMuted,
+  luxorPdfPageHeight,
+  luxorPdfPageWidth,
+  luxorPdfPaleGold,
+  luxorPdfSoft,
+} from './luxorPdfBrandingServer'
 import type { LuxorContractSignaturePlacement } from './luxorSignaturePlacement'
 import { formatLuxorDate } from './luxorDateFormatting'
 import { getOfficialDecorService } from './luxorDecorCatalog'
@@ -15,16 +29,16 @@ import { luxorCalendarDate } from './luxorProposalTerms'
 import { SAME_DAY_CARD_CUTOFF_TERMS } from './luxorSameDayBooking'
 import { formatLuxorCustomRentalDuration, formatLuxorCustomRentalPriceBreakdown, getLuxorCustomRentalSnapshot, type LuxorCustomRentalSnapshot } from './luxorCustomRentalSnapshot'
 
-const gold = rgb(0.67, 0.47, 0.20)
-const paleGold = rgb(0.92, 0.85, 0.72)
-const ink = rgb(0.13, 0.11, 0.09)
-const muted = rgb(0.42, 0.38, 0.32)
-const cream = rgb(0.985, 0.972, 0.945)
-const soft = rgb(0.955, 0.93, 0.885)
-const margin = 52
-const pageWidth = 612
-const pageHeight = 792
-const contentWidth = 508
+const gold = luxorPdfGold
+const paleGold = luxorPdfPaleGold
+const ink = luxorPdfInk
+const muted = luxorPdfMuted
+const cream = luxorPdfCream
+const soft = luxorPdfSoft
+const margin = luxorPdfMargin
+const pageWidth = luxorPdfPageWidth
+const pageHeight = luxorPdfPageHeight
+const contentWidth = luxorPdfContentWidth
 
 type UnknownRecord = Record<string, unknown>
 
@@ -278,12 +292,7 @@ async function createWriter(documentLabel: string) {
   let y = 0
 
   const drawHeader = (target: PDFPage) => {
-    target.drawRectangle({ x: 0, y: 734, width: pageWidth, height: 58, color: ink })
-    if (logo) target.drawImage(logo, { x: margin, y: 746, width: 34, height: 34 })
-    target.drawText('LUXOR', { x: logo ? 96 : margin, y: 760, size: 15, font: bold, color: paleGold })
-    target.drawText('AT LAS PALMAS EVENTS', { x: logo ? 96 : margin, y: 749, size: 6.5, font: bold, color: cream })
-    const labelWidth = bold.widthOfTextAtSize(documentLabel, 7)
-    target.drawText(documentLabel, { x: pageWidth - margin - labelWidth, y: 755, size: 7, font: bold, color: paleGold })
+    drawLuxorPdfHeader(target, documentLabel, logo, bold)
   }
 
   const addPage = () => {
@@ -392,13 +401,7 @@ async function createWriter(documentLabel: string) {
   }
 
   const finish = async () => {
-    const pages = pdf.getPages()
-    pages.forEach((target, index) => {
-      target.drawLine({ start: { x: margin, y: 43 }, end: { x: pageWidth - margin, y: 43 }, thickness: 0.45, color: paleGold })
-      target.drawText(`Luxor Event Space  |  ${LUXOR_VENUE_ADDRESS}`, { x: margin, y: 25, size: 7.2, font: regular, color: muted })
-      const pageText = `${index + 1} / ${pages.length}`
-      target.drawText(pageText, { x: pageWidth - margin - regular.widthOfTextAtSize(pageText, 7.2), y: 25, size: 7.2, font: regular, color: muted })
-    })
+    drawLuxorPdfStandardFooters(pdf.getPages(), regular)
     return pdf.save({ useObjectStreams: false })
   }
 
