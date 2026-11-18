@@ -2,7 +2,7 @@ import 'server-only'
 
 import { decodeStereoMp3, sliceChannelToWav } from './luxorDualChannelAudio'
 import { luxorDualChannelIndexForStorageTrack, type LuxorCall } from './luxorCallTypes'
-import { getLuxorCallBySid, getLuxorTranscriptSegments } from './luxorCallsServer'
+import { getLuxorCallBySid, resolveLuxorCallTranscriptRowsForCorrection } from './luxorCallsServer'
 import { supabaseRest } from './supabaseRestServer'
 
 export const LUXOR_POST_CALL_TRANSCRIBE_MODEL_DEFAULT = 'gpt-transcribe'
@@ -233,7 +233,7 @@ export async function runLuxorPostCallTranscriptCorrection(callSid: string) {
   call = claimed
 
   try {
-    const ordered = await getLuxorTranscriptSegments(call.id)
+    const ordered = await resolveLuxorCallTranscriptRowsForCorrection(call.id)
     if (!ordered.length) {
       await patchPostCallMeta(callSid, { status: 'skipped', model, at: new Date().toISOString(), corrected_count: 0, kept_count: 0, error_count: 0 })
       return { status: 'skipped' as const, reason: 'no_segments' }

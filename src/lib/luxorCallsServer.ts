@@ -8,7 +8,11 @@ import {
   luxorElenaLiveInboundTranscriptUsesSipBridge,
   luxorTranscriptStorageTrack,
 } from './luxorCallTypes'
-import { mergeElenaLiveTranscriptRows } from './luxorElenaLiveTranscriptSnapshot'
+import {
+  elenaAgentLineCount,
+  mergeElenaLiveTranscriptRows,
+  shouldRepairThinPostCallTranscriptSnapshot,
+} from './luxorElenaLiveTranscriptSnapshot'
 import { getLuxorInquiry, listLuxorInquiries } from './luxorInquiriesServer'
 import { supabaseRest } from './supabaseRestServer'
 
@@ -423,6 +427,48 @@ function resolvedTranscriptRowsForCall(call: LuxorCall, rows: TranscriptRow[]) {
   return elenaLiveSnapshotTranscriptRows(call, rows)
 }
 
+function transcriptRowsForDisplay(call: LuxorCall, rows: TranscriptRow[]) {
+  if (isTranscriptManuallyCorrected(call)) {
+    return transcriptSegmentsFromCallSnapshot(call)
+  }
+  if (shouldRepairThinPostCallTranscriptSnapshot({
+    transcriptSource: call.metadata?.transcript_source,
+    manuallyCorrected: call.metadata?.transcript_manually_corrected,
+    sideband: call.metadata?.agent_transcript_sideband,
+    snapshotAgentLineCount: elenaAgentLineCount(call.transcript_segments ?? []),
+    rawRows: rows,
+    usesSipBridge: luxorElenaLiveInboundTranscriptUsesSipBridge(call.metadata),
+  })) {
+    return resolvedTranscriptRowsForCall(call, rows)
+  }
+  if (isTranscriptPostCallSnapshot(call)) {
+    return transcriptSegmentsFromCallSnapshot(call)
+  }
+  return resolvedTranscriptRowsForCall(call, rows)
+}
+
+function transcriptSegmentsPayloadFromRows(call: LuxorCall, rows: TranscriptRow[]) {
+  return transcriptRowsInAudioOrder(rows, call.recording_started_at).map((row) => ({
+    id: row.id,
+    text: row.english_text || row.segment_text,
+    originalText: row.segment_text,
+    spokenLanguages: row.spoken_languages || [],
+    translationStatus: row.translation_status,
+    track: row.track,
+    timestamp: row.event_timestamp || '',
+    final: true,
+    startSeconds: row.segment_start_seconds,
+  }))
+}
+
+/** Raw segment rows with Elena thin-sideband resolution (not frozen post_call snapshots). */
+export async function resolveLuxorCallTranscriptRowsForCorrection(callId: string) {
+  const call = await getLuxorCallById(callId)
+  if (!call) return []
+  const rows = await getTranscriptRows(`call_id=eq.${encodeURIComponent(callId)}`)
+  return transcriptRowsInAudioOrder(resolvedTranscriptRowsForCall(call, rows), call.recording_started_at)
+}
+
 async function syncLuxorCallTranscriptSnapshot(call: LuxorCall, sequenceId?: number) {
   if (usesFrozenTranscriptSnapshot(call)) return call
   const rows = resolvedTranscriptRowsForCall(call, await getTranscriptRows(`call_id=eq.${encodeURIComponent(call.id)}`))
@@ -698,33 +744,32 @@ export async function listLuxorCalls(options: {
     rowsByCall.set(row.call_id, callRows)
   }
   return enriched.map((call) => {
-    if (usesFrozenTranscriptSnapshot(call)) return call
+    const raw = rowsByCall.get(call.id) ?? []
+    if (isTranscriptManuallyCorrected(call)) return call
+    if (isTranscriptPostCallSnapshot(call)
+      && !shouldRepairThinPostCallTranscriptSnapshot({
+        transcriptSource: call.metadata?.transcript_source,
+        manuallyCorrected: call.metadata?.transcript_manually_corrected,
+        sideband: call.metadata?.agent_transcript_sideband,
+        snapshotAgentLineCount: elenaAgentLineCount(call.transcript_segments ?? []),
+        rawRows: raw,
+        usesSipBridge: luxorElenaLiveInboundTranscriptUsesSipBridge(call.metadata),
+      })) {
+      return call
+    }
+  const displayRows = transcriptRowsForDisplay(call, raw)
     return {
       ...call,
-      transcript_segments: transcriptRowsInAudioOrder(resolvedTranscriptRowsForCall(call, rowsByCall.get(call.id) ?? []), call.recording_started_at)
-        .map((row) => ({
-          id: row.id,
-          text: row.english_text || row.segment_text,
-          originalText: row.segment_text,
-          spokenLanguages: row.spoken_languages || [],
-          translationStatus: row.translation_status,
-          track: row.track,
-          timestamp: row.event_timestamp || '',
-          final: true,
-          startSeconds: row.segment_start_seconds,
-        })),
+      transcript_segments: transcriptSegmentsPayloadFromRows(call, displayRows),
     }
   })
 }
 
 export async function getLuxorTranscriptSegments(callId: string) {
   const call = await getLuxorCallById(callId)
-  if (call && usesFrozenTranscriptSnapshot(call)) {
-    return transcriptRowsInAudioOrder(transcriptSegmentsFromCallSnapshot(call), call.recording_started_at)
-  }
   const rows = await getTranscriptRows(`call_id=eq.${encodeURIComponent(callId)}`)
-  const resolved = call ? resolvedTranscriptRowsForCall(call, rows) : rows
-  return transcriptRowsInAudioOrder(resolved, call?.recording_started_at)
+  if (!call) return transcriptRowsInAudioOrder(rows, null)
+  return transcriptRowsInAudioOrder(transcriptRowsForDisplay(call, rows), call.recording_started_at)
 }
 
 export async function updateLuxorCallDetails(

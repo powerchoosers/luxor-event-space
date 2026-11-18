@@ -33,6 +33,51 @@ test('uses ASR fallback when completed sideband has fewer model rows than final 
   assert.deepEqual(merged.map((row) => row.segment_text), ['hi', 'greeting', 'middle', 'other', 'almost done'])
 })
 
+test('repairs thin post_call snapshot when agent lines are below ASR count', () => {
+  assert.equal(snapshot.shouldRepairThinPostCallTranscriptSnapshot({
+    transcriptSource: 'post_call',
+    manuallyCorrected: false,
+    sideband: 'completed',
+    snapshotAgentLineCount: 1,
+    rawRows: [
+      { track: 'luxor_agent', transcription_sid: MODEL, segment_text: 'one' },
+      { track: 'luxor_agent', transcription_sid: 'GT', segment_text: 'a' },
+      { track: 'luxor_agent', transcription_sid: 'GT', segment_text: 'b' },
+    ],
+    usesSipBridge: true,
+  }), true)
+})
+
+test('never repairs post_call snapshots that were manually corrected', () => {
+  assert.equal(snapshot.shouldRepairThinPostCallTranscriptSnapshot({
+    transcriptSource: 'post_call',
+    manuallyCorrected: true,
+    sideband: 'completed',
+    snapshotAgentLineCount: 1,
+    rawRows: [
+      { track: 'luxor_agent', transcription_sid: MODEL, segment_text: 'one' },
+      { track: 'luxor_agent', transcription_sid: 'GT', segment_text: 'a' },
+      { track: 'luxor_agent', transcription_sid: 'GT', segment_text: 'b' },
+    ],
+    usesSipBridge: true,
+  }), false)
+})
+
+test('skips post_call repair when snapshot already has full agent ASR coverage', () => {
+  assert.equal(snapshot.shouldRepairThinPostCallTranscriptSnapshot({
+    transcriptSource: 'post_call',
+    manuallyCorrected: false,
+    sideband: 'completed',
+    snapshotAgentLineCount: 3,
+    rawRows: [
+      { track: 'luxor_agent', transcription_sid: MODEL, segment_text: 'one' },
+      { track: 'luxor_agent', transcription_sid: 'GT', segment_text: 'a' },
+      { track: 'luxor_agent', transcription_sid: 'GT', segment_text: 'b' },
+    ],
+    usesSipBridge: true,
+  }), false)
+})
+
 test('keeps model rows when model coverage matches ASR', () => {
   assert.equal(snapshot.shouldUseElenaAgentAsrFallback(3, 3, 'completed'), false)
   const merged = snapshot.mergeElenaLiveTranscriptRows('completed', [

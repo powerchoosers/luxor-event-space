@@ -33,6 +33,38 @@ export function pickElenaLiveAgentTranscriptRows(
   return modelAgentRows
 }
 
+export function elenaAgentLineCount(rows: Array<{ track: string }>) {
+  return rows.filter((row) => row.track === 'luxor_agent').length
+}
+
+export function countElenaModelAndAsrAgentRows(rows: ElenaLiveTranscriptRow[]) {
+  let model = 0
+  let asr = 0
+  for (const row of rows) {
+    if (row.track !== 'luxor_agent') continue
+    if (isElenaModelAgentTranscriptRow(row)) model += 1
+    else asr += 1
+  }
+  return { model, asr }
+}
+
+/** Read-time repair for frozen post_call snapshots written before ASR fallback. */
+export function shouldRepairThinPostCallTranscriptSnapshot(input: {
+  transcriptSource?: unknown
+  manuallyCorrected?: unknown
+  sideband?: unknown
+  snapshotAgentLineCount: number
+  rawRows: ElenaLiveTranscriptRow[]
+  usesSipBridge: boolean
+}) {
+  if (!input.usesSipBridge) return false
+  if (input.transcriptSource !== 'post_call') return false
+  if (input.manuallyCorrected === true) return false
+  const { model, asr } = countElenaModelAndAsrAgentRows(input.rawRows)
+  if (!shouldUseElenaAgentAsrFallback(model, asr, input.sideband)) return false
+  return input.snapshotAgentLineCount < asr
+}
+
 export function mergeElenaLiveTranscriptRows(
   sideband: unknown,
   nonAgentRows: ElenaLiveTranscriptRow[],
