@@ -4,6 +4,7 @@ import crypto from 'crypto'
 import { createUniqueLuxorEmailJob, updateLuxorEmailJob } from './luxorEmailJobsServer'
 import { supabaseRest } from './supabaseRestServer'
 import { broadcastLuxorPortalNotification } from './luxorZohoWebhookServer'
+import { notifyOwnerOfClientStatusChange } from './luxorClientStatusOwnerAlertsServer'
 import { normalizeEmailAddress } from './zohoMailServer'
 import { renderLayoutReviewEmailCopy, type LayoutReviewEmailCopy } from './luxorLayoutReviewEmailCopy'
 import type { LuxorEmailJob } from './luxorInquiryTypes'
@@ -406,6 +407,16 @@ export async function submitLuxorLayoutReviewResponse(input: {
   }).catch((error) => {
     // Realtime is the fast path. Portal polling still reveals the saved reply.
     console.error('Layout feedback was recorded, but its realtime notice failed:', error)
+  })
+
+  const summary = input.action === 'approved'
+    ? 'Client approved the shared layout review.'
+    : `Client sent layout feedback: ${String(input.note || 'No note provided.').trim().slice(0, 240)}`
+  void notifyOwnerOfClientStatusChange({
+    leadId: review.inquiry_id,
+    kind: 'layout_review',
+    summary,
+    eventId: `layout_review:${feedback.id}`,
   })
 
   return { review: updatedReview, feedback, created: true }

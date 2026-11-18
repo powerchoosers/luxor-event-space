@@ -33,6 +33,7 @@ import { ArrowsDownUp, CaretDown as PhosphorCaretDown, CaretUp as PhosphorCaretU
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { isLuxorInquiryArchived, isLuxorNonRevenueTestInquiry, isLuxorPermanentTestLead, isLuxorTestInquiry, LUXOR_MAX_GUESTS, LuxorInquiry, LuxorInquiryInput, LuxorInquiryStatus, LuxorPipelineStage, normalizeLuxorEventType } from '@/lib/luxorInquiryTypes'
+import { luxorLeadNeedsClientAttention } from '@/lib/luxorClientAttention'
 import { startLuxorBrowserCall } from '@/lib/luxorVoiceClient'
 import { formatPhoneDisplay } from '@/lib/luxorPhoneClient'
 import { isLuxorBounceForCurrentAddress } from '@/lib/luxorEmailBounce'
@@ -335,6 +336,9 @@ export default function LeadsPage() {
 
   const sortedLeads = useMemo(() => {
     return [...filteredLeads].sort((a, b) => {
+      const attentionA = luxorLeadNeedsClientAttention(a) ? 1 : 0
+      const attentionB = luxorLeadNeedsClientAttention(b) ? 1 : 0
+      if (attentionB !== attentionA) return attentionB - attentionA
       const stageA = PIPELINE_STAGE_OPTIONS.find((option) => option.value === getPipelineStage(a))?.label || getPipelineStage(a)
       const stageB = PIPELINE_STAGE_OPTIONS.find((option) => option.value === getPipelineStage(b))?.label || getPipelineStage(b)
       let comparison = 0
@@ -761,6 +765,11 @@ export default function LeadsPage() {
                             <span className="inline-flex items-center gap-1.5">{lead.full_name}{isMarketingLead(lead) ? <Star className="h-3.5 w-3.5 fill-[#caa24c] text-[#caa24c]" aria-label="Marketing lead" /> : null}</span>
                           </p>
                           <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                            {luxorLeadNeedsClientAttention(lead) ? (
+                              <span className="inline-flex items-center rounded border border-[#caa24c]/35 bg-[#caa24c]/12 px-1.5 py-0.5 text-[9px] font-semibold text-[#a8792f] dark:text-[#e6c77f]">
+                                Needs attention
+                              </span>
+                            ) : null}
                             {lead.metadata?.emailBounce ? (
                               <span
                                 className="inline-flex items-center rounded border border-rose-500/25 bg-rose-500/8 px-1.5 py-0.5 text-[9px] font-semibold text-rose-600 dark:text-rose-300"

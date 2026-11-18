@@ -10,6 +10,7 @@ import { isLuxorOfferExpired } from '@/lib/luxorOffer'
 import { getVerifiedLuxorPortalSession } from '@/lib/luxorPortalAuth'
 import { getLuxorPaymentSettings } from '@/lib/luxorPaymentSettingsServer'
 import { broadcastLuxorPortalNotification } from '@/lib/luxorZohoWebhookServer'
+import { notifyOwnerOfClientStatusChange } from '@/lib/luxorClientStatusOwnerAlertsServer'
 import { getLuxorAgreementClientEmailStatus } from '@/lib/luxorTransactionalNoticeServer'
 import { sameDayBookingPromotion, sameDayBookingRequiresRevision } from '@/lib/luxorSameDayBooking'
 import { SAME_DAY_REVISION_MESSAGE } from '@/lib/luxorSameDayBookingServer'
@@ -153,6 +154,15 @@ export async function GET(request: NextRequest) {
           })
           await broadcastLuxorPortalNotification('contract-status', { signatureId: firstView.id, status: 'viewed' })
             .catch((error) => console.error('Agreement view was saved, but portal notification failed:', error))
+          if (signature.inquiry_id) {
+            void notifyOwnerOfClientStatusChange({
+              leadId: signature.inquiry_id,
+              kind: 'signature_view',
+              summary: `Event Agreement opened by ${signature.client_name} in the secure signing portal.`,
+              eventId: `signature_view:${firstView.id}`,
+              leadName: signature.client_name,
+            })
+          }
         } else {
           // A concurrent view or signature may already have progressed this
           // agreement. Return the current state instead of a stale "sent" one.
@@ -220,6 +230,15 @@ export async function POST(request: NextRequest) {
 
     await broadcastLuxorPortalNotification('contract-status', { signatureId: signature.id, status: signature.status })
       .catch((notificationError) => console.error('Agreement signature was saved, but portal notification failed:', notificationError))
+    if (signature.inquiry_id && signature.status === 'signed') {
+      void notifyOwnerOfClientStatusChange({
+        leadId: signature.inquiry_id,
+        kind: 'signature_signed',
+        summary: `Event Agreement signed by ${signature.client_name || signature.signed_name || 'client'} in the secure signing portal.`,
+        eventId: `signature_signed:${signature.id}:${signature.signed_at || signature.updated_at}`,
+        leadName: signature.client_name,
+      })
+    }
 
     const confirmedBooking = pendingSignature.status !== 'signed'
       ? await getLuxorBooking(signature.booking_id)

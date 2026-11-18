@@ -4,10 +4,11 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { decodeHtmlEntities } from '@/lib/luxorTextUtils'
 import { getPortalSupabaseClient } from '@/lib/supabaseClient'
 import { isLuxorBounceForCurrentAddress, luxorBounceNotificationId } from '@/lib/luxorEmailBounce'
+import { luxorLeadNeedsClientAttention } from '@/lib/luxorClientAttention'
 import { getLuxorOutstandingPaymentRequestAmount } from '@/lib/luxorInvoiceNotificationEligibility'
 import { ELENA_ANSWERED_NOTIFICATION_BODY, ELENA_ANSWERED_NOTIFICATION_TITLE, isElenaLiveAnsweredCall } from '@/lib/luxorElenaInboundNotification'
 
-export type NotificationType = 'email' | 'call' | 'sms' | 'form' | 'booking' | 'calendar_response' | 'proposal_opened' | 'checkout_opened' | 'invoice_paid' | 'bill_due' | 'contract' | 'email_open' | 'layout_feedback' | 'email_delivery_issue'
+export type NotificationType = 'email' | 'call' | 'sms' | 'form' | 'booking' | 'calendar_response' | 'proposal_opened' | 'checkout_opened' | 'invoice_paid' | 'bill_due' | 'contract' | 'email_open' | 'layout_feedback' | 'email_delivery_issue' | 'client_status'
 
 export interface PortalNotificationItem {
   id: string
@@ -278,6 +279,21 @@ export function usePortalNotifications() {
             const source = String(inq.source || 'Website')
 
             const isRead = currentReadIds.has(`form_${inqId}`) || (inq.status !== 'new' && inq.status !== 'tour_requested')
+
+            const attentionEventId = String(inq.client_attention_event_id || '').trim()
+            if (luxorLeadNeedsClientAttention(inq as { client_attention_at?: string | null; client_attention_acknowledged_at?: string | null })) {
+              const clientNotificationId = attentionEventId ? `client_status_${inqId}_${attentionEventId}` : `client_status_${inqId}`
+              aggregated.push({
+                id: clientNotificationId,
+                type: 'client_status',
+                title: `Client update: ${fullName}`,
+                subtitle: String(inq.client_attention_reason || 'The client changed status through a public link or portal.').trim(),
+                timestamp: String(inq.client_attention_at || inq.updated_at || createdAt),
+                isRead: currentReadIds.has(clientNotificationId),
+                targetUrl: leadUrl(inqId),
+                metadata: { inquiryId: inqId, kind: inq.client_attention_kind, eventId: attentionEventId },
+              })
+            }
 
             let title = `New Inquiry: ${fullName}`
             const isContactMessage = (inq.source === 'contact_page' || inq.flow === 'contact_form')
@@ -833,6 +849,9 @@ export function usePortalNotifications() {
           .on('broadcast', { event: 'layout-review-feedback' }, () => {
             void fetchNotifications(true, false, ['layoutReviews'])
           })
+          .on('broadcast', { event: 'client-status-change' }, () => {
+            void fetchNotifications(true, false, ['inquiries'])
+          })
           .subscribe()
       })
       .catch((error) => console.warn('Failed to connect portal realtime notifications:', error))
@@ -987,6 +1006,7 @@ export function usePortalNotifications() {
       email_open: 0,
       email_delivery_issue: 0,
       layout_feedback: 0,
+      client_status: 0,
     }
     items.forEach((item) => {
       if (!item.isRead) {

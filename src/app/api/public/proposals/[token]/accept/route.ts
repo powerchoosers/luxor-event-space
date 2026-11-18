@@ -10,6 +10,7 @@ import { SAME_DAY_REVISION_MESSAGE } from '@/lib/luxorSameDayBookingServer'
 import { claimLuxorWeekdayProposalAcceptance, LuxorWeekdayRentalError } from '@/lib/luxorWeekdayRentalServer'
 import { LuxorProposalBookingTimingError } from '@/lib/luxorProposalBookingTiming'
 import { isWeekdayCustomRentalContext } from '@/lib/luxorWeekdayRental'
+import { notifyOwnerOfClientStatusChange } from '@/lib/luxorClientStatusOwnerAlertsServer'
 
 export const dynamic = 'force-dynamic'
 
@@ -83,6 +84,13 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
     const signingUrl = result.signature.token && hasLuxorSignatureDeliveryDocuments(result.signature) && ['sent', 'viewed'].includes(result.signature.status)
       ? `${(process.env.NEXT_PUBLIC_SITE_URL || new URL(request.url).origin).replace(/\/$/, '')}/secure-portal/sign/${encodeURIComponent(result.signature.token)}`
       : null
+    void notifyOwnerOfClientStatusChange({
+      leadId: inquiry.id,
+      kind: 'proposal_accept',
+      summary: 'Client accepted the locked proposal in the client portal.',
+      eventId: `proposal_accept:${acceptedInvoice.id}:${acceptedInvoice.proposal_accepted_at}`,
+      leadName: inquiry.full_name,
+    })
     return NextResponse.json({
       accepted: true,
       alreadyAccepted: !acceptanceClaim || Boolean(invoice.proposal_accepted_at),

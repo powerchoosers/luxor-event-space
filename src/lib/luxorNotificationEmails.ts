@@ -560,6 +560,23 @@ export async function deliverLuxorInquiryNotification(job: LuxorEmailJob): Promi
       if (!task || task.status !== 'pending' || !['high', 'urgent'].includes(task.priority)) return { status: 'skipped' }
     }
   }
+  if (cancellationKind === 'client_status_change') {
+    const eventId = job.metadata.clientStatusEventId
+    const leadId = job.metadata.leadId ?? job.inquiry_id
+    if (
+      job.metadata.notificationRendered !== true
+      || typeof eventId !== 'string'
+      || !eventId
+      || typeof leadId !== 'string'
+      || !/^[0-9a-f-]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(leadId)
+    ) {
+      throw new Error('Client status alert is missing its saved identity.')
+    }
+    const [lead] = await supabaseRest<Array<{ client_attention_event_id: string | null; is_test: boolean }>>(
+      `luxor_inquiries?select=client_attention_event_id,is_test&id=eq.${encodeURIComponent(leadId)}&limit=1`,
+    )
+    if (!lead || lead.is_test || lead.client_attention_event_id !== eventId) return { status: 'skipped' }
+  }
   let frozen = job
   if (job.metadata.notificationRendered !== true) {
     const snapshot = job.metadata.inquirySnapshot as InquirySnapshot | undefined
