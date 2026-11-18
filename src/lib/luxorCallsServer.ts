@@ -8,6 +8,7 @@ import {
   luxorElenaLiveInboundTranscriptUsesSipBridge,
   luxorTranscriptStorageTrack,
 } from './luxorCallTypes'
+import { mergeElenaLiveTranscriptRows } from './luxorElenaLiveTranscriptSnapshot'
 import { getLuxorInquiry, listLuxorInquiries } from './luxorInquiriesServer'
 import { supabaseRest } from './supabaseRestServer'
 
@@ -401,22 +402,21 @@ export function elenaLiveSnapshotTranscriptRows(call: LuxorCall, rows: Transcrip
   const nonAgentRows = rows.filter((row) => row.track !== 'luxor_agent')
   const modelAgentRows = rows.filter(isElenaModelAgentRow)
   const agentAsrRows = rows.filter((row) => row.track === 'luxor_agent' && !isElenaModelAgentRow(row))
-  if (!modelAgentRows.length) return rows
+  if (!modelAgentRows.length && !agentAsrRows.length) return rows
   const sideband = call.metadata?.agent_transcript_sideband
-  if (sideband === 'completed') return [...nonAgentRows, ...modelAgentRows]
-  if (sideband === 'partial') {
+  let agentAsrAfter: TranscriptRow[] = []
+  if (sideband === 'partial' && modelAgentRows.length) {
     let cutoffMs = Number.NEGATIVE_INFINITY
     for (const row of modelAgentRows) {
       const orderMs = transcriptRowOrderMs(row, call.recording_started_at)
       if (Number.isFinite(orderMs)) cutoffMs = Math.max(cutoffMs, orderMs)
     }
-    const agentAsrAfter = agentAsrRows.filter((row) => {
+    agentAsrAfter = agentAsrRows.filter((row) => {
       const orderMs = transcriptRowOrderMs(row, call.recording_started_at)
       return Number.isFinite(orderMs) && orderMs > cutoffMs
     })
-    return [...nonAgentRows, ...modelAgentRows, ...agentAsrAfter]
   }
-  return [...nonAgentRows, ...agentAsrRows]
+  return mergeElenaLiveTranscriptRows(sideband, nonAgentRows, modelAgentRows, agentAsrRows, agentAsrAfter) as TranscriptRow[]
 }
 
 function resolvedTranscriptRowsForCall(call: LuxorCall, rows: TranscriptRow[]) {
@@ -524,6 +524,13 @@ export async function saveLuxorTranscriptEvent(input: {
   return call
 }
 
+export async function maxElenaModelTranscriptSequenceForCallSid(callSid: string) {
+  const call = await getLuxorCallBySid(callSid)
+  if (!call) return 0
+  const existing = await getTranscriptRows(`call_id=eq.${encodeURIComponent(call.id)}&transcription_sid=eq.${encodeURIComponent(ELENA_LIVE_AGENT_TRANSCRIPTION_SID)}`)
+  return existing.reduce((max, row) => Math.max(max, row.sequence_id), 0)
+}
+
 export async function saveLuxorElenaAgentTranscriptSegment(input: {
   callSid: string
   sessionId: string
@@ -531,6 +538,7 @@ export async function saveLuxorElenaAgentTranscriptSegment(input: {
   startMs?: number | null
   endMs?: number | null
   eventTimestamp?: string | null
+  sequenceId?: number | null
 }) {
   let call = await getLuxorCallBySid(input.callSid)
   if (!call || !canProcessLuxorRecording(call) || !luxorElenaLiveInboundTranscriptUsesSipBridge(call.metadata)) return null
@@ -538,17 +546,23 @@ export async function saveLuxorElenaAgentTranscriptSegment(input: {
   const text = input.text.trim().slice(0, 4000)
   if (!text) return null
   const existing = await getTranscriptRows(`call_id=eq.${encodeURIComponent(call.id)}&transcription_sid=eq.${encodeURIComponent(ELENA_LIVE_AGENT_TRANSCRIPTION_SID)}`)
-  const sequenceId = existing.reduce((max, row) => Math.max(max, row.sequence_id), 0) + 1
+  const sequenceId = typeof input.sequenceId === 'number' && Number.isFinite(input.sequenceId) && input.sequenceId > 0
+    ? Math.trunc(input.sequenceId)
+    : existing.reduce((max, row) => Math.max(max, row.sequence_id), 0) + 1
   const sessionEpochMs = Date.parse(String(call.metadata.accepted_at || call.answered_at || call.started_at || ''))
   const recordingStartMs = Date.parse(call.recording_started_at || '')
-  const startSeconds = typeof input.startMs === 'number' && Number.isFinite(input.startMs) && Number.isFinite(sessionEpochMs) && Number.isFinite(recordingStartMs)
-    ? Math.max(0, (sessionEpochMs + input.startMs - recordingStartMs) / 1000)
-    : null
   const eventTime = input.eventTimestamp && Number.isFinite(Date.parse(input.eventTimestamp))
     ? input.eventTimestamp
     : typeof input.endMs === 'number' && Number.isFinite(input.endMs) && Number.isFinite(sessionEpochMs)
       ? new Date(sessionEpochMs + input.endMs).toISOString()
       : new Date().toISOString()
+  const eventMs = Date.parse(eventTime)
+  let startSeconds: number | null = typeof input.startMs === 'number' && Number.isFinite(input.startMs) && Number.isFinite(sessionEpochMs) && Number.isFinite(recordingStartMs)
+    ? Math.max(0, (sessionEpochMs + input.startMs - recordingStartMs) / 1000)
+    : null
+  if (startSeconds == null && Number.isFinite(recordingStartMs) && Number.isFinite(eventMs)) {
+    startSeconds = Math.max(0, (eventMs - recordingStartMs) / 1000)
+  }
   const inserted = await supabaseRest<Array<{ id: string }>>('luxor_call_transcript_segments?on_conflict=call_id%2Ctranscription_sid%2Csequence_id%2Ctrack', {
     method: 'POST', headers: { Prefer: 'resolution=ignore-duplicates,return=representation' },
     body: JSON.stringify({
