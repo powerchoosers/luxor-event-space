@@ -159,6 +159,99 @@ test('getLuxorTranscriptSegments dedupes Elena agent rows for post-call correcti
   assert.deepEqual(segments.map((row) => row.segment_text), ['hello', 'Luxor at Las Palmas'])
 })
 
+test('getLuxorTranscriptSegments repairs thin post_call frozen snapshot from raw ASR', async () => {
+  const callId = 'call-id'
+  const call = {
+    id: callId,
+    recording_started_at: '2026-11-14T19:25:00.000Z',
+    transcript_segments: [
+      { id: 'snap-c', track: 'caller', text: 'hello', originalText: 'hello', timestamp: '2026-11-14T19:25:01.000Z', startSeconds: 1, final: true, spokenLanguages: [], translationStatus: 'not_requested' },
+      { id: 'snap-e', track: 'luxor_agent', text: 'last only', originalText: 'last only', timestamp: '2026-11-14T19:26:30.000Z', startSeconds: 90, final: true, spokenLanguages: [], translationStatus: 'not_requested' },
+    ],
+    metadata: { scope: 'elena_live_inbound', agent_transcript_sideband: 'completed', transcript_source: 'post_call' },
+  }
+  const rawRows = [
+    { id: '1', call_id: callId, transcription_sid: 'GT123', sequence_id: 1, track: 'caller', segment_text: 'hello', english_text: null, spoken_languages: [], translation_status: 'not_requested', event_timestamp: '2026-11-14T19:25:01.000Z', segment_audio_timestamp: null, segment_start_seconds: 1 },
+    { id: '2', call_id: callId, transcription_sid: MODEL_SID, sequence_id: 2, track: 'luxor_agent', segment_text: 'last only', english_text: null, spoken_languages: [], translation_status: 'not_requested', event_timestamp: '2026-11-14T19:26:30.000Z', segment_audio_timestamp: null, segment_start_seconds: 90 },
+    { id: '3', call_id: callId, transcription_sid: 'GT123', sequence_id: 3, track: 'luxor_agent', segment_text: 'greeting', english_text: null, spoken_languages: [], translation_status: 'not_requested', event_timestamp: '2026-11-14T19:25:05.000Z', segment_audio_timestamp: null, segment_start_seconds: 5 },
+    { id: '4', call_id: callId, transcription_sid: 'GT123', sequence_id: 4, track: 'luxor_agent', segment_text: 'middle', english_text: null, spoken_languages: [], translation_status: 'not_requested', event_timestamp: '2026-11-14T19:25:40.000Z', segment_audio_timestamp: null, segment_start_seconds: 40 },
+  ]
+  const filename = path.resolve(__dirname, '../src/lib/luxorCallsServer.ts')
+  const mod = new Module(filename, module)
+  mod.filename = filename
+  mod.paths = Module._nodeModulePaths(path.dirname(filename))
+  const transpileTs = (file) => ts.transpileModule(fs.readFileSync(file, 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true } }).outputText
+  const loadTs = (file, parent) => {
+    const child = new Module(file, parent); child.filename = file; child.paths = Module._nodeModulePaths(path.dirname(file))
+    const orig = child.require.bind(child)
+    child.require = (n) => (n === 'server-only' ? {} : orig(n))
+    child._compile(transpileTs(file), file)
+    return child.exports
+  }
+  mod.require = (name) => {
+    if (name === 'server-only') return {}
+    if (name === './luxorCallTypes') return loadTs(path.resolve(__dirname, '../src/lib/luxorCallTypes.ts'), mod)
+    if (name === './luxorElenaLiveTranscriptSnapshot') return loadTs(path.resolve(__dirname, '../src/lib/luxorElenaLiveTranscriptSnapshot.ts'), mod)
+    if (name === './supabaseRestServer') return {
+      supabaseRest: async (query) => {
+        if (query.startsWith('luxor_calls?')) return [call]
+        if (query.includes('luxor_call_transcript_segments')) return rawRows
+        return []
+      },
+    }
+    if (name === './luxorInquiriesServer') return { listLuxorInquiries: async () => [] }
+    return Module.prototype.require.call(mod, name)
+  }
+  mod._compile(transpileTs(filename), filename)
+  const segments = await mod.exports.getLuxorTranscriptSegments(callId)
+  assert.deepEqual(segments.map((row) => row.segment_text), ['hello', 'greeting', 'middle'])
+})
+
+test('getLuxorTranscriptSegments keeps manual post_call snapshot untouched', async () => {
+  const callId = 'call-id'
+  const call = {
+    id: callId,
+    recording_started_at: '2026-11-14T19:25:00.000Z',
+    transcript_segments: [
+      { id: 'snap-e', track: 'luxor_agent', text: 'edited greeting', originalText: 'edited greeting', timestamp: '2026-11-14T19:25:05.000Z', startSeconds: 5, final: true, spokenLanguages: [], translationStatus: 'not_requested' },
+    ],
+    metadata: { scope: 'elena_live_inbound', agent_transcript_sideband: 'completed', transcript_source: 'post_call', transcript_manually_corrected: true },
+  }
+  const rawRows = [
+    { id: '2', call_id: callId, transcription_sid: 'GT123', sequence_id: 2, track: 'luxor_agent', segment_text: 'ASR only', english_text: null, spoken_languages: [], translation_status: 'not_requested', event_timestamp: '2026-11-14T19:25:05.000Z', segment_audio_timestamp: null, segment_start_seconds: 5 },
+    { id: '3', call_id: callId, transcription_sid: MODEL_SID, sequence_id: 3, track: 'luxor_agent', segment_text: 'model', english_text: null, spoken_languages: [], translation_status: 'not_requested', event_timestamp: '2026-11-14T19:25:05.000Z', segment_audio_timestamp: null, segment_start_seconds: 5 },
+  ]
+  const filename = path.resolve(__dirname, '../src/lib/luxorCallsServer.ts')
+  const mod = new Module(filename, module)
+  mod.filename = filename
+  mod.paths = Module._nodeModulePaths(path.dirname(filename))
+  const transpileTs = (file) => ts.transpileModule(fs.readFileSync(file, 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true } }).outputText
+  const loadTs = (file, parent) => {
+    const child = new Module(file, parent); child.filename = file; child.paths = Module._nodeModulePaths(path.dirname(file))
+    const orig = child.require.bind(child)
+    child.require = (n) => (n === 'server-only' ? {} : orig(n))
+    child._compile(transpileTs(file), file)
+    return child.exports
+  }
+  mod.require = (name) => {
+    if (name === 'server-only') return {}
+    if (name === './luxorCallTypes') return loadTs(path.resolve(__dirname, '../src/lib/luxorCallTypes.ts'), mod)
+    if (name === './luxorElenaLiveTranscriptSnapshot') return loadTs(path.resolve(__dirname, '../src/lib/luxorElenaLiveTranscriptSnapshot.ts'), mod)
+    if (name === './supabaseRestServer') return {
+      supabaseRest: async (query) => {
+        if (query.startsWith('luxor_calls?')) return [call]
+        if (query.includes('luxor_call_transcript_segments')) return rawRows
+        return []
+      },
+    }
+    if (name === './luxorInquiriesServer') return { listLuxorInquiries: async () => [] }
+    return Module.prototype.require.call(mod, name)
+  }
+  mod._compile(transpileTs(filename), filename)
+  const segments = await mod.exports.getLuxorTranscriptSegments(callId)
+  assert.deepEqual(segments.map((row) => row.segment_text), ['edited greeting'])
+})
+
 test('elena agent segments store model output as final luxor_agent rows', async () => {
   const { exports, inserted } = loadCallsServer()
   await exports.saveLuxorElenaAgentTranscriptSegment({
