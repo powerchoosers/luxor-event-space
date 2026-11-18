@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import {
   completeLuxorCreatedDocumentSigner,
   declineLuxorCreatedDocumentSigner,
+  luxorCreatedDocumentSignerGateResponse,
   markLuxorCreatedDocumentSignerViewed,
   publicCreatedDocumentSignaturePayload,
   resolveLuxorCreatedDocumentSignerFromToken,
@@ -10,21 +11,22 @@ import {
 export async function tryCreatedDocumentSignGet(request: NextRequest, token: string) {
   const signer = await resolveLuxorCreatedDocumentSignerFromToken(token)
   if (!signer) return null
+  const denied = await luxorCreatedDocumentSignerGateResponse(signer)
+  if (denied) return NextResponse.json({ error: denied.error }, { status: denied.status })
   const viewed = await markLuxorCreatedDocumentSignerViewed(signer, {
     ip: request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || request.headers.get('x-real-ip'),
     userAgent: request.headers.get('user-agent'),
   })
   const payload = await publicCreatedDocumentSignaturePayload(viewed, token)
   if (!payload) return NextResponse.json({ error: 'Signing link not found.' }, { status: 404 })
-  if (viewed.status === 'expired') {
-    return NextResponse.json({ error: 'This signing link has expired.' }, { status: 410 })
-  }
   return NextResponse.json(payload, { headers: { 'Cache-Control': 'no-store' } })
 }
 
 export async function tryCreatedDocumentSignPost(request: NextRequest, token: string, body: Record<string, unknown>) {
   const signer = await resolveLuxorCreatedDocumentSignerFromToken(token)
   if (!signer) return null
+  const denied = await luxorCreatedDocumentSignerGateResponse(signer)
+  if (denied) return NextResponse.json({ error: denied.error }, { status: denied.status })
   const meta = {
     ip: request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || request.headers.get('x-real-ip'),
     userAgent: request.headers.get('user-agent'),

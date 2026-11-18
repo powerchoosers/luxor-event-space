@@ -3,6 +3,7 @@ import { downloadLuxorPrivatePdf } from '@/lib/luxorDocumentsServer'
 import { getLuxorSignatureRequestByToken, recordLuxorSignatureEvent } from '@/lib/luxorSignaturesServer'
 import {
   createdDocumentPdfDownloadPath,
+  luxorCreatedDocumentSignerGateResponse,
   resolveLuxorCreatedDocumentSignerFromToken,
 } from '@/lib/luxorCreatedDocumentSigningServer'
 import { recordLuxorCreatedDocumentEvent } from '@/lib/luxorCreatedDocumentFieldsServer'
@@ -15,6 +16,8 @@ export async function GET(request: NextRequest) {
     if (!signature) {
       const createdSigner = await resolveLuxorCreatedDocumentSignerFromToken(token)
       if (!createdSigner) return NextResponse.json({ error: 'Signature request not found.' }, { status: 404 })
+      const createdDenied = await luxorCreatedDocumentSignerGateResponse(createdSigner)
+      if (createdDenied) return NextResponse.json({ error: createdDenied.error }, { status: createdDenied.status })
       const path = await createdDocumentPdfDownloadPath(createdSigner, kind)
       if (!path) return NextResponse.json({ error: 'The PDF is not ready.' }, { status: 404 })
       const pdf = await downloadLuxorPrivatePdf(path)

@@ -117,3 +117,155 @@ test('booking signing route still resolves booking tokens before created-documen
   assert.match(signaturesRoute, /tryCreatedDocumentSignGet/)
   assert.match(createdBranch, /resolveLuxorCreatedDocumentSignerFromToken/)
 })
+
+function signerRow(overrides = {}) {
+  return {
+    id: '11111111-1111-4111-8111-111111111111',
+    document_id: '22222222-2222-4222-8222-222222222222',
+    role_key: 'signer_1',
+    role_label: 'Signer',
+    name: 'Pat Smith',
+    email: 'pat@example.invalid',
+    status: 'viewed',
+    token_hash: 'abc',
+    token_expires_at: new Date(Date.now() + 86_400_000).toISOString(),
+    viewed_at: new Date().toISOString(),
+    signed_at: null,
+    declined_at: null,
+    decline_reason: null,
+    signed_pdf_path: null,
+    last_ip: null,
+    last_user_agent: null,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+    ...overrides,
+  }
+}
+
+test('created-document signer gate rejects expired and declined tokens', async () => {
+  const signingStubs = {
+    './luxorCreatedDocumentToken': tokenLib,
+    './luxorCreatedDocumentFieldTypes': fieldTypes,
+    './luxorCreatedDocumentFieldsServer': {
+      getLuxorCreatedDocumentSignerByTokenHash: async () => null,
+      updateLuxorCreatedDocumentSigner: async () => null,
+    },
+    './luxorCreatedDocumentSignedPdfServer': {},
+    './luxorDocumentCreatorServer': {
+      getLuxorCreatedDocument: async () => ({ id: 'doc', status: 'draft', title: 'Test', document_type: 'agreement', pdf_storage_path: 'x.pdf' }),
+    },
+    'server-only': {},
+  }
+  const signing = compile('src/lib/luxorCreatedDocumentSigningServer.ts', path.join(root, 'luxor-created-signing-gate.synthetic.cjs'), signingStubs)
+  const { luxorCreatedDocumentSignerGateResponse } = signing
+
+  const doc = { id: 'doc', status: 'draft' }
+  const expired = await luxorCreatedDocumentSignerGateResponse(signerRow({
+    status: 'expired',
+    token_expires_at: new Date(Date.now() - 60_000).toISOString(),
+  }), doc)
+  assert.equal(expired?.status, 410)
+  assert.match(expired?.error, /expired/i)
+
+  const declined = await luxorCreatedDocumentSignerGateResponse(signerRow({ status: 'declined', declined_at: new Date().toISOString() }), doc)
+  assert.equal(declined?.status, 410)
+  assert.match(declined?.error, /no longer active/i)
+
+  const signed = await luxorCreatedDocumentSignerGateResponse(signerRow({
+    status: 'signed',
+    signed_at: new Date().toISOString(),
+    token_expires_at: new Date(Date.now() - 60_000).toISOString(),
+  }), doc)
+  assert.equal(signed, null)
+})
+
+function signingGateModule(document) {
+  return compile('src/lib/luxorCreatedDocumentSigningServer.ts', path.join(root, 'luxor-created-signing-download.synthetic.cjs'), {
+    './luxorCreatedDocumentToken': tokenLib,
+    './luxorCreatedDocumentFieldTypes': fieldTypes,
+    './luxorCreatedDocumentFieldsServer': {
+      getLuxorCreatedDocumentSignerByTokenHash: async () => null,
+      updateLuxorCreatedDocumentSigner: async () => null,
+    },
+    './luxorCreatedDocumentSignedPdfServer': {},
+    './luxorDocumentCreatorServer': {
+      getLuxorCreatedDocument: async () => document,
+    },
+    'server-only': {},
+  })
+}
+
+function downloadRouteFixture(state) {
+  const gateModule = signingGateModule(state.document)
+  return compile('src/app/api/public/signatures/download/route.ts', path.join(root, 'luxor-download-route.synthetic.cjs'), {
+    '@/lib/luxorDocumentsServer': { downloadLuxorPrivatePdf: async () => new Uint8Array([37, 80, 68, 70]) },
+    '@/lib/luxorSignaturesServer': { getLuxorSignatureRequestByToken: async () => null, recordLuxorSignatureEvent: async () => null },
+    '@/lib/luxorCreatedDocumentFieldsServer': { recordLuxorCreatedDocumentEvent: async () => null },
+    '@/lib/luxorCreatedDocumentSigningServer': {
+      resolveLuxorCreatedDocumentSignerFromToken: async () => state.signer,
+      luxorCreatedDocumentSignerGateResponse: (signer) => gateModule.luxorCreatedDocumentSignerGateResponse(signer, state.document),
+      createdDocumentPdfDownloadPath: async () => state.pdfPath,
+    },
+    'next/server': {
+      NextResponse: class NextResponse extends Response {
+        static json(body, init) {
+          return new NextResponse(JSON.stringify(body), {
+            ...init,
+            headers: { 'content-type': 'application/json', ...(init?.headers || {}) },
+          })
+        }
+      },
+    },
+  })
+}
+
+test('created-document PDF download refuses expired and declined tokens', async () => {
+  const document = { id: 'doc', status: 'draft', title: 'Test', pdf_storage_path: 'private/doc.pdf' }
+  for (const signer of [
+    signerRow({ status: 'expired', token_expires_at: new Date(Date.now() - 60_000).toISOString() }),
+    signerRow({ status: 'declined', declined_at: new Date().toISOString(), token_expires_at: new Date(Date.now() + 60_000).toISOString() }),
+  ]) {
+    const { GET } = downloadRouteFixture({ signer, document, pdfPath: document.pdf_storage_path })
+    const response = await GET({ nextUrl: new URL('http://localhost/api/public/signatures/download?token=test&kind=contract') })
+    assert.equal(response.status, 410)
+    const body = await response.json()
+    assert.ok(body.error)
+  }
+})
+
+test('created-document sign GET and POST refuse expired and declined tokens', async () => {
+  const document = { id: 'doc', status: 'draft', title: 'Test', document_type: 'agreement', pdf_storage_path: 'private/doc.pdf' }
+  const gateModule = signingGateModule(document)
+  const nextResponse = {
+    NextResponse: class NextResponse extends Response {
+      static json(body, init) {
+        return new NextResponse(JSON.stringify(body), {
+          ...init,
+          headers: { 'content-type': 'application/json', ...(init?.headers || {}) },
+        })
+      }
+    },
+  }
+  const request = {
+    headers: { get: () => null },
+    json: async () => ({ token: 'blocked' }),
+  }
+  for (const signer of [
+    signerRow({ status: 'expired', token_expires_at: new Date(Date.now() - 60_000).toISOString() }),
+    signerRow({ status: 'declined', declined_at: new Date().toISOString() }),
+  ]) {
+    const mod = compile('src/app/api/public/created-document-signatures.ts', path.join(root, `luxor-created-signatures-${signer.status}.synthetic.cjs`), {
+      '@/lib/luxorCreatedDocumentSigningServer': {
+        resolveLuxorCreatedDocumentSignerFromToken: async () => signer,
+        luxorCreatedDocumentSignerGateResponse: (s) => gateModule.luxorCreatedDocumentSignerGateResponse(s, document),
+        markLuxorCreatedDocumentSignerViewed: async (s) => s,
+        publicCreatedDocumentSignaturePayload: async () => ({ flow: 'created_document' }),
+        declineLuxorCreatedDocumentSigner: async () => signer,
+        completeLuxorCreatedDocumentSigner: async () => signer,
+      },
+      'next/server': nextResponse,
+    })
+    assert.equal((await mod.tryCreatedDocumentSignGet(request, 'blocked')).status, 410)
+    assert.equal((await mod.tryCreatedDocumentSignPost(request, 'blocked', { accepted: true, signedName: 'Pat' })).status, 410)
+  }
+})

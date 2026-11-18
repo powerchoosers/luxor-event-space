@@ -30,6 +30,32 @@ export async function resolveLuxorCreatedDocumentSignerFromToken(token: string) 
   return signer
 }
 
+export type LuxorCreatedDocumentSignerGateDenial = { error: string; status: 410 }
+
+export async function luxorCreatedDocumentSignerGateResponse(
+  signer: LuxorCreatedDocumentSignerRow,
+  document?: Awaited<ReturnType<typeof getLuxorCreatedDocument>>,
+): Promise<LuxorCreatedDocumentSignerGateDenial | null> {
+  const record = document === undefined ? await getLuxorCreatedDocument(signer.document_id) : document
+  if (record?.status === 'voided') {
+    return { error: 'This signing link was cancelled.', status: 410 }
+  }
+  if (signer.status === 'declined') {
+    return { error: 'This signing link is no longer active.', status: 410 }
+  }
+  if (
+    signer.token_expires_at
+    && new Date(signer.token_expires_at).getTime() < Date.now()
+    && signer.status !== 'signed'
+  ) {
+    return { error: 'This signing link has expired.', status: 410 }
+  }
+  if (signer.status === 'expired') {
+    return { error: 'This signing link has expired.', status: 410 }
+  }
+  return null
+}
+
 export async function publicCreatedDocumentSignaturePayload(signer: LuxorCreatedDocumentSignerRow, token: string) {
   const document = await getLuxorCreatedDocument(signer.document_id)
   if (!document) return null
