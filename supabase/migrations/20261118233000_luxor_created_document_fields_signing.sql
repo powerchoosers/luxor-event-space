@@ -77,6 +77,9 @@ create table if not exists public.luxor_created_document_events (
 create index if not exists luxor_created_document_events_document_idx
   on public.luxor_created_document_events (document_id, created_at desc);
 
+create index if not exists luxor_created_document_events_signer_idx
+  on public.luxor_created_document_events (signer_id);
+
 drop trigger if exists luxor_created_document_fields_set_updated_at on public.luxor_created_document_fields;
 create trigger luxor_created_document_fields_set_updated_at
   before update on public.luxor_created_document_fields
@@ -94,6 +97,17 @@ security invoker
 set search_path = ''
 as $$
 begin
+  if tg_op = 'DELETE' and not exists (select 1 from public.luxor_created_documents d where d.id = old.document_id) then
+    return old;
+  end if;
+  if tg_op = 'UPDATE'
+     and new.id is not distinct from old.id and new.created_at is not distinct from old.created_at
+     and new.document_id is not distinct from old.document_id and new.event_type is not distinct from old.event_type
+     and new.payload is not distinct from old.payload
+     and new.signer_id is null and old.signer_id is not null
+     and not exists (select 1 from public.luxor_created_document_signers s where s.id = old.signer_id) then
+    return new;
+  end if;
   raise exception 'luxor_created_document_events rows are immutable';
 end;
 $$;
