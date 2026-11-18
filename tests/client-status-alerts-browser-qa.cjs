@@ -22,6 +22,18 @@ const WIDTHS = [390, 820, 1280]
 const ATTENTION_LEAD_ID = '11111111-1111-4111-8111-111111111111'
 const DECOY_LEAD_ID = '22222222-2222-4222-8222-222222222222'
 const TOUR_VISIT_ID = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc'
+const QA_FIX_NOTICE_ID = 'ffffffff-ffff-4fff-8fff-ffffffffffff'
+const QA_FIX_NOTICE_ROW = {
+  id: QA_FIX_NOTICE_ID,
+  is_active: true,
+  banner_label: 'Portal fix',
+  title: 'Synthetic QA fix notice for client-status alerts',
+  summary: ['This banner confirms PortalFixNotice still renders above the portal shell during QA.'],
+  fixed_text: 'Client-status owner alerts ship with bell, toast, pipeline badge, and acknowledge flow.',
+  unchanged_text: 'Other portal navigation and tabs stay unchanged in this synthetic run.',
+  steps: [{ title: 'Review the notice', text: 'Open the banner and confirm the steps read clearly.' }],
+  if_stuck: 'If the banner is missing, confirm the mock luxor_portal_fix_notices row is active.',
+}
 
 function createPortalSessionCookie(email) {
   const issuedAt = Date.now()
@@ -122,7 +134,13 @@ function createFixtureState(options = {}) {
     created_at: '2026-11-01T12:00:00.000Z',
     updated_at: '2026-11-18T12:05:00.000Z',
   }]
-  return { inquiries, leadEvents, attentionLeadId: ATTENTION_LEAD_ID }
+  return {
+    inquiries,
+    leadEvents,
+    attentionLeadId: ATTENTION_LEAD_ID,
+    captureTheme: 'light',
+    qaFixNoticeActive: false,
+  }
 }
 
 function applyClientAttention(state, enabled = true) {
@@ -153,7 +171,7 @@ function notificationSummaryPayload(state) {
   }
 }
 
-function startMockSupabase() {
+function startMockSupabase(state) {
   const member = {
     id: 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',
     email: QA_EMAIL,
@@ -194,7 +212,7 @@ function startMockSupabase() {
       return
     }
     if (requestUrl.pathname.includes('luxor_portal_fix_notices')) {
-      res.end(JSON.stringify([]))
+      res.end(JSON.stringify(state.qaFixNoticeActive ? [QA_FIX_NOTICE_ROW] : []))
       return
     }
     if (requestUrl.pathname.includes('rpc/')) {
@@ -329,12 +347,12 @@ function installApiMocks(context, state) {
       return json(route, state.inquiries)
     }
 
-    const acknowledgeMatch = url.pathname.match(/^\/api\/leads\/([^/]+)\/acknowledge-client-attention$/)
+    const acknowledgeMatch = url.pathname.match(/^\/api\/leads\/([^/]+)\/acknowledge-client-attention\/?$/)
     if (acknowledgeMatch && method === 'POST') {
       const inquiry = state.inquiries.find((item) => item.id === acknowledgeMatch[1])
       if (!inquiry) return json(route, { error: 'Not found' }, 404)
-      inquiry.client_attention_acknowledged_at = new Date().toISOString()
-      return json(route, { inquiry })
+      inquiry.client_attention_acknowledged_at = '2026-11-18T13:00:00.000Z'
+      return json(route, { inquiry: JSON.parse(JSON.stringify(inquiry)) })
     }
 
     if (url.pathname === '/api/tour-actions' && method === 'GET') {
@@ -346,7 +364,7 @@ function installApiMocks(context, state) {
     }
     if (url.pathname === '/api/portal/user-preferences' && method === 'GET') {
       return json(route, {
-        theme: 'light',
+        theme: state.captureTheme || 'light',
         sidebar: 'expanded',
         email: QA_EMAIL,
         display_name: 'Arianna Patterson',
@@ -413,13 +431,101 @@ function installApiMocks(context, state) {
   })
 }
 
-async function setPortalTheme(page, theme) {
-  await page.context().addCookies([{ name: 'luxor-portal-theme', value: theme, url: origin }])
-  await page.evaluate((value) => {
-    window.localStorage.setItem('luxor-portal-theme', value)
-    document.body.setAttribute('data-portal-theme', value)
-    window.dispatchEvent(new Event('luxor-portal-theme'))
-  }, theme).catch(() => {})
+async function waitForPortalTheme(page, theme) {
+  await page.waitForFunction((expected) => document.body.getAttribute('data-portal-theme') === expected, theme, { timeout: 30_000 })
+}
+
+function luminanceFromHex(hexColor) {
+  const match = String(hexColor).trim().match(/^#([0-9a-f]{6})$/i)
+  if (!match) return null
+  const n = Number.parseInt(match[1], 16)
+  const r = (n >> 16) & 255
+  const g = (n >> 8) & 255
+  const b = n & 255
+  return 0.299 * r + 0.587 * g + 0.114 * b
+}
+
+async function verifyThemeBackground(page, theme) {
+  const snapshot = await page.evaluate(() => {
+    const style = window.getComputedStyle(document.body)
+    const portalBg = style.getPropertyValue('--portal-bg').trim()
+    const match = style.backgroundColor.match(/[\d.]+/g) || []
+    const [r, g, b] = [match[0], match[1], match[2]].map((value) => Number(value || 0))
+    return {
+      dataTheme: document.body.getAttribute('data-portal-theme'),
+      portalBg,
+      backgroundColor: style.backgroundColor,
+      backgroundLuminance: 0.299 * r + 0.587 * g + 0.114 * b,
+    }
+  })
+  if (snapshot.dataTheme !== theme) {
+    throw new Error(`Expected data-portal-theme=${theme}, saw ${snapshot.dataTheme}`)
+  }
+  const portalBgLuminance = luminanceFromHex(snapshot.portalBg)
+  const luminance = portalBgLuminance ?? snapshot.backgroundLuminance
+  if (theme === 'dark' && luminance > 95) {
+    throw new Error(`Dark capture looks light (luminance ${luminance.toFixed(1)}, portal-bg=${snapshot.portalBg || snapshot.backgroundColor})`)
+  }
+  if (theme === 'light' && luminance < 40) {
+    throw new Error(`Light capture looks dark (luminance ${luminance.toFixed(1)}, portal-bg=${snapshot.portalBg || snapshot.backgroundColor})`)
+  }
+}
+
+async function createPortalContext(browser, state, theme, options = {}) {
+  const { reducedMotion = 'no-preference', viewport = { width: 1280, height: 900 } } = options
+  state.captureTheme = theme
+  const context = await browser.newContext({
+    viewport,
+    reducedMotion,
+    colorScheme: theme === 'dark' ? 'dark' : 'light',
+  })
+  await context.addCookies([
+    { ...createPortalSessionCookie(QA_EMAIL), url: origin },
+    { name: 'luxor-portal-theme', value: theme, url: origin },
+  ])
+  await context.addInitScript((portalTheme) => {
+    window.localStorage.setItem('luxor-portal-theme', portalTheme)
+    window.localStorage.setItem('luxor_leads_active_tab', 'pipeline')
+    window.localStorage.removeItem('luxor_read_notification_ids_v1')
+    window.localStorage.removeItem('luxor_notified_toast_ids_v1')
+  }, theme)
+  installApiMocks(context, state)
+  return context
+}
+
+function assertDarkCapturesDifferFromLight() {
+  for (const name of fs.readdirSync(artifactDir)) {
+    if (!name.endsWith('.png') || !name.includes('-dark-')) continue
+    const lightName = name.replace('-dark-', '-light-')
+    const darkPath = path.join(artifactDir, name)
+    const lightPath = path.join(artifactDir, lightName)
+    if (!fs.existsSync(lightPath)) continue
+    const dark = fs.readFileSync(darkPath)
+    const light = fs.readFileSync(lightPath)
+    if (dark.equals(light)) {
+      throw new Error(`${name} is byte-identical to ${lightName}`)
+    }
+  }
+}
+
+async function acknowledgeClientAttention(page) {
+  const acknowledgeButton = page.getByRole('alert').filter({ hasText: 'Client update needs your attention' }).getByRole('button', { name: 'Acknowledge' })
+  await acknowledgeButton.waitFor({ state: 'visible', timeout: 30_000 })
+  const acknowledgeResponse = page.waitForResponse(
+    (response) => response.request().method() === 'POST'
+      && response.url().includes('/acknowledge-client-attention')
+      && response.status() === 200,
+  )
+  await acknowledgeButton.click()
+  const response = await acknowledgeResponse
+  const payload = await response.json()
+  if (!payload.inquiry?.client_attention_acknowledged_at) {
+    throw new Error(`Unexpected acknowledge payload: ${JSON.stringify(payload).slice(0, 400)}`)
+  }
+  const banner = page.getByRole('alert').filter({ hasText: 'Client update needs your attention' })
+  await banner.waitFor({ state: 'hidden', timeout: 30_000 })
+  await acknowledgeButton.waitFor({ state: 'hidden', timeout: 15_000 }).catch(() => {})
+  await delay(500)
 }
 
 async function waitForSampleGuestLead(page) {
@@ -433,13 +539,9 @@ async function waitForSampleGuestLead(page) {
   await page.locator('tbody tr').filter({ hasText: 'Sample Guest' }).first().waitFor({ state: 'visible', timeout: 90_000 })
 }
 
-async function gotoLeadsList(page) {
-  await page.addInitScript(() => {
-    window.localStorage.setItem('luxor_leads_active_tab', 'pipeline')
-    window.localStorage.removeItem('luxor_read_notification_ids_v1')
-    window.localStorage.removeItem('luxor_notified_toast_ids_v1')
-  })
+async function gotoLeadsList(page, theme) {
   await page.goto(`${origin}/portal/leads?view=pipeline`, { waitUntil: 'domcontentloaded' })
+  if (theme) await waitForPortalTheme(page, theme)
   await delay(500)
   try {
     await waitForSampleGuestLead(page)
@@ -496,21 +598,23 @@ async function captureToast(page, state, theme, width, fileName) {
   await screenshot(page, fileName)
 }
 
-async function captureThemeScreenshots(page, state, theme, reducedMotion = false) {
+async function captureThemeScreenshots(browser, state, theme, reducedMotion, consoleLog) {
   const fresh = createFixtureState({ withAttention: true })
   state.inquiries = fresh.inquiries
   state.leadEvents = fresh.leadEvents
-  if (reducedMotion) {
-    await page.emulateMedia({ reducedMotion: 'reduce' })
-  } else {
-    await page.emulateMedia({ reducedMotion: 'no-preference' })
-  }
-  await setPortalTheme(page, theme)
-  await gotoLeadsList(page)
+  const context = await createPortalContext(browser, state, theme, {
+    reducedMotion: reducedMotion ? 'reduce' : 'no-preference',
+  })
+  const page = await context.newPage()
+  attachPageDiagnostics(page, consoleLog)
+
+  await gotoLeadsList(page, theme)
+  await waitForSampleGuestLead(page)
+  await verifyThemeBackground(page, theme)
   await page.getByText('Needs attention').first().waitFor({ timeout: 60_000 })
 
   const firstLeadCell = page.locator('tbody tr').first().getByText('Sample Guest')
-  await firstLeadCell.waitFor({ timeout: 30_000 })
+  await firstLeadCell.waitFor({ timeout: 30_000 }).catch(() => {})
 
   const widthSet = reducedMotion ? [390] : WIDTHS
   const suffix = reducedMotion ? '-reduced-motion' : ''
@@ -518,11 +622,12 @@ async function captureThemeScreenshots(page, state, theme, reducedMotion = false
   for (const width of widthSet) {
     await page.setViewportSize({ width, height: 900 })
     await delay(200)
+    if (!reducedMotion) await verifyThemeBackground(page, theme)
     await screenshot(page, `client-status-leads-list-${theme}-${width}${suffix}.png`)
 
     if (!reducedMotion) {
       await captureToast(page, state, theme, width, `client-status-toast-${theme}-${width}.png`)
-      await gotoLeadsList(page)
+      await gotoLeadsList(page, theme)
       await page.setViewportSize({ width, height: 900 })
       await delay(200)
     }
@@ -533,21 +638,39 @@ async function captureThemeScreenshots(page, state, theme, reducedMotion = false
     await delay(150)
 
     await page.goto(`${origin}/portal/leads/${ATTENTION_LEAD_ID}?tab=overview`, { waitUntil: 'domcontentloaded' })
+    await waitForPortalTheme(page, theme)
     await page.getByText('Client update needs your attention').waitFor({ timeout: 90_000 })
     await page.setViewportSize({ width, height: 900 })
     await delay(200)
     await screenshot(page, `client-status-lead-banner-${theme}-${width}${suffix}.png`)
 
     if (width === 1280 && !reducedMotion) {
-      await page.getByRole('button', { name: 'Acknowledge' }).click()
-      await page.getByText('Client update needs your attention').waitFor({ state: 'hidden', timeout: 30_000 }).catch(() => {})
-      await delay(400)
+      await acknowledgeClientAttention(page)
+      await page.getByText('Client update needs your attention').waitFor({ state: 'hidden', timeout: 15_000 })
+      await verifyThemeBackground(page, theme)
       await screenshot(page, `client-status-lead-acknowledged-${theme}-${width}.png`)
-      const reset = createFixtureState({ withAttention: true })
-      state.inquiries = reset.inquiries
-      state.leadEvents = reset.leadEvents
     }
   }
+
+  await context.close()
+}
+
+async function captureFixNoticeBanner(browser, state, theme, consoleLog) {
+  state.qaFixNoticeActive = true
+  const context = await createPortalContext(browser, state, theme)
+  const page = await context.newPage()
+  attachPageDiagnostics(page, consoleLog)
+  await page.addInitScript((noticeId) => {
+    window.localStorage.removeItem(`luxor_portal_fix_notice_dismissed:${noticeId}`)
+  }, QA_FIX_NOTICE_ID)
+  await gotoLeadsList(page, theme)
+  await page.getByText(QA_FIX_NOTICE_ROW.title).waitFor({ state: 'visible', timeout: 60_000 })
+  await verifyThemeBackground(page, theme)
+  await page.setViewportSize({ width: 1280, height: 900 })
+  await delay(300)
+  await screenshot(page, `client-status-portal-fix-notice-${theme}-1280.png`)
+  state.qaFixNoticeActive = false
+  await context.close()
 }
 
 async function recordFlowVideo(browser, state) {
@@ -560,17 +683,19 @@ async function recordFlowVideo(browser, state) {
     reducedMotion: 'no-preference',
     colorScheme: 'light',
   })
+  state.captureTheme = 'light'
   await context.addCookies([
     { ...createPortalSessionCookie(QA_EMAIL), url: origin },
     { name: 'luxor-portal-theme', value: 'light', url: origin },
   ])
-  installApiMocks(context, state)
-  const page = await context.newPage()
-  await page.addInitScript(() => {
+  await context.addInitScript((portalTheme) => {
+    window.localStorage.setItem('luxor-portal-theme', portalTheme)
     window.localStorage.setItem('luxor_leads_active_tab', 'pipeline')
     window.localStorage.removeItem('luxor_notified_toast_ids_v1')
     window.localStorage.removeItem('luxor_read_notification_ids_v1')
-  })
+  }, 'light')
+  installApiMocks(context, state)
+  const page = await context.newPage()
   await page.goto(`${origin}/portal/leads?view=pipeline`, { waitUntil: 'domcontentloaded' })
   await waitForSampleGuestLead(page)
   await delay(1000)
@@ -586,8 +711,8 @@ async function recordFlowVideo(browser, state) {
   await delay(600)
   await page.goto(`${origin}/portal/leads/${ATTENTION_LEAD_ID}?tab=overview`, { waitUntil: 'domcontentloaded' })
   await page.getByText('Client update needs your attention').waitFor({ timeout: 60_000 })
-  await page.getByRole('button', { name: 'Acknowledge' }).click()
-  await delay(1200)
+  await acknowledgeClientAttention(page)
+  await delay(800)
   const video = page.video()
   await page.close()
   await context.close()
@@ -603,7 +728,7 @@ async function main() {
   freePort(mockSupabasePort)
   await waitForPortFree()
   await delay(500)
-  const mockSupabase = await startMockSupabase()
+  const mockSupabase = await startMockSupabase(state)
 
   if (!fs.existsSync(path.join(root, '.next/BUILD_ID'))) {
     const build = spawnSync('npm', ['run', 'build'], {
@@ -646,25 +771,19 @@ async function main() {
     await waitForServer()
     await delay(1500)
 
-    const context = await browser.newContext({ viewport: { width: 1440, height: 900 } })
-    await context.addCookies([{ ...createPortalSessionCookie(QA_EMAIL), url: origin }])
-    installApiMocks(context, state)
-    const page = await context.newPage()
-
     consoleLog = []
-    attachPageDiagnostics(page, consoleLog)
-  page.on('response', (response) => {
-    if (response.status() >= 500) consoleLog.push(`response: ${response.status()} ${response.url()}`)
-  })
 
     for (const theme of ['light', 'dark']) {
-      await captureThemeScreenshots(page, state, theme, false)
+      await captureThemeScreenshots(browser, state, theme, false, consoleLog)
     }
-    await captureThemeScreenshots(page, state, 'light', true)
+    await captureThemeScreenshots(browser, state, 'light', true, consoleLog)
 
-    await context.close()
+    await captureFixNoticeBanner(browser, state, 'light', consoleLog)
+    await captureFixNoticeBanner(browser, state, 'dark', consoleLog)
+
     await recordFlowVideo(browser, state)
 
+    assertDarkCapturesDifferFromLight()
     writeConsoleLog(consoleLog)
     const screenshots = fs.readdirSync(artifactDir).filter((name) => name.endsWith('.png') || name.endsWith('.webm')).sort()
     console.log(JSON.stringify({ pass: true, artifactDir, screenshots }))
