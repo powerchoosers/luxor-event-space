@@ -1,20 +1,15 @@
 export type TipTapDocNode = Record<string, unknown>
 
+/** Plain-text paste: each line becomes its own paragraph; blank lines stay as empty paragraphs. */
 export function plainTextToTipTapDocument(text: string): TipTapDocNode {
-  const trimmed = text.replace(/\r\n/g, '\n')
-  if (!trimmed.trim()) {
+  const normalized = text.replace(/\r\n/g, '\n')
+  const lines = normalized.split('\n')
+  const content = lines.map((line) => {
+    if (!line) return { type: 'paragraph' }
+    return { type: 'paragraph', content: [{ type: 'text', text: line }] }
+  })
+  if (content.length === 0) {
     return { type: 'doc', content: [{ type: 'paragraph' }] }
   }
-  const paragraphs = trimmed.split(/\n{2,}/)
-  const content = paragraphs.map((paragraph) => {
-    const lines = paragraph.split('\n')
-    const inline: TipTapDocNode[] = []
-    lines.forEach((line, index) => {
-      if (line) inline.push({ type: 'text', text: line })
-      if (index < lines.length - 1) inline.push({ type: 'hardBreak' })
-    })
-    if (inline.length === 0) inline.push({ type: 'hardBreak' })
-    return { type: 'paragraph', content: inline }
-  })
   return { type: 'doc', content }
 }

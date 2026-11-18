@@ -2,6 +2,7 @@
 
 import type { ReactNode } from 'react'
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react'
+import { useReducedMotion } from 'framer-motion'
 import { useEditor, EditorContent, type Editor } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import Underline from '@tiptap/extension-underline'
@@ -24,11 +25,11 @@ const typeOptions = LUXOR_CREATED_DOCUMENT_TYPES.map((value) => ({
   label: LUXOR_CREATED_DOCUMENT_TYPE_LABELS[value],
 }))
 
-const editorFieldClass =
-  'w-full min-h-11 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-2 text-sm text-[color:var(--portal-text)] outline-none transition-colors placeholder:text-[color:var(--portal-faint)] focus:border-[#caa24c]/45 focus:ring-2 focus:ring-[#caa24c]/10'
+const editorFieldClassBase =
+  'w-full min-h-11 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-2 text-sm text-[color:var(--portal-text)] outline-none placeholder:text-[color:var(--portal-faint)] focus:border-[#caa24c]/45 focus:ring-2 focus:ring-[#caa24c]/10'
 
 const editorBodyClass =
-  'min-h-[240px] px-3 py-3 font-[family-name:var(--font-manrope)] text-sm leading-relaxed text-[color:var(--portal-text)] outline-none focus:outline-none [&_h1]:text-xl [&_h1]:font-semibold [&_h2]:text-lg [&_h2]:font-semibold [&_h3]:text-base [&_h3]:font-semibold [&_p]:my-2 [&_ul]:my-2 [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:my-2 [&_ol]:list-decimal [&_ol]:pl-5'
+  'min-h-[240px] max-w-full min-w-0 break-words px-3 py-3 font-[family-name:var(--font-manrope)] text-sm leading-relaxed text-[color:var(--portal-text)] [overflow-wrap:anywhere] outline-none focus:outline-none [&_h1]:text-xl [&_h1]:font-semibold [&_h2]:text-lg [&_h2]:font-semibold [&_h3]:text-base [&_h3]:font-semibold [&_p]:my-2 [&_p]:break-words [&_ul]:my-2 [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:my-2 [&_ol]:list-decimal [&_ol]:pl-5'
 
 export type DocumentCreatorEditorHandle = {
   saveDraft: () => Promise<LuxorCreatedDocumentRow | null>
@@ -47,6 +48,7 @@ export const DocumentCreatorEditor = forwardRef<DocumentCreatorEditorHandle, Pro
   { bootstrap, revision, onSaved, onFormChange },
   ref,
 ) {
+  const reduceMotion = useReducedMotion()
   const [title, setTitle] = useState('')
   const [documentType, setDocumentType] = useState<LuxorCreatedDocumentType>('venue_use_agreement')
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
@@ -79,7 +81,13 @@ export const DocumentCreatorEditor = forwardRef<DocumentCreatorEditorHandle, Pro
         if (plain == null) return false
         event.preventDefault()
         const document = plainTextToTipTapDocument(plain)
-        tiptapRef.current?.chain().focus().insertContent(document).run()
+        const tiptap = tiptapRef.current
+        if (!tiptap) return false
+        if (tiptap.isEmpty) {
+          tiptap.commands.setContent(document, { emitUpdate: true })
+        } else {
+          tiptap.chain().focus().insertContent(document).run()
+        }
         return true
       },
     },
@@ -236,20 +244,8 @@ export const DocumentCreatorEditor = forwardRef<DocumentCreatorEditorHandle, Pro
     editor?.chain().focus().toggleHeading({ level }).run()
   }
 
-  const toggleBulletForSelection = () => {
-    if (!editor) return
-    const { empty, from, to } = editor.state.selection
-    if (empty) {
-      editor.chain().focus().toggleBulletList().run()
-      return
-    }
-    const before = editor.state.doc.resolve(from).before()
-    const after = editor.state.doc.resolve(to).after()
-    editor.chain().focus().setTextSelection({ from: before, to: after }).toggleBulletList().run()
-  }
-
   return (
-    <div className="space-y-4 rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-4 sm:p-5">
+    <div className="min-w-0 max-w-full space-y-4 overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-4 sm:p-5">
       <div className="flex items-center justify-between gap-2">
         <h2 className="text-sm font-semibold text-[color:var(--portal-text)]">Create</h2>
         <PortalStatusBadge status={autosaveLabel} tone="neutral" />
@@ -257,7 +253,7 @@ export const DocumentCreatorEditor = forwardRef<DocumentCreatorEditorHandle, Pro
       <label className="block space-y-1.5">
         <span className="text-xs font-medium text-[color:var(--portal-muted)]">Title</span>
         <input
-          className={editorFieldClass}
+          className={`${editorFieldClassBase} ${reduceMotion ? 'motion-reduce:transition-none' : 'transition-colors'}`}
           value={title}
           onChange={(event) => setTitle(event.target.value)}
           maxLength={300}
@@ -281,10 +277,10 @@ export const DocumentCreatorEditor = forwardRef<DocumentCreatorEditorHandle, Pro
           <ToolbarButton label="Heading 1" active={editor?.isActive('heading', { level: 1 })} onClick={() => runHeading(1)}>H1</ToolbarButton>
           <ToolbarButton label="Heading 2" active={editor?.isActive('heading', { level: 2 })} onClick={() => runHeading(2)}>H2</ToolbarButton>
           <ToolbarButton label="Heading 3" active={editor?.isActive('heading', { level: 3 })} onClick={() => runHeading(3)}>H3</ToolbarButton>
-          <ToolbarButton label="Bullet list" active={editor?.isActive('bulletList')} onClick={toggleBulletForSelection}><List size={14} /></ToolbarButton>
+          <ToolbarButton label="Bullet list" active={editor?.isActive('bulletList')} onClick={() => editor?.chain().focus().toggleBulletList().run()}><List size={14} /></ToolbarButton>
           <ToolbarButton label="Numbered list" active={editor?.isActive('orderedList')} onClick={() => editor?.chain().focus().toggleOrderedList().run()}><ListTodo size={14} /></ToolbarButton>
         </div>
-        <fieldset className="overflow-hidden rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]">
+        <fieldset className="min-w-0 overflow-hidden rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]">
           <legend className="sr-only">Agreement body</legend>
           <EditorContent editor={editor} />
         </fieldset>

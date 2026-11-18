@@ -9,6 +9,7 @@ import { DocumentCreatorPaperPreview } from '@/components/portal/DocumentCreator
 import { DocumentCreatorPdfPreview } from '@/components/portal/DocumentCreatorPdfPreview'
 import { DocumentCreatorStepper } from '@/components/portal/DocumentCreatorStepper'
 import type { LuxorCreatedDocumentRow, LuxorCreatedDocumentType } from '@/lib/luxorDocumentCreatorTypes'
+import { stashCreatedDocumentHandoff } from '@/lib/luxorDocumentCreatorHandoff'
 import { ArrowLeft, ChevronDown, FileText } from '@/lib/icons/phosphor-compat'
 
 type Props = {
@@ -60,8 +61,14 @@ export function DocumentCreatorWorkbench({ initial }: Props) {
 
   const onSaved = (document: LuxorCreatedDocumentRow) => {
     setRecord(document)
-    if (!initial && typeof window !== 'undefined') {
-      window.history.replaceState(null, '', `/portal/operations/documents/${document.id}`)
+    setForm((current) => ({
+      title: document.title || current.title,
+      documentType: document.document_type,
+      bodyHtml: document.body_html || current.bodyHtml,
+    }))
+    if (!initial) {
+      stashCreatedDocumentHandoff(document)
+      router.replace(`/portal/operations/documents/${document.id}`, { scroll: false })
     }
   }
 
@@ -106,8 +113,8 @@ export function DocumentCreatorWorkbench({ initial }: Props) {
       </div>
 
       <div className="min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden portal-scrollbar min-[1280px]:overflow-hidden">
-        <div className="flex min-h-0 min-w-0 flex-col gap-4 min-[1280px]:grid min-[1280px]:h-full min-[1280px]:min-w-0 min-[1280px]:grid-cols-[minmax(0,360px)_minmax(0,1fr)_minmax(0,260px)] min-[1280px]:gap-4 min-[1280px]:overflow-hidden">
-          <section className="min-h-0 min-w-0 shrink-0 min-[1280px]:overflow-y-auto min-[1280px]:portal-scrollbar">
+        <div className="flex min-h-0 min-w-0 flex-col gap-4 min-[1280px]:grid min-[1280px]:h-full min-[1280px]:min-w-0 min-[1280px]:grid-cols-[minmax(0,360px)_minmax(0,1fr)_minmax(0,280px)] min-[1280px]:gap-6 min-[1280px]:overflow-hidden">
+          <section className="min-h-0 min-w-0 shrink-0 overflow-x-hidden px-4 sm:px-0 min-[1280px]:overflow-y-auto min-[1280px]:px-0 min-[1280px]:portal-scrollbar">
             <button
               type="button"
               className="mb-2 flex min-h-11 w-full items-center justify-between rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 text-left text-sm font-semibold text-[color:var(--portal-text)] min-[1280px]:hidden focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45"
@@ -137,7 +144,7 @@ export function DocumentCreatorWorkbench({ initial }: Props) {
             </div>
           </section>
 
-          <section className="flex min-h-0 min-w-0 flex-col gap-2 overflow-hidden min-[1280px]:overflow-y-auto min-[1280px]:portal-scrollbar">
+          <section className="flex min-h-0 min-w-0 flex-col gap-2 overflow-hidden px-4 sm:px-0 min-[1280px]:overflow-y-auto min-[1280px]:px-0 min-[1280px]:portal-scrollbar">
             <p className="text-xs font-medium text-[color:var(--portal-muted)] min-[1280px]:sr-only">Live paper preview</p>
             <div className="min-w-0 w-full max-w-full overflow-x-hidden">
               <DocumentCreatorPaperPreview
@@ -149,7 +156,7 @@ export function DocumentCreatorWorkbench({ initial }: Props) {
             </div>
           </section>
 
-          <section className="hidden min-h-0 min-w-0 flex-col gap-2 overflow-hidden min-[1280px]:flex">
+          <section className="hidden min-h-0 min-w-0 flex-col gap-2 overflow-hidden px-4 sm:px-0 min-[1280px]:flex min-[1280px]:px-0">
             <div>
               <h2 className="text-sm font-semibold text-[color:var(--portal-text)]">PDF preview</h2>
               <p className="text-xs text-[color:var(--portal-muted)]">Server-rendered file with tabular page numbers.</p>

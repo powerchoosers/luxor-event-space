@@ -5,13 +5,15 @@ import { useParams } from 'next/navigation'
 import { DocumentCreatorWorkbench } from '@/components/portal/DocumentCreatorWorkbench'
 import { PortalCardSkeleton, PortalPageFrame } from '@/components/portal/PortalUI'
 import type { LuxorCreatedDocumentRow } from '@/lib/luxorDocumentCreatorTypes'
+import { takeCreatedDocumentHandoff } from '@/lib/luxorDocumentCreatorHandoff'
 
 export default function EditCreatedDocumentPage() {
   const params = useParams<{ id: string }>()
-  const [document, setDocument] = useState<LuxorCreatedDocumentRow | null>(null)
+  const [document, setDocument] = useState<LuxorCreatedDocumentRow | null>(() => takeCreatedDocumentHandoff(params.id))
   const [error, setError] = useState('')
 
   useEffect(() => {
+    if (document) return
     let cancelled = false
     const load = async () => {
       try {
@@ -25,7 +27,7 @@ export default function EditCreatedDocumentPage() {
     }
     void load()
     return () => { cancelled = true }
-  }, [params.id])
+  }, [document, params.id])
 
   if (error) {
     return (

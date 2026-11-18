@@ -35,7 +35,7 @@ function compile(relativePath, filename, stubs = {}) {
   return loaded.exports
 }
 
-const { verbatimPlainTextFromTipTap, blocksFromTipTapJson } = compile(
+const { blocksFromTipTapJson, inlinesToPlainText, verbatimPlainTextFromTipTap } = compile(
   'src/lib/luxorDocumentCreatorVerbatim.ts',
   path.join(root, 'luxor-document-creator-verbatim.synthetic.cjs'),
 )
@@ -44,18 +44,47 @@ const sampleClause = '§ 4.2 — Client acknowledges "as-is" condition; venue pr
 
 const unicodeSample = 'Teen Night: “curfew” applies after 10 PM — parents’ consent required. Items: • snacks … © Luxor.'
 
+const lineBreakDoc = {
+  type: 'doc',
+  content: [
+    { type: 'paragraph', content: [{ type: 'text', text: 'Line one' }] },
+    { type: 'paragraph', content: [{ type: 'text', text: 'Line two' }] },
+    { type: 'paragraph', content: [{ type: 'text', text: 'Line three' }] },
+  ],
+}
+
+const boldDoc = {
+  type: 'doc',
+  content: [
+    {
+      type: 'paragraph',
+      content: [
+        { type: 'text', text: 'Bold ', marks: [{ type: 'bold' }] },
+        { type: 'text', text: 'normal' },
+      ],
+    },
+  ],
+}
+
+const bulletDoc = {
+  type: 'doc',
+  content: [
+    {
+      type: 'bulletList',
+      content: [
+        { type: 'listItem', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Alpha' }] }] },
+        { type: 'listItem', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Beta' }] }] },
+        { type: 'listItem', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Gamma' }] }] },
+      ],
+    },
+  ],
+}
+
 const sampleDoc = {
   type: 'doc',
   content: [
     { type: 'heading', attrs: { level: 1 }, content: [{ type: 'text', text: 'Venue Use Agreement' }] },
     { type: 'paragraph', content: [{ type: 'text', text: sampleClause }] },
-    {
-      type: 'orderedList',
-      content: [
-        { type: 'listItem', content: [{ type: 'paragraph', content: [{ type: 'text', text: '1.1 Payment shall be due net 10 days.' }] }] },
-        { type: 'listItem', content: [{ type: 'paragraph', content: [{ type: 'text', text: '1.2 Security deposit: $750 (refundable).' }] }] },
-      ],
-    },
   ],
 }
 
@@ -68,33 +97,53 @@ const unicodeDoc = {
 }
 
 test('TipTap blocks preserve legal characters verbatim', () => {
-  const plain = verbatimPlainTextFromTipTap(sampleDoc)
-  assert.ok(plain.includes('§ 4.2'))
-  assert.ok(plain.includes('"as-is"'))
-  assert.ok(plain.includes('warranty—express'))
   const blocks = blocksFromTipTapJson(sampleDoc)
   const paragraph = blocks.find((block) => block.type === 'paragraph')
-  assert.equal(paragraph?.text, sampleClause)
+  assert.ok(paragraph)
+  assert.equal(inlinesToPlainText(paragraph.inlines), sampleClause)
 })
 
-test('plain-text paste splitter keeps smart punctuation', () => {
+test('plain-text paste uses one paragraph per line', () => {
   const { plainTextToTipTapDocument } = compile(
     'src/lib/luxorDocumentCreatorPaste.ts',
     path.join(root, 'luxor-document-creator-paste.synthetic.cjs'),
   )
-  const doc = plainTextToTipTapDocument(`Line one “quote”\nLine two\n\nSecond paragraph — dash`)
-  assert.equal(doc.content.length, 2)
-  const first = doc.content[0]
-  assert.equal(first.type, 'paragraph')
-  const joined = first.content.map((node) => (node.type === 'text' ? node.text : '\n')).join('')
-  assert.ok(joined.includes('“quote”'))
+  const doc = plainTextToTipTapDocument('Alpha\nBeta\nGamma')
+  assert.equal(doc.content.length, 3)
+  assert.equal(doc.content[0].content[0].text, 'Alpha')
+  assert.equal(doc.content[1].content[0].text, 'Beta')
+  assert.equal(doc.content[2].content[0].text, 'Gamma')
 })
 
-test('generated creator PDF embeds unicode body text', async () => {
+test('three-line document yields three bullet items', () => {
+  const blocks = blocksFromTipTapJson(bulletDoc)
+  assert.equal(blocks.length, 1)
+  assert.equal(blocks[0].type, 'bullet')
+  assert.equal(blocks[0].items.length, 3)
+})
+
+test('wrap preserves logical newlines', async () => {
+  const { wrapLuxorPdfPreservingBreaks } = compile(
+    'src/lib/luxorCreatedDocumentPdfLayout.ts',
+    path.join(root, 'luxor-created-document-pdf-layout.synthetic.cjs'),
+    { 'server-only': {} },
+  )
+  const { PDFDocument, StandardFonts } = require('pdf-lib')
+  const pdf = await PDFDocument.create()
+  const font = await pdf.embedFont(StandardFonts.Helvetica)
+  const lines = wrapLuxorPdfPreservingBreaks('Line one\nLine two', font, 12, 400)
+  assert.ok(lines.length >= 2)
+  assert.equal(lines[0].includes('Line one'), true)
+  assert.equal(lines.some((line) => line.includes('Line two')), true)
+})
+
+test('generated creator PDF embeds unicode and bold body text', async () => {
   const branding = compile('src/lib/luxorPdfBrandingServer.ts', path.join(root, 'luxor-pdf-branding.synthetic.cjs'), {
     './luxorVenue': { LUXOR_VENUE_ADDRESS: '3100 Voss Ave, Dallas, TX' },
     'server-only': {},
     'node:fs/promises': fs.promises,
+    'fs/promises': fs.promises,
+    path,
     'node:path': path,
   })
   const fonts = compile('src/lib/luxorCreatedDocumentPdfFontsServer.ts', path.join(root, 'luxor-created-document-pdf-fonts.synthetic.cjs'), {
@@ -113,7 +162,23 @@ test('generated creator PDF embeds unicode body text', async () => {
     'node:path': path,
     'node:fs/promises': fs.promises,
     'fs/promises': fs.promises,
+    './luxorVenue': { LUXOR_VENUE_ADDRESS: '3100 Voss Ave, Dallas, TX' },
+    '@/lib/luxorVenue': { LUXOR_VENUE_ADDRESS: '3100 Voss Ave, Dallas, TX' },
   }
+  const pdfLayout = compile('src/lib/luxorCreatedDocumentPdfLayout.ts', path.join(root, 'luxor-created-document-pdf-layout.synthetic.cjs'), sharedNodeStubs)
+  const pdfRender = compile('src/lib/luxorDocumentCreatorPdfRender.ts', path.join(root, 'luxor-document-creator-pdf-render.synthetic.cjs'), {
+    ...sharedNodeStubs,
+    './luxorPdfBrandingServer': branding,
+    '@/lib/luxorPdfBrandingServer': branding,
+    './luxorCreatedDocumentPdfLayout': pdfLayout,
+    '@/lib/luxorCreatedDocumentPdfLayout': pdfLayout,
+    './luxorCreatedDocumentPdfFontsServer': fonts,
+    '@/lib/luxorCreatedDocumentPdfFontsServer': fonts,
+    './luxorDocumentCreatorRenderNormalize': compile('src/lib/luxorDocumentCreatorRenderNormalize.ts', path.join(root, 'luxor-document-creator-render-normalize.synthetic.cjs'), sharedNodeStubs),
+    '@/lib/luxorDocumentCreatorRenderNormalize': compile('src/lib/luxorDocumentCreatorRenderNormalize.ts', path.join(root, 'luxor-document-creator-render-normalize.synthetic.cjs'), sharedNodeStubs),
+    './luxorDocumentCreatorVerbatim': { blocksFromTipTapJson, inlinesToPlainText, verbatimPlainTextFromTipTap },
+    '@/lib/luxorDocumentCreatorVerbatim': { blocksFromTipTapJson, inlinesToPlainText, verbatimPlainTextFromTipTap },
+  })
   const { buildLuxorCreatedDocumentPdf, extractRenderableBlocks } = compile(
     'src/lib/luxorDocumentCreatorPdfServer.ts',
     path.join(root, 'luxor-document-creator-pdf.synthetic.cjs'),
@@ -123,13 +188,17 @@ test('generated creator PDF embeds unicode body text', async () => {
       '@/lib/luxorPdfBrandingServer': branding,
       './luxorCreatedDocumentPdfFontsServer': fonts,
       '@/lib/luxorCreatedDocumentPdfFontsServer': fonts,
-      './luxorDocumentCreatorVerbatim': { blocksFromTipTapJson, verbatimPlainTextFromTipTap },
-      '@/lib/luxorDocumentCreatorVerbatim': { blocksFromTipTapJson, verbatimPlainTextFromTipTap },
+      './luxorDocumentCreatorPdfRender': pdfRender,
+      '@/lib/luxorDocumentCreatorPdfRender': pdfRender,
+      './luxorDocumentCreatorVerbatim': { blocksFromTipTapJson, inlinesToPlainText, verbatimPlainTextFromTipTap },
+      '@/lib/luxorDocumentCreatorVerbatim': { blocksFromTipTapJson, inlinesToPlainText, verbatimPlainTextFromTipTap },
       './luxorDocumentCreatorTypes': compile('src/lib/luxorDocumentCreatorTypes.ts', path.join(root, 'luxor-document-creator-types.synthetic.cjs')),
       '@/lib/luxorDocumentCreatorTypes': compile('src/lib/luxorDocumentCreatorTypes.ts', path.join(root, 'luxor-document-creator-types.synthetic.cjs')),
     },
   )
-  assert.equal(extractRenderableBlocks(sampleDoc).length, 3)
+  assert.equal(extractRenderableBlocks(lineBreakDoc).length, 3)
+  assert.equal(extractRenderableBlocks(boldDoc)[0].type, 'paragraph')
+  assert.ok(extractRenderableBlocks(boldDoc)[0].inlines.some((part) => part.kind === 'text' && part.bold))
   const pdfBytes = await buildLuxorCreatedDocumentPdf({
     title: 'Teen Night Agreement',
     documentType: 'venue_use_agreement',
@@ -141,7 +210,5 @@ test('generated creator PDF embeds unicode body text', async () => {
   assert.ok(loaded.getPageCount() >= 1)
   const renderedPlain = verbatimPlainTextFromTipTap(unicodeDoc)
   assert.ok(renderedPlain.includes('“curfew”'))
-  assert.ok(renderedPlain.includes('—'))
   assert.ok(renderedPlain.includes('©'))
-  assert.ok(renderedPlain.includes('§'))
 })

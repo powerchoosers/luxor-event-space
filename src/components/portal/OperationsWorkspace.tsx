@@ -780,15 +780,18 @@ export function OperationsPageContent({ embeddedBills = false }: { embeddedBills
       />}
 
       {/* Desktop rectangular sliding tab navigation */}
-      {!embeddedBills && <div className="hidden shrink-0 xl:flex">
-        <PortalAnimatedTabs
-          variant="slider"
-          ariaLabel="Operations sections"
-          tabs={operationsTabs}
-          activeTab={activeTab}
-          onTabChange={(tab) => router.push(`/portal/operations?tab=${tab}`)}
-        />
-      </div>}
+      {!embeddedBills && (
+        <div className="hidden w-full min-w-0 max-w-full shrink-0 overflow-x-auto portal-scrollbar min-[1280px]:block">
+          <PortalAnimatedTabs
+            className="w-max max-w-none"
+            variant="slider"
+            ariaLabel="Operations sections"
+            tabs={operationsTabs}
+            activeTab={activeTab}
+            onTabChange={(tab) => router.push(`/portal/operations?tab=${tab}`)}
+          />
+        </div>
+      )}
 
       <PortalTabTransition activeKey={activeTab} className={`min-h-0 flex-1 overflow-hidden ${embeddedBills ? 'flex flex-col' : ''}`}>
       {loading ? (

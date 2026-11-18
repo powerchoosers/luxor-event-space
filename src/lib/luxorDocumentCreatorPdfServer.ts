@@ -3,15 +3,18 @@ import 'server-only'
 import { type PDFPage } from 'pdf-lib'
 import {
   drawLuxorPdfHeader,
-  drawLuxorPdfStandardFooters,
   luxorPdfCream,
   luxorPdfGold,
   luxorPdfInk,
   luxorPdfMargin,
-  luxorPdfMuted,
-  wrapLuxorPdfText,
 } from './luxorPdfBrandingServer'
 import { createLuxorCreatedDocumentPdfKit } from './luxorCreatedDocumentPdfFontsServer'
+import {
+  drawListBlock,
+  drawLuxorCreatedDocumentFooters,
+  drawRichInlines,
+  wrapTitleLines,
+} from './luxorDocumentCreatorPdfRender'
 import { blocksFromTipTapJson, type LuxorDocumentCreatorBlock } from './luxorDocumentCreatorVerbatim'
 import { LUXOR_CREATED_DOCUMENT_TYPE_LABELS, type LuxorCreatedDocumentType } from './luxorDocumentCreatorTypes'
 
@@ -26,7 +29,7 @@ export function extractRenderableBlocks(bodyJson: unknown): LuxorDocumentCreator
 }
 
 export async function buildLuxorCreatedDocumentPdf(input: RenderInput): Promise<Uint8Array> {
-  const { pdf, regular, bold, serifBold, logo, pageWidth, pageHeight } = await createLuxorCreatedDocumentPdfKit()
+  const { pdf, bold, serifBold, logo, pageWidth, pageHeight, fonts, regular } = await createLuxorCreatedDocumentPdfKit()
   const blocks = extractRenderableBlocks(input.bodyJson)
   const documentLabel = (LUXOR_CREATED_DOCUMENT_TYPE_LABELS[input.documentType] || 'DOCUMENT').toUpperCase()
   let page: PDFPage
@@ -46,7 +49,7 @@ export async function buildLuxorCreatedDocumentPdf(input: RenderInput): Promise<
     if (y < 66 + height) addPage()
   }
 
-  const titleLines = wrapLuxorPdfText(input.title, serifBold, 22, contentWidth)
+  const titleLines = wrapTitleLines(input.title, serifBold, 22, contentWidth)
   for (const line of titleLines) {
     ensure(28)
     page!.drawText(line, { x: luxorPdfMargin, y, size: 22, font: serifBold, color: luxorPdfInk })
@@ -59,50 +62,24 @@ export async function buildLuxorCreatedDocumentPdf(input: RenderInput): Promise<
     if (block.type === 'heading') {
       ensure(36)
       const size = block.level === 1 ? 14 : block.level === 2 ? 12 : 10.5
-      const font = block.level === 1 ? serifBold : bold
       const color = block.level === 1 ? luxorPdfInk : luxorPdfGold
-      const lines = wrapLuxorPdfText(block.text, font, size, contentWidth)
-      for (const line of lines) {
-        ensure(18)
-        page!.drawText(line, { x: luxorPdfMargin, y, size, font, color })
-        y -= size + 6
-      }
+      const before = y
+      y = drawRichInlines(page!, fonts, block.inlines, luxorPdfMargin, y, contentWidth, size, size + 6, color)
+      if (y === before) y -= size + 6
       y -= 6
       continue
     }
     if (block.type === 'bullet' || block.type === 'ordered') {
-      let index = 0
-      for (const item of block.items) {
-        index += 1
-        const prefix = block.type === 'ordered' ? `${index}. ` : '• '
-        const lines = wrapLuxorPdfText(item, regular, 9.6, contentWidth - 14)
-        ensure(lines.length * 13 + 4)
-        let first = true
-        for (const line of lines) {
-          if (first) {
-            page!.drawText(prefix, { x: luxorPdfMargin, y, size: 9.6, font: bold, color: luxorPdfMuted })
-            page!.drawText(line, { x: luxorPdfMargin + 14, y, size: 9.6, font: regular, color: luxorPdfInk })
-            first = false
-          } else {
-            page!.drawText(line, { x: luxorPdfMargin + 14, y, size: 9.6, font: regular, color: luxorPdfInk })
-          }
-          y -= 13
-        }
-        y -= 4
-      }
+      ensure(block.items.length * 16 + 8)
+      y = drawListBlock(page!, fonts, block.items, block.type === 'ordered', luxorPdfMargin, y, contentWidth, 9.6, 13)
       continue
     }
-    const font = block.bold ? bold : regular
-    const size = 9.7
-    const lines = wrapLuxorPdfText(block.text, font, size, contentWidth)
-    ensure(lines.length * 14 + 6)
-    for (const line of lines) {
-      page!.drawText(line, { x: luxorPdfMargin, y, size, font, color: luxorPdfInk })
-      y -= 14
-    }
+    const before = y
+    y = drawRichInlines(page!, fonts, block.inlines, luxorPdfMargin, y, contentWidth, 9.7, 14)
+    if (y === before) y -= 14
     y -= 7
   }
 
-  drawLuxorPdfStandardFooters(pdf.getPages(), regular)
+  drawLuxorCreatedDocumentFooters(pdf.getPages(), regular)
   return pdf.save({ useObjectStreams: false })
 }

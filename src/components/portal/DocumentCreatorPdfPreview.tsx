@@ -41,7 +41,7 @@ export function DocumentCreatorPdfPreview({ signedUrl, title, loading, error }: 
     )
   }
   return (
-    <div className="min-h-0 flex-1 overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)]">
+    <div className="min-h-0 min-w-0 max-w-full flex-1 overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)]">
       <PortalPdfViewerRenderer url={signedUrl} title={title} />
     </div>
   )
