@@ -17,11 +17,12 @@ const FIX_NOTICE_DISMISS_EVENT = 'luxor-portal-fix-notice-dismiss'
 type PortalFixNoticeDismissSnapshot = { ready: boolean; dismissed: boolean }
 
 const pendingDismissSnapshot: PortalFixNoticeDismissSnapshot = { ready: false, dismissed: false }
+const noNoticeDismissSnapshot: PortalFixNoticeDismissSnapshot = { ready: true, dismissed: false }
 const dismissSnapshotByNoticeId = new Map<string, PortalFixNoticeDismissSnapshot>()
 const dismissSnapshotListeners = new Set<() => void>()
 
 function getPortalFixNoticeDismissSnapshot(noticeId: string | null): PortalFixNoticeDismissSnapshot {
-  if (!noticeId) return { ready: true, dismissed: false }
+  if (!noticeId) return noNoticeDismissSnapshot
   return dismissSnapshotByNoticeId.get(noticeId) ?? pendingDismissSnapshot
 }
 
@@ -40,7 +41,7 @@ function readPortalFixNoticeDismissedAfterMount(noticeId: string) {
 }
 
 function getPortalFixNoticeDismissServerSnapshot(noticeId: string | null): PortalFixNoticeDismissSnapshot {
-  return noticeId ? pendingDismissSnapshot : { ready: true, dismissed: false }
+  return noticeId ? pendingDismissSnapshot : noNoticeDismissSnapshot
 }
 
 export function PortalFixNotice({ notice }: { notice: PortalFixNoticeData | null }) {
