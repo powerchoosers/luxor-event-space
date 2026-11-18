@@ -17,7 +17,8 @@ const origin = `http://127.0.0.1:${port}`
 const QA_SESSION_SECRET = process.env.PORTAL_TOUR_QA_SESSION_SECRET || 'luxor-portal-tour-reopen-qa-local-only'
 const QA_EMAIL = process.env.PORTAL_TOUR_QA_EMAIL || 'qa-portal-owner@luxoratlaspalmas.com'
 
-const WIDTHS = [390, 820, 1280]
+const MOBILE_VIEWPORT = { width: 390, height: 844 }
+const DESKTOP_WIDTHS = [820, 1280]
 
 function luxorTodayKey() {
   const parts = new Intl.DateTimeFormat('en-CA', {
@@ -134,7 +135,15 @@ function createFixtureState() {
     pipeline_stage: 'proposal',
     event_type: 'Quinceañera',
   }]
-  return { inquiries, leadEvents, upcomingId, completedId }
+  return { inquiries, leadEvents, upcomingId, completedId, captureTheme: 'light' }
+}
+
+function resetFixtureState(state) {
+  const fresh = createFixtureState()
+  state.inquiries = fresh.inquiries
+  state.leadEvents = fresh.leadEvents
+  state.upcomingId = fresh.upcomingId
+  state.completedId = fresh.completedId
 }
 
 function startMockSupabase() {
@@ -191,14 +200,20 @@ function json(route, data, status = 200) {
 }
 
 function freePort(portNumber) {
+  spawnSync('pkill', ['-f', `next start -H 127.0.0.1 -p ${portNumber}`], { encoding: 'utf8' })
+  spawnSync('fuser', ['-k', `${portNumber}/tcp`], { encoding: 'utf8' })
   const result = spawnSync('lsof', ['-ti', `:${portNumber}`], { encoding: 'utf8' })
   const pids = result.stdout.trim().split('\n').filter(Boolean)
   for (const pid of pids) {
     if (pid === String(process.pid)) continue
     try {
-      process.kill(Number(pid), 'SIGTERM')
+      process.kill(Number(pid), 'SIGKILL')
     } catch {}
   }
+}
+
+function hasFfmpeg() {
+  return spawnSync('ffmpeg', ['-version'], { encoding: 'utf8' }).status === 0
 }
 
 async function waitForServer() {
@@ -261,7 +276,7 @@ function installApiMocks(context, state) {
 
     if (url.pathname === '/api/portal/user-preferences' && method === 'GET') {
       return json(route, {
-        theme: 'light',
+        theme: state.captureTheme || 'light',
         sidebar: 'expanded',
         email: QA_EMAIL,
         display_name: 'QA Portal Owner',
@@ -277,188 +292,324 @@ function installApiMocks(context, state) {
       return json(route, { outbound_mode: 'browser', ring_to_number: null, ring_browser: true, ring_phone: false })
     }
     if (url.pathname === '/api/notes') return json(route, method === 'GET' ? [] : { success: true })
-    if (url.pathname === '/api/tasks') return json(route, method === 'GET' ? { tasks: [], assignees: [] } : { success: true })
+    if (url.pathname === '/api/tasks' && method === 'GET') {
+      if (url.searchParams.get('inquiryId')) return json(route, [])
+      return json(route, { tasks: [], assignees: [] })
+    }
+    if (url.pathname === '/api/tasks') return json(route, { success: true })
     if (url.pathname === '/api/invoices') return json(route, [])
     if (url.pathname === '/api/bookings') return json(route, [])
     if (url.pathname === '/api/payments') return json(route, [])
     if (url.pathname === '/api/documents') return json(route, [])
     if (url.pathname === '/api/signatures') return json(route, [])
     if (url.pathname === '/api/vendors') return json(route, [])
-    if (url.pathname === '/api/twilio/calls') return json(route, { calls: [] })
+    if (url.pathname === '/api/twilio/calls' && method === 'GET') return json(route, [])
     if (url.pathname.startsWith('/api/twilio/consent')) return json(route, { status: 'unknown' })
     if (url.pathname === '/api/marketing/members') return json(route, { members: [] })
     if (url.pathname === '/api/marketing/lead') return json(route, { lead: null })
     if (url.pathname === '/api/portal/lead-event-preference') return json(route, { preferred_event_id: null })
     if (url.pathname.startsWith('/api/portal/leads/')) return json(route, { clicks: [] })
+    if (url.pathname.startsWith('/api/leads/') && url.pathname.endsWith('/correct-email-resend')) {
+      return json(route, { options: [], suggestedId: null })
+    }
     if (url.pathname === '/api/portal/realtime-config') return json(route, { enabled: false })
     if (url.pathname === '/api/inquiries' && method === 'PATCH') {
       const inquiry = state.inquiries.find((item) => item.id === body.id)
       return inquiry ? json(route, inquiry) : json(route, { error: 'Not found' }, 404)
     }
     if (method === 'GET') return json(route, [])
-  return json(route, { success: true })
+    return json(route, { success: true })
   })
 }
 
-async function setPortalTheme(page, theme) {
-  await page.context().addCookies([{ name: 'luxor-portal-theme', value: theme, url: origin }])
-  await page.evaluate((value) => {
-    window.localStorage.setItem('luxor-portal-theme', value)
-    document.body.setAttribute('data-portal-theme', value)
-    window.dispatchEvent(new Event('luxor-portal-theme'))
-  }, theme).catch(() => {})
+function attachPageDiagnostics(page, consoleLog) {
+  page.on('response', (response) => {
+    if (response.status() >= 500) consoleLog.push(`response: ${response.status()} ${response.url()}`)
+  })
+  page.on('pageerror', (err) => consoleLog.push(`pageerror: ${err.message}`))
+  page.on('console', (msg) => {
+    if (msg.type() === 'error') consoleLog.push(`console: ${msg.text()}`)
+  })
 }
 
-async function gotoLeadsTours(page) {
+async function createPortalContext(browser, state, options) {
+  const {
+    viewport,
+    theme,
+    reducedMotion = 'no-preference',
+    recordVideo,
+  } = options
+  const context = await browser.newContext({
+    viewport,
+    reducedMotion,
+    ...(recordVideo ? { recordVideo } : {}),
+  })
+  await context.addCookies([
+    { ...createPortalSessionCookie(QA_EMAIL), url: origin },
+    { name: 'luxor-portal-theme', value: theme, url: origin },
+  ])
+  await context.addInitScript((portalTheme) => {
+    window.localStorage.setItem('luxor-portal-theme', portalTheme)
+  }, theme)
+  installApiMocks(context, state)
+  return context
+}
+
+async function waitForPortalTheme(page, theme) {
+  await page.waitForFunction((expected) => document.body.getAttribute('data-portal-theme') === expected, theme, { timeout: 30_000 })
+}
+
+async function verifyThemeBackground(page, theme) {
+  const snapshot = await page.evaluate(() => {
+    const style = window.getComputedStyle(document.body)
+    const match = style.backgroundColor.match(/[\d.]+/g) || ['128', '128', '128']
+    const [r, g, b] = match.map(Number)
+    return {
+      dataTheme: document.body.getAttribute('data-portal-theme'),
+      luminance: 0.299 * r + 0.587 * g + 0.114 * b,
+    }
+  })
+  if (snapshot.dataTheme !== theme) {
+    throw new Error(`Expected data-portal-theme=${theme}, saw ${snapshot.dataTheme}`)
+  }
+  if (theme === 'dark' && snapshot.luminance > 95) {
+    throw new Error(`Dark capture looks light (body luminance ${snapshot.luminance.toFixed(1)})`)
+  }
+}
+
+async function waitForDialogSettled(page) {
+  const dialog = page.locator('[data-portal-dialog="true"]')
+  await dialog.waitFor({ state: 'visible', timeout: 15_000 })
+  await page.waitForFunction(() => {
+    const el = document.querySelector('[data-portal-dialog="true"]')
+    if (!el) return false
+    const opacity = Number.parseFloat(window.getComputedStyle(el).opacity)
+    const backdrop = document.querySelector('[data-portal-backdrop="true"]')
+    const backdropOpacity = backdrop ? Number.parseFloat(window.getComputedStyle(backdrop).opacity) : 1
+    return opacity >= 0.99 && backdropOpacity >= 0.99
+  }, { timeout: 10_000 })
+  await delay(350)
+}
+
+async function gotoLeadsTours(page, theme, viewportWidth = 1280) {
   await page.addInitScript(() => {
     window.localStorage.setItem('luxor_leads_tours_view', 'all')
   })
-  await page.setViewportSize({ width: 1440, height: 900 })
-  await page.goto(`${origin}/portal/leads?view=tours`, { waitUntil: 'domcontentloaded' })
-  await delay(400)
-  try {
-    await page.getByText('Sample Guest').or(page.getByText('Sample Host')).first().waitFor({ timeout: 60_000 })
-  } catch (error) {
-    const snippet = await page.locator('body').innerText().catch(() => '')
-    const diagnostics = await page.evaluate(async () => {
-      const res = await fetch('/api/inquiries')
-      const toursNav = document.querySelector('nav[aria-label="Leads & Clients views"]')
-      return {
-        inquiryStatus: res.status,
-        inquiryPreview: (await res.text()).slice(0, 400),
-        activeTab: window.localStorage.getItem('luxor_leads_active_tab'),
-        toursNavFound: Boolean(toursNav),
-        toursButtonLabels: toursNav
-          ? [...toursNav.querySelectorAll('button')].map((button) => button.textContent?.trim())
-          : [],
-      }
-    }).catch(() => ({}))
-    fs.writeFileSync(path.join(artifactDir, 'qa-failure-body.txt'), `url=${page.url()}\n\n${JSON.stringify(diagnostics, null, 2)}\n\n${snippet}`)
-    throw error
+  if (viewportWidth !== MOBILE_VIEWPORT.width) {
+    await page.setViewportSize({ width: viewportWidth, height: 900 })
   }
+  await page.goto(`${origin}/portal/leads?view=tours`, { waitUntil: 'domcontentloaded' })
+  await waitForPortalTheme(page, theme)
+  await delay(400)
+  await page.getByRole('button', { name: 'Reopen tour' }).or(page.getByRole('button', { name: 'Mark Completed' })).first().waitFor({ timeout: 60_000 })
 }
 
-async function screenshot(page, name) {
+async function screenshot(page, name, theme) {
   fs.mkdirSync(artifactDir, { recursive: true })
+  await verifyThemeBackground(page, theme)
   await page.screenshot({ path: path.join(artifactDir, name), fullPage: true })
 }
 
-async function captureStaticScreenshots(page, state) {
-  for (const theme of ['light', 'dark']) {
-    const fresh = createFixtureState()
-    state.inquiries = fresh.inquiries
-    state.leadEvents = fresh.leadEvents
-    state.upcomingId = fresh.upcomingId
-    state.completedId = fresh.completedId
-    await setPortalTheme(page, theme)
-    await gotoLeadsTours(page)
-    await page.getByRole('button', { name: 'Reopen tour' }).first().waitFor({ timeout: 60_000 })
-    for (const width of WIDTHS) {
-      await page.setViewportSize({ width, height: 900 })
-      await delay(150)
-      await screenshot(page, `tours-reopen-control-${theme}-${width}.png`)
-      await page.getByRole('button', { name: 'Reopen tour' }).first().click()
-      await page.getByText('Reopen this tour?').waitFor()
-      await screenshot(page, `tours-reopen-confirm-${theme}-${width}.png`)
-      await page.getByRole('dialog').getByRole('button', { name: 'Cancel' }).click()
-      await delay(200)
-    }
-
-    await gotoLeadsTours(page)
-    const markButton = page.getByRole('button', { name: 'Mark Completed' }).first()
-    await markButton.click()
-    await page.getByText('Tour marked completed').waitFor()
-    await page.getByRole('button', { name: 'Undo' }).waitFor()
-    await delay(6_000)
-    for (const width of WIDTHS) {
-      await page.setViewportSize({ width, height: 900 })
-      await delay(400)
-      await screenshot(page, `tours-complete-toast-undo-${theme}-${width}.png`)
-    }
-
-    if (theme === 'light') {
-      try {
-        await setPortalTheme(page, 'light')
-        await page.goto(`${origin}/portal/leads/${state.completedId}?tab=overview&stage=proposal`, { waitUntil: 'networkidle' })
-        await page.getByText('Sample Host').waitFor({ timeout: 90_000 })
-        const viewTourDetails = page.getByRole('button', { name: 'View Tour Details' })
-        if (await viewTourDetails.isVisible().catch(() => false)) await viewTourDetails.click()
-        await page.locator('#lead-tour-details').scrollIntoViewIfNeeded()
-        await page.getByRole('button', { name: 'Reopen tour' }).waitFor({ timeout: 90_000 })
-        for (const width of [1280, 390]) {
-          await page.setViewportSize({ width, height: 900 })
-          await delay(150)
-          await screenshot(page, `lead-detail-reopen-light-${width}.png`)
-          if (width === 390) {
-            await page.getByRole('button', { name: 'Reopen tour' }).click()
-            await page.getByText('Reopen this tour?').waitFor()
-            await screenshot(page, 'lead-detail-reopen-confirm-light-390.png')
-            await page.getByRole('dialog').getByRole('button', { name: 'Cancel' }).click()
-          }
-        }
-      } catch (error) {
-        console.warn(`Lead detail QA capture skipped: ${error instanceof Error ? error.message : error}`)
-      }
-    }
+async function captureReopenScreensAtWidth(page, state, theme, width) {
+  await page.getByRole('button', { name: 'Reopen tour' }).first().waitFor({ timeout: 60_000 })
+  if (width !== MOBILE_VIEWPORT.width) {
+    await page.setViewportSize({ width, height: 900 })
+    await delay(150)
   }
-
-  const reducedState = createFixtureState()
-  state.inquiries = reducedState.inquiries
-  state.leadEvents = reducedState.leadEvents
-  state.upcomingId = reducedState.upcomingId
-  state.completedId = reducedState.completedId
-  await page.emulateMedia({ reducedMotion: 'reduce' })
-  await setPortalTheme(page, 'light')
-  await gotoLeadsTours(page)
-  await page.getByRole('button', { name: 'Mark Completed' }).first().click()
-  await page.getByText('Tour marked completed').waitFor()
-  await page.setViewportSize({ width: 390, height: 900 })
-  await screenshot(page, 'tours-toast-reduced-motion-390.png')
-  await gotoLeadsTours(page)
+  await screenshot(page, `tours-reopen-control-${theme}-${width}.png`, theme)
   await page.getByRole('button', { name: 'Reopen tour' }).first().click()
-  await page.getByText('Reopen this tour?').waitFor()
-  await screenshot(page, 'tours-confirm-reduced-motion-390.png')
-  await page.emulateMedia({ reducedMotion: 'no-preference' })
+  await page.getByText('Reopen this tour?').waitFor({ timeout: 15_000 })
+  await waitForDialogSettled(page)
+  await screenshot(page, `tours-reopen-confirm-${theme}-${width}.png`, theme)
+  await page.getByRole('dialog').getByRole('button', { name: 'Cancel' }).click()
+  await page.locator('[data-portal-dialog="true"]').waitFor({ state: 'hidden', timeout: 10_000 }).catch(() => {})
+  await delay(250)
 }
 
-async function recordFlowVideo(browser, state, width, theme, fileName) {
-  const fresh = createFixtureState()
-  state.inquiries = fresh.inquiries
-  state.leadEvents = fresh.leadEvents
-  state.upcomingId = fresh.upcomingId
-  state.completedId = fresh.completedId
-  const context = await browser.newContext({
-    viewport: { width, height: 900 },
-    recordVideo: { dir: artifactDir, size: { width, height: 900 } },
-    reducedMotion: 'no-preference',
+async function captureToastScreensAtWidth(page, theme, width) {
+  if (width !== MOBILE_VIEWPORT.width) {
+    await page.setViewportSize({ width, height: 900 })
+    await delay(200)
+  }
+  await page.getByText('Tour marked completed').waitFor({ timeout: 15_000 })
+  await page.getByRole('button', { name: 'Undo' }).waitFor({ timeout: 15_000 })
+  await delay(500)
+  await screenshot(page, `tours-complete-toast-undo-${theme}-${width}.png`, theme)
+}
+
+async function openLeadTourStage(page, mobileLayout) {
+  if (mobileLayout) {
+    const stagePicker = page.locator('button[aria-controls]').filter({ hasText: /Stage \d+ of/ }).first()
+    await stagePicker.click()
+    await page.locator('button').filter({ has: page.getByText('Tour', { exact: true }) }).first().click()
+  } else {
+    await page.locator('.lg\\:block button').filter({ has: page.getByText('Tour', { exact: true }) }).first().click()
+  }
+  await page.locator('#lead-tour-details').waitFor({ state: 'visible', timeout: 60_000 })
+  await page.locator('#lead-tour-details').scrollIntoViewIfNeeded()
+}
+
+async function captureLeadDetailReopen(browser, state, theme, consoleLog) {
+  resetFixtureState(state)
+  state.captureTheme = theme
+
+  for (const { width, height, mobile } of [
+    { width: 1280, height: 900, mobile: false },
+    { width: MOBILE_VIEWPORT.width, height: MOBILE_VIEWPORT.height, mobile: true },
+  ]) {
+    const context = await createPortalContext(browser, state, {
+      viewport: { width, height },
+      theme,
+    })
+    const page = await context.newPage()
+    attachPageDiagnostics(page, consoleLog)
+    await page.goto(`${origin}/portal/leads/${state.completedId}?tab=overview&stage=proposal`, { waitUntil: 'domcontentloaded' })
+    await waitForPortalTheme(page, theme)
+    await page.getByRole('main').getByText('Sample Host', { exact: true }).first().waitFor({ state: 'visible', timeout: 90_000 })
+    await openLeadTourStage(page, mobile)
+    await page.getByRole('button', { name: 'Reopen tour' }).waitFor({ timeout: 90_000 })
+    await screenshot(page, `lead-detail-reopen-${theme}-${width}.png`, theme)
+    await page.getByRole('button', { name: 'Reopen tour' }).click()
+    await page.getByText('Reopen this tour?').waitFor({ timeout: 15_000 })
+    await waitForDialogSettled(page)
+    await screenshot(page, `lead-detail-reopen-confirm-${theme}-${width}.png`, theme)
+    await page.getByRole('dialog').getByRole('button', { name: 'Cancel' }).click()
+    await context.close()
+  }
+}
+
+async function captureStaticScreenshots(browser, state, consoleLog) {
+  for (const theme of ['light', 'dark']) {
+    resetFixtureState(state)
+    state.captureTheme = theme
+
+    const desktopContext = await createPortalContext(browser, state, {
+      viewport: { width: 1280, height: 900 },
+      theme,
+    })
+    const desktopPage = await desktopContext.newPage()
+    attachPageDiagnostics(desktopPage, consoleLog)
+
+    await gotoLeadsTours(desktopPage, theme, 1280)
+    for (const width of DESKTOP_WIDTHS) {
+      await captureReopenScreensAtWidth(desktopPage, state, theme, width)
+    }
+
+    await gotoLeadsTours(desktopPage, theme, 1280)
+    await desktopPage.getByRole('button', { name: 'Mark Completed' }).first().click()
+    for (const width of DESKTOP_WIDTHS) {
+      await captureToastScreensAtWidth(desktopPage, theme, width)
+    }
+    await desktopContext.close()
+
+    const mobileContext = await createPortalContext(browser, state, {
+      viewport: MOBILE_VIEWPORT,
+      theme,
+    })
+    const mobilePage = await mobileContext.newPage()
+    attachPageDiagnostics(mobilePage, consoleLog)
+
+    resetFixtureState(state)
+  state.captureTheme = theme
+    await gotoLeadsTours(mobilePage, theme, MOBILE_VIEWPORT.width)
+    await captureReopenScreensAtWidth(mobilePage, state, theme, MOBILE_VIEWPORT.width)
+
+    resetFixtureState(state)
+    state.captureTheme = theme
+    await gotoLeadsTours(mobilePage, theme, MOBILE_VIEWPORT.width)
+    await mobilePage.getByRole('button', { name: 'Mark Completed' }).first().click()
+    await captureToastScreensAtWidth(mobilePage, theme, MOBILE_VIEWPORT.width)
+    await mobileContext.close()
+
+    await captureLeadDetailReopen(browser, state, theme, consoleLog)
+  }
+
+  resetFixtureState(state)
+  state.captureTheme = 'light'
+  const reducedContext = await createPortalContext(browser, state, {
+    viewport: MOBILE_VIEWPORT,
+    theme: 'light',
+    reducedMotion: 'reduce',
   })
-  await context.addCookies([{ ...createPortalSessionCookie(QA_EMAIL), url: origin }])
-  installApiMocks(context, state)
+  const reducedPage = await reducedContext.newPage()
+  attachPageDiagnostics(reducedPage, consoleLog)
+  await gotoLeadsTours(reducedPage, 'light', MOBILE_VIEWPORT.width)
+  await reducedPage.getByRole('button', { name: 'Mark Completed' }).first().click()
+  await reducedPage.getByText('Tour marked completed').waitFor()
+  await delay(400)
+  await screenshot(reducedPage, 'tours-toast-reduced-motion-390.png', 'light')
+
+  resetFixtureState(state)
+  await gotoLeadsTours(reducedPage, 'light', MOBILE_VIEWPORT.width)
+  await reducedPage.getByRole('button', { name: 'Reopen tour' }).first().click()
+  await reducedPage.getByText('Reopen this tour?').waitFor()
+  await waitForDialogSettled(reducedPage)
+  await screenshot(reducedPage, 'tours-confirm-reduced-motion-390.png', 'light')
+  await reducedContext.close()
+}
+
+async function recordContinuousFlow(browser, state) {
+  resetFixtureState(state)
+  state.captureTheme = 'light'
+  const context = await createPortalContext(browser, state, {
+    viewport: { width: 1280, height: 900 },
+    theme: 'light',
+    recordVideo: { dir: artifactDir, size: { width: 1280, height: 900 } },
+  })
   const page = await context.newPage()
-  await setPortalTheme(page, theme)
-  await gotoLeadsTours(page)
+  await gotoLeadsTours(page, 'light', 1280)
+  await delay(2000)
+
   await page.getByRole('button', { name: 'Mark Completed' }).first().click()
-  await page.getByText('Tour marked completed').waitFor()
+  await page.getByText('Tour marked completed').waitFor({ timeout: 15_000 })
+  await delay(3000)
+
   await page.getByRole('button', { name: 'Undo' }).click()
   await page.getByText('Tour reopened').waitFor({ timeout: 15_000 })
-  await gotoLeadsTours(page)
-  state.inquiries.find((item) => item.id === state.upcomingId).tour_attendance_status = 'attended'
+  await delay(3500)
+
+  await gotoLeadsTours(page, 'light', 1280)
+  await page.getByRole('button', { name: 'Mark Completed' }).first().waitFor({ timeout: 30_000 })
+  await delay(3000)
+
   await page.getByRole('button', { name: 'Reopen tour' }).first().click()
+  await waitForDialogSettled(page)
+  await delay(2000)
   await page.getByRole('dialog').getByRole('button', { name: 'Reopen tour' }).click()
   await page.getByText('Tour reopened').waitFor({ timeout: 15_000 })
-  await delay(1200)
+  await delay(4500)
+
   const video = page.video()
   await page.close()
   await context.close()
   if (!video) throw new Error('Video recording was not started.')
   const webmPath = await video.path()
-  const target = path.join(artifactDir, fileName)
-  fs.copyFileSync(webmPath, target)
+  const webmTarget = path.join(artifactDir, 'tour-reopen-flow-1280-light.webm')
+  fs.copyFileSync(webmPath, webmTarget)
+  if (hasFfmpeg()) {
+    const mp4Target = path.join(artifactDir, 'tour-reopen-flow-1280-light.mp4')
+    const convert = spawnSync('ffmpeg', ['-y', '-i', webmTarget, '-c:v', 'libx264', '-pix_fmt', 'yuv420p', mp4Target], {
+      encoding: 'utf8',
+    })
+    if (convert.status !== 0) {
+      throw new Error(`ffmpeg failed: ${convert.stderr || convert.stdout}`)
+    }
+  }
+}
+
+function cleanArtifactDir() {
+  fs.mkdirSync(artifactDir, { recursive: true })
+  for (const entry of fs.readdirSync(artifactDir)) {
+    if (entry.startsWith('page@') && entry.endsWith('.webm')) {
+      fs.unlinkSync(path.join(artifactDir, entry))
+    }
+  }
 }
 
 async function main() {
-  fs.mkdirSync(artifactDir, { recursive: true })
+  cleanArtifactDir()
   const state = createFixtureState()
+  const consoleLog = []
   freePort(port)
   freePort(mockSupabasePort)
   await delay(300)
@@ -493,29 +644,19 @@ async function main() {
       if (attempt === 59) throw new Error(`Next production server is not serving build ${buildId} (manifest status ${buildMeta}).`)
       await delay(500)
     }
-    const context = await browser.newContext({ viewport: { width: 1440, height: 900 } })
-    await context.addCookies([{ ...createPortalSessionCookie(QA_EMAIL), url: origin }])
-    installApiMocks(context, state)
-    const page = await context.newPage()
-    const consoleLog = []
-    page.on('response', (response) => {
-      if (response.status() >= 500) consoleLog.push(`response: ${response.status()} ${response.url()}`)
-    })
-    page.on('pageerror', (err) => consoleLog.push(`pageerror: ${err.message}`))
-    page.on('console', (msg) => {
-      if (msg.type() === 'error') consoleLog.push(`console: ${msg.text()}`)
-    })
-    await captureStaticScreenshots(page, state).catch(async (error) => {
-      fs.writeFileSync(path.join(artifactDir, 'qa-console-errors.txt'), consoleLog.join('\n'))
-      throw error
-    })
-    await context.close()
 
-    await recordFlowVideo(browser, state, 1280, 'light', 'tour-reopen-flow-1280-light.webm')
-    const state390 = createFixtureState()
-    await recordFlowVideo(browser, state390, 390, 'light', 'tour-reopen-flow-390-light.webm')
+    await captureStaticScreenshots(browser, state, consoleLog)
+    await recordContinuousFlow(browser, state)
 
-    console.log(JSON.stringify({ pass: true, artifactDir, screenshots: fs.readdirSync(artifactDir).sort() }))
+    fs.writeFileSync(path.join(artifactDir, 'qa-console-errors.txt'), consoleLog.length ? consoleLog.join('\n') : '(no page or console errors captured)')
+    for (const entry of fs.readdirSync(artifactDir)) {
+      if (entry.startsWith('page@') && entry.endsWith('.webm')) fs.unlinkSync(path.join(artifactDir, entry))
+      if (entry === 'qa-failure-body.txt' || entry === 'tour-reopen-flow-390-light.webm') {
+        fs.unlinkSync(path.join(artifactDir, entry))
+      }
+    }
+    const screenshots = fs.readdirSync(artifactDir).sort()
+    console.log(JSON.stringify({ pass: true, artifactDir, screenshots, ffmpeg: hasFfmpeg() }))
   } finally {
     await browser.close().catch(() => {})
     server.kill('SIGKILL')
