@@ -1,23 +1,39 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { PortalButton, PortalPageFrame, PortalPageHeader } from '@/components/portal/PortalUI'
-import { DocumentCreatorEditor } from '@/components/portal/DocumentCreatorEditor'
+import { DocumentCreatorEditor, type DocumentCreatorEditorHandle } from '@/components/portal/DocumentCreatorEditor'
+import { DocumentCreatorPaperPreview } from '@/components/portal/DocumentCreatorPaperPreview'
 import { DocumentCreatorPdfPreview } from '@/components/portal/DocumentCreatorPdfPreview'
-import type { LuxorCreatedDocumentRow } from '@/lib/luxorDocumentCreatorTypes'
-import { ArrowLeft, FileText } from '@/lib/icons/phosphor-compat'
+import { DocumentCreatorStepper } from '@/components/portal/DocumentCreatorStepper'
+import type { LuxorCreatedDocumentRow, LuxorCreatedDocumentType } from '@/lib/luxorDocumentCreatorTypes'
+import { ArrowLeft, ChevronDown, FileText } from '@/lib/icons/phosphor-compat'
 
 type Props = {
   initial?: LuxorCreatedDocumentRow | null
 }
 
+type FormPreview = {
+  title: string
+  documentType: LuxorCreatedDocumentType
+  bodyHtml: string
+}
+
 export function DocumentCreatorWorkbench({ initial }: Props) {
   const router = useRouter()
+  const editorRef = useRef<DocumentCreatorEditorHandle>(null)
   const [record, setRecord] = useState<LuxorCreatedDocumentRow | null>(initial ?? null)
   const [signedUrl, setSignedUrl] = useState<string | null>(null)
   const [previewLoading, setPreviewLoading] = useState(false)
   const [previewError, setPreviewError] = useState<string | null>(null)
+  const [formOpen, setFormOpen] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [form, setForm] = useState<FormPreview>({
+    title: initial?.title || '',
+    documentType: initial?.document_type || 'venue_use_agreement',
+    bodyHtml: initial?.body_html || '',
+  })
 
   const refreshPreview = useCallback(async (document: LuxorCreatedDocumentRow) => {
     setPreviewLoading(true)
@@ -39,49 +55,113 @@ export function DocumentCreatorWorkbench({ initial }: Props) {
     if (record) void refreshPreview(record)
   }, [record?.id, record?.version, refreshPreview])
 
+  const onSaved = (document: LuxorCreatedDocumentRow) => {
+    setRecord(document)
+    if (!initial && typeof window !== 'undefined') {
+      window.history.replaceState(null, '', `/portal/operations/documents/${document.id}`)
+    }
+    void refreshPreview(document)
+  }
+
+  const runSave = async (mode: 'draft' | 'template') => {
+    setSaving(true)
+    try {
+      const result = mode === 'draft' ? await editorRef.current?.saveDraft() : await editorRef.current?.saveTemplate()
+      if (result) onSaved(result)
+    } finally {
+      setSaving(false)
+    }
+  }
+
   return (
-    <PortalPageFrame className="h-full min-h-0 gap-4 overflow-hidden">
-      <PortalPageHeader
-        icon={<FileText size={18} />}
-        title={record?.title || 'New document'}
-        actions={(
-          <PortalButton type="button" variant="secondary" onClick={() => router.push('/portal/operations?tab=documents')}>
-            <ArrowLeft size={14} />
-            Back to library
+    <PortalPageFrame className="h-full min-h-0 gap-4 overflow-hidden pb-[calc(4.5rem+env(safe-area-inset-bottom))] min-[1280px]:pb-0">
+      <div className="flex min-w-0 flex-col gap-3 min-[1280px]:flex-row min-[1280px]:items-end min-[1280px]:justify-between">
+        <div className="min-w-0 flex-1 space-y-3">
+          <PortalPageHeader
+            icon={<FileText size={18} />}
+            title={record?.title || form.title || 'New document'}
+            hideBackButton
+            mobileActionsInline
+            actions={(
+              <PortalButton type="button" variant="secondary" className="min-h-11" onClick={() => router.push('/portal/operations?tab=documents')}>
+                <ArrowLeft size={14} />
+                Back
+              </PortalButton>
+            )}
+          />
+          <DocumentCreatorStepper />
+        </div>
+        <div className="hidden min-[1280px]:flex shrink-0 flex-wrap gap-2">
+          <PortalButton type="button" variant="secondary" className="min-h-11" disabled={saving} onClick={() => void runSave('template')}>
+            Save as template
           </PortalButton>
-        )}
-      />
-      <div className="grid min-h-0 flex-1 gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
-        <DocumentCreatorEditor
-          initial={record}
-          previewBusy={previewLoading}
-          onSaved={(document) => {
-            setRecord(document)
-            if (!initial && typeof window !== 'undefined') {
-              window.history.replaceState(null, '', `/portal/operations/documents/${document.id}`)
-            }
-          }}
-          onPreviewRequest={(document) => void refreshPreview(document)}
-        />
-        <PreviewPanel
-          signedUrl={signedUrl}
-          title={record?.title || 'Document'}
-          loading={previewLoading}
-          error={previewError}
-        />
+          <PortalButton type="button" variant="primary" className="min-h-11" disabled={saving} onClick={() => void runSave('draft')}>
+            Save draft
+          </PortalButton>
+        </div>
+      </div>
+
+      <div className="min-h-0 flex-1 overflow-y-auto portal-scrollbar min-[1280px]:overflow-hidden">
+        <div className="flex min-h-0 flex-col gap-4 min-[1280px]:grid min-[1280px]:h-full min-[1280px]:grid-cols-[360px_minmax(0,1fr)_260px] min-[1280px]:gap-5 min-[1280px]:overflow-hidden">
+          <section className="min-h-0 min-[1280px]:overflow-y-auto min-[1280px]:portal-scrollbar">
+            <button
+              type="button"
+              className="mb-2 flex min-h-11 w-full items-center justify-between rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 text-left text-sm font-semibold text-[color:var(--portal-text)] min-[1280px]:hidden focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45"
+              aria-expanded={formOpen}
+              aria-controls="document-creator-form-panel"
+              onClick={() => setFormOpen((value) => !value)}
+            >
+              Document details
+              <ChevronDown size={16} className={`text-[color:var(--portal-muted)] transition-transform motion-reduce:transition-none ${formOpen ? 'rotate-180' : ''}`} />
+            </button>
+            <div
+              id="document-creator-form-panel"
+              className="grid overflow-hidden transition-[grid-template-rows] duration-[420ms] ease-[cubic-bezier(0.4,0,0.2,1)] motion-reduce:transition-none min-[1280px]:!grid-rows-[1fr]"
+              style={{ gridTemplateRows: formOpen ? '1fr' : '0fr' }}
+              inert={!formOpen ? true : undefined}
+              aria-hidden={!formOpen}
+            >
+              <div className="min-h-0 overflow-hidden min-[1280px]:overflow-visible">
+                <DocumentCreatorEditor ref={editorRef} initial={record} onSaved={onSaved} onFormChange={setForm} />
+              </div>
+            </div>
+          </section>
+
+          <section className="flex min-h-0 flex-col gap-2 min-[1280px]:overflow-y-auto min-[1280px]:portal-scrollbar">
+            <p className="text-xs font-medium text-[color:var(--portal-muted)] min-[1280px]:sr-only">Live paper preview</p>
+            <DocumentCreatorPaperPreview
+              title={form.title}
+              documentType={form.documentType}
+              bodyHtml={form.bodyHtml}
+              className="w-full min-[1280px]:max-w-[612px] min-[1280px]:justify-self-center"
+            />
+          </section>
+
+          <section className="hidden min-h-0 flex-col gap-2 min-[1280px]:flex min-[1280px]:overflow-hidden">
+            <div>
+              <h2 className="text-sm font-semibold text-[color:var(--portal-text)]">PDF preview</h2>
+              <p className="text-xs text-[color:var(--portal-muted)]">Server-rendered file with tabular page numbers.</p>
+            </div>
+            <DocumentCreatorPdfPreview
+              signedUrl={signedUrl}
+              title={form.title || 'Document'}
+              loading={previewLoading}
+              error={previewError}
+            />
+          </section>
+        </div>
+      </div>
+
+      <div className="fixed inset-x-0 bottom-0 z-20 border-t border-[color:var(--portal-border)] bg-[color:var(--portal-frame)] p-3 min-[1280px]:hidden">
+        <div className="mx-auto flex max-w-xl flex-col gap-2">
+          <PortalButton type="button" variant="primary" className="min-h-11 w-full" disabled={saving} onClick={() => void runSave('draft')}>
+            Save draft
+          </PortalButton>
+          <PortalButton type="button" variant="secondary" className="min-h-11 w-full" disabled={saving} onClick={() => void runSave('template')}>
+            Save as template
+          </PortalButton>
+        </div>
       </div>
     </PortalPageFrame>
-  )
-}
-
-function PreviewPanel(props: { signedUrl: string | null; title: string; loading: boolean; error: string | null }) {
-  return (
-    <section className="flex min-h-[320px] flex-col gap-2 overflow-hidden">
-      <div>
-        <h2 className="text-sm font-semibold text-[color:var(--portal-text)]">PDF preview</h2>
-        <p className="text-xs text-[color:var(--portal-muted)]">Luxor header, footer, and page numbers from the server renderer.</p>
-      </div>
-      <DocumentCreatorPdfPreview {...props} />
-    </section>
   )
 }

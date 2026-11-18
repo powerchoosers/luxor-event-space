@@ -1,18 +1,22 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useState, type ReactNode } from 'react'
 import { useRouter } from 'next/navigation'
 import {
+  PortalAnimatedTabs,
   PortalButton,
   PortalCardSkeleton,
+  PortalCheckbox,
   PortalDatePicker,
+  PortalEmptyState,
   PortalFilterBar,
+  PortalMobileTabPicker,
+  PortalMobileTabTrigger,
   PortalSelect,
   PortalStatusBadge,
   PortalStickyTable,
   PortalStickyThead,
   PortalTableCard,
-  type PortalStatusTone,
 } from '@/components/portal/PortalUI'
 import {
   displayStatusForDocument,
@@ -21,15 +25,14 @@ import {
   LUXOR_CREATED_DOCUMENT_TYPES,
   LUXOR_CREATED_DOCUMENT_TYPE_LABELS,
   type LuxorCreatedDocumentLibrarySection,
-  type LuxorCreatedDocumentStatus,
   type LuxorCreatedDocumentSummary,
 } from '@/lib/luxorDocumentCreatorTypes'
-import { ChevronRight, Copy, FileText, Plus } from '@/lib/icons/phosphor-compat'
+import { createdDocumentStatusPresentation } from '@/lib/luxorDocumentCreatorStatus'
+import { ChevronRight, Copy, FileText } from '@/lib/icons/phosphor-compat'
 
-const sections: Array<{ id: LuxorCreatedDocumentLibrarySection; label: string; description: string }> = [
-  { id: 'my_documents', label: 'My Documents', description: 'Draft agreements you are working on.' },
-  { id: 'templates', label: 'Templates', description: 'Reusable starting points for new drafts.' },
-  { id: 'archived', label: 'Archived', description: 'Documents removed from active lists.' },
+const libraryTabs: Array<{ id: Exclude<LuxorCreatedDocumentLibrarySection, 'archived'>; label: string; description: string; icon: ReactNode; group: string }> = [
+  { id: 'my_documents', label: 'Documents', description: 'Drafts and in-progress agreements.', icon: <FileText size={15} />, group: 'Library' },
+  { id: 'templates', label: 'Templates', description: 'Reusable starting points for new drafts.', icon: <FileText size={15} />, group: 'Library' },
 ]
 
 const typeFilterOptions = [
@@ -39,19 +42,23 @@ const typeFilterOptions = [
 
 const statusFilterOptions = [
   { value: 'all', label: 'All statuses' },
-  ...LUXOR_CREATED_DOCUMENT_STATUSES.map((value) => ({ value, label: LUXOR_CREATED_DOCUMENT_STATUS_LABELS[value] })),
+  ...LUXOR_CREATED_DOCUMENT_STATUSES.filter((value) => value !== 'archived').map((value) => ({
+    value,
+    label: value === 'signed' ? 'Fully signed' : LUXOR_CREATED_DOCUMENT_STATUS_LABELS[value],
+  })),
 ]
 
-function statusTone(status: LuxorCreatedDocumentStatus): PortalStatusTone {
-  if (status === 'archived') return 'neutral'
-  if (status === 'template') return 'warning'
-  if (status === 'draft') return 'neutral'
-  return 'neutral'
+function formatLastChange(value: string) {
+  const parsed = new Date(value)
+  if (Number.isNaN(parsed.getTime())) return '—'
+  return parsed.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })
 }
 
 export function DocumentCreatorLibrary() {
   const router = useRouter()
-  const [section, setSection] = useState<LuxorCreatedDocumentLibrarySection>('my_documents')
+  const [primaryTab, setPrimaryTab] = useState<Exclude<LuxorCreatedDocumentLibrarySection, 'archived'>>('my_documents')
+  const [showArchived, setShowArchived] = useState(false)
+  const [pickerOpen, setPickerOpen] = useState(false)
   const [search, setSearch] = useState('')
   const [typeFilter, setTypeFilter] = useState('all')
   const [statusFilter, setStatusFilter] = useState('all')
@@ -63,6 +70,8 @@ export function DocumentCreatorLibrary() {
   const [error, setError] = useState('')
   const [busyId, setBusyId] = useState<string | null>(null)
 
+  const section: LuxorCreatedDocumentLibrarySection = showArchived ? 'archived' : primaryTab
+
   const load = useCallback(async () => {
     setLoading(true)
     setError('')
@@ -70,7 +79,7 @@ export function DocumentCreatorLibrary() {
       const params = new URLSearchParams({ section })
       if (search.trim()) params.set('search', search.trim())
       if (typeFilter !== 'all') params.set('type', typeFilter)
-      if (statusFilter !== 'all' && section !== 'archived') params.set('status', statusFilter)
+      if (statusFilter !== 'all' && !showArchived) params.set('status', statusFilter)
       if (dateFrom) params.set('from', new Date(`${dateFrom}T00:00:00.000Z`).toISOString())
       if (dateTo) params.set('to', new Date(`${dateTo}T23:59:59.999Z`).toISOString())
       const response = await fetch(`/api/operations/documents?${params.toString()}`, { cache: 'no-store' })
@@ -83,13 +92,11 @@ export function DocumentCreatorLibrary() {
     } finally {
       setLoading(false)
     }
-  }, [dateFrom, dateTo, search, section, statusFilter, typeFilter])
+  }, [dateFrom, dateTo, search, section, showArchived, statusFilter, typeFilter])
 
   useEffect(() => {
     void load()
   }, [load])
-
-  const sectionMeta = useMemo(() => sections.find((item) => item.id === section) ?? sections[0], [section])
 
   const runArchive = async (document: LuxorCreatedDocumentSummary, action: 'archive' | 'restore') => {
     setBusyId(document.id)
@@ -125,37 +132,60 @@ export function DocumentCreatorLibrary() {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-hidden">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div className="min-w-0">
-          <p className="text-[9px] font-black uppercase tracking-[0.2em] text-[#a8792f] dark:text-[#caa24c]">Document creator</p>
-          <h2 className="mt-1 text-lg font-semibold tracking-tight text-[color:var(--portal-text)]">{sectionMeta.label}</h2>
-          <p className="mt-1 max-w-2xl text-xs leading-5 text-[color:var(--portal-muted)]">{sectionMeta.description}</p>
-        </div>
-        <PortalButton variant="primary" type="button" onClick={() => router.push('/portal/operations/documents/new')}>
-          <Plus size={14} />
-          New document
-        </PortalButton>
-      </div>
+      <PortalMobileTabPicker
+        tabs={libraryTabs}
+        activeTab={primaryTab}
+        open={pickerOpen}
+        onOpenChange={setPickerOpen}
+        onTabChange={(tab) => {
+          if (tab === 'my_documents' || tab === 'templates') setPrimaryTab(tab)
+        }}
+        title="Document library"
+        subtitle="Documents or templates."
+        triggerLabel="Library view"
+      />
+      <PortalMobileTabTrigger
+        tabs={libraryTabs}
+        activeTab={primaryTab}
+        onClick={() => setPickerOpen(true)}
+        triggerLabel="Library view"
+      />
 
-      <div className="flex flex-wrap gap-2">
-        {sections.map((item) => (
-          <PortalButton
-            key={item.id}
-            type="button"
-            variant={section === item.id ? 'primary' : 'secondary'}
-            onClick={() => setSection(item.id)}
-          >
-            {item.label}
-          </PortalButton>
-        ))}
+      <div className="hidden min-[1280px]:flex">
+        <PortalAnimatedTabs
+          variant="slider"
+          ariaLabel="Document library"
+          tabs={libraryTabs}
+          activeTab={primaryTab}
+          onTabChange={(tab) => {
+            if (tab === 'my_documents' || tab === 'templates') {
+              setPrimaryTab(tab)
+              setShowArchived(false)
+            }
+          }}
+        />
       </div>
 
       <PortalFilterBar searchValue={search} onSearchChange={setSearch} searchPlaceholder="Search by title">
-        <div className="grid w-full gap-2 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="grid w-full gap-3 min-[1280px]:grid-cols-2 xl:grid-cols-4">
           <PortalSelect value={typeFilter} onChange={setTypeFilter} options={typeFilterOptions} aria-label="Document type filter" />
-          <PortalSelect value={statusFilter} onChange={setStatusFilter} options={statusFilterOptions} aria-label="Status filter" />
+          <PortalSelect
+            value={statusFilter}
+            onChange={setStatusFilter}
+            options={statusFilterOptions}
+            aria-label="Status filter"
+            disabled={showArchived}
+          />
           <PortalDatePicker value={dateFrom} onChange={setDateFrom} placeholder="Updated from" />
           <PortalDatePicker value={dateTo} onChange={setDateTo} placeholder="Updated to" />
+        </div>
+        <div className="mt-3 border-t border-[color:var(--portal-border)] pt-3">
+          <PortalCheckbox
+            checked={showArchived}
+            onChange={setShowArchived}
+            label="Show archived"
+            sublabel="Archived documents from every type"
+          />
         </div>
       </PortalFilterBar>
 
@@ -170,11 +200,22 @@ export function DocumentCreatorLibrary() {
         {loading ? (
           <PortalCardSkeleton count={5} />
         ) : documents.length === 0 ? (
-          <div className="flex flex-col items-center justify-center gap-3 px-6 py-16 text-center">
-            <FileText size={28} className="text-[color:var(--portal-faint)]" />
-            <p className="text-sm font-semibold text-[color:var(--portal-text)]">No documents in this view</p>
-            <p className="max-w-md text-xs text-[color:var(--portal-muted)]">Create a draft or save a template to see it here.</p>
-          </div>
+          <PortalEmptyState
+            icon={<FileText size={24} />}
+            title={showArchived ? 'No archived documents' : primaryTab === 'templates' ? 'No templates yet' : 'No documents yet'}
+            description={
+              showArchived
+                ? 'Archived agreements appear here when you archive them from Documents or Templates.'
+                : 'Create a new document from Operations, or save a draft as a template for next time.'
+            }
+            action={
+              !showArchived ? (
+                <PortalButton type="button" variant="primary" className="min-h-11" onClick={() => router.push('/portal/operations/documents/new')}>
+                  New document
+                </PortalButton>
+              ) : null
+            }
+          />
         ) : (
           <PortalStickyTable>
             <PortalStickyThead>
@@ -182,40 +223,72 @@ export function DocumentCreatorLibrary() {
                 <th className="text-left">Title</th>
                 <th className="text-left">Type</th>
                 <th className="text-left">Status</th>
-                <th className="text-left">Updated</th>
+                <th className="text-left">Recipients</th>
+                <th className="text-left">Last change</th>
                 <th className="text-right">Actions</th>
               </tr>
             </PortalStickyThead>
             <tbody>
               {documents.map((document) => {
                 const status = displayStatusForDocument(document)
+                const presentation = createdDocumentStatusPresentation(status)
                 return (
                   <tr key={document.id}>
-                    <td className="font-medium text-[color:var(--portal-text)]">{document.title}</td>
-                    <td>{LUXOR_CREATED_DOCUMENT_TYPE_LABELS[document.document_type]}</td>
+                    <td className="max-w-[16rem] font-medium text-[color:var(--portal-text)]">
+                      <button
+                        type="button"
+                        className="text-left hover:text-[#8c6424] dark:hover:text-[#f1d27a] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45"
+                        onClick={() => router.push(`/portal/operations/documents/${document.id}`)}
+                      >
+                        {document.title}
+                      </button>
+                    </td>
+                    <td className="text-[color:var(--portal-muted)]">{LUXOR_CREATED_DOCUMENT_TYPE_LABELS[document.document_type]}</td>
                     <td>
-                      <PortalStatusBadge status={LUXOR_CREATED_DOCUMENT_STATUS_LABELS[status]} tone={statusTone(status)} />
+                      <PortalStatusBadge status={presentation.label} tone={presentation.tone} />
                     </td>
-                    <td className="tabular-nums text-[color:var(--portal-muted)]">
-                      {new Date(document.updated_at).toLocaleString()}
-                    </td>
+                    <td className="tabular-nums text-[color:var(--portal-faint)]">—</td>
+                    <td className="tabular-nums text-[color:var(--portal-muted)]">{formatLastChange(document.updated_at)}</td>
                     <td>
                       <div className="flex flex-wrap items-center justify-end gap-2">
-                        <PortalButton type="button" variant="secondary" onClick={() => router.push(`/portal/operations/documents/${document.id}`)}>
+                        <PortalButton
+                          type="button"
+                          variant="secondary"
+                          className="min-h-11"
+                          onClick={() => router.push(`/portal/operations/documents/${document.id}`)}
+                        >
                           Open <ChevronRight size={12} />
                         </PortalButton>
-                        {section === 'templates' ? (
-                          <PortalButton type="button" variant="secondary" disabled={busyId === document.id} onClick={() => void runDuplicate(document)}>
+                        {primaryTab === 'templates' && !showArchived ? (
+                          <PortalButton
+                            type="button"
+                            variant="secondary"
+                            className="min-h-11"
+                            disabled={busyId === document.id}
+                            onClick={() => void runDuplicate(document)}
+                          >
                             <Copy size={12} />
                             Duplicate
                           </PortalButton>
                         ) : null}
-                        {section !== 'archived' ? (
-                          <PortalButton type="button" variant="secondary" disabled={busyId === document.id} onClick={() => void runArchive(document, 'archive')}>
+                        {!showArchived ? (
+                          <PortalButton
+                            type="button"
+                            variant="ghost"
+                            className="min-h-11"
+                            disabled={busyId === document.id}
+                            onClick={() => void runArchive(document, 'archive')}
+                          >
                             Archive
                           </PortalButton>
                         ) : (
-                          <PortalButton type="button" variant="secondary" disabled={busyId === document.id} onClick={() => void runArchive(document, 'restore')}>
+                          <PortalButton
+                            type="button"
+                            variant="secondary"
+                            className="min-h-11"
+                            disabled={busyId === document.id}
+                            onClick={() => void runArchive(document, 'restore')}
+                          >
                             Unarchive
                           </PortalButton>
                         )}

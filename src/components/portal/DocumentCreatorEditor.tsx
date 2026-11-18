@@ -1,13 +1,12 @@
 'use client'
 
 import type { ReactNode } from 'react'
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react'
 import { useEditor, EditorContent } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import Underline from '@tiptap/extension-underline'
 import Placeholder from '@tiptap/extension-placeholder'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
-  PortalButton,
   PortalSelect,
   PortalStatusBadge,
 } from '@/components/portal/PortalUI'
@@ -24,23 +23,25 @@ const typeOptions = LUXOR_CREATED_DOCUMENT_TYPES.map((value) => ({
   label: LUXOR_CREATED_DOCUMENT_TYPE_LABELS[value],
 }))
 
-const steps: Array<{ id: string; label: string; disabled?: boolean; hint?: string }> = [
-  { id: 'create', label: 'Create' },
-  { id: 'fields', label: 'Fields', disabled: true, hint: 'Coming soon' },
-  { id: 'send', label: 'Send', disabled: true, hint: 'Coming soon' },
-]
-
 const editorFieldClass =
-  'w-full rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-2 text-sm text-[color:var(--portal-text)] outline-none transition-colors placeholder:text-[color:var(--portal-faint)] focus:border-[#caa24c]/45 focus:ring-2 focus:ring-[#caa24c]/10'
+  'w-full min-h-11 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-2 text-sm text-[color:var(--portal-text)] outline-none transition-colors placeholder:text-[color:var(--portal-faint)] focus:border-[#caa24c]/45 focus:ring-2 focus:ring-[#caa24c]/10'
+
+export type DocumentCreatorEditorHandle = {
+  saveDraft: () => Promise<LuxorCreatedDocumentRow | null>
+  saveTemplate: () => Promise<LuxorCreatedDocumentRow | null>
+  isSaving: boolean
+}
 
 type Props = {
   initial?: LuxorCreatedDocumentRow | null
   onSaved?: (document: LuxorCreatedDocumentRow) => void
-  onPreviewRequest?: (document: LuxorCreatedDocumentRow) => void
-  previewBusy?: boolean
+  onFormChange?: (form: { title: string; documentType: LuxorCreatedDocumentType; bodyHtml: string }) => void
 }
 
-export function DocumentCreatorEditor({ initial, onSaved, onPreviewRequest, previewBusy }: Props) {
+export const DocumentCreatorEditor = forwardRef<DocumentCreatorEditorHandle, Props>(function DocumentCreatorEditor(
+  { initial, onSaved, onFormChange },
+  ref,
+) {
   const [title, setTitle] = useState(initial?.title || '')
   const [documentType, setDocumentType] = useState<LuxorCreatedDocumentType>(initial?.document_type || 'venue_use_agreement')
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
@@ -48,6 +49,10 @@ export function DocumentCreatorEditor({ initial, onSaved, onPreviewRequest, prev
   const [record, setRecord] = useState<LuxorCreatedDocumentRow | null>(initial ?? null)
   const autosaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const dirtyRef = useRef(false)
+  const titleRef = useRef(title)
+  const documentTypeRef = useRef(documentType)
+  titleRef.current = title
+  documentTypeRef.current = documentType
 
   const editor = useEditor({
     extensions: [
@@ -60,15 +65,33 @@ export function DocumentCreatorEditor({ initial, onSaved, onPreviewRequest, prev
     content: initial?.body_json || { type: 'doc', content: [{ type: 'paragraph' }] },
     editorProps: {
       attributes: {
-        class: 'min-h-[320px] px-3 py-3 text-sm leading-relaxed text-[color:var(--portal-text)] outline-none focus:outline-none [&_h1]:text-xl [&_h1]:font-semibold [&_h2]:text-lg [&_h2]:font-semibold [&_h3]:text-base [&_h3]:font-semibold [&_p]:my-2 [&_ul]:my-2 [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:my-2 [&_ol]:list-decimal [&_ol]:pl-5',
+        class: 'min-h-[240px] px-3 py-3 text-sm leading-relaxed text-[color:var(--portal-text)] outline-none focus:outline-none [&_h1]:text-xl [&_h1]:font-semibold [&_h2]:text-lg [&_h2]:font-semibold [&_h3]:text-base [&_h3]:font-semibold [&_p]:my-2 [&_ul]:my-2 [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:my-2 [&_ol]:list-decimal [&_ol]:pl-5',
       },
     },
-    onUpdate: () => {
+    onUpdate: ({ editor: tiptap }) => {
       dirtyRef.current = true
       setSaveState('idle')
+      onFormChange?.({
+        title: titleRef.current,
+        documentType: documentTypeRef.current,
+        bodyHtml: tiptap.getHTML(),
+      })
     },
     immediatelyRender: false,
   })
+
+  const emitFormChange = useCallback(() => {
+    if (!editor) return
+    onFormChange?.({
+      title,
+      documentType,
+      bodyHtml: editor.getHTML(),
+    })
+  }, [documentType, editor, onFormChange, title])
+
+  useEffect(() => {
+    emitFormChange()
+  }, [emitFormChange])
 
   const payload = useCallback(() => {
     if (!editor) return null
@@ -136,6 +159,12 @@ export function DocumentCreatorEditor({ initial, onSaved, onPreviewRequest, prev
     }
   }, [onSaved, payload, record])
 
+  useImperativeHandle(ref, () => ({
+    saveDraft: () => persist(false),
+    saveTemplate: () => persist(true),
+    isSaving: saveState === 'saving',
+  }), [persist, saveState])
+
   useEffect(() => {
     if (!record || !dirtyRef.current) return
     if (autosaveTimer.current) clearTimeout(autosaveTimer.current)
@@ -147,94 +176,75 @@ export function DocumentCreatorEditor({ initial, onSaved, onPreviewRequest, prev
     }
   }, [title, documentType, editor, persist, record])
 
-  const autosaveLabel = useMemo(() => {
-    if (saveState === 'saving') return 'Saving…'
-    if (saveState === 'saved' && record) return `Saved · v${record.version}`
-    if (saveState === 'error') return 'Save failed'
-    if (dirtyRef.current) return 'Unsaved changes'
-    return record ? `Draft · v${record.version}` : 'New draft'
-  }, [record, saveState])
+  const autosaveLabel =
+    saveState === 'saving'
+      ? 'Saving…'
+      : saveState === 'saved' && record
+        ? `Saved · v${record.version}`
+        : saveState === 'error'
+          ? 'Save failed'
+          : dirtyRef.current
+            ? 'Unsaved changes'
+            : record
+              ? `Draft · v${record.version}`
+              : 'New draft'
 
   const runHeading = (level: 1 | 2 | 3) => {
     editor?.chain().focus().toggleHeading({ level }).run()
   }
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-4">
-      <ol className="flex flex-wrap items-center gap-2" aria-label="Document steps">
-        {steps.map((step, index) => (
-          <li key={step.id} className="flex items-center gap-2">
-            <span
-              className={`inline-flex items-center gap-2 rounded-lg border px-3 py-1.5 text-xs font-semibold ${
-                step.id === 'create'
-                  ? 'border-[#caa24c]/35 bg-[#caa24c]/10 text-[#8c6529] dark:text-[#f1d27a]'
-                  : 'border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] text-[color:var(--portal-muted)] opacity-70'
-              }`}
-              aria-disabled={step.disabled || undefined}
-            >
-              <span className="tabular-nums">{index + 1}</span>
-              {step.label}
-              {step.hint ? <span className="font-normal text-[10px] uppercase tracking-wide">{step.hint}</span> : null}
-            </span>
-            {index < steps.length - 1 ? <span className="hidden text-[color:var(--portal-faint)] sm:inline">→</span> : null}
-          </li>
-        ))}
-      </ol>
+    <div className="space-y-4 rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-4 sm:p-5">
+      <div className="flex items-center justify-between gap-2">
+        <h2 className="text-sm font-semibold text-[color:var(--portal-text)]">Create</h2>
+        <PortalStatusBadge status={autosaveLabel} tone="neutral" />
+      </div>
+      <label className="block space-y-1.5">
+        <span className="text-xs font-medium text-[color:var(--portal-muted)]">Title</span>
+        <input
+          className={editorFieldClass}
+          value={title}
+          onChange={(event) => {
+            setTitle(event.target.value)
+            queueMicrotask(emitFormChange)
+          }}
+          maxLength={300}
+        />
+      </label>
+      <label className="block space-y-1.5">
+        <span className="text-xs font-medium text-[color:var(--portal-muted)]">Document type</span>
+        <PortalSelect
+          value={documentType}
+          onChange={(value) => {
+            setDocumentType(value as LuxorCreatedDocumentType)
+            queueMicrotask(emitFormChange)
+          }}
+          options={typeOptions}
+          aria-label="Document type"
+        />
+      </label>
 
-      <section className="space-y-4 rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-4 sm:p-5">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <h2 className="text-sm font-semibold text-[color:var(--portal-text)]">Create document</h2>
-            <PortalStatusBadge status={autosaveLabel} tone="neutral" />
-          </div>
-          <label className="block space-y-1.5">
-            <span className="text-xs font-medium text-[color:var(--portal-muted)]">Title</span>
-            <input className={editorFieldClass} value={title} onChange={(event) => setTitle(event.target.value)} maxLength={300} />
-          </label>
-          <label className="block space-y-1.5">
-            <span className="text-xs font-medium text-[color:var(--portal-muted)]">Document type</span>
-            <PortalSelect value={documentType} onChange={(value) => setDocumentType(value as LuxorCreatedDocumentType)} options={typeOptions} aria-label="Document type" />
-          </label>
+      <div className="space-y-2">
+        <div className="flex flex-wrap items-center gap-1 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-1">
+          <ToolbarButton label="Bold" active={editor?.isActive('bold')} onClick={() => editor?.chain().focus().toggleBold().run()}><Bold size={14} /></ToolbarButton>
+          <ToolbarButton label="Italic" active={editor?.isActive('italic')} onClick={() => editor?.chain().focus().toggleItalic().run()}><Italic size={14} /></ToolbarButton>
+          <ToolbarButton label="Underline" active={editor?.isActive('underline')} onClick={() => editor?.chain().focus().toggleUnderline().run()}><UnderlineIcon size={14} /></ToolbarButton>
+          <ToolbarButton label="Heading 1" active={editor?.isActive('heading', { level: 1 })} onClick={() => runHeading(1)}>H1</ToolbarButton>
+          <ToolbarButton label="Heading 2" active={editor?.isActive('heading', { level: 2 })} onClick={() => runHeading(2)}>H2</ToolbarButton>
+          <ToolbarButton label="Heading 3" active={editor?.isActive('heading', { level: 3 })} onClick={() => runHeading(3)}>H3</ToolbarButton>
+          <ToolbarButton label="Bullet list" active={editor?.isActive('bulletList')} onClick={() => editor?.chain().focus().toggleBulletList().run()}><List size={14} /></ToolbarButton>
+          <ToolbarButton label="Numbered list" active={editor?.isActive('orderedList')} onClick={() => editor?.chain().focus().toggleOrderedList().run()}><ListTodo size={14} /></ToolbarButton>
+        </div>
+        <fieldset className="overflow-hidden rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]">
+          <legend className="sr-only">Agreement body</legend>
+          <EditorContent editor={editor} />
+        </fieldset>
+      </div>
 
-          <div className="space-y-2">
-            <div className="flex flex-wrap items-center gap-1 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-1">
-              <ToolbarButton label="Bold" active={editor?.isActive('bold')} onClick={() => editor?.chain().focus().toggleBold().run()}><Bold size={14} /></ToolbarButton>
-              <ToolbarButton label="Italic" active={editor?.isActive('italic')} onClick={() => editor?.chain().focus().toggleItalic().run()}><Italic size={14} /></ToolbarButton>
-              <ToolbarButton label="Underline" active={editor?.isActive('underline')} onClick={() => editor?.chain().focus().toggleUnderline().run()}><UnderlineIcon size={14} /></ToolbarButton>
-              <ToolbarButton label="Heading 1" active={editor?.isActive('heading', { level: 1 })} onClick={() => runHeading(1)}>H1</ToolbarButton>
-              <ToolbarButton label="Heading 2" active={editor?.isActive('heading', { level: 2 })} onClick={() => runHeading(2)}>H2</ToolbarButton>
-              <ToolbarButton label="Heading 3" active={editor?.isActive('heading', { level: 3 })} onClick={() => runHeading(3)}>H3</ToolbarButton>
-              <ToolbarButton label="Bullet list" active={editor?.isActive('bulletList')} onClick={() => editor?.chain().focus().toggleBulletList().run()}><List size={14} /></ToolbarButton>
-              <ToolbarButton label="Numbered list" active={editor?.isActive('orderedList')} onClick={() => editor?.chain().focus().toggleOrderedList().run()}><ListTodo size={14} /></ToolbarButton>
-            </div>
-            <fieldset className="overflow-hidden rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]">
-              <legend className="sr-only">Agreement body</legend>
-              <EditorContent editor={editor} />
-            </fieldset>
-          </div>
-
-          {saveError ? <p role="alert" className="text-xs text-rose-600 dark:text-rose-400">{saveError}</p> : null}
-
-          <div className="flex flex-wrap gap-2">
-            <PortalButton variant="primary" type="button" disabled={saveState === 'saving'} onClick={() => void persist(false)}>Save draft</PortalButton>
-            <PortalButton variant="secondary" type="button" disabled={saveState === 'saving'} onClick={() => void persist(true)}>Save as template</PortalButton>
-            {record ? (
-              <PortalButton
-                variant="secondary"
-                type="button"
-                disabled={previewBusy}
-                onClick={async () => {
-                  const saved = dirtyRef.current ? await persist(false) : record
-                  if (saved) onPreviewRequest?.(saved)
-                }}
-              >
-                Refresh PDF preview
-              </PortalButton>
-            ) : null}
-          </div>
-      </section>
+      {saveError ? <p role="alert" className="text-xs text-rose-600 dark:text-rose-400">{saveError}</p> : null}
     </div>
   )
-}
+})
 
 function ToolbarButton({
   label,

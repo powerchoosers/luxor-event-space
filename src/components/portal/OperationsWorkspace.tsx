@@ -761,7 +761,7 @@ export function OperationsPageContent({ embeddedBills = false }: { embeddedBills
             ) : activeTab === 'vendors' && vendorWorkspaceView === 'roster' ? (
               <PortalButton variant="primary" onClick={() => setIsVendorModalOpen(true)}><Plus size={14} /> Add Vendor</PortalButton>
             ) : activeTab === 'documents' ? (
-              <PortalButton variant="primary" onClick={() => router.push('/portal/operations/documents/new')}><Plus size={14} /> New document</PortalButton>
+              <PortalButton variant="primary" className="min-h-11" onClick={() => router.push('/portal/operations/documents/new')}><Plus size={14} /> New document</PortalButton>
             ) : null}
           </div>
         }
