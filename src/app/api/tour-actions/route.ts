@@ -10,7 +10,9 @@ import {
   processLuxorEmailJobs,
 } from '@/lib/luxorEmailJobsServer'
 import { getLuxorInquiry, updateLuxorInquiry, updateLuxorInquiryIfTourAttendanceStatus } from '@/lib/luxorInquiriesServer'
-import { resolveLuxorTourOutcomePrecondition } from '@/lib/luxorTourOutcome'
+import { canReopenLuxorTourCompletion, resolveLuxorTourOutcomePrecondition } from '@/lib/luxorTourOutcome'
+import { stopLuxorTourAttendedFollowups } from '@/lib/luxorTourReopenServer'
+import { luxorTodayKey } from '@/lib/luxorTourMetrics'
 import { getLuxorLeadEventForInquiry, listLuxorLeadEventsByInquiry, updateLuxorLeadEvent } from '@/lib/luxorLeadEventsServer'
 import { createNote } from '@/lib/luxorNotesServer'
 import { getLuxorPortalSession } from '@/lib/luxorPortalAuth'
@@ -147,6 +149,77 @@ export async function POST(request: NextRequest) {
       const leadEvents = await listLuxorLeadEventsByInquiry(inquiryId)
       const primaryEvents = leadEvents.filter((event) => event.is_primary)
       selectedLeadEvent = primaryEvents.length === 1 ? primaryEvents[0] : null
+    } else if (action === 'reopen-tour' && !selectedLeadEvent) {
+      const leadEvents = await listLuxorLeadEventsByInquiry(inquiryId)
+      const primaryEvents = leadEvents.filter((event) => event.is_primary)
+      selectedLeadEvent = primaryEvents.length === 1 ? primaryEvents[0] : null
+    }
+
+    if (action === 'reopen-tour') {
+      if (inquiry.tour_attendance_status !== 'attended') {
+        return NextResponse.json({ error: 'Only a completed tour can be reopened.' }, { status: 409 })
+      }
+      if (!canReopenLuxorTourCompletion(inquiry, luxorTodayKey())) {
+        return NextResponse.json({ error: 'This tour is already in the past. Reopen is available only before the tour date passes.' }, { status: 409 })
+      }
+      const expectedAttendance = typeof body.expectedAttendance === 'string'
+        ? body.expectedAttendance as LuxorTourAttendanceStatus
+        : body.expectedAttendance === null ? null : undefined
+      const precondition = resolveLuxorTourOutcomePrecondition(inquiry.tour_attendance_status || null, 'pending', expectedAttendance)
+      if (precondition === 'stale') {
+        return NextResponse.json({ error: 'The tour outcome changed since this view loaded. Refresh and try again.' }, { status: 409 })
+      }
+      if (precondition === 'already_applied') {
+        return NextResponse.json({ inquiry, warnings: [], idempotent: true })
+      }
+      const visitId = typeof body.visitId === 'string' ? body.visitId : inquiry.current_tour_visit_id || null
+      const visitVersion = Number.isInteger(body.expectedVisitVersion) ? Number(body.expectedVisitVersion) : inquiry.current_tour_visit_version || 0
+      const calendar = visitId ? null : await getLuxorCalendarEvent(inquiryId)
+      const calendarSequence = Number.isInteger(body.expectedCalendarSequence)
+        ? Number(body.expectedCalendarSequence) : calendar?.sequence ?? -1
+      let postTourFollowUp: { outcome: string; visit_id?: string; version?: number } | null = null
+      try {
+        postTourFollowUp = await supabaseRest('rpc/luxor_record_tour_visit_outcome', {
+          method: 'POST', body: JSON.stringify({
+            p_inquiry_id: inquiryId, p_visit_id: visitId,
+            p_expected_version: visitVersion, p_expected_sequence: calendarSequence,
+            p_attendance: 'pending',
+          }),
+        })
+      } catch (error) {
+        return NextResponse.json({ error: error instanceof Error ? error.message : 'The visit changed before this reopen was saved.' }, { status: 409 })
+      }
+      const updated = await getLuxorInquiry(inquiryId) || inquiry
+      const resolvedVisitId = postTourFollowUp?.visit_id || visitId
+      const warnings: string[] = []
+      try {
+        await stopLuxorTourAttendedFollowups(inquiryId, resolvedVisitId)
+      } catch (error) {
+        console.error('Tour reopened; attended-tour workflow follow-ups need review:', error)
+        warnings.push('The tour was reopened, but automated follow-up workflows could not be stopped. Review the lead before anything sends.')
+      }
+      let updatedLeadEvent = null
+      if (selectedLeadEvent && selectedLeadEvent.pipeline_stage === 'proposal'
+        && PRE_PROPOSAL_STATUSES.has(selectedLeadEvent.status as LuxorInquiryStatus)) {
+        try {
+          updatedLeadEvent = await updateLuxorLeadEvent(selectedLeadEvent.id, {
+            status: 'tour_confirmed',
+            pipeline_stage: 'tour',
+          })
+        } catch (error) {
+          console.error('Tour reopened; linked event stage needs refresh:', error)
+          warnings.push('The tour was reopened, but its linked event stage could not be updated.')
+        }
+      }
+      if (postTourFollowUp?.outcome !== 'already_applied') {
+        try {
+          await createNote(inquiryId, 'Tour completion was reopened. The visit is scheduled again and pending attendance.', 'status_change', session.email)
+        } catch (error) {
+          console.error('Tour reopened; activity note was not recorded:', error)
+          warnings.push('The tour was reopened, but its activity note could not be recorded.')
+        }
+      }
+      return NextResponse.json({ inquiry: updated, leadEvent: updatedLeadEvent, postTourFollowUp, warnings, idempotent: postTourFollowUp?.outcome === 'already_applied' })
     }
 
     if (action === 'cancel-tour' || (action === 'attendance' && body.attendance === 'cancelled')) {

@@ -31,14 +31,14 @@ import {
 } from '@/lib/icons/phosphor-compat'
 import { ArrowsDownUp, CaretDown as PhosphorCaretDown, CaretUp as PhosphorCaretUp } from '@phosphor-icons/react'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { isLuxorInquiryArchived, isLuxorNonRevenueTestInquiry, isLuxorPermanentTestLead, isLuxorTestInquiry, LUXOR_MAX_GUESTS, LuxorInquiry, LuxorInquiryInput, LuxorInquiryStatus, LuxorPipelineStage, normalizeLuxorEventType } from '@/lib/luxorInquiryTypes'
 import { luxorLeadNeedsClientAttention } from '@/lib/luxorClientAttention'
 import { startLuxorBrowserCall } from '@/lib/luxorVoiceClient'
 import { formatPhoneDisplay } from '@/lib/luxorPhoneClient'
 import { isLuxorBounceForCurrentAddress } from '@/lib/luxorEmailBounce'
 import { compareLuxorScheduledTours, formatLuxorTourDate, getLuxorTourSection, luxorTodayKey, type LuxorTourSection } from '@/lib/luxorTourMetrics'
-import { createLuxorTourAttendancePayload } from '@/lib/luxorTourOutcome'
+import { canReopenLuxorTourCompletion, createLuxorTourAttendancePayload, createLuxorTourReopenPayload } from '@/lib/luxorTourOutcome'
 import { MagicCard } from '@/components/ui/magic-card'
 import { LeadsFunnelDashboard } from '@/components/portal/LeadsFunnelDashboard'
 import { getDefaultFunnelWeekRange, getFunnelPeriodFromRange, type FunnelPeriod } from '@/lib/luxorFunnelPeriods'
@@ -139,7 +139,14 @@ function getRequestedTourLanguage(lead: LuxorInquiry) {
 const DEFAULT_LEAD_SORT: TableSort<LeadSortKey> = { key: 'intake', direction: 'desc' }
 const DEFAULT_CLIENT_SORT: TableSort<ClientSortKey> = { key: 'targetDate', direction: 'asc' }
 
-const LEADS_TAB_LABELS: Record<'dashboard' | 'pipeline' | 'tours' | 'proposals' | 'clients' | 'lost' | 'followups', string> = {
+const LEADS_VIEW_TABS = ['dashboard', 'pipeline', 'tours', 'proposals', 'clients', 'lost', 'followups'] as const
+type LeadsViewTab = (typeof LEADS_VIEW_TABS)[number]
+
+function isLeadsViewTab(value: string | null): value is LeadsViewTab {
+  return Boolean(value && (LEADS_VIEW_TABS as readonly string[]).includes(value))
+}
+
+const LEADS_TAB_LABELS: Record<LeadsViewTab, string> = {
   dashboard: 'Funnel Dashboard',
   pipeline: 'Pipeline',
   tours: 'Tours',
@@ -149,26 +156,25 @@ const LEADS_TAB_LABELS: Record<'dashboard' | 'pipeline' | 'tours' | 'proposals' 
   lost: 'Archived',
 }
 
-const LEADS_TABS = ['dashboard', 'pipeline', 'tours', 'proposals', 'clients', 'lost', 'followups'] as const
-type LeadsTab = (typeof LEADS_TABS)[number]
-
-function leadsTabFromView(view: string | null | undefined): LeadsTab | null {
-  if (!view || !LEADS_TABS.includes(view as LeadsTab)) return null
-  return view as LeadsTab
-}
-
 export default function LeadsPage() {
   const router = useRouter()
-  const { notify } = useToast()
+  const searchParams = useSearchParams()
+  const requestedView = searchParams.get('view')
+  const { notify, dismiss } = useToast()
+  const tourCompletionToastIdRef = useRef<string | null>(null)
   const reduceMotion = useReducedMotion()
   const [leads, setLeads] = useState<LuxorInquiry[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [busyTourOutcomeIds, setBusyTourOutcomeIds] = useState<string[]>([])
+  const [tourReopenTarget, setTourReopenTarget] = useState<LuxorInquiry | null>(null)
+  const [tourReopenBusy, setTourReopenBusy] = useState(false)
   const tourOutcomeLocks = useRef(new Set<string>())
   
   // Tab control
-  const [activeTab, setActiveTab] = useState<LeadsTab>('dashboard')
+  const [activeTab, setActiveTab] = useState<LeadsViewTab>(
+    isLeadsViewTab(requestedView) ? requestedView : 'dashboard',
+  )
   const [viewPreferencesReady, setViewPreferencesReady] = useState(false)
   const [isTabMenuOpen, setIsTabMenuOpen] = useState(false)
   const [funnelRange, setFunnelRange] = useState<PortalDateRange>(() => getDefaultFunnelWeekRange())
@@ -216,15 +222,14 @@ export default function LeadsPage() {
   // Restore the saved view before the route's first client paint.
   useLayoutEffect(() => {
     if (typeof window !== 'undefined') {
-      const requestedTab = leadsTabFromView(new URLSearchParams(window.location.search).get('view'))
-      const savedTab = requestedTab ?? (() => {
-        const stored = localStorage.getItem('luxor_leads_active_tab')
-        return stored && LEADS_TABS.includes(stored as LeadsTab) ? stored as LeadsTab : null
-      })()
+      const requestedTab = searchParams.get('view')
+      const savedTab = isLeadsViewTab(requestedTab)
+        ? requestedTab
+        : localStorage.getItem('luxor_leads_active_tab')
       const savedPage = localStorage.getItem('luxor_leads_current_page')
       const savedLeadSort = localStorage.getItem('luxor_leads_table_sort')
       const savedClientSort = localStorage.getItem('luxor_clients_table_sort')
-      if (savedTab) {
+      if (isLeadsViewTab(savedTab)) {
         setActiveTab(savedTab)
       }
       if (savedPage) {
@@ -238,7 +243,7 @@ export default function LeadsPage() {
       }
     }
     setViewPreferencesReady(true)
-  }, [])
+  }, [searchParams])
 
   useEffect(() => {
     fetchLeads()
@@ -293,6 +298,50 @@ export default function LeadsPage() {
     }
   }
 
+  const dismissTourCompletionToast = useCallback(() => {
+    if (tourCompletionToastIdRef.current) {
+      dismiss(tourCompletionToastIdRef.current)
+      tourCompletionToastIdRef.current = null
+    }
+  }, [dismiss])
+
+  const handleTourReopen = async (lead: LuxorInquiry) => {
+    if (tourOutcomeLocks.current.has(lead.id)) return
+    dismissTourCompletionToast()
+    tourOutcomeLocks.current.add(lead.id)
+    setTourReopenBusy(true)
+    setBusyTourOutcomeIds((current) => [...current, lead.id])
+    try {
+      const response = await fetch('/api/tour-actions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(createLuxorTourReopenPayload({
+          inquiryId: lead.id,
+          expectedAttendance: lead.tour_attendance_status || null,
+          visitId: lead.current_tour_visit_id,
+          visitVersion: lead.current_tour_visit_version,
+        })),
+      })
+      const payload = await response.json().catch(() => ({})) as { error?: string; warnings?: string[]; inquiry?: LuxorInquiry }
+      if (!response.ok) throw new Error(payload.error || 'The tour could not be reopened.')
+      const refreshFailed = !await fetchLeads()
+      const warnings = [...(payload.warnings ?? [])]
+      if (refreshFailed) warnings.push('Reload the page to refresh the tour list.')
+      setTourReopenTarget(null)
+      notify({
+        title: 'Tour reopened',
+        description: warnings.length ? warnings.join(' ') : 'The visit is scheduled again. Post-tour follow-ups that had not sent were cancelled.',
+        variant: warnings.length ? 'warning' : 'success',
+      })
+    } catch (error) {
+      notify({ title: 'Tour could not be reopened', description: error instanceof Error ? error.message : 'Please try again.', variant: 'error' })
+    } finally {
+      tourOutcomeLocks.current.delete(lead.id)
+      setTourReopenBusy(false)
+      setBusyTourOutcomeIds((current) => current.filter((id) => id !== lead.id))
+    }
+  }
+
   const handleTourOutcome = async (lead: LuxorInquiry, attendance: 'attended' | 'no_show') => {
     if (tourOutcomeLocks.current.has(lead.id)) return
     tourOutcomeLocks.current.add(lead.id)
@@ -303,12 +352,29 @@ export default function LeadsPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(createLuxorTourAttendancePayload({ inquiryId: lead.id, attendance, expectedAttendance: lead.tour_attendance_status || null, visitId: lead.current_tour_visit_id, visitVersion: lead.current_tour_visit_version })),
       })
-      const payload = await response.json().catch(() => ({})) as { error?: string; warnings?: string[] }
+      const payload = await response.json().catch(() => ({})) as { error?: string; warnings?: string[]; inquiry?: LuxorInquiry }
       if (!response.ok) throw new Error(payload.error || 'Tour outcome could not be saved.')
       const refreshFailed = !await fetchLeads()
       const warnings = [...(payload.warnings ?? [])]
       if (refreshFailed) warnings.push('Reload the page to refresh the tour list.')
-      notify({ title: attendance === 'attended' ? 'Tour marked completed' : 'Tour marked no show', description: warnings.length ? warnings.join(' ') : 'The outcome was saved without sending a message.', variant: warnings.length ? 'warning' : 'success' })
+      const savedLead = payload.inquiry || lead
+      const showUndo = attendance === 'attended' && canReopenLuxorTourCompletion(savedLead)
+      const completionToastId = notify({
+        title: attendance === 'attended' ? 'Tour marked completed' : 'Tour marked no show',
+        description: warnings.length ? warnings.join(' ') : 'The outcome was saved without sending a message.',
+        variant: warnings.length ? 'warning' : 'success',
+        durationMs: showUndo ? 12_000 : undefined,
+        action: showUndo ? (
+          <button
+            type="button"
+            className="text-xs font-semibold text-[#a8792f] hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45"
+            onClick={() => void handleTourReopen(savedLead)}
+          >
+            Undo
+          </button>
+        ) : undefined,
+      })
+      tourCompletionToastIdRef.current = showUndo ? completionToastId : null
     } catch (error) {
       notify({ title: 'Tour outcome could not be confirmed', description: `${error instanceof Error ? error.message : 'Try again.'} Refresh and retrying the same outcome is safe.`, variant: 'error' })
     } finally {
@@ -654,7 +720,7 @@ export default function LeadsPage() {
         {activeTab === 'clients' && <LeadsClientsTab leads={activeLeads} loading={loading} sort={clientSort} onSort={updateClientSort} onOpen={(client) => router.push(`/portal/leads/${client.id}`)} onLifecycleAction={openLeadLifecycleAction} />}
         {activeTab === 'lost' && <LeadsLostTab leads={leads} loading={loading} />}
         {activeTab === 'followups' && <FollowUpsTab leads={leads} onLeadsRefresh={async () => { await fetchLeads() }} />}
-        {activeTab === 'tours' && <LeadsToursTab leads={activeLeads} loading={loading} onLifecycleAction={openLeadLifecycleAction} onTourOutcome={handleTourOutcome} busyTourOutcomeIds={busyTourOutcomeIds} />}
+        {activeTab === 'tours' && <LeadsToursTab leads={activeLeads} loading={loading} onLifecycleAction={openLeadLifecycleAction} onTourOutcome={handleTourOutcome} onTourReopenRequest={setTourReopenTarget} busyTourOutcomeIds={busyTourOutcomeIds} />}
         {activeTab === 'proposals' && <LeadsProposalsTab leads={activeLeads} loading={loading} onLifecycleAction={openLeadLifecycleAction} />}
 
         {activeTab === 'pipeline' && (
@@ -963,6 +1029,15 @@ export default function LeadsPage() {
         busy={bulkBusy === 'delete'}
         onClose={() => setConfirmBulkDelete(false)}
         onConfirm={() => void runLeadBulkAction('delete')}
+      />
+      <PortalBulkConfirmDialog
+        open={Boolean(tourReopenTarget)}
+        title="Reopen this tour?"
+        description="This removes the completed visit mark, returns the lead to the tour stage, and cancels post-tour follow-ups that have not sent yet. Nothing is deleted and no email sends."
+        confirmLabel="Reopen tour"
+        busy={tourReopenBusy}
+        onClose={() => !tourReopenBusy && setTourReopenTarget(null)}
+        onConfirm={() => { if (tourReopenTarget) void handleTourReopen(tourReopenTarget) }}
       />
       <LeadLifecycleActionSheet
         lead={lifecycleLead}
@@ -1604,12 +1679,18 @@ function MobileLeadCard({
     ...(showStatusBadge ? [{ label: lead.status.replaceAll('_', ' '), tone: luxorCrmStatusTone(lead.status) }] : []),
     ...(showPipelineStage ? [{ label: stageLabel, tone: stageTone }] : []),
   ]
+  const attentionBadge = luxorLeadNeedsClientAttention(lead) ? (
+    <span className="inline-flex items-center rounded border border-[#caa24c]/35 bg-[#caa24c]/12 px-1.5 py-0.5 text-[9px] font-semibold text-[#a8792f] dark:text-[#e6c77f]">
+      Needs attention
+    </span>
+  ) : null
 
   return (
     <LuxorCrmRecordCard
       lead={lead}
       listFlush
       badges={badges}
+      headerAction={attentionBadge}
       subtitle={pipelineStage !== 'newsletter' ? <>{lead.event_type || 'Quinceañera'} · {lead.target_date ? formatLuxorTourDate(lead.target_date) : 'Date not set'} · {lead.guest_count || 'Flexible'} guests</> : 'Newsletter contact'}
       contact={<span className="block">{lead.email || 'No email captured'}{lead.phone ? <span className="mt-0.5 block">{formatPhoneDisplay(lead.phone)}</span> : null}</span>}
       onOpen={() => { window.location.href = `/portal/leads/${lead.id}` }}
@@ -1745,12 +1826,14 @@ function LeadsToursTab({
   loading = false,
   onLifecycleAction,
   onTourOutcome,
+  onTourReopenRequest,
   busyTourOutcomeIds,
 }: {
   leads: LuxorInquiry[]
   loading?: boolean
   onLifecycleAction: (lead: LuxorInquiry, action: LeadLifecycleAction) => void
   onTourOutcome: (lead: LuxorInquiry, attendance: 'attended' | 'no_show') => void
+  onTourReopenRequest: (lead: LuxorInquiry) => void
   busyTourOutcomeIds: string[]
 }) {
   type TourView = 'all' | TourCategory
@@ -1897,6 +1980,11 @@ function LeadsToursTab({
               <LuxorCrmSecondaryAction className="w-full" disabled={busyTourOutcomeIds.includes(tour.id)} onClick={() => onTourOutcome(tour, 'attended')}>{busyTourOutcomeIds.includes(tour.id) ? 'Saving…' : tour.tour_attendance_status === 'no_show' ? 'Correct to Completed' : 'Mark Completed'}</LuxorCrmSecondaryAction>
               {!['attended', 'no_show'].includes(tour.tour_attendance_status || '') ? <LuxorCrmSecondaryAction className="w-full" disabled={busyTourOutcomeIds.includes(tour.id)} onClick={() => onTourOutcome(tour, 'no_show')}>{busyTourOutcomeIds.includes(tour.id) ? 'Saving…' : 'Mark No Show'}</LuxorCrmSecondaryAction> : null}
             </div>
+          ) : null}
+          {canReopenLuxorTourCompletion(tour, todayKey) ? (
+            <LuxorCrmSecondaryAction className="w-full" disabled={busyTourOutcomeIds.includes(tour.id)} onClick={() => onTourReopenRequest(tour)}>
+              {busyTourOutcomeIds.includes(tour.id) ? 'Saving…' : 'Reopen tour'}
+            </LuxorCrmSecondaryAction>
           ) : null}
         </div>
       </LuxorCrmRecordCard>

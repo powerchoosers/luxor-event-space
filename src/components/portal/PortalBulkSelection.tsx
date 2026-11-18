@@ -247,7 +247,14 @@ export function PortalBulkConfirmDialog({
   onClose: () => void
 }) {
   return (
-    <PortalModal isOpen={open} onClose={busy ? () => undefined : onClose} title={title} description={description} maxWidth="max-w-md">
+    <PortalModal
+      isOpen={open}
+      onClose={busy ? () => undefined : onClose}
+      title={title}
+      description={description}
+      maxWidth="max-w-md"
+      className="portal-bulk-confirm-surface"
+    >
       <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
         <PortalButton onClick={onClose} disabled={busy}>Cancel</PortalButton>
         <PortalButton variant="danger" onClick={onConfirm} disabled={busy}>
