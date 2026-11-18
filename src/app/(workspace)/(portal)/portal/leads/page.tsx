@@ -149,6 +149,14 @@ const LEADS_TAB_LABELS: Record<'dashboard' | 'pipeline' | 'tours' | 'proposals' 
   lost: 'Archived',
 }
 
+const LEADS_TABS = ['dashboard', 'pipeline', 'tours', 'proposals', 'clients', 'lost', 'followups'] as const
+type LeadsTab = (typeof LEADS_TABS)[number]
+
+function leadsTabFromView(view: string | null | undefined): LeadsTab | null {
+  if (!view || !LEADS_TABS.includes(view as LeadsTab)) return null
+  return view as LeadsTab
+}
+
 export default function LeadsPage() {
   const router = useRouter()
   const { notify } = useToast()
@@ -160,7 +168,7 @@ export default function LeadsPage() {
   const tourOutcomeLocks = useRef(new Set<string>())
   
   // Tab control
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'pipeline' | 'tours' | 'proposals' | 'clients' | 'lost' | 'followups'>('dashboard')
+  const [activeTab, setActiveTab] = useState<LeadsTab>('dashboard')
   const [viewPreferencesReady, setViewPreferencesReady] = useState(false)
   const [isTabMenuOpen, setIsTabMenuOpen] = useState(false)
   const [funnelRange, setFunnelRange] = useState<PortalDateRange>(() => getDefaultFunnelWeekRange())
@@ -208,13 +216,16 @@ export default function LeadsPage() {
   // Restore the saved view before the route's first client paint.
   useLayoutEffect(() => {
     if (typeof window !== 'undefined') {
-      const requestedTab = new URLSearchParams(window.location.search).get('view')
-      const savedTab = requestedTab === 'followups' ? requestedTab : localStorage.getItem('luxor_leads_active_tab')
+      const requestedTab = leadsTabFromView(new URLSearchParams(window.location.search).get('view'))
+      const savedTab = requestedTab ?? (() => {
+        const stored = localStorage.getItem('luxor_leads_active_tab')
+        return stored && LEADS_TABS.includes(stored as LeadsTab) ? stored as LeadsTab : null
+      })()
       const savedPage = localStorage.getItem('luxor_leads_current_page')
       const savedLeadSort = localStorage.getItem('luxor_leads_table_sort')
       const savedClientSort = localStorage.getItem('luxor_clients_table_sort')
       if (savedTab) {
-        setActiveTab(savedTab as 'dashboard' | 'pipeline' | 'tours' | 'proposals' | 'clients' | 'lost' | 'followups')
+        setActiveTab(savedTab)
       }
       if (savedPage) {
         setCurrentPage(parseInt(savedPage, 10))
