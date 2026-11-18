@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect, Suspense, useCallback, useMemo } from 'react'
+import React, { useState, useEffect, useLayoutEffect, useRef, Suspense, useCallback, useMemo } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import {
   Wrench,
@@ -164,6 +164,37 @@ export function OperationsPageContent({ embeddedBills = false }: { embeddedBills
   const tabParam = searchParams.get('tab') as SubTab | null
   const activeTab = embeddedBills ? 'bills' : tabParam || 'dashboard'
   const [isViewPickerOpen, setIsViewPickerOpen] = useState(false)
+  const opsDesktopNavSlotRef = useRef<HTMLDivElement | null>(null)
+  const [opsNavCompact, setOpsNavCompact] = useState(false)
+
+  const syncOpsNavFit = useCallback(() => {
+    const slot = opsDesktopNavSlotRef.current
+    if (!slot) return
+    const nav = slot.querySelector('nav')
+    if (!nav) return
+    setOpsNavCompact(nav.scrollWidth > slot.clientWidth + 1)
+  }, [])
+
+  useLayoutEffect(() => {
+    if (embeddedBills) return
+    const slot = opsDesktopNavSlotRef.current
+    if (!slot) return
+    syncOpsNavFit()
+    const observer =
+      typeof ResizeObserver !== 'undefined'
+        ? new ResizeObserver(() => {
+            syncOpsNavFit()
+          })
+        : null
+    observer?.observe(slot)
+    const nav = slot.querySelector('nav')
+    if (nav) observer?.observe(nav)
+    window.addEventListener('resize', syncOpsNavFit)
+    return () => {
+      observer?.disconnect()
+      window.removeEventListener('resize', syncOpsNavFit)
+    }
+  }, [activeTab, embeddedBills, syncOpsNavFit])
 
   useEffect(() => {
     if (!embeddedBills && tabParam === 'bills') {
@@ -753,6 +784,7 @@ export function OperationsPageContent({ embeddedBills = false }: { embeddedBills
               tabs={operationsTabs}
               activeTab={activeTab}
               onClick={() => setIsViewPickerOpen(true)}
+              className={opsNavCompact ? '!inline-flex xl:!inline-flex' : ''}
             />
             {activeTab === 'maintenance' ? (
               <PortalButton variant="primary" onClick={() => setIsTaskModalOpen(true)}><Plus size={14} /> New Ticket</PortalButton>
@@ -781,15 +813,16 @@ export function OperationsPageContent({ embeddedBills = false }: { embeddedBills
 
       {/* Desktop rectangular sliding tab navigation */}
       {!embeddedBills && (
-        <div className="hidden w-full min-w-0 max-w-full shrink-0 overflow-x-auto overflow-y-visible portal-scrollbar min-[1280px]:block">
-          <PortalAnimatedTabs
-            className="!w-max min-w-max shrink-0"
-            variant="slider"
-            ariaLabel="Operations sections"
-            tabs={operationsTabs}
-            activeTab={activeTab}
-            onTabChange={(tab) => router.push(`/portal/operations?tab=${tab}`)}
-          />
+        <div ref={opsDesktopNavSlotRef} className="hidden w-full min-w-0 max-w-full shrink-0 min-[1280px]:block">
+          <div className={opsNavCompact ? 'max-h-0 overflow-hidden opacity-0 pointer-events-none' : undefined}>
+            <PortalAnimatedTabs
+              variant="slider"
+              ariaLabel="Operations sections"
+              tabs={operationsTabs}
+              activeTab={activeTab}
+              onTabChange={(tab) => router.push(`/portal/operations?tab=${tab}`)}
+            />
+          </div>
         </div>
       )}
 

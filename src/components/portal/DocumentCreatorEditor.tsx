@@ -20,6 +20,7 @@ import {
 } from '@/lib/luxorDocumentCreatorTypes'
 import { plainTextToTipTapDocument } from '@/lib/luxorDocumentCreatorPaste'
 import { sanitizeTipTapDocumentForEditor } from '@/lib/luxorDocumentCreatorSanitize'
+import { shouldRetrySaveAfterConflict, type DocumentSaveContentSnapshot } from '@/lib/luxorDocumentCreatorSaveClient'
 import { Bold, Italic, List, ListTodo, Underline as UnderlineIcon } from '@/lib/icons/phosphor-compat'
 
 const typeOptions = LUXOR_CREATED_DOCUMENT_TYPES.map((value) => ({
@@ -44,7 +45,7 @@ type Props = {
   revision?: LuxorCreatedDocumentRow | null
   onSaved?: (document: LuxorCreatedDocumentRow) => void
   onFormChange?: (form: { title: string; documentType: LuxorCreatedDocumentType; bodyHtml: string }) => void
-  waitForPdfIdle?: () => Promise<void>
+  waitForPdfIdle?: () => Promise<LuxorCreatedDocumentRow | null | void>
 }
 
 export const DocumentCreatorEditor = forwardRef<DocumentCreatorEditorHandle, Props>(function DocumentCreatorEditor(
@@ -157,6 +158,41 @@ export const DocumentCreatorEditor = forwardRef<DocumentCreatorEditorHandle, Pro
     }
   }, [documentType, editor, title])
 
+  const patchDocument = async (
+    documentId: string,
+    expectedUpdatedAt: string,
+    body: NonNullable<ReturnType<typeof payload>>,
+    asTemplate: boolean,
+    snapshot: DocumentSaveContentSnapshot,
+    allowRetry: boolean,
+  ) => {
+    const response = await fetch(`/api/operations/documents/${encodeURIComponent(documentId)}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        expectedUpdatedAt,
+        title: body.title,
+        documentType: body.documentType,
+        bodyJson: body.bodyJson,
+        bodyHtml: body.bodyHtml,
+        isTemplate: asTemplate,
+      }),
+    })
+    const json = await response.json()
+    if (response.status === 409 && allowRetry) {
+      const reload = await fetch(`/api/operations/documents/${encodeURIComponent(documentId)}`, { cache: 'no-store' })
+      const reloadBody = await reload.json()
+      if (!reload.ok || !reloadBody.document) throw new Error(json.error || 'Document changed. Reload and try again.')
+      if (shouldRetrySaveAfterConflict(snapshot, reloadBody.document as LuxorCreatedDocumentRow)) {
+        return patchDocument(documentId, reloadBody.document.updated_at, body, asTemplate, snapshot, false)
+      }
+      throw new Error(json.error || 'Document changed. Reload and try again.')
+    }
+    if (response.status === 409) throw new Error(json.error || 'Document changed. Reload and try again.')
+    if (!response.ok) throw new Error(json.error || 'Document could not be saved.')
+    return json.document as LuxorCreatedDocumentRow
+  }
+
   const persist = useCallback(async (asTemplate: boolean) => {
     const body = payload()
     if (!body || !body.title.trim()) {
@@ -167,8 +203,19 @@ export const DocumentCreatorEditor = forwardRef<DocumentCreatorEditorHandle, Pro
     setSaveState('saving')
     setSaveError('')
     try {
-      if (waitForPdfIdle) await waitForPdfIdle()
-      if (!record) {
+      const latestFromPdf = waitForPdfIdle ? await waitForPdfIdle() : null
+      const activeRecord = latestFromPdf && typeof latestFromPdf === 'object' && 'id' in latestFromPdf
+        ? latestFromPdf
+        : record
+      if (
+        activeRecord
+        && activeRecord.id === record?.id
+        && activeRecord.updated_at !== record?.updated_at
+      ) {
+        setRecord(activeRecord)
+      }
+      const saveTarget = activeRecord ?? record
+      if (!saveTarget?.id) {
         const response = await fetch('/api/operations/documents', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -188,26 +235,19 @@ export const DocumentCreatorEditor = forwardRef<DocumentCreatorEditorHandle, Pro
         onSaved?.(json.document)
         return json.document as LuxorCreatedDocumentRow
       }
-      const response = await fetch(`/api/operations/documents/${encodeURIComponent(record.id)}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          expectedUpdatedAt: record.updated_at,
-          title: body.title,
-          documentType: body.documentType,
-          bodyJson: body.bodyJson,
-          bodyHtml: body.bodyHtml,
-          isTemplate: asTemplate,
-        }),
-      })
-      const json = await response.json()
-      if (response.status === 409) throw new Error(json.error || 'Document changed. Reload and try again.')
-      if (!response.ok) throw new Error(json.error || 'Document could not be saved.')
-      setRecord(json.document)
+      const snapshot: DocumentSaveContentSnapshot = {
+        title: body.title,
+        documentType: body.documentType,
+        bodyJson: body.bodyJson,
+        bodyHtml: body.bodyHtml,
+        version: saveTarget.version,
+      }
+      const document = await patchDocument(saveTarget.id, saveTarget.updated_at, body, asTemplate, snapshot, true)
+      setRecord(document)
       dirtyRef.current = false
       setSaveState('saved')
-      onSaved?.(json.document)
-      return json.document as LuxorCreatedDocumentRow
+      onSaved?.(document)
+      return document
     } catch (error) {
       setSaveState('error')
       setSaveError(error instanceof Error ? error.message : 'Document could not be saved.')

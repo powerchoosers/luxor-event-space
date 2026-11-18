@@ -324,3 +324,34 @@ test('long creator PDF paginates and keeps the final paragraph', async () => {
   assert.ok(extracted.includes(`Page 1 of ${loaded.numPages}`))
   assert.ok(extracted.includes(`Page ${loaded.numPages} of ${loaded.numPages}`))
 })
+
+test('save conflict retry only when server content still matches snapshot', () => {
+  const { shouldRetrySaveAfterConflict } = compile(
+    'src/lib/luxorDocumentCreatorSaveClient.ts',
+    path.join(root, 'luxor-document-creator-save-client.synthetic.cjs'),
+    {
+      './luxorDocumentCreatorTypes': compile('src/lib/luxorDocumentCreatorTypes.ts', path.join(root, 'luxor-document-creator-types.synthetic.cjs')),
+      '@/lib/luxorDocumentCreatorTypes': compile('src/lib/luxorDocumentCreatorTypes.ts', path.join(root, 'luxor-document-creator-types.synthetic.cjs')),
+    },
+  )
+  const bodyJson = { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Hello' }] }] }
+  const snapshot = {
+    title: 'Sample doc',
+    documentType: 'venue_use_agreement',
+    bodyJson,
+    bodyHtml: '<p>Hello</p>',
+    version: 2,
+  }
+  const pdfRefreshServer = {
+    title: 'Sample doc',
+    document_type: 'venue_use_agreement',
+    body_json: bodyJson,
+    body_html: '<p>Hello</p>',
+    version: 2,
+    updated_at: '2026-01-02T00:00:00.000Z',
+    pdf_storage_path: 'created-documents/abc.pdf',
+  }
+  const editedServer = { ...pdfRefreshServer, title: 'Edited title' }
+  assert.equal(shouldRetrySaveAfterConflict(snapshot, pdfRefreshServer), true)
+  assert.equal(shouldRetrySaveAfterConflict(snapshot, editedServer), false)
+})

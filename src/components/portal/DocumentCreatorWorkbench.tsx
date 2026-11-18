@@ -33,6 +33,8 @@ export function DocumentCreatorWorkbench({ initial }: Props) {
   const [formOpen, setFormOpen] = useState(true)
   const [saving, setSaving] = useState(false)
   const pdfPreviewChain = useRef<Promise<void>>(Promise.resolve())
+  const recordRef = useRef<LuxorCreatedDocumentRow | null>(record)
+  recordRef.current = record
   const [form, setForm] = useState<FormPreview>({
     title: initial?.title || '',
     documentType: initial?.document_type || 'venue_use_agreement',
@@ -48,7 +50,10 @@ export function DocumentCreatorWorkbench({ initial }: Props) {
         const body = await response.json()
         if (!response.ok) throw new Error(body.error || 'PDF preview is unavailable.')
         setSignedUrl(body.signedUrl)
-        if (body.document) setRecord(body.document)
+        if (body.document) {
+          recordRef.current = body.document
+          setRecord(body.document)
+        }
       } catch (error) {
         setPreviewError(error instanceof Error ? error.message : 'PDF preview is unavailable.')
         setSignedUrl(null)
@@ -144,7 +149,10 @@ export function DocumentCreatorWorkbench({ initial }: Props) {
                   revision={record}
                   onSaved={onSaved}
                   onFormChange={setForm}
-                  waitForPdfIdle={() => pdfPreviewChain.current}
+                  waitForPdfIdle={async () => {
+                    await pdfPreviewChain.current
+                    return recordRef.current
+                  }}
                 />
               </div>
             </div>
