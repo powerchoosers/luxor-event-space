@@ -5,6 +5,7 @@ import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useSta
 import { useReducedMotion } from 'framer-motion'
 import { useEditor, EditorContent, type Editor } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
+import type { Content } from '@tiptap/core'
 import Underline from '@tiptap/extension-underline'
 import Placeholder from '@tiptap/extension-placeholder'
 import {
@@ -18,6 +19,7 @@ import {
   type LuxorCreatedDocumentType,
 } from '@/lib/luxorDocumentCreatorTypes'
 import { plainTextToTipTapDocument } from '@/lib/luxorDocumentCreatorPaste'
+import { sanitizeTipTapDocumentForEditor } from '@/lib/luxorDocumentCreatorSanitize'
 import { Bold, Italic, List, ListTodo, Underline as UnderlineIcon } from '@/lib/icons/phosphor-compat'
 
 const typeOptions = LUXOR_CREATED_DOCUMENT_TYPES.map((value) => ({
@@ -42,10 +44,11 @@ type Props = {
   revision?: LuxorCreatedDocumentRow | null
   onSaved?: (document: LuxorCreatedDocumentRow) => void
   onFormChange?: (form: { title: string; documentType: LuxorCreatedDocumentType; bodyHtml: string }) => void
+  waitForPdfIdle?: () => Promise<void>
 }
 
 export const DocumentCreatorEditor = forwardRef<DocumentCreatorEditorHandle, Props>(function DocumentCreatorEditor(
-  { bootstrap, revision, onSaved, onFormChange },
+  { bootstrap, revision, onSaved, onFormChange, waitForPdfIdle },
   ref,
 ) {
   const reduceMotion = useReducedMotion()
@@ -115,7 +118,8 @@ export const DocumentCreatorEditor = forwardRef<DocumentCreatorEditorHandle, Pro
     setTitle(bootstrap.title)
     setDocumentType(bootstrap.document_type)
     setRecord(bootstrap)
-    editor.commands.setContent(bootstrap.body_json || { type: 'doc', content: [{ type: 'paragraph' }] }, { emitUpdate: false })
+    const safeDoc = sanitizeTipTapDocumentForEditor(bootstrap.body_json || { type: 'doc', content: [{ type: 'paragraph' }] })
+    editor.commands.setContent(safeDoc as Content, { emitUpdate: false })
     onFormChange?.({
       title: bootstrap.title,
       documentType: bootstrap.document_type,
@@ -163,6 +167,7 @@ export const DocumentCreatorEditor = forwardRef<DocumentCreatorEditorHandle, Pro
     setSaveState('saving')
     setSaveError('')
     try {
+      if (waitForPdfIdle) await waitForPdfIdle()
       if (!record) {
         const response = await fetch('/api/operations/documents', {
           method: 'POST',
@@ -208,7 +213,7 @@ export const DocumentCreatorEditor = forwardRef<DocumentCreatorEditorHandle, Pro
       setSaveError(error instanceof Error ? error.message : 'Document could not be saved.')
       return null
     }
-  }, [onSaved, payload, record])
+  }, [onSaved, payload, record, waitForPdfIdle])
 
   useImperativeHandle(ref, () => ({
     saveDraft: () => persist(false),

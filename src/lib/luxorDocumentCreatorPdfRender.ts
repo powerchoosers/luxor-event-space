@@ -1,9 +1,10 @@
 import 'server-only'
 
-import type { PDFPage, PDFFont } from 'pdf-lib'
+import type { Color, PDFFont } from 'pdf-lib'
 import { luxorPdfInk, luxorPdfMargin, luxorPdfMuted, luxorPdfPaleGold } from './luxorPdfBrandingServer'
 import { LUXOR_VENUE_ADDRESS } from './luxorVenue'
 import { wrapLuxorPdfLogicalLine } from './luxorCreatedDocumentPdfLayout'
+import { CreatedDocumentPdfPaginator } from './luxorCreatedDocumentPdfPaginator'
 import { selectCreatedDocumentBodyFont, type LuxorCreatedDocumentPdfFonts } from './luxorCreatedDocumentPdfFontsServer'
 import { normalizeControlCharsForRender } from './luxorDocumentCreatorRenderNormalize'
 import type { LuxorDocumentCreatorInline } from './luxorDocumentCreatorVerbatim'
@@ -95,86 +96,95 @@ function layoutWords(words: StyledWord[], fonts: LuxorCreatedDocumentPdfFonts, s
 }
 
 function drawLine(
-  page: PDFPage,
+  paginator: CreatedDocumentPdfPaginator,
   fonts: LuxorCreatedDocumentPdfFonts,
   line: LayoutLine,
   x: number,
-  y: number,
   size: number,
-  color = luxorPdfInk,
+  lineHeight: number,
+  color: Color,
 ) {
+  paginator.ensureLine(lineHeight)
+  const page = paginator.page
+  const y = paginator.y
   let cursor = x
+
+  type Segment = { startX: number; endX: number; underline?: boolean }
+
+  const segments: Segment[] = []
+
   for (let index = 0; index < line.length; index += 1) {
     const word = line[index]
-    if (word.word === ' ') {
-      const font = selectCreatedDocumentBodyFont(fonts, word)
-      cursor += font.widthOfTextAtSize(' ', size)
-      continue
-    }
     const font = selectCreatedDocumentBodyFont(fonts, word)
-    const prefix = index > 0 && line[index - 1].word !== ' ' ? ' ' : ''
-    const text = `${prefix}${word.word}`
+  const prefix = index > 0 && line[index - 1].word !== ' ' ? ' ' : ''
+    const text = word.word === ' ' ? ' ' : `${prefix}${word.word}`
     page.drawText(text, { x: cursor, y, size, font, color })
     const width = font.widthOfTextAtSize(text, size)
-    if (word.underline) {
-      page.drawLine({
-        start: { x: cursor, y: y - 1.2 },
-        end: { x: cursor + width, y: y - 1.2 },
-        thickness: 0.45,
-        color,
-      })
+
+    const seg: Segment = { startX: cursor, endX: cursor + width, underline: word.underline }
+    const last = segments[segments.length - 1]
+    if (last && Boolean(last.underline) === Boolean(seg.underline)) {
+      last.endX = seg.endX
+    } else {
+      segments.push({ ...seg })
     }
     cursor += width
   }
+
+  for (const segment of segments) {
+    if (!segment.underline) continue
+    page.drawLine({
+      start: { x: segment.startX, y: y - 1.2 },
+      end: { x: segment.endX, y: y - 1.2 },
+      thickness: 0.45,
+      color,
+    })
+  }
+
+  paginator.y -= lineHeight
 }
 
 export function drawRichInlines(
-  page: PDFPage,
+  paginator: CreatedDocumentPdfPaginator,
   fonts: LuxorCreatedDocumentPdfFonts,
   inlines: LuxorDocumentCreatorInline[],
   x: number,
-  y: number,
   maxWidth: number,
   size: number,
   lineHeight: number,
-  color = luxorPdfInk,
-): number {
+  color: Color = luxorPdfInk,
+) {
   const rows = splitInlinesToRows(inlines)
-  let cursorY = y
   for (const row of rows) {
     const words = wordsFromInlines(row)
     if (!words.length) {
-      cursorY -= lineHeight
+      paginator.ensureLine(lineHeight)
+      paginator.y -= lineHeight
       continue
     }
     const lines = layoutWords(words, fonts, size, maxWidth)
     for (const line of lines) {
-      drawLine(page, fonts, line, x, cursorY, size, color)
-      cursorY -= lineHeight
+      drawLine(paginator, fonts, line, x, size, lineHeight, color)
     }
   }
-  return cursorY
 }
 
 export function drawListBlock(
-  page: PDFPage,
+  paginator: CreatedDocumentPdfPaginator,
   fonts: LuxorCreatedDocumentPdfFonts,
   items: LuxorDocumentCreatorInline[][],
   ordered: boolean,
   x: number,
-  y: number,
   maxWidth: number,
   size: number,
   lineHeight: number,
   markerColor = luxorPdfMuted,
-): number {
-  let cursorY = y
+) {
   let ordinal = 0
   for (const item of items) {
     ordinal += 1
     const marker = ordered ? `${ordinal}.` : '•'
     const markerFont = fonts.bold
-    const markerWidth = markerFont.widthOfTextAtSize(`${marker} `, size)
     const textX = x + hangingIndent
     const textWidth = maxWidth - hangingIndent
 
@@ -184,29 +194,30 @@ export function drawListBlock(
       const words = wordsFromInlines(row)
       const lines = words.length ? layoutWords(words, fonts, size, textWidth) : [[]]
       for (const line of lines) {
+        paginator.ensureLine(lineHeight)
         if (firstLine) {
-          page.drawText(`${marker}`, { x, y: cursorY, size, font: markerFont, color: markerColor })
-          if (line.length) drawLine(page, fonts, line, textX, cursorY, size)
+          paginator.page.drawText(marker, { x, y: paginator.y, size, font: markerFont, color: markerColor })
+          if (line.length) drawLine(paginator, fonts, line, textX, size, lineHeight, luxorPdfInk)
+          else paginator.y -= lineHeight
           firstLine = false
+        } else if (line.length) {
+          drawLine(paginator, fonts, line, textX, size, lineHeight, luxorPdfInk)
         } else {
-          drawLine(page, fonts, line, textX, cursorY, size)
+          paginator.y -= lineHeight
         }
-        cursorY -= lineHeight
       }
-      if (!words.length) {
-        if (firstLine) {
-          page.drawText(`${marker}`, { x, y: cursorY, size, font: markerFont, color: markerColor })
-          firstLine = false
-        }
-        cursorY -= lineHeight
+      if (!words.length && firstLine) {
+        paginator.ensureLine(lineHeight)
+        paginator.page.drawText(marker, { x, y: paginator.y, size, font: markerFont, color: markerColor })
+        paginator.y -= lineHeight
+        firstLine = false
       }
     }
-    cursorY -= 4
+    paginator.y -= 4
   }
-  return cursorY
 }
 
-export function drawLuxorCreatedDocumentFooters(pages: PDFPage[], regular: PDFFont) {
+export function drawLuxorCreatedDocumentFooters(pages: ReturnType<CreatedDocumentPdfPaginator['pages']>, regular: PDFFont) {
   const total = pages.length
   pages.forEach((target, index) => {
     target.drawLine({ start: { x: luxorPdfMargin, y: 43 }, end: { x: target.getWidth() - luxorPdfMargin, y: 43 }, thickness: 0.45, color: luxorPdfPaleGold })

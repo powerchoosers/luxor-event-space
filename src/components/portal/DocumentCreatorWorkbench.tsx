@@ -32,27 +32,32 @@ export function DocumentCreatorWorkbench({ initial }: Props) {
   const [previewError, setPreviewError] = useState<string | null>(null)
   const [formOpen, setFormOpen] = useState(true)
   const [saving, setSaving] = useState(false)
+  const pdfPreviewChain = useRef<Promise<void>>(Promise.resolve())
   const [form, setForm] = useState<FormPreview>({
     title: initial?.title || '',
     documentType: initial?.document_type || 'venue_use_agreement',
     bodyHtml: initial?.body_html || '',
   })
 
-  const refreshPreview = useCallback(async (document: LuxorCreatedDocumentRow) => {
-    setPreviewLoading(true)
-    setPreviewError(null)
-    try {
-      const response = await fetch(`/api/operations/documents/${encodeURIComponent(document.id)}/pdf?refresh=1`, { cache: 'no-store' })
-      const body = await response.json()
-      if (!response.ok) throw new Error(body.error || 'PDF preview is unavailable.')
-      setSignedUrl(body.signedUrl)
-      if (body.document) setRecord(body.document)
-    } catch (error) {
-      setPreviewError(error instanceof Error ? error.message : 'PDF preview is unavailable.')
-      setSignedUrl(null)
-    } finally {
-      setPreviewLoading(false)
-    }
+  const refreshPreview = useCallback((document: LuxorCreatedDocumentRow) => {
+    const task = (async () => {
+      setPreviewLoading(true)
+      setPreviewError(null)
+      try {
+        const response = await fetch(`/api/operations/documents/${encodeURIComponent(document.id)}/pdf?refresh=1`, { cache: 'no-store' })
+        const body = await response.json()
+        if (!response.ok) throw new Error(body.error || 'PDF preview is unavailable.')
+        setSignedUrl(body.signedUrl)
+        if (body.document) setRecord(body.document)
+      } catch (error) {
+        setPreviewError(error instanceof Error ? error.message : 'PDF preview is unavailable.')
+        setSignedUrl(null)
+      } finally {
+        setPreviewLoading(false)
+      }
+    })()
+    pdfPreviewChain.current = task
+    return task
   }, [])
 
   useEffect(() => {
@@ -139,6 +144,7 @@ export function DocumentCreatorWorkbench({ initial }: Props) {
                   revision={record}
                   onSaved={onSaved}
                   onFormChange={setForm}
+                  waitForPdfIdle={() => pdfPreviewChain.current}
                 />
               </div>
             </div>

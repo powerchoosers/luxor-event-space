@@ -74,6 +74,13 @@ export function DocumentCreatorLibrary() {
   const [busyId, setBusyId] = useState<string | null>(null)
 
   const section: LuxorCreatedDocumentLibrarySection = showArchived ? 'archived' : primaryTab
+  const hasActiveFilters = Boolean(
+    search.trim()
+    || typeFilter !== 'all'
+    || (!showArchived && statusFilter !== 'all')
+    || dateFrom
+    || dateTo,
+  )
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -207,22 +214,46 @@ export function DocumentCreatorLibrary() {
         {loading ? (
           <PortalCardSkeleton count={5} />
         ) : documents.length === 0 ? (
-          <PortalEmptyState
-            icon={<FileText size={24} />}
-            title={showArchived ? 'No archived documents' : primaryTab === 'templates' ? 'No templates yet' : 'No documents yet'}
-            description={
-              showArchived
-                ? 'Archived agreements appear here when you archive them from Documents or Templates.'
-                : 'Create a new document from Operations, or save a draft as a template for next time.'
-            }
-            action={
-              !showArchived ? (
-                <PortalButton type="button" variant="primary" className="min-h-11" onClick={() => router.push('/portal/operations/documents/new')}>
-                  New document
+          hasActiveFilters ? (
+            <PortalEmptyState
+              icon={<FileText size={24} />}
+              title="No documents match your search"
+              description="Try a different title or clear filters to see the full library."
+              action={(
+                <PortalButton
+                  type="button"
+                  variant="secondary"
+                  className="min-h-11"
+                  onClick={() => {
+                    setSearch('')
+                    setTypeFilter('all')
+                    setStatusFilter('all')
+                    setDateFrom('')
+                    setDateTo('')
+                  }}
+                >
+                  Clear filters
                 </PortalButton>
-              ) : null
-            }
-          />
+              )}
+            />
+          ) : (
+            <PortalEmptyState
+              icon={<FileText size={24} />}
+              title={showArchived ? 'No archived documents' : primaryTab === 'templates' ? 'No templates yet' : 'No documents yet'}
+              description={
+                showArchived
+                  ? 'Archived agreements appear here when you archive them from Documents or Templates.'
+                  : 'Create a new document from Operations, or save a draft as a template for next time.'
+              }
+              action={
+                !showArchived ? (
+                  <PortalButton type="button" variant="primary" className="min-h-11" onClick={() => router.push('/portal/operations/documents/new')}>
+                    New document
+                  </PortalButton>
+                ) : null
+              }
+            />
+          )
         ) : (
           <>
             <div className={`divide-y divide-[color:var(--portal-border)] lg:hidden ${PORTAL_TABLE_LIST_SCROLL_PAD_CLASS}`}>

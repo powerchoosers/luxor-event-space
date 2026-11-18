@@ -743,7 +743,7 @@ export function OperationsPageContent({ embeddedBills = false }: { embeddedBills
   const sensorsOnline = utilities.length > 0
 
   return (
-    <PortalPageFrame bleed={embeddedBills} className={embeddedBills ? 'min-h-0 flex-1 gap-0 overflow-hidden' : 'h-full min-h-0 overflow-hidden flex flex-col gap-4 xl:gap-6'}>
+    <PortalPageFrame bleed={embeddedBills} className={embeddedBills ? 'min-h-0 flex-1 gap-0 overflow-hidden' : 'h-full min-h-0 overflow-x-hidden overflow-y-hidden flex flex-col gap-4 xl:gap-6'}>
       {!embeddedBills && <PortalPageHeader
         icon={<Wrench size={18} />}
         title="Venue Operations"
@@ -781,9 +781,9 @@ export function OperationsPageContent({ embeddedBills = false }: { embeddedBills
 
       {/* Desktop rectangular sliding tab navigation */}
       {!embeddedBills && (
-        <div className="hidden w-full min-w-0 max-w-full shrink-0 overflow-x-auto portal-scrollbar min-[1280px]:block">
+        <div className="hidden w-full min-w-0 max-w-full shrink-0 overflow-x-auto overflow-y-visible portal-scrollbar min-[1280px]:block">
           <PortalAnimatedTabs
-            className="w-max max-w-none"
+            className="!w-max min-w-max shrink-0"
             variant="slider"
             ariaLabel="Operations sections"
             tabs={operationsTabs}

@@ -104,15 +104,22 @@ test('TipTap blocks preserve legal characters verbatim', () => {
 })
 
 test('plain-text paste uses one paragraph per line', () => {
+  const { normalizePastedPlainText } = compile('src/lib/luxorDocumentCreatorSanitize.ts', path.join(root, 'luxor-document-creator-sanitize.synthetic.cjs'))
   const { plainTextToTipTapDocument } = compile(
     'src/lib/luxorDocumentCreatorPaste.ts',
     path.join(root, 'luxor-document-creator-paste.synthetic.cjs'),
+    {
+      '@/lib/luxorDocumentCreatorSanitize': { normalizePastedPlainText },
+      './luxorDocumentCreatorSanitize': { normalizePastedPlainText },
+    },
   )
   const doc = plainTextToTipTapDocument('Alpha\nBeta\nGamma')
   assert.equal(doc.content.length, 3)
   assert.equal(doc.content[0].content[0].text, 'Alpha')
   assert.equal(doc.content[1].content[0].text, 'Beta')
   assert.equal(doc.content[2].content[0].text, 'Gamma')
+  const formFeedDoc = plainTextToTipTapDocument('Before\fAfter')
+  assert.equal(formFeedDoc.content.length, 2)
 })
 
 test('three-line document yields three bullet items', () => {
@@ -165,11 +172,18 @@ test('generated creator PDF embeds unicode and bold body text', async () => {
     './luxorVenue': { LUXOR_VENUE_ADDRESS: '3100 Voss Ave, Dallas, TX' },
     '@/lib/luxorVenue': { LUXOR_VENUE_ADDRESS: '3100 Voss Ave, Dallas, TX' },
   }
+  const pdfPaginator = compile('src/lib/luxorCreatedDocumentPdfPaginator.ts', path.join(root, 'luxor-created-document-pdf-paginator.synthetic.cjs'), {
+    ...sharedNodeStubs,
+    './luxorPdfBrandingServer': branding,
+    '@/lib/luxorPdfBrandingServer': branding,
+  })
   const pdfLayout = compile('src/lib/luxorCreatedDocumentPdfLayout.ts', path.join(root, 'luxor-created-document-pdf-layout.synthetic.cjs'), sharedNodeStubs)
   const pdfRender = compile('src/lib/luxorDocumentCreatorPdfRender.ts', path.join(root, 'luxor-document-creator-pdf-render.synthetic.cjs'), {
     ...sharedNodeStubs,
     './luxorPdfBrandingServer': branding,
     '@/lib/luxorPdfBrandingServer': branding,
+    './luxorCreatedDocumentPdfPaginator': pdfPaginator,
+    '@/lib/luxorCreatedDocumentPdfPaginator': pdfPaginator,
     './luxorCreatedDocumentPdfLayout': pdfLayout,
     '@/lib/luxorCreatedDocumentPdfLayout': pdfLayout,
     './luxorCreatedDocumentPdfFontsServer': fonts,
@@ -190,6 +204,8 @@ test('generated creator PDF embeds unicode and bold body text', async () => {
       '@/lib/luxorCreatedDocumentPdfFontsServer': fonts,
       './luxorDocumentCreatorPdfRender': pdfRender,
       '@/lib/luxorDocumentCreatorPdfRender': pdfRender,
+      './luxorCreatedDocumentPdfPaginator': pdfPaginator,
+      '@/lib/luxorCreatedDocumentPdfPaginator': pdfPaginator,
       './luxorDocumentCreatorVerbatim': { blocksFromTipTapJson, inlinesToPlainText, verbatimPlainTextFromTipTap },
       '@/lib/luxorDocumentCreatorVerbatim': { blocksFromTipTapJson, inlinesToPlainText, verbatimPlainTextFromTipTap },
       './luxorDocumentCreatorTypes': compile('src/lib/luxorDocumentCreatorTypes.ts', path.join(root, 'luxor-document-creator-types.synthetic.cjs')),
@@ -211,4 +227,100 @@ test('generated creator PDF embeds unicode and bold body text', async () => {
   const renderedPlain = verbatimPlainTextFromTipTap(unicodeDoc)
   assert.ok(renderedPlain.includes('“curfew”'))
   assert.ok(renderedPlain.includes('©'))
+})
+
+test('long creator PDF paginates and keeps the final paragraph', async () => {
+  const branding = compile('src/lib/luxorPdfBrandingServer.ts', path.join(root, 'luxor-pdf-branding.synthetic.cjs'), {
+    './luxorVenue': { LUXOR_VENUE_ADDRESS: '3100 Voss Ave, Dallas, TX' },
+    'server-only': {},
+    'node:fs/promises': fs.promises,
+    'fs/promises': fs.promises,
+    path,
+    'node:path': path,
+  })
+  const fonts = compile('src/lib/luxorCreatedDocumentPdfFontsServer.ts', path.join(root, 'luxor-created-document-pdf-fonts.synthetic.cjs'), {
+    './luxorPdfBrandingServer': branding,
+    '@/lib/luxorPdfBrandingServer': branding,
+    'server-only': {},
+    'node:fs/promises': fs.promises,
+    'fs/promises': fs.promises,
+    path,
+    'node:path': path,
+    '@pdf-lib/fontkit': require('@pdf-lib/fontkit'),
+  })
+  const sharedNodeStubs = {
+    'server-only': {},
+    path,
+    'node:path': path,
+    'node:fs/promises': fs.promises,
+    'fs/promises': fs.promises,
+    './luxorVenue': { LUXOR_VENUE_ADDRESS: '3100 Voss Ave, Dallas, TX' },
+    '@/lib/luxorVenue': { LUXOR_VENUE_ADDRESS: '3100 Voss Ave, Dallas, TX' },
+  }
+  const pdfPaginator = compile('src/lib/luxorCreatedDocumentPdfPaginator.ts', path.join(root, 'luxor-created-document-pdf-paginator.synthetic.cjs'), {
+    ...sharedNodeStubs,
+    './luxorPdfBrandingServer': branding,
+    '@/lib/luxorPdfBrandingServer': branding,
+  })
+  const pdfLayout = compile('src/lib/luxorCreatedDocumentPdfLayout.ts', path.join(root, 'luxor-created-document-pdf-layout.synthetic.cjs'), sharedNodeStubs)
+  const pdfRender = compile('src/lib/luxorDocumentCreatorPdfRender.ts', path.join(root, 'luxor-document-creator-pdf-render.synthetic.cjs'), {
+    ...sharedNodeStubs,
+    './luxorPdfBrandingServer': branding,
+    '@/lib/luxorPdfBrandingServer': branding,
+    './luxorCreatedDocumentPdfPaginator': pdfPaginator,
+    '@/lib/luxorCreatedDocumentPdfPaginator': pdfPaginator,
+    './luxorCreatedDocumentPdfLayout': pdfLayout,
+    '@/lib/luxorCreatedDocumentPdfLayout': pdfLayout,
+    './luxorCreatedDocumentPdfFontsServer': fonts,
+    '@/lib/luxorCreatedDocumentPdfFontsServer': fonts,
+    './luxorDocumentCreatorRenderNormalize': compile('src/lib/luxorDocumentCreatorRenderNormalize.ts', path.join(root, 'luxor-document-creator-render-normalize.synthetic.cjs'), sharedNodeStubs),
+    '@/lib/luxorDocumentCreatorRenderNormalize': compile('src/lib/luxorDocumentCreatorRenderNormalize.ts', path.join(root, 'luxor-document-creator-render-normalize.synthetic.cjs'), sharedNodeStubs),
+    './luxorDocumentCreatorVerbatim': { blocksFromTipTapJson, inlinesToPlainText, verbatimPlainTextFromTipTap },
+    '@/lib/luxorDocumentCreatorVerbatim': { blocksFromTipTapJson, inlinesToPlainText, verbatimPlainTextFromTipTap },
+  })
+  const { buildLuxorCreatedDocumentPdf } = compile('src/lib/luxorDocumentCreatorPdfServer.ts', path.join(root, 'luxor-document-creator-pdf-long.synthetic.cjs'), {
+    ...sharedNodeStubs,
+    './luxorPdfBrandingServer': branding,
+    '@/lib/luxorPdfBrandingServer': branding,
+    './luxorCreatedDocumentPdfFontsServer': fonts,
+    '@/lib/luxorCreatedDocumentPdfFontsServer': fonts,
+    './luxorDocumentCreatorPdfRender': pdfRender,
+    '@/lib/luxorDocumentCreatorPdfRender': pdfRender,
+    './luxorCreatedDocumentPdfPaginator': pdfPaginator,
+    '@/lib/luxorCreatedDocumentPdfPaginator': pdfPaginator,
+    './luxorDocumentCreatorVerbatim': { blocksFromTipTapJson, inlinesToPlainText, verbatimPlainTextFromTipTap },
+    '@/lib/luxorDocumentCreatorVerbatim': { blocksFromTipTapJson, inlinesToPlainText, verbatimPlainTextFromTipTap },
+    './luxorDocumentCreatorTypes': compile('src/lib/luxorDocumentCreatorTypes.ts', path.join(root, 'luxor-document-creator-types.synthetic.cjs')),
+    '@/lib/luxorDocumentCreatorTypes': compile('src/lib/luxorDocumentCreatorTypes.ts', path.join(root, 'luxor-document-creator-types.synthetic.cjs')),
+  })
+
+  const content = Array.from({ length: 40 }, (_, index) => {
+    const number = index + 1
+    return {
+      type: 'paragraph',
+      content: [{
+        type: 'text',
+        text: `${number}. This is paragraph number ${number} with extra length to force wrapping across several words when rendered in the PDF pipeline for pagination tests and contract body simulation.`,
+      }],
+    }
+  })
+  const bodyJson = { type: 'doc', content }
+  const pdfBytes = await buildLuxorCreatedDocumentPdf({
+    title: 'Long Venue Agreement',
+    documentType: 'venue_use_agreement',
+    bodyJson,
+  })
+  const { getDocument } = require('pdfjs-dist/legacy/build/pdf.mjs')
+  const loaded = await getDocument({ data: pdfBytes, useSystemFonts: true }).promise
+  assert.ok(loaded.numPages >= 3)
+  let extracted = ''
+  for (let pageNumber = 1; pageNumber <= loaded.numPages; pageNumber += 1) {
+    const page = await loaded.getPage(pageNumber)
+    const textContent = await page.getTextContent()
+    extracted += `${textContent.items.map((item) => item.str).join(' ')} `
+  }
+  const normalizedExtracted = extracted.replace(/\s+/g, ' ').trim()
+  assert.ok(normalizedExtracted.includes('paragraph number 40'))
+  assert.ok(extracted.includes(`Page 1 of ${loaded.numPages}`))
+  assert.ok(extracted.includes(`Page ${loaded.numPages} of ${loaded.numPages}`))
 })

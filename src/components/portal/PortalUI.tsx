@@ -592,6 +592,22 @@ export function PortalAnimatedTabs<T extends string>({
     }
   }, [activeTab, tabsSignature])
 
+  React.useLayoutEffect(() => {
+    const activeButton = buttonRefs.current[activeTab]
+    const scrollParent = containerRef.current?.parentElement
+    if (!activeButton || !(scrollParent instanceof HTMLElement)) return
+    const parentLeft = scrollParent.scrollLeft
+    const parentWidth = scrollParent.clientWidth
+    const buttonLeft = activeButton.offsetLeft
+    const buttonRight = buttonLeft + activeButton.offsetWidth
+    let nextLeft = parentLeft
+    if (buttonLeft < parentLeft) nextLeft = Math.max(0, buttonLeft - 8)
+    else if (buttonRight > parentLeft + parentWidth) nextLeft = buttonRight - parentWidth + 8
+    if (nextLeft !== parentLeft) {
+      scrollParent.scrollTo({ left: nextLeft, behavior: reduceMotion ? 'auto' : 'smooth' })
+    }
+  }, [activeTab, reduceMotion, tabsSignature])
+
   const isSlider = variant === 'slider'
   const sliderLayoutId = `portal-tab-slider-${ariaLabel.replace(/[^a-zA-Z0-9_-]/g, '-').toLowerCase()}`
 

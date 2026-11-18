@@ -1,8 +1,10 @@
+import { normalizePastedPlainText } from '@/lib/luxorDocumentCreatorSanitize'
+
 export type TipTapDocNode = Record<string, unknown>
 
 /** Plain-text paste: each line becomes its own paragraph; blank lines stay as empty paragraphs. */
 export function plainTextToTipTapDocument(text: string): TipTapDocNode {
-  const normalized = text.replace(/\r\n/g, '\n')
+  const normalized = normalizePastedPlainText(text)
   const lines = normalized.split('\n')
   const content = lines.map((line) => {
     if (!line) return { type: 'paragraph' }

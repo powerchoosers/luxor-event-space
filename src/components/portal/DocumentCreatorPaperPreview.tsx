@@ -3,6 +3,7 @@
 import Image from 'next/image'
 import { LUXOR_CREATED_DOCUMENT_TYPE_LABELS, type LuxorCreatedDocumentType } from '@/lib/luxorDocumentCreatorTypes'
 import { LUXOR_VENUE_ADDRESS } from '@/lib/luxorVenue'
+import { stripControlCharsFromHtml } from '@/lib/luxorDocumentCreatorSanitize'
 
 type Props = {
   title: string
@@ -40,7 +41,7 @@ export function DocumentCreatorPaperPreview({ title, documentType, bodyHtml, pag
         <h1 className="break-words font-[family-name:var(--font-cormorant)] text-2xl font-semibold text-[#211c17]">{title || 'Untitled document'}</h1>
         <div
           className="mt-4 max-w-full break-words font-[family-name:var(--font-manrope)] text-[13px] leading-relaxed text-[#211c17] [&_h1]:mb-2 [&_h1]:break-words [&_h1]:text-lg [&_h1]:font-semibold [&_h2]:mb-2 [&_h2]:break-words [&_h2]:text-base [&_h2]:font-semibold [&_h3]:mb-1 [&_h3]:break-words [&_h3]:text-sm [&_h3]:font-semibold [&_ol]:my-2 [&_ol]:list-decimal [&_ol]:pl-5 [&_p]:my-2 [&_p]:break-words [&_ul]:my-2 [&_ul]:list-disc [&_ul]:pl-5"
-          dangerouslySetInnerHTML={{ __html: bodyHtml || '<p class="text-[#6f6457]">Paste or type agreement text. Nothing is rewritten.</p>' }}
+          dangerouslySetInnerHTML={{ __html: stripControlCharsFromHtml(bodyHtml || '<p class="text-[#6f6457]">Paste or type agreement text. Nothing is rewritten.</p>') }}
         />
       </div>
       <footer
