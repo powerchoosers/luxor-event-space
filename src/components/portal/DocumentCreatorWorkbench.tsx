@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { useReducedMotion } from 'framer-motion'
 import { PortalButton, PortalPageFrame, PortalPageHeader } from '@/components/portal/PortalUI'
 import { DocumentCreatorEditor, type DocumentCreatorEditorHandle } from '@/components/portal/DocumentCreatorEditor'
 import { DocumentCreatorPaperPreview } from '@/components/portal/DocumentCreatorPaperPreview'
@@ -22,6 +23,7 @@ type FormPreview = {
 
 export function DocumentCreatorWorkbench({ initial }: Props) {
   const router = useRouter()
+  const reduceMotion = useReducedMotion()
   const editorRef = useRef<DocumentCreatorEditorHandle>(null)
   const [record, setRecord] = useState<LuxorCreatedDocumentRow | null>(initial ?? null)
   const [signedUrl, setSignedUrl] = useState<string | null>(null)
@@ -43,6 +45,7 @@ export function DocumentCreatorWorkbench({ initial }: Props) {
       const body = await response.json()
       if (!response.ok) throw new Error(body.error || 'PDF preview is unavailable.')
       setSignedUrl(body.signedUrl)
+      if (body.document) setRecord(body.document)
     } catch (error) {
       setPreviewError(error instanceof Error ? error.message : 'PDF preview is unavailable.')
       setSignedUrl(null)
@@ -52,7 +55,7 @@ export function DocumentCreatorWorkbench({ initial }: Props) {
   }, [])
 
   useEffect(() => {
-    if (record) void refreshPreview(record)
+    if (record?.id) void refreshPreview(record)
   }, [record?.id, record?.version, refreshPreview])
 
   const onSaved = (document: LuxorCreatedDocumentRow) => {
@@ -60,7 +63,6 @@ export function DocumentCreatorWorkbench({ initial }: Props) {
     if (!initial && typeof window !== 'undefined') {
       window.history.replaceState(null, '', `/portal/operations/documents/${document.id}`)
     }
-    void refreshPreview(document)
   }
 
   const runSave = async (mode: 'draft' | 'template') => {
@@ -73,13 +75,15 @@ export function DocumentCreatorWorkbench({ initial }: Props) {
     }
   }
 
+  const accordionTransition = reduceMotion ? 'none' : 'grid-template-rows 420ms cubic-bezier(0.4, 0, 0.2, 1)'
+
   return (
-    <PortalPageFrame className="h-full min-h-0 gap-4 overflow-hidden pb-[calc(4.5rem+env(safe-area-inset-bottom))] min-[1280px]:pb-0">
+    <PortalPageFrame className="h-full min-h-0 gap-4 overflow-x-hidden pb-[calc(4.5rem+env(safe-area-inset-bottom))] min-[1280px]:pb-0">
       <div className="flex min-w-0 flex-col gap-3 min-[1280px]:flex-row min-[1280px]:items-end min-[1280px]:justify-between">
         <div className="min-w-0 flex-1 space-y-3">
           <PortalPageHeader
             icon={<FileText size={18} />}
-            title={record?.title || form.title || 'New document'}
+            title={form.title || record?.title || 'New document'}
             hideBackButton
             mobileActionsInline
             actions={(
@@ -101,9 +105,9 @@ export function DocumentCreatorWorkbench({ initial }: Props) {
         </div>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto portal-scrollbar min-[1280px]:overflow-hidden">
-        <div className="flex min-h-0 flex-col gap-4 min-[1280px]:grid min-[1280px]:h-full min-[1280px]:grid-cols-[360px_minmax(0,1fr)_260px] min-[1280px]:gap-5 min-[1280px]:overflow-hidden">
-          <section className="min-h-0 min-[1280px]:overflow-y-auto min-[1280px]:portal-scrollbar">
+      <div className="min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden portal-scrollbar min-[1280px]:overflow-hidden">
+        <div className="flex min-h-0 min-w-0 flex-col gap-4 min-[1280px]:grid min-[1280px]:h-full min-[1280px]:min-w-0 min-[1280px]:grid-cols-[minmax(0,360px)_minmax(0,1fr)_minmax(0,260px)] min-[1280px]:gap-4 min-[1280px]:overflow-hidden">
+          <section className="min-h-0 min-w-0 shrink-0 min-[1280px]:overflow-y-auto min-[1280px]:portal-scrollbar">
             <button
               type="button"
               className="mb-2 flex min-h-11 w-full items-center justify-between rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 text-left text-sm font-semibold text-[color:var(--portal-text)] min-[1280px]:hidden focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45"
@@ -112,32 +116,40 @@ export function DocumentCreatorWorkbench({ initial }: Props) {
               onClick={() => setFormOpen((value) => !value)}
             >
               Document details
-              <ChevronDown size={16} className={`text-[color:var(--portal-muted)] transition-transform motion-reduce:transition-none ${formOpen ? 'rotate-180' : ''}`} />
+              <ChevronDown size={16} className={`text-[color:var(--portal-muted)] ${reduceMotion ? '' : 'transition-transform'} motion-reduce:transition-none ${formOpen ? 'rotate-180' : ''}`} />
             </button>
             <div
               id="document-creator-form-panel"
-              className="grid overflow-hidden transition-[grid-template-rows] duration-[420ms] ease-[cubic-bezier(0.4,0,0.2,1)] motion-reduce:transition-none min-[1280px]:!grid-rows-[1fr]"
-              style={{ gridTemplateRows: formOpen ? '1fr' : '0fr' }}
+              className="grid min-w-0 overflow-hidden min-[1280px]:!grid-rows-[1fr]"
+              style={{ gridTemplateRows: formOpen ? '1fr' : '0fr', transition: accordionTransition }}
               inert={!formOpen ? true : undefined}
               aria-hidden={!formOpen}
             >
-              <div className="min-h-0 overflow-hidden min-[1280px]:overflow-visible">
-                <DocumentCreatorEditor ref={editorRef} initial={record} onSaved={onSaved} onFormChange={setForm} />
+              <div className="min-h-0 min-w-0 overflow-hidden min-[1280px]:overflow-visible">
+                <DocumentCreatorEditor
+                  ref={editorRef}
+                  bootstrap={initial ?? undefined}
+                  revision={record}
+                  onSaved={onSaved}
+                  onFormChange={setForm}
+                />
               </div>
             </div>
           </section>
 
-          <section className="flex min-h-0 flex-col gap-2 min-[1280px]:overflow-y-auto min-[1280px]:portal-scrollbar">
+          <section className="flex min-h-0 min-w-0 flex-col gap-2 overflow-hidden min-[1280px]:overflow-y-auto min-[1280px]:portal-scrollbar">
             <p className="text-xs font-medium text-[color:var(--portal-muted)] min-[1280px]:sr-only">Live paper preview</p>
-            <DocumentCreatorPaperPreview
-              title={form.title}
-              documentType={form.documentType}
-              bodyHtml={form.bodyHtml}
-              className="w-full min-[1280px]:max-w-[612px] min-[1280px]:justify-self-center"
-            />
+            <div className="min-w-0 w-full max-w-full overflow-x-hidden">
+              <DocumentCreatorPaperPreview
+                title={form.title}
+                documentType={form.documentType}
+                bodyHtml={form.bodyHtml}
+                className="mx-auto w-full max-w-full min-[1280px]:max-w-[min(100%,508px)]"
+              />
+            </div>
           </section>
 
-          <section className="hidden min-h-0 flex-col gap-2 min-[1280px]:flex min-[1280px]:overflow-hidden">
+          <section className="hidden min-h-0 min-w-0 flex-col gap-2 overflow-hidden min-[1280px]:flex">
             <div>
               <h2 className="text-sm font-semibold text-[color:var(--portal-text)]">PDF preview</h2>
               <p className="text-xs text-[color:var(--portal-muted)]">Server-rendered file with tabular page numbers.</p>

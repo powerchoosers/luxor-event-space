@@ -22,8 +22,9 @@ export async function GET(request: NextRequest, context: RouteContext) {
     }
     const fileName = `Luxor-${document.title.replace(/[^a-zA-Z0-9._-]+/g, '_').slice(0, 80)}.pdf`
     const signedUrl = await signedPdfUrlForCreatedDocument(document, fileName)
-    return NextResponse.json({ signedUrl, documentId: document.id, version: document.version }, { headers: { 'Cache-Control': 'no-store' } })
+    return NextResponse.json({ signedUrl, document, documentId: document.id, version: document.version }, { headers: { 'Cache-Control': 'no-store' } })
   } catch (error) {
+    console.error('Created document PDF preview failed', error)
     if (schemaUnavailable(error)) {
       return NextResponse.json({ error: 'Documents are not stored yet.' }, { status: 409 })
     }

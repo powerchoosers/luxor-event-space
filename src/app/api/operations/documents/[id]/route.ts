@@ -7,6 +7,7 @@ import {
 } from '@/lib/luxorDocumentCreatorServer'
 import { isLuxorCreatedDocumentType } from '@/lib/luxorDocumentCreatorTypes'
 import { luxorTimestampIsKnown } from '@/lib/luxorTimestamp'
+import { SupabaseRestError } from '@/lib/supabaseRestServer'
 
 type RouteContext = { params: Promise<{ id: string }> }
 
@@ -59,10 +60,13 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     })
     return NextResponse.json({ document }, { headers: { 'Cache-Control': 'no-store' } })
   } catch (error) {
+    console.error('Created document PATCH failed', error)
     if (schemaUnavailable(error)) {
       return NextResponse.json({ error: 'Documents are not stored yet.' }, { status: 409 })
     }
-    const status = error instanceof Error && error.message.includes('unavailable') ? 409 : 503
-    return NextResponse.json({ error: 'Document could not be saved.' }, { status })
+    if (error instanceof SupabaseRestError) {
+      return NextResponse.json({ error: error.message }, { status: error.status })
+    }
+    return NextResponse.json({ error: 'Document could not be saved.' }, { status: 503 })
   }
 }

@@ -14,6 +14,9 @@ import {
   PortalMobileTabTrigger,
   PortalSelect,
   PortalStatusBadge,
+  PORTAL_TABLE_LIST_CARD_CLASS,
+  PORTAL_TABLE_LIST_EDGE_CLASS,
+  PORTAL_TABLE_LIST_SCROLL_PAD_CLASS,
   PortalStickyTable,
   PortalStickyThead,
   PortalTableCard,
@@ -196,7 +199,11 @@ export function DocumentCreatorLibrary() {
         </div>
       ) : null}
 
-      <PortalTableCard className="min-h-0 flex-1 overflow-hidden">
+      <PortalTableCard
+        mobilePageScroll
+        mobilePageScrollUntil="lg"
+        className={`${PORTAL_TABLE_LIST_CARD_CLASS} ${PORTAL_TABLE_LIST_EDGE_CLASS}`}
+      >
         {loading ? (
           <PortalCardSkeleton count={5} />
         ) : documents.length === 0 ? (
@@ -217,88 +224,158 @@ export function DocumentCreatorLibrary() {
             }
           />
         ) : (
-          <PortalStickyTable>
-            <PortalStickyThead>
-              <tr>
-                <th className="text-left">Title</th>
-                <th className="text-left">Type</th>
-                <th className="text-left">Status</th>
-                <th className="text-left">Recipients</th>
-                <th className="text-left">Last change</th>
-                <th className="text-right">Actions</th>
-              </tr>
-            </PortalStickyThead>
-            <tbody>
+          <>
+            <div className={`divide-y divide-[color:var(--portal-border)] lg:hidden ${PORTAL_TABLE_LIST_SCROLL_PAD_CLASS}`}>
               {documents.map((document) => {
                 const status = displayStatusForDocument(document)
                 const presentation = createdDocumentStatusPresentation(status)
                 return (
-                  <tr key={document.id}>
-                    <td className="max-w-[16rem] font-medium text-[color:var(--portal-text)]">
-                      <button
+                  <article key={document.id} className="space-y-3 px-4 py-4 sm:px-6">
+                    <button
+                      type="button"
+                      className="w-full text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45"
+                      onClick={() => router.push(`/portal/operations/documents/${document.id}`)}
+                    >
+                      <p className="text-sm font-semibold text-[color:var(--portal-text)]">{document.title}</p>
+                      <p className="mt-1 text-xs text-[color:var(--portal-muted)]">
+                        {LUXOR_CREATED_DOCUMENT_TYPE_LABELS[document.document_type]} · {formatLastChange(document.updated_at)}
+                      </p>
+                      <div className="mt-2">
+                        <PortalStatusBadge status={presentation.label} tone={presentation.tone} />
+                      </div>
+                    </button>
+                    <div className="flex flex-wrap gap-2">
+                      <PortalButton
                         type="button"
-                        className="text-left hover:text-[#8c6424] dark:hover:text-[#f1d27a] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45"
+                        variant="secondary"
+                        className="min-h-11"
                         onClick={() => router.push(`/portal/operations/documents/${document.id}`)}
                       >
-                        {document.title}
-                      </button>
-                    </td>
-                    <td className="text-[color:var(--portal-muted)]">{LUXOR_CREATED_DOCUMENT_TYPE_LABELS[document.document_type]}</td>
-                    <td>
-                      <PortalStatusBadge status={presentation.label} tone={presentation.tone} />
-                    </td>
-                    <td className="tabular-nums text-[color:var(--portal-faint)]">—</td>
-                    <td className="tabular-nums text-[color:var(--portal-muted)]">{formatLastChange(document.updated_at)}</td>
-                    <td>
-                      <div className="flex flex-wrap items-center justify-end gap-2">
+                        Open <ChevronRight size={12} />
+                      </PortalButton>
+                      {primaryTab === 'templates' && !showArchived ? (
                         <PortalButton
                           type="button"
                           variant="secondary"
                           className="min-h-11"
-                          onClick={() => router.push(`/portal/operations/documents/${document.id}`)}
+                          disabled={busyId === document.id}
+                          onClick={() => void runDuplicate(document)}
                         >
-                          Open <ChevronRight size={12} />
+                          <Copy size={12} />
+                          Duplicate
                         </PortalButton>
-                        {primaryTab === 'templates' && !showArchived ? (
-                          <PortalButton
-                            type="button"
-                            variant="secondary"
-                            className="min-h-11"
-                            disabled={busyId === document.id}
-                            onClick={() => void runDuplicate(document)}
-                          >
-                            <Copy size={12} />
-                            Duplicate
-                          </PortalButton>
-                        ) : null}
-                        {!showArchived ? (
-                          <PortalButton
-                            type="button"
-                            variant="ghost"
-                            className="min-h-11"
-                            disabled={busyId === document.id}
-                            onClick={() => void runArchive(document, 'archive')}
-                          >
-                            Archive
-                          </PortalButton>
-                        ) : (
-                          <PortalButton
-                            type="button"
-                            variant="secondary"
-                            className="min-h-11"
-                            disabled={busyId === document.id}
-                            onClick={() => void runArchive(document, 'restore')}
-                          >
-                            Unarchive
-                          </PortalButton>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
+                      ) : null}
+                      {!showArchived ? (
+                        <PortalButton
+                          type="button"
+                          variant="ghost"
+                          className="min-h-11"
+                          disabled={busyId === document.id}
+                          onClick={() => void runArchive(document, 'archive')}
+                        >
+                          Archive
+                        </PortalButton>
+                      ) : (
+                        <PortalButton
+                          type="button"
+                          variant="secondary"
+                          className="min-h-11"
+                          disabled={busyId === document.id}
+                          onClick={() => void runArchive(document, 'restore')}
+                        >
+                          Unarchive
+                        </PortalButton>
+                      )}
+                    </div>
+                  </article>
                 )
               })}
-            </tbody>
-          </PortalStickyTable>
+            </div>
+            <div className="hidden min-w-0 overflow-x-auto lg:block">
+              <PortalStickyTable minWidth="920px">
+                <PortalStickyThead>
+                  <tr>
+                    <th className="px-4 text-left sm:px-6">Title</th>
+                    <th className="px-4 text-left sm:px-6">Type</th>
+                    <th className="px-4 text-left sm:px-6">Status</th>
+                    <th className="px-4 text-left sm:px-6">Recipients</th>
+                    <th className="px-4 text-left sm:px-6">Last change</th>
+                    <th className="px-4 text-right sm:px-6">Actions</th>
+                  </tr>
+                </PortalStickyThead>
+                <tbody>
+                  {documents.map((document) => {
+                    const status = displayStatusForDocument(document)
+                    const presentation = createdDocumentStatusPresentation(status)
+                    return (
+                      <tr key={document.id}>
+                        <td className="max-w-[16rem] px-4 font-medium text-[color:var(--portal-text)] sm:px-6">
+                          <button
+                            type="button"
+                            className="text-left hover:text-[#8c6424] dark:hover:text-[#f1d27a] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45"
+                            onClick={() => router.push(`/portal/operations/documents/${document.id}`)}
+                          >
+                            {document.title}
+                          </button>
+                        </td>
+                        <td className="px-4 text-[color:var(--portal-muted)] sm:px-6">{LUXOR_CREATED_DOCUMENT_TYPE_LABELS[document.document_type]}</td>
+                        <td className="px-4 sm:px-6">
+                          <PortalStatusBadge status={presentation.label} tone={presentation.tone} />
+                        </td>
+                        <td className="px-4 tabular-nums text-[color:var(--portal-faint)] sm:px-6">—</td>
+                        <td className="px-4 tabular-nums text-[color:var(--portal-muted)] sm:px-6">{formatLastChange(document.updated_at)}</td>
+                        <td className="px-4 sm:px-6">
+                          <div className="flex flex-wrap items-center justify-end gap-2">
+                            <PortalButton
+                              type="button"
+                              variant="secondary"
+                              className="min-h-11"
+                              onClick={() => router.push(`/portal/operations/documents/${document.id}`)}
+                            >
+                              Open <ChevronRight size={12} />
+                            </PortalButton>
+                            {primaryTab === 'templates' && !showArchived ? (
+                              <PortalButton
+                                type="button"
+                                variant="secondary"
+                                className="min-h-11"
+                                disabled={busyId === document.id}
+                                onClick={() => void runDuplicate(document)}
+                              >
+                                <Copy size={12} />
+                                Duplicate
+                              </PortalButton>
+                            ) : null}
+                            {!showArchived ? (
+                              <PortalButton
+                                type="button"
+                                variant="ghost"
+                                className="min-h-11"
+                                disabled={busyId === document.id}
+                                onClick={() => void runArchive(document, 'archive')}
+                              >
+                                Archive
+                              </PortalButton>
+                            ) : (
+                              <PortalButton
+                                type="button"
+                                variant="secondary"
+                                className="min-h-11"
+                                disabled={busyId === document.id}
+                                onClick={() => void runArchive(document, 'restore')}
+                              >
+                                Unarchive
+                              </PortalButton>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </PortalStickyTable>
+            </div>
+          </>
         )}
       </PortalTableCard>
     </div>

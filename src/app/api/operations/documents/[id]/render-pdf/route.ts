@@ -21,6 +21,7 @@ export async function POST(_request: NextRequest, context: RouteContext) {
     const signedUrl = await signedPdfUrlForCreatedDocument(document, fileName)
     return NextResponse.json({ document, signedUrl }, { headers: { 'Cache-Control': 'no-store' } })
   } catch (error) {
+    console.error('Created document PDF render failed', error)
     if (schemaUnavailable(error)) {
       return NextResponse.json({ error: 'Documents are not stored yet.' }, { status: 409 })
     }

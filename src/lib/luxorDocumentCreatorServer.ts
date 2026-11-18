@@ -111,12 +111,13 @@ export async function createLuxorCreatedDocument(input: {
     created_by: input.createdBy,
     source_template_id: input.sourceTemplateId ?? null,
   }
-  const [row] = await supabaseRestStrict<Record<string, unknown>[]>(`${TABLE}?select=*`, {
+  const rows = await supabaseRestStrict<Record<string, unknown>[]>(`${TABLE}?select=*`, {
     method: 'POST',
     headers: { Prefer: 'return=representation' },
     body: JSON.stringify(payload),
   })
-  const document = rowFromRecord(row)
+  const row = Array.isArray(rows) ? rows[0] : undefined
+  const document = row && typeof row === 'object' ? rowFromRecord(row) : null
   if (!document) throw new Error('The document could not be saved.')
   return document
 }
@@ -144,7 +145,7 @@ export async function updateLuxorCreatedDocument(input: {
   if (!existing) throw new SupabaseRestError('Document not found.', 404, 'PGRST116')
   patch.version = existing.version + 1
 
-  const [row] = await supabaseRestStrict<Record<string, unknown>[]>(
+  const rows = await supabaseRestStrict<Record<string, unknown>[]>(
     `${TABLE}?id=eq.${encodeURIComponent(input.id)}&updated_at=eq.${encodeURIComponent(input.expectedUpdatedAt)}&select=*`,
     {
       method: 'PATCH',
@@ -152,7 +153,8 @@ export async function updateLuxorCreatedDocument(input: {
       body: JSON.stringify(patch),
     },
   )
-  const document = rowFromRecord(row)
+  const row = Array.isArray(rows) ? rows[0] : undefined
+  const document = row && typeof row === 'object' ? rowFromRecord(row) : null
   if (!document) throw new SupabaseRestError('Document changed or is unavailable. Reload and try again.', 409, 'PGRST116')
   return document
 }
@@ -168,7 +170,7 @@ export async function archiveLuxorCreatedDocument(input: {
   const now = new Date().toISOString()
   const archivedAt = input.action === 'archive' ? now : null
   const status = input.action === 'archive' ? 'archived' : (existing.is_template ? 'template' : 'draft')
-  const [row] = await supabaseRestStrict<Record<string, unknown>[]>(
+  const rows = await supabaseRestStrict<Record<string, unknown>[]>(
     `${TABLE}?id=eq.${encodeURIComponent(input.id)}&updated_at=eq.${encodeURIComponent(input.expectedUpdatedAt)}&select=*`,
     {
       method: 'PATCH',
@@ -176,7 +178,8 @@ export async function archiveLuxorCreatedDocument(input: {
       body: JSON.stringify({ archived_at: archivedAt, status, updated_at: now }),
     },
   )
-  const document = rowFromRecord(row)
+  const row = Array.isArray(rows) ? rows[0] : undefined
+  const document = row && typeof row === 'object' ? rowFromRecord(row) : null
   if (!document) throw new SupabaseRestError('Document changed or is unavailable. Reload and try again.', 409, 'PGRST116')
   return document
 }
@@ -206,17 +209,17 @@ export async function renderLuxorCreatedDocumentPdf(document: LuxorCreatedDocume
   })
   const storagePath = pdfStoragePath(document.id, document.version)
   await saveLuxorPrivatePdf(storagePath, pdf)
-  const [row] = await supabaseRest<Record<string, unknown>[]>(
-    `${TABLE}?id=eq.${encodeURIComponent(document.id)}&select=*`,
+  await supabaseRest<Record<string, unknown>[]>(
+    `${TABLE}?id=eq.${encodeURIComponent(document.id)}&select=id`,
     {
       method: 'PATCH',
-      headers: { Prefer: 'return=representation' },
+      headers: { Prefer: 'return=minimal' },
       body: JSON.stringify({ pdf_storage_path: storagePath }),
     },
   )
-  const updated = row[0] && typeof row[0] === 'object' ? rowFromRecord(row[0] as Record<string, unknown>) : null
-  if (!updated) throw new Error('The PDF was generated but the document record could not be updated.')
-  return updated
+  const fresh = await getLuxorCreatedDocument(document.id)
+  if (!fresh) throw new Error('The PDF was generated but the document record could not be reloaded.')
+  return { ...fresh, pdf_storage_path: storagePath }
 }
 
 export async function signedPdfUrlForCreatedDocument(document: LuxorCreatedDocumentRow, fileName: string) {
