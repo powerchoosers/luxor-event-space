@@ -1319,12 +1319,12 @@ export function PortalEmptyState({
 export type PortalStatusTone = 'red' | 'blue' | 'gold' | 'green' | 'purple' | 'neutral' | 'warning'
 
 const STATUS_TONES: Record<string, PortalStatusTone> = {
-  overdue: 'red', error: 'red', failed: 'red', no_show: 'red', urgent: 'red',
+  overdue: 'red', error: 'red', failed: 'red', no_show: 'red', urgent: 'red', declined: 'red',
   new: 'purple', new_lead: 'purple', post_tour: 'purple',
-  contacted: 'blue', sent: 'blue', viewed: 'blue', unread: 'blue', active: 'blue', pending: 'blue', scheduled: 'blue',
-  tentative: 'gold', tour_requested: 'neutral', tour_confirmed: 'blue', proposal_sent: 'blue', awaiting_signature: 'blue', upcoming: 'gold', needs_outcome: 'gold', needs_schedule: 'neutral', needs_follow_up: 'gold', high: 'gold', partial: 'gold',
-  booked: 'green', confirmed: 'green', completed: 'green', attended: 'green', paid: 'green', signed: 'green',
-  closed_lost: 'neutral', draft: 'neutral', cancelled: 'neutral', canceled: 'neutral', not_sent: 'neutral', void: 'neutral', refunded: 'neutral',
+  contacted: 'blue', sent: 'blue', viewed: 'blue', unread: 'blue', active: 'blue', pending: 'blue', scheduled: 'blue', opened: 'blue',
+  tentative: 'gold', tour_requested: 'neutral', tour_confirmed: 'blue', proposal_sent: 'blue', awaiting_signature: 'blue', upcoming: 'gold', needs_outcome: 'gold', needs_schedule: 'neutral', needs_follow_up: 'gold', high: 'gold', partial: 'gold', partially_signed: 'gold',
+  booked: 'green', confirmed: 'green', completed: 'green', attended: 'green', paid: 'green', signed: 'green', fully_signed: 'green',
+  closed_lost: 'neutral', draft: 'neutral', cancelled: 'neutral', canceled: 'neutral', not_sent: 'neutral', void: 'neutral', voided: 'neutral', refunded: 'neutral', expired: 'warning', archived: 'neutral', template: 'neutral',
 }
 
 const STATUS_TONE_STYLES: Record<PortalStatusTone, string> = {

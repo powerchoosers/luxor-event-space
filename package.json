@@ -31,6 +31,7 @@
     "test:phase5-bills": "node --test tests/luxor-phase5-bills.test.cjs",
     "test:phase6-budget-summary": "node --test tests/luxor-phase6-budget-summary.test.cjs",
     "test:books-health": "node --test tests/luxor-books-health.test.cjs",
+    "test:document-creator": "node --test tests/luxor-document-creator.test.cjs",
     "test:sales-briefing": "node --test tests/sales-briefing-send-gate.test.cjs tests/sales-briefing-pipeline.test.cjs",
     "phase5:migration-readiness": "node scripts/phase5-migration-readiness.cjs",
     "phase5:stage": "node scripts/stage-phase5.cjs"
@@ -45,6 +46,10 @@
     "@react-three/drei": "^10.7.7",
     "@react-three/fiber": "^9.6.1",
     "@supabase/supabase-js": "^2.110.8",
+    "@tiptap/extension-placeholder": "^3.34.0",
+    "@tiptap/extension-underline": "^3.34.0",
+    "@tiptap/react": "^3.34.0",
+    "@tiptap/starter-kit": "^3.34.0",
     "@twilio/voice-sdk": "2.18.3",
     "@types/three": "^0.185.1",
     "clsx": "^2.1.1",

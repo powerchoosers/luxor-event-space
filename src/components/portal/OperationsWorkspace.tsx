@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect, Suspense, useCallback, useMemo } from 'react'
+import React, { useState, useEffect, useLayoutEffect, useRef, Suspense, useCallback, useMemo } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import {
   Wrench,
@@ -66,6 +66,7 @@ import { MagicCard } from '@/components/ui/magic-card'
 import { OperationsLoadingSkeleton } from '@/app/(workspace)/(portal)/portal/operations/OperationsLoadingSkeleton'
 import { NeedsAttentionNow } from '@/components/portal/NeedsAttentionNow'
 import { PartnerApplicationsPanel } from '@/components/portal/PartnerApplicationsPanel'
+import { DocumentCreatorLibrary } from '@/components/portal/DocumentCreatorLibrary'
 
 type SubTab =
   | 'dashboard'
@@ -76,6 +77,7 @@ type SubTab =
   | 'utilities'
   | 'cleaning'
   | 'staff'
+  | 'documents'
 
 type ReadinessTask = {
   id: string
@@ -121,6 +123,7 @@ const operationsTabs: Array<{ id: SubTab; label: string; icon: React.ReactNode; 
   { id: 'utilities', label: 'Utility Sensors', icon: <Zap size={15} />, description: 'Real-time power, water, HVAC, and ambient readings', group: 'Facility & Environment' },
   { id: 'cleaning', label: 'Cleaning Checklists', icon: <Sparkles size={15} />, description: 'Sanitation rota, turn-down status, and audit logs', group: 'Facility & Environment' },
   { id: 'staff', label: 'Staff Rota', icon: <Clock size={15} />, description: 'Shift assignments, coordinator on-duty, and team schedule', group: 'Team & Staffing' },
+  { id: 'documents', label: 'Documents', icon: <FileText size={15} />, description: 'Draft agreements, templates, and branded PDFs', group: 'Team & Staffing' },
 ]
 
 type EditFormData = {
@@ -161,6 +164,37 @@ export function OperationsPageContent({ embeddedBills = false }: { embeddedBills
   const tabParam = searchParams.get('tab') as SubTab | null
   const activeTab = embeddedBills ? 'bills' : tabParam || 'dashboard'
   const [isViewPickerOpen, setIsViewPickerOpen] = useState(false)
+  const opsDesktopNavSlotRef = useRef<HTMLDivElement | null>(null)
+  const [opsNavCompact, setOpsNavCompact] = useState(false)
+
+  const syncOpsNavFit = useCallback(() => {
+    const slot = opsDesktopNavSlotRef.current
+    if (!slot) return
+    const nav = slot.querySelector('nav')
+    if (!nav) return
+    setOpsNavCompact(nav.scrollWidth > slot.clientWidth + 1)
+  }, [])
+
+  useLayoutEffect(() => {
+    if (embeddedBills) return
+    const slot = opsDesktopNavSlotRef.current
+    if (!slot) return
+    syncOpsNavFit()
+    const observer =
+      typeof ResizeObserver !== 'undefined'
+        ? new ResizeObserver(() => {
+            syncOpsNavFit()
+          })
+        : null
+    observer?.observe(slot)
+    const nav = slot.querySelector('nav')
+    if (nav) observer?.observe(nav)
+    window.addEventListener('resize', syncOpsNavFit)
+    return () => {
+      observer?.disconnect()
+      window.removeEventListener('resize', syncOpsNavFit)
+    }
+  }, [activeTab, embeddedBills, syncOpsNavFit])
 
   useEffect(() => {
     if (!embeddedBills && tabParam === 'bills') {
@@ -740,7 +774,7 @@ export function OperationsPageContent({ embeddedBills = false }: { embeddedBills
   const sensorsOnline = utilities.length > 0
 
   return (
-    <PortalPageFrame bleed={embeddedBills} className={embeddedBills ? 'min-h-0 flex-1 gap-0 overflow-hidden' : 'h-full min-h-0 overflow-hidden flex flex-col gap-4 xl:gap-6'}>
+    <PortalPageFrame bleed={embeddedBills} className={embeddedBills ? 'min-h-0 flex-1 gap-0 overflow-hidden' : 'h-full min-h-0 overflow-x-hidden overflow-y-hidden flex flex-col gap-4 xl:gap-6'}>
       {!embeddedBills && <PortalPageHeader
         icon={<Wrench size={18} />}
         title="Venue Operations"
@@ -750,6 +784,7 @@ export function OperationsPageContent({ embeddedBills = false }: { embeddedBills
               tabs={operationsTabs}
               activeTab={activeTab}
               onClick={() => setIsViewPickerOpen(true)}
+              className={opsNavCompact ? '!inline-flex xl:!inline-flex' : ''}
             />
             {activeTab === 'maintenance' ? (
               <PortalButton variant="primary" onClick={() => setIsTaskModalOpen(true)}><Plus size={14} /> New Ticket</PortalButton>
@@ -757,6 +792,8 @@ export function OperationsPageContent({ embeddedBills = false }: { embeddedBills
               <PortalButton variant="primary" onClick={() => setIsInventoryModalOpen(true)}><Plus size={14} /> Audit Stock</PortalButton>
             ) : activeTab === 'vendors' && vendorWorkspaceView === 'roster' ? (
               <PortalButton variant="primary" onClick={() => setIsVendorModalOpen(true)}><Plus size={14} /> Add Vendor</PortalButton>
+            ) : activeTab === 'documents' ? (
+              <PortalButton variant="primary" className="min-h-11" onClick={() => router.push('/portal/operations/documents/new')}><Plus size={14} /> New document</PortalButton>
             ) : null}
           </div>
         }
@@ -775,15 +812,19 @@ export function OperationsPageContent({ embeddedBills = false }: { embeddedBills
       />}
 
       {/* Desktop rectangular sliding tab navigation */}
-      {!embeddedBills && <div className="hidden shrink-0 xl:flex">
-        <PortalAnimatedTabs
-          variant="slider"
-          ariaLabel="Operations sections"
-          tabs={operationsTabs}
-          activeTab={activeTab}
-          onTabChange={(tab) => router.push(`/portal/operations?tab=${tab}`)}
-        />
-      </div>}
+      {!embeddedBills && (
+        <div ref={opsDesktopNavSlotRef} className="hidden w-full min-w-0 max-w-full shrink-0 min-[1280px]:block">
+          <div className={opsNavCompact ? 'max-h-0 overflow-hidden opacity-0 pointer-events-none' : undefined}>
+            <PortalAnimatedTabs
+              variant="slider"
+              ariaLabel="Operations sections"
+              tabs={operationsTabs}
+              activeTab={activeTab}
+              onTabChange={(tab) => router.push(`/portal/operations?tab=${tab}`)}
+            />
+          </div>
+        </div>
+      )}
 
       <PortalTabTransition activeKey={activeTab} className={`min-h-0 flex-1 overflow-hidden ${embeddedBills ? 'flex flex-col' : ''}`}>
       {loading ? (
@@ -1273,6 +1314,12 @@ export function OperationsPageContent({ embeddedBills = false }: { embeddedBills
               <p className="mt-2 text-[10px] leading-relaxed text-[color:var(--portal-muted)]">The previous checklist and photo uploader were visual-only and did not save. Use maintenance tasks until cleaning records and attachments are tied to individual events.</p>
             </div>
           </div>
+        </div>
+      )}
+
+      {activeTab === 'documents' && (
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+          <DocumentCreatorLibrary />
         </div>
       )}
 
