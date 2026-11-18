@@ -99,7 +99,8 @@ import {
   type LeadEmailSentEventDetail,
 } from '@/lib/luxorLeadEmailNotice'
 import { getLuxorTourSection, luxorTodayKey } from '@/lib/luxorTourMetrics'
-import { createLuxorTourAttendancePayload } from '@/lib/luxorTourOutcome'
+import { canReopenLuxorTourCompletion, createLuxorTourAttendancePayload, createLuxorTourReopenPayload } from '@/lib/luxorTourOutcome'
+import { PortalBulkConfirmDialog } from '@/components/portal/PortalBulkSelection'
 import { queueLuxorPaymentReceiptAfterSave } from '@/lib/luxorPaymentReceiptClient'
 import { CorrectEmailResendDialog } from '@/components/portal/CorrectEmailResendDialog'
 import type { CorrectEmailResendOption } from '@/lib/luxorLeadEmailResend'
@@ -488,7 +489,8 @@ export default function LeadDetailPage({
   const requestedTestRunId = searchParams?.get('testRunId') || null
   const router = useRouter()
   const pathname = usePathname()
-  const { notify } = useToast()
+  const { notify, dismiss } = useToast()
+  const tourCompletionToastIdRef = useRef<string | null>(null)
   const [leadReturnPath, setLeadReturnPath] = useState('/portal/leads')
   useEffect(() => {
     try {
@@ -675,6 +677,8 @@ export default function LeadDetailPage({
   const [sendingReminderId, setSendingReminderId] = useState<string | null>(null)
   const [refundingDeposit, setRefundingDeposit] = useState(false)
   const [confirmRefundModalOpen, setConfirmRefundModalOpen] = useState(false)
+  const [tourReopenConfirmOpen, setTourReopenConfirmOpen] = useState(false)
+  const [tourReopenBusy, setTourReopenBusy] = useState(false)
 
   // Tour scheduling + Zoho invite state
   const [isTourScheduleModalOpen, setIsTourScheduleModalOpen] = useState(false)
@@ -4049,6 +4053,52 @@ export default function LeadDetailPage({
     }
   }
 
+  const dismissTourCompletionToast = useCallback(() => {
+    if (tourCompletionToastIdRef.current) {
+      dismiss(tourCompletionToastIdRef.current)
+      tourCompletionToastIdRef.current = null
+    }
+  }, [dismiss])
+
+  const handleTourReopen = async () => {
+    if (!lead || tourReopenBusy) return
+    dismissTourCompletionToast()
+    setTourReopenBusy(true)
+    try {
+      const response = await fetch('/api/tour-actions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(createLuxorTourReopenPayload({
+          inquiryId: lead.id,
+          leadEventId: selectedLeadEvent?.id,
+          expectedAttendance: lead.tour_attendance_status || null,
+          visitId: lead.current_tour_visit_id,
+          visitVersion: lead.current_tour_visit_version,
+        })),
+      })
+      const payload = await response.json().catch(() => ({})) as { error?: string; inquiry?: LuxorInquiry; warnings?: string[] }
+      if (!response.ok) throw new Error(payload.error || 'The tour could not be reopened.')
+      if (payload.inquiry) setLead(payload.inquiry as LuxorInquiry)
+      setSelectedStageOverride('tour')
+      const nextParams = new URLSearchParams(searchParams?.toString() || '')
+      nextParams.set('tab', 'overview')
+      nextParams.set('stage', 'tour')
+      router.replace(`${pathname || `/portal/leads/${id}`}?${nextParams.toString()}`, { scroll: false })
+      await fetchAllData(false)
+      setTourReopenConfirmOpen(false)
+      const warnings = payload.warnings ?? []
+      notify({
+        title: 'Tour reopened',
+        description: warnings.length ? warnings.join(' ') : 'The visit is scheduled again. Post-tour follow-ups that had not sent were cancelled.',
+        variant: warnings.length ? 'warning' : 'success',
+      })
+    } catch (error) {
+      notify({ title: 'Tour could not be reopened', description: error instanceof Error ? error.message : 'Please try again.', variant: 'error' })
+    } finally {
+      setTourReopenBusy(false)
+    }
+  }
+
   const handleTourAttendanceAction = async (attendance: 'attended' | 'no_show') => {
     if (!lead) return
     try {
@@ -4059,6 +4109,7 @@ export default function LeadDetailPage({
       })
       const payload = await response.json().catch(() => ({})) as { error?: string; inquiry?: unknown; warnings?: string[]; simulated?: boolean }
       if (!response.ok) throw new Error(payload.error || 'Tour attendance could not be updated.')
+      const savedLead = (payload.inquiry as LuxorInquiry | undefined) || lead
       if (payload.inquiry) setLead(payload.inquiry as LuxorInquiry)
       if (attendance === 'attended') {
         setSelectedStageOverride('proposal')
@@ -4069,13 +4120,25 @@ export default function LeadDetailPage({
       }
       await fetchAllData(false)
       const warnings = payload.warnings ?? []
-      notify({
+      const showUndo = attendance === 'attended' && canReopenLuxorTourCompletion(savedLead)
+      const completionToastId = notify({
         title: attendance === 'attended' ? (lead.tour_attendance_status === 'no_show' ? 'Tour outcome corrected to complete' : 'Tour marked complete') : 'Tour marked no show',
         description: warnings.length ? warnings.join(' ') : payload.simulated
           ? 'Saved in the isolated Test Lead run. No customer message, venue calendar event, or inventory slot changed.'
           : 'The outcome was saved without sending a message.',
         variant: warnings.length ? 'warning' : 'success',
+        durationMs: showUndo ? 12_000 : undefined,
+        action: showUndo ? (
+          <button
+            type="button"
+            className="text-xs font-semibold text-[#a8792f] hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45"
+            onClick={() => void handleTourReopen()}
+          >
+            Undo
+          </button>
+        ) : undefined,
       })
+      tourCompletionToastIdRef.current = showUndo ? completionToastId : null
     } catch (error) {
       notify({ title: 'Tour status not saved', description: error instanceof Error ? error.message : 'Please try again.', variant: 'error' })
     }
@@ -6105,6 +6168,9 @@ export default function LeadDetailPage({
                           ) : null}
                           {!['Completed', 'Cancelled'].includes(tourDisplayStatus(lead)) ? (
                             <button type="button" onClick={() => handleTourAttendanceAction('attended')} className="luxor-gold-raised inline-flex min-h-11 w-full items-center justify-center rounded-xl px-4 text-[10px] font-black uppercase tracking-[0.14em] text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45">{lead.tour_attendance_status === 'no_show' ? 'Correct Outcome to Completed' : 'Mark Complete'}</button>
+                          ) : null}
+                          {canReopenLuxorTourCompletion(lead) ? (
+                            <button type="button" onClick={() => setTourReopenConfirmOpen(true)} className="mt-2 inline-flex min-h-11 w-full items-center justify-center rounded-xl border border-[color:var(--portal-border)] px-4 text-[10px] font-black uppercase tracking-[0.14em] text-[color:var(--portal-text)] transition-colors hover:border-[#caa24c]/35 hover:text-[#a8792f] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45">Reopen tour</button>
                           ) : null}
                           <div className="mt-2 grid gap-2 sm:grid-cols-2">
                             <button type="button" onClick={() => openTourScheduleModal('reschedule')} className="min-h-10 rounded-lg border border-[color:var(--portal-border)] px-3 text-[9px] font-black uppercase tracking-wider text-[color:var(--portal-muted)] transition-colors hover:border-[#caa24c]/35 hover:text-[color:var(--portal-text)]">Reschedule</button>
@@ -9347,6 +9413,16 @@ export default function LeadDetailPage({
           </div>
         </div>
       </PortalModal>
+
+      <PortalBulkConfirmDialog
+        open={tourReopenConfirmOpen}
+        title="Reopen this tour?"
+        description="This removes the completed visit mark, returns the lead to the tour stage, and cancels post-tour follow-ups that have not sent yet. Nothing is deleted and no email sends."
+        confirmLabel="Reopen tour"
+        busy={tourReopenBusy}
+        onClose={() => !tourReopenBusy && setTourReopenConfirmOpen(false)}
+        onConfirm={() => void handleTourReopen()}
+      />
 
       <ProposalDeliveryPreview
         invoice={proposalDeliveryPreview?.invoice || null}
