@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import dynamic from 'next/dynamic'
 import { CheckCircle2, ChevronLeft, ChevronRight, Download, FileText, LoaderCircle, LockKeyhole, PenLine, Type } from '@/lib/icons/phosphor-compat'
 import { LUXOR_LEGACY_CONTRACT_SIGNATURE_PLACEMENT } from '@/lib/luxorSignaturePlacement'
+import { createTypedSignature, DrawSignature } from '@/components/secure-portal/SecurePortalSignatureAdopt'
 
 const ContractPdfViewer = dynamic(() => import('@/app/secure-portal/sign/[token]/ContractPdfViewer'), {
   ssr: false,
@@ -38,26 +39,6 @@ export type CreatedDocumentSignPayload = {
 }
 
 type SignatureMode = 'type' | 'draw'
-
-function createTypedSignature(name: string) {
-  const canvas = document.createElement('canvas')
-  canvas.width = 1000
-  canvas.height = 220
-  const context = canvas.getContext('2d')
-  if (!context) return null
-  context.fillStyle = '#2d251e'
-  context.textAlign = 'center'
-  context.textBaseline = 'middle'
-  let size = 104
-  const signatureFont = getComputedStyle(document.documentElement).getPropertyValue('--font-signature').trim() || '"Brush Script MT", "Segoe Script", cursive'
-  context.font = `${size}px ${signatureFont}`
-  while (context.measureText(name).width > 900 && size > 42) {
-    size -= 2
-    context.font = `${size}px ${signatureFont}`
-  }
-  context.fillText(name, canvas.width / 2, canvas.height / 2 + 5)
-  return canvas.toDataURL('image/png')
-}
 
 export function CreatedDocumentSignFlow({ token, initial }: { token: string; initial: CreatedDocumentSignPayload }) {
   const [payload, setPayload] = useState(initial)
@@ -98,6 +79,11 @@ export function CreatedDocumentSignFlow({ token, initial }: { token: string; ini
     setSignatureDataUrl(name ? createTypedSignature(name) : null)
   }, [complete, mode, signedName])
 
+  const chooseMode = (nextMode: SignatureMode) => {
+    setMode(nextMode)
+    setSignatureDataUrl(nextMode === 'type' && signedName.trim() ? createTypedSignature(signedName.trim()) : null)
+  }
+
   useEffect(() => {
     if (!activeField) return
     setPageNumber(activeField.page_index + 1)
@@ -117,7 +103,12 @@ export function CreatedDocumentSignFlow({ token, initial }: { token: string; ini
       setFieldValue(activeField, new Date().toLocaleDateString('en-US'))
       return
     }
-    if (activeField.field_type === 'name' || activeField.field_type === 'signature' || activeField.field_type === 'initials') {
+    if (activeField.field_type === 'signature' || activeField.field_type === 'initials') {
+      if (!signatureDataUrl) return
+      setFieldValue(activeField, signedName.trim() || 'Signed')
+      return
+    }
+    if (activeField.field_type === 'name') {
       setFieldValue(activeField, signedName.trim())
     }
   }
@@ -190,9 +181,10 @@ export function CreatedDocumentSignFlow({ token, initial }: { token: string; ini
         setFieldValue={setFieldValue}
         fillActiveField={fillActiveField}
         mode={mode}
-        setMode={setMode}
+        chooseMode={chooseMode}
         signedName={signedName}
         setSignedName={setSignedName}
+        setSignatureDataUrl={setSignatureDataUrl}
         accepted={accepted}
         setAccepted={setAccepted}
         error={error}
@@ -243,9 +235,10 @@ function SignFlowBody(props: {
   setFieldValue: (field: SignField, value: string | boolean) => void
   fillActiveField: () => void
   mode: SignatureMode
-  setMode: (value: SignatureMode) => void
+  chooseMode: (value: SignatureMode) => void
   signedName: string
   setSignedName: (value: string) => void
+  setSignatureDataUrl: (value: string | null) => void
   accepted: boolean
   setAccepted: (value: boolean) => void
   error: string | null
@@ -259,7 +252,7 @@ function SignFlowBody(props: {
   const {
     viewerRef, pdfUrl, pageNumber, pageWidth, signatureDataUrl, complete, numPages, setNumPages, setPageNumber, setError,
     payload, activeField, activeFieldIndex, visibleCount, fieldValues, setFieldValue, fillActiveField,
-    mode, setMode, signedName, setSignedName, accepted, setAccepted, error, submitting, onSubmit, onPrev, onNext, onDecline, pdfUrlComplete,
+    mode, chooseMode, signedName, setSignedName, setSignatureDataUrl, accepted, setAccepted, error, submitting, onSubmit, onPrev, onNext, onDecline, pdfUrlComplete,
   } = props
 
   return (
@@ -293,9 +286,11 @@ function SignFlowBody(props: {
             setFieldValue={setFieldValue}
             fillActiveField={fillActiveField}
             mode={mode}
-            setMode={setMode}
+            chooseMode={chooseMode}
             signedName={signedName}
             setSignedName={setSignedName}
+            signatureDataUrl={signatureDataUrl}
+            setSignatureDataUrl={setSignatureDataUrl}
             accepted={accepted}
             setAccepted={setAccepted}
             error={error}
@@ -344,9 +339,11 @@ function SignPane(props: {
   setFieldValue: (field: SignField, value: string | boolean) => void
   fillActiveField: () => void
   mode: SignatureMode
-  setMode: (value: SignatureMode) => void
+  chooseMode: (value: SignatureMode) => void
   signedName: string
   setSignedName: (value: string) => void
+  signatureDataUrl: string | null
+  setSignatureDataUrl: (value: string | null) => void
   accepted: boolean
   setAccepted: (value: boolean) => void
   error: string | null
@@ -358,7 +355,8 @@ function SignPane(props: {
 }) {
   const {
     activeField, activeFieldIndex, visibleCount, fieldValues, setFieldValue, fillActiveField,
-    mode, setMode, signedName, setSignedName, accepted, setAccepted, error, submitting, onSubmit, onPrev, onNext, onDecline,
+    mode, chooseMode, signedName, setSignedName, signatureDataUrl, setSignatureDataUrl,
+    accepted, setAccepted, error, submitting, onSubmit, onPrev, onNext, onDecline,
   } = props
   return (
     <form onSubmit={onSubmit} className="flex min-h-[650px] flex-1 flex-col lg:min-h-0">
@@ -380,8 +378,44 @@ function SignPane(props: {
           </button>
         ) : null}
         <p className="mt-5 text-[10px] font-bold uppercase tracking-[0.16em] text-[#9b7740]">Adopt signature once</p>
-        <SignModeButtons mode={mode} setMode={setMode} />
-        <input className="mt-3 w-full min-h-11 rounded-lg border border-[#d8d0c4] bg-white px-3 text-sm" value={signedName} onChange={(event) => setSignedName(event.target.value)} placeholder="Legal name" />
+        <label className="mt-2 block text-xs font-semibold text-[#554b41]" htmlFor="created-doc-legal-name">Full legal name</label>
+        <input
+          id="created-doc-legal-name"
+          className="mt-2 h-11 w-full rounded-xl border border-[#d8d0c4] bg-[#fffdfa] px-3.5 text-sm text-[#2d251e] outline-none transition placeholder:text-[#aaa095] focus:border-[#b88a44] focus:ring-2 focus:ring-[#b88a44]/15"
+          value={signedName}
+          onChange={(event) => setSignedName(event.target.value)}
+          autoComplete="name"
+          placeholder="Legal name"
+        />
+        <div className="mt-5 grid grid-cols-2 gap-1 rounded-xl bg-[#e8e1d7] p-1">
+          <button
+            type="button"
+            onClick={() => chooseMode('type')}
+            className={`flex h-9 items-center justify-center gap-2 rounded-lg text-xs font-semibold transition ${mode === 'type' ? 'bg-[#fffdfa] text-[#2d251e] shadow-sm' : 'text-[#776d61] hover:text-[#2d251e]'}`}
+          >
+            <Type size={14} /> Type
+          </button>
+          <button
+            type="button"
+            onClick={() => chooseMode('draw')}
+            className={`flex h-9 items-center justify-center gap-2 rounded-lg text-xs font-semibold transition ${mode === 'draw' ? 'bg-[#fffdfa] text-[#2d251e] shadow-sm' : 'text-[#776d61] hover:text-[#2d251e]'}`}
+          >
+            <PenLine size={14} /> Draw
+          </button>
+        </div>
+        <div className="mt-3">
+          {mode === 'type' ? (
+            <div className="flex h-36 items-center justify-center overflow-hidden rounded-xl border border-[#d8d0c4] bg-[#fffdfa] px-5">
+              {signedName.trim() ? (
+                <span className="max-w-full truncate text-4xl text-[#2d251e]" style={{ fontFamily: 'var(--font-signature)' }}>{signedName}</span>
+              ) : (
+                <span className="text-sm text-[#a39a8d]">Type your name above</span>
+              )}
+            </div>
+          ) : (
+            <DrawSignature value={signatureDataUrl} onChange={setSignatureDataUrl} />
+          )}
+        </div>
         <label className="mt-4 flex items-start gap-2 text-xs leading-5 text-[#5f554a]">
           <input type="checkbox" checked={accepted} onChange={(event) => setAccepted(event.target.checked)} className="mt-0.5" />
           I agree to sign electronically and understand this is legally binding.
@@ -393,15 +427,6 @@ function SignPane(props: {
         <SignFlowFooter onPrev={onPrev} onNext={onNext} onDecline={onDecline} />
       </div>
     </form>
-  )
-}
-
-function SignModeButtons({ mode, setMode }: { mode: SignatureMode; setMode: (value: SignatureMode) => void }) {
-  return (
-    <div className="mt-3 grid grid-cols-2 gap-2">
-      <button type="button" onClick={() => setMode('type')} className={`min-h-10 rounded-lg border text-xs font-semibold ${mode === 'type' ? 'border-[#b98a3e] bg-[#f5ead2]' : 'border-[#ded5c8] bg-white'}`}><Type size={14} className="inline" /> Type</button>
-      <button type="button" onClick={() => setMode('draw')} className={`min-h-10 rounded-lg border text-xs font-semibold ${mode === 'draw' ? 'border-[#b98a3e] bg-[#f5ead2]' : 'border-[#ded5c8] bg-white'}`}><PenLine size={14} className="inline" /> Draw</button>
-    </div>
   )
 }
 
