@@ -159,7 +159,8 @@ export default function LeadsPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const requestedView = searchParams.get('view')
-  const { notify } = useToast()
+  const { notify, dismiss } = useToast()
+  const tourCompletionToastIdRef = useRef<string | null>(null)
   const reduceMotion = useReducedMotion()
   const [leads, setLeads] = useState<LuxorInquiry[]>([])
   const [loading, setLoading] = useState(true)
@@ -296,8 +297,16 @@ export default function LeadsPage() {
     }
   }
 
+  const dismissTourCompletionToast = useCallback(() => {
+    if (tourCompletionToastIdRef.current) {
+      dismiss(tourCompletionToastIdRef.current)
+      tourCompletionToastIdRef.current = null
+    }
+  }, [dismiss])
+
   const handleTourReopen = async (lead: LuxorInquiry) => {
     if (tourOutcomeLocks.current.has(lead.id)) return
+    dismissTourCompletionToast()
     tourOutcomeLocks.current.add(lead.id)
     setTourReopenBusy(true)
     setBusyTourOutcomeIds((current) => [...current, lead.id])
@@ -349,7 +358,7 @@ export default function LeadsPage() {
       if (refreshFailed) warnings.push('Reload the page to refresh the tour list.')
       const savedLead = payload.inquiry || lead
       const showUndo = attendance === 'attended' && canReopenLuxorTourCompletion(savedLead)
-      notify({
+      const completionToastId = notify({
         title: attendance === 'attended' ? 'Tour marked completed' : 'Tour marked no show',
         description: warnings.length ? warnings.join(' ') : 'The outcome was saved without sending a message.',
         variant: warnings.length ? 'warning' : 'success',
@@ -364,6 +373,7 @@ export default function LeadsPage() {
           </button>
         ) : undefined,
       })
+      tourCompletionToastIdRef.current = showUndo ? completionToastId : null
     } catch (error) {
       notify({ title: 'Tour outcome could not be confirmed', description: `${error instanceof Error ? error.message : 'Try again.'} Refresh and retrying the same outcome is safe.`, variant: 'error' })
     } finally {

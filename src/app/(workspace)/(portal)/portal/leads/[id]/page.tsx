@@ -489,7 +489,8 @@ export default function LeadDetailPage({
   const requestedTestRunId = searchParams?.get('testRunId') || null
   const router = useRouter()
   const pathname = usePathname()
-  const { notify } = useToast()
+  const { notify, dismiss } = useToast()
+  const tourCompletionToastIdRef = useRef<string | null>(null)
   const [leadReturnPath, setLeadReturnPath] = useState('/portal/leads')
   useEffect(() => {
     try {
@@ -4052,8 +4053,16 @@ export default function LeadDetailPage({
     }
   }
 
+  const dismissTourCompletionToast = useCallback(() => {
+    if (tourCompletionToastIdRef.current) {
+      dismiss(tourCompletionToastIdRef.current)
+      tourCompletionToastIdRef.current = null
+    }
+  }, [dismiss])
+
   const handleTourReopen = async () => {
     if (!lead || tourReopenBusy) return
+    dismissTourCompletionToast()
     setTourReopenBusy(true)
     try {
       const response = await fetch('/api/tour-actions', {
@@ -4112,7 +4121,7 @@ export default function LeadDetailPage({
       await fetchAllData(false)
       const warnings = payload.warnings ?? []
       const showUndo = attendance === 'attended' && canReopenLuxorTourCompletion(savedLead)
-      notify({
+      const completionToastId = notify({
         title: attendance === 'attended' ? (lead.tour_attendance_status === 'no_show' ? 'Tour outcome corrected to complete' : 'Tour marked complete') : 'Tour marked no show',
         description: warnings.length ? warnings.join(' ') : payload.simulated
           ? 'Saved in the isolated Test Lead run. No customer message, venue calendar event, or inventory slot changed.'
@@ -4129,6 +4138,7 @@ export default function LeadDetailPage({
           </button>
         ) : undefined,
       })
+      tourCompletionToastIdRef.current = showUndo ? completionToastId : null
     } catch (error) {
       notify({ title: 'Tour status not saved', description: error instanceof Error ? error.message : 'Please try again.', variant: 'error' })
     }

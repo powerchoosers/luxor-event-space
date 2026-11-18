@@ -510,7 +510,7 @@ async function captureStaticScreenshots(browser, state, consoleLog) {
     attachPageDiagnostics(mobilePage, consoleLog)
 
     resetFixtureState(state)
-  state.captureTheme = theme
+    state.captureTheme = theme
     await gotoLeadsTours(mobilePage, theme, MOBILE_VIEWPORT.width)
     await captureReopenScreensAtWidth(mobilePage, state, theme, MOBILE_VIEWPORT.width)
 
@@ -546,6 +546,29 @@ async function captureStaticScreenshots(browser, state, consoleLog) {
   await waitForDialogSettled(reducedPage)
   await screenshot(reducedPage, 'tours-confirm-reduced-motion-390.png', 'light')
   await reducedContext.close()
+}
+
+async function captureLeadsBulkDeleteConfirmDark(browser, state, consoleLog) {
+  resetFixtureState(state)
+  state.captureTheme = 'dark'
+  const context = await createPortalContext(browser, state, {
+    viewport: { width: 1280, height: 900 },
+    theme: 'dark',
+  })
+  const page = await context.newPage()
+  attachPageDiagnostics(page, consoleLog)
+  await page.addInitScript(() => {
+    window.localStorage.setItem('luxor_leads_active_tab', 'pipeline')
+  })
+  await page.goto(`${origin}/portal/leads?view=pipeline`, { waitUntil: 'domcontentloaded' })
+  await waitForPortalTheme(page, 'dark')
+  await page.getByRole('row').filter({ hasText: 'Sample Guest' }).getByRole('checkbox', { name: /Select Sample Guest/ }).click()
+  await page.getByLabel('Bulk actions').getByRole('button', { name: 'Delete' }).click()
+  await page.getByText(/Delete \d+ selected lead/).waitFor({ timeout: 15_000 })
+  await waitForDialogSettled(page)
+  await screenshot(page, 'leads-bulk-delete-confirm-dark-1280.png', 'dark')
+  await page.getByRole('dialog').getByRole('button', { name: 'Cancel' }).click()
+  await context.close()
 }
 
 async function recordContinuousFlow(browser, state) {
@@ -646,6 +669,7 @@ async function main() {
     }
 
     await captureStaticScreenshots(browser, state, consoleLog)
+    await captureLeadsBulkDeleteConfirmDark(browser, state, consoleLog)
     await recordContinuousFlow(browser, state)
 
     fs.writeFileSync(path.join(artifactDir, 'qa-console-errors.txt'), consoleLog.length ? consoleLog.join('\n') : '(no page or console errors captured)')

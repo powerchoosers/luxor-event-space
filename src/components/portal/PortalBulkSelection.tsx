@@ -253,7 +253,7 @@ export function PortalBulkConfirmDialog({
       title={title}
       description={description}
       maxWidth="max-w-md"
-      className="!bg-[color:var(--portal-card)] ![backdrop-filter:none] ![-webkit-backdrop-filter:none]"
+      className="portal-bulk-confirm-surface"
     >
       <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
         <PortalButton onClick={onClose} disabled={busy}>Cancel</PortalButton>
