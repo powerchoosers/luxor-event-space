@@ -389,6 +389,11 @@ export type LuxorInquiry = {
   tour_response_token?: string | null
   follow_up_disposition?: 'no_response' | 'not_interested' | 'lost_another_venue' | 'event_canceled' | null
   follow_up_disposition_reason?: string | null
+  client_attention_at?: string | null
+  client_attention_reason?: string | null
+  client_attention_kind?: string | null
+  client_attention_event_id?: string | null
+  client_attention_acknowledged_at?: string | null
 }
 
 /** Legacy closed-lost rows remain archived in the CRM without changing their business semantics. */

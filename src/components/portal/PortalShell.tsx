@@ -595,6 +595,7 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
         email_open: 'info',
         email_delivery_issue: 'warning',
         layout_feedback: 'info',
+        client_status: 'warning',
       }
       const elenaAnsweredCall = item.title === ELENA_ANSWERED_NOTIFICATION_TITLE
       notify({

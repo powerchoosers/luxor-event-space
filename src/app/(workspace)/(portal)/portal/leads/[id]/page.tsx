@@ -6,6 +6,7 @@ import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import Link from 'next/link'
 import { LuxorTimePicker } from '@/components/LuxorTimePicker'
 import { EnrollInWorkflowModal } from '@/components/portal/EnrollInWorkflowModal'
+import { ClientAttentionBanner } from '@/components/portal/ClientAttentionBanner'
 import { AddFollowUpModal } from '@/components/portal/AddFollowUpModal'
 import { LogCallOutcomeModal } from '@/components/portal/LogCallOutcomeModal'
 import { WorkflowBadge } from '@/components/portal/WorkflowBadge'
@@ -5277,6 +5278,7 @@ export default function LeadDetailPage({
         <p className="text-xs text-[color:var(--portal-muted)]">{loadingTestRun ? 'Preparing the isolated Test Lead run…' : 'This lead needs an active isolated run before tours or proposals can be simulated.'}</p>
         {!loadingTestRun ? <button type="button" onClick={() => void ensureActiveTestRun(true)} className="min-h-10 rounded-lg bg-sky-700 px-3 text-xs font-semibold text-white">Start or resume isolated run</button> : null}
       </div> : null}
+{lead ? <ClientAttentionBanner lead={lead} onAcknowledged={setLead} /> : null}
 {invoices.some(invoice => invoice.same_day_booking_status === 'review') || payments.some(payment => payment.metadata?.deposit_receipt_review === true || (payment.metadata?.receipt_received && payment.status !== 'paid')) ? <div role="alert" className="mb-4 border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-4 text-sm leading-6 text-[color:var(--portal-text)]"><p className="font-semibold">Payment received — owner review required</p><p className="text-[color:var(--portal-muted)]">A payment needs review before the date can be confirmed. Do not collect another payment. Check the receipt and the date, including any other payment link in progress, before making changes.</p></div> : null}
 {paymentLoadError ? <div role="alert" className="mb-4 border border-red-500/30 bg-red-500/5 p-4 text-sm text-[color:var(--portal-text)]">{paymentLoadError}</div> : null}
 

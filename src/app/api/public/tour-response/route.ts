@@ -4,6 +4,7 @@ import { cancelLuxorTourForInquiry } from '@/lib/luxorTourCancellationServer'
 import { getLuxorCalendarEvent } from '@/lib/luxorCalendarServer'
 import { createNote } from '@/lib/luxorNotesServer'
 import { assertLuxorProductionSideEffectsAllowed } from '@/lib/luxorTestLeadServer'
+import { notifyOwnerOfClientStatusChange } from '@/lib/luxorClientStatusOwnerAlertsServer'
 
 export async function POST(request: NextRequest) {
   try {
@@ -43,6 +44,15 @@ export async function POST(request: NextRequest) {
       if (!Number.isSafeInteger(expectedSequence) || expectedSequence < 0) return NextResponse.json({ error: 'Reopen the link and review your tour before cancelling.' }, { status: 400 })
       const result = await cancelLuxorTourForInquiry({ inquiry, token, expectedSequence, requestedBy: 'Client' })
       if (!result.ok) return NextResponse.json({ error: result.errors[0] }, { status: 409 })
+      const eventId = `tour_cancel:${inquiry.id}:${result.inquiry?.metadata?.tourCancellation && typeof result.inquiry.metadata.tourCancellation === 'object' ? String((result.inquiry.metadata.tourCancellation as Record<string, unknown>).calendarSequence || 'seq') : 'seq'}`
+      void notifyOwnerOfClientStatusChange({
+        leadId: inquiry.id,
+        kind: 'tour_cancel',
+        summary: 'Client cancelled their tour from the email link.',
+        eventId,
+        leadName: inquiry.full_name,
+        skipOwnerEmail: true,
+      })
       return NextResponse.json({ message: 'Your tour has been cancelled.' })
     }
 
@@ -60,6 +70,13 @@ export async function POST(request: NextRequest) {
       })
       if (!updated) return NextResponse.json({ error: 'This tour changed. Please contact Luxor Event Space for help.' }, { status: 409 })
       await createNote(inquiry.id, 'Client confirmed their tour from email link.', 'status_change', 'Client')
+      void notifyOwnerOfClientStatusChange({
+        leadId: inquiry.id,
+        kind: 'tour_confirm',
+        summary: 'Client confirmed their tour from the email link.',
+        eventId: `tour_confirm:${inquiry.id}:${updated.updated_at}`,
+        leadName: inquiry.full_name,
+      })
       return NextResponse.json({ inquiry: updated, message: 'Tour confirmed.' })
     }
 
@@ -71,6 +88,13 @@ export async function POST(request: NextRequest) {
       })
       if (!updated) return NextResponse.json({ error: 'This tour changed. Please contact Luxor Event Space for help.' }, { status: 409 })
       await createNote(inquiry.id, 'Client requested to reschedule from email link.', 'status_change', 'Client')
+      void notifyOwnerOfClientStatusChange({
+        leadId: inquiry.id,
+        kind: 'tour_reschedule',
+        summary: 'Client requested to reschedule from the email link.',
+        eventId: `tour_reschedule:${inquiry.id}:${updated.updated_at}`,
+        leadName: inquiry.full_name,
+      })
       return NextResponse.json({ inquiry: updated, message: 'Reschedule request received.' })
     }
 

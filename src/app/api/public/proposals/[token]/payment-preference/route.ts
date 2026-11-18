@@ -9,6 +9,7 @@ import { assertLuxorProductionSideEffectsAllowed } from '@/lib/luxorTestLeadServ
 import { getLuxorPaymentSettings } from '@/lib/luxorPaymentSettingsServer'
 import { queueLuxorZelleInstructionsEmail } from '@/lib/luxorZelleInstructionsServer'
 import { getInvoiceByBookingAndKind } from '@/lib/luxorInvoicesServer'
+import { notifyOwnerOfClientStatusChange } from '@/lib/luxorClientStatusOwnerAlertsServer'
 
 const methods = ['card', 'cash', 'zelle', 'check'] as const
 const amounts = ['deposit', 'full'] as const
@@ -59,7 +60,17 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
       },
     },
   })
-  if (invoice.inquiry_id) await createNote(invoice.inquiry_id, `Client selected ${body.method === 'zelle' ? 'Zelle' : body.method} for ${body.amount === 'deposit' ? 'the reservation deposit' : 'the full event payment'}.`, 'status_change', 'Client Payment Portal')
+  if (invoice.inquiry_id) {
+    const note = `Client selected ${body.method === 'zelle' ? 'Zelle' : body.method} for ${body.amount === 'deposit' ? 'the reservation deposit' : 'the full event payment'}.`
+    await createNote(invoice.inquiry_id, note, 'status_change', 'Client Payment Portal')
+    void notifyOwnerOfClientStatusChange({
+      leadId: invoice.inquiry_id,
+      kind: 'payment_preference',
+      summary: note,
+      eventId: `payment_preference:${invoice.inquiry_id}:${selectedAt}:${body.method}:${body.amount}`,
+      leadName: inquiry?.full_name,
+    })
+  }
   let zelleEmailStatus: string | null = null
   if (body.method === 'zelle' && zelleRecipient && zelleAmount !== null) {
     const inquiryId = invoice.inquiry_id || booking.inquiry_id || null

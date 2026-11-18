@@ -102,9 +102,9 @@ function ToastItem({
         ease: [0.23, 1, 0.32, 1],
         layout: { duration: 0.22, ease: [0.23, 1, 0.32, 1] },
       }}
-      className={`portal-toast pointer-events-auto relative overflow-hidden rounded-2xl border p-4 pr-12 shadow-2xl backdrop-blur-xl touch-pan-y cursor-grab active:cursor-grabbing select-none transform-gpu will-change-transform ${
+      className={`portal-toast pointer-events-auto relative overflow-hidden rounded-2xl border p-4 pr-12 shadow-2xl touch-pan-y cursor-grab active:cursor-grabbing select-none transform-gpu will-change-transform ${
         toast.onClick ? 'cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/60' : ''
-      } ${style.className}`}
+      } ${style.className} !bg-[color:var(--portal-bg)]`}
       data-toast-variant={toast.variant || 'info'}
       role={toast.onClick ? 'button' : 'status'}
       tabIndex={toast.onClick ? 0 : undefined}

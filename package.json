@@ -17,6 +17,8 @@
     "test:payments-dashboard": "node --test tests/luxor-payment-dashboard-model.test.cjs tests/luxor-manual-installment-route.test.cjs tests/luxor-payment-receipt-email-route.test.cjs tests/luxor-payment-reminder-history-route.test.cjs tests/luxor-payment-reminder-retry-route.test.cjs",
     "test:payment-ledger-postgres": "node --test tests/luxor-final-balance-guard-postgres.test.cjs",
     "test:follow-ups": "node --test tests/follow-ups-*.test.cjs tests/notes-route.test.cjs",
+    "test:client-status-alerts": "node --test tests/client-status-owner-alerts.test.cjs tests/tour-response-owner-alert.test.cjs",
+    "test:client-status-alerts-browser": "node tests/client-status-alerts-browser-qa.cjs",
     "test:workflow-portal": "node --test tests/workflow-call-continue-modal.test.cjs tests/workflow-current-email-lease.test.cjs tests/workflow-adopted-preview.test.cjs tests/ordered-workflow-task-display.test.cjs",
     "test:workflow-release-gates": "npm run test:custom-workflows && npm run test:workflow-system-batch && npm run test:automations-library && node --test tests/workflow-inventory-paths.test.cjs",
     "verify:workflow-release-coverage": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/verify-workflow-release-coverage.ps1",
