@@ -135,11 +135,10 @@ function applyClientAttention(state, enabled = true) {
 }
 
 function notificationSummaryPayload(state) {
-  const emptySource = { ok: true, data: null }
   return {
     sources: {
       inquiries: { ok: true, data: state.inquiries },
-      emails: emptySource,
+      emails: { ok: true, data: null },
       messages: { ok: true, data: [] },
       calls: { ok: true, data: [] },
       invoices: { ok: true, data: [] },
@@ -147,9 +146,9 @@ function notificationSummaryPayload(state) {
       bookings: { ok: true, data: [] },
       payments: { ok: true, data: [] },
       signatures: { ok: true, data: [] },
-      marketingEvents: emptySource,
-      layoutReviews: emptySource,
-      calendarResponses: emptySource,
+      marketingEvents: { ok: true, data: { events: [] } },
+      layoutReviews: { ok: true, data: { feedback: [] } },
+      calendarResponses: { ok: true, data: { responses: [] } },
     },
   }
 }
@@ -218,6 +217,7 @@ function json(route, data, status = 200) {
 }
 
 function freePort(portNumber) {
+  spawnSync('fuser', ['-k', `${portNumber}/tcp`], { stdio: 'ignore' })
   const result = spawnSync('lsof', ['-ti', `:${portNumber}`], { encoding: 'utf8' })
   const pids = result.stdout.trim().split('\n').filter(Boolean)
   for (const pid of pids) {
@@ -228,12 +228,38 @@ function freePort(portNumber) {
   }
 }
 
+async function waitForPortFree() {
+  for (let attempt = 0; attempt < 40; attempt += 1) {
+    try {
+      await fetch(`${origin}/portal/login`)
+      freePort(port)
+      await delay(250)
+    } catch {
+      return
+    }
+  }
+  throw new Error(`Port ${port} is still serving a stale Next.js process.`)
+}
+
 async function waitForServer() {
   for (let attempt = 0; attempt < 180; attempt += 1) {
     try {
       const response = await fetch(`${origin}/portal/login`)
-      if (response.status < 500) return
-    } catch {}
+      if (response.status < 500) {
+        const html = await response.text()
+        const layoutChunk = html.match(/layout-[a-f0-9]+\.js/)?.[0]
+        const portalChunkDir = path.join(root, '.next/static/chunks/app/(workspace)/(portal)')
+        const onDisk = fs.existsSync(portalChunkDir)
+          ? fs.readdirSync(portalChunkDir).find((name) => name.startsWith('layout-') && name.endsWith('.js'))
+          : null
+        if (layoutChunk && onDisk && layoutChunk !== onDisk) {
+          throw new Error(`Stale Next.js server on ${port}: HTML references ${layoutChunk} but build has ${onDisk}.`)
+        }
+        return
+      }
+    } catch (error) {
+      if (error instanceof Error && error.message.includes('Stale Next.js server')) throw error
+    }
     await delay(1000)
   }
   throw new Error('Timed out waiting for production Next.js server.')
@@ -250,6 +276,38 @@ function installSupabaseBrowserRoutes(context) {
     }
     return route.abort()
   })
+}
+
+function attachPageDiagnostics(page, consoleLog) {
+  page.on('pageerror', (err) => {
+    consoleLog.push(`pageerror: ${err.message}`)
+    if (err.stack) consoleLog.push(err.stack)
+  })
+  page.on('console', (msg) => {
+    const type = msg.type()
+    if (type === 'error' || type === 'warning') {
+      consoleLog.push(`console.${type}: ${msg.text()}`)
+      const location = msg.location()
+      if (location.url) {
+        consoleLog.push(`  at ${location.url}:${location.lineNumber}:${location.columnNumber}`)
+      }
+    }
+  })
+  page.on('requestfailed', (request) => {
+    const url = request.url()
+    if (url.includes('_rsc=')) return
+    consoleLog.push(`requestfailed: ${request.method()} ${url} ${request.failure()?.errorText || ''}`)
+  })
+}
+
+function writeConsoleLog(consoleLog) {
+  fs.mkdirSync(artifactDir, { recursive: true })
+  const filtered = consoleLog.filter((line) => !line.includes('Supabase Realtime is unavailable'))
+  const errors = filtered.filter((line) => line.startsWith('pageerror:') || line.startsWith('console.error:') || line.startsWith('response: 5') || line.startsWith('requestfailed:'))
+  fs.writeFileSync(
+    path.join(artifactDir, 'qa-console-errors.txt'),
+    errors.length ? `${errors.join('\n---\n')}\n` : 'No console errors.\n',
+  )
 }
 
 function installApiMocks(context, state) {
@@ -308,21 +366,39 @@ function installApiMocks(context, state) {
       return json(route, { match: null })
     }
     if (url.pathname === '/api/notes') return json(route, method === 'GET' ? [] : { success: true })
-    if (url.pathname === '/api/tasks') return json(route, method === 'GET' ? { tasks: [], assignees: [] } : { success: true })
+    if (url.pathname === '/api/tasks' && method === 'GET') {
+      if (url.searchParams.get('all') === '1') {
+        return json(route, { tasks: [], assignees: [QA_EMAIL] })
+      }
+      if (url.searchParams.get('inquiryId')) return json(route, [])
+      return json(route, { error: 'Missing inquiryId parameter.' }, 400)
+    }
+    if (url.pathname === '/api/tasks') return json(route, { success: true })
     if (url.pathname === '/api/invoices') return json(route, [])
     if (url.pathname === '/api/bookings') return json(route, [])
     if (url.pathname === '/api/payments') return json(route, [])
     if (url.pathname === '/api/documents') return json(route, [])
     if (url.pathname === '/api/signatures') return json(route, [])
     if (url.pathname === '/api/vendors') return json(route, [])
-    if (url.pathname === '/api/twilio/calls') {
-      if (url.searchParams.get('unreadOnly')) return json(route, [])
-      return json(route, { calls: [] })
-    }
+    if (url.pathname === '/api/twilio/calls') return json(route, [])
     if (url.pathname.startsWith('/api/twilio/consent')) return json(route, { status: 'unknown' })
     if (url.pathname === '/api/twilio/messages') return json(route, { messages: [] })
     if (url.pathname === '/api/marketing/members') return json(route, { members: [] })
+    if (url.pathname === '/api/marketing/lists') return json(route, { lists: [] })
+    if (url.pathname === '/api/marketing/custom-workflows') return json(route, { workflows: [] })
     if (url.pathname === '/api/marketing/lead') return json(route, { lead: null })
+    if (url.pathname === '/api/follow-ups' && url.searchParams.get('dashboard') === '1') {
+      return json(route, {
+        emailActions: [],
+        pausedEnrollmentIds: [],
+        pausedEnrollments: [],
+        signedBookedInquiryIds: [],
+        sequenceStatus: 'unknown',
+        missedCallTextEnabled: false,
+        inboundTextReplyEnabled: false,
+      })
+    }
+    if (url.pathname === '/api/portal/team-members') return json(route, { members: [] })
     if (url.pathname === '/api/portal/lead-event-preference') return json(route, { preferred_event_id: state.leadEvents[0]?.id || null })
     if (url.pathname === '/api/portal/payment-installments') return json(route, { installments: [] })
     if (url.pathname.startsWith('/api/portal/leads/')) return json(route, { clicks: [] })
@@ -346,6 +422,17 @@ async function setPortalTheme(page, theme) {
   }, theme).catch(() => {})
 }
 
+async function waitForSampleGuestLead(page) {
+  const viewport = page.viewportSize()?.width ?? 1280
+  const leadAnchor = page.locator('a[href*="/portal/leads/"]').filter({ hasText: 'Sample Guest' })
+  if (viewport < 768) {
+    await page.locator('div.md\\:hidden').filter({ hasText: 'Sample Guest' }).first().waitFor({ state: 'visible', timeout: 90_000 })
+    return
+  }
+  await leadAnchor.first().waitFor({ state: 'attached', timeout: 90_000 })
+  await page.locator('tbody tr').filter({ hasText: 'Sample Guest' }).first().waitFor({ state: 'visible', timeout: 90_000 })
+}
+
 async function gotoLeadsList(page) {
   await page.addInitScript(() => {
     window.localStorage.setItem('luxor_leads_active_tab', 'pipeline')
@@ -355,7 +442,7 @@ async function gotoLeadsList(page) {
   await page.goto(`${origin}/portal/leads?view=pipeline`, { waitUntil: 'domcontentloaded' })
   await delay(500)
   try {
-    await page.getByText('Sample Guest').first().waitFor({ timeout: 90_000 })
+    await waitForSampleGuestLead(page)
   } catch (error) {
     const snippet = await page.locator('body').innerText().catch(() => '')
     const diagnostics = await page.evaluate(async () => {
@@ -387,19 +474,23 @@ async function openNotificationsPanel(page) {
 }
 
 async function captureToast(page, state, theme, width, fileName) {
+  await page.setViewportSize({ width, height: 900 })
   applyClientAttention(state, false)
   await page.goto(`${origin}/portal/leads?view=pipeline`, { waitUntil: 'domcontentloaded' })
   await page.evaluate(() => {
     window.localStorage.removeItem('luxor_notified_toast_ids_v1')
     window.localStorage.removeItem('luxor_read_notification_ids_v1')
   })
-  await page.getByText('Sample Guest').first().waitFor({ timeout: 90_000 })
-  await delay(1200)
+  await page.getByRole('heading', { name: /Leads/i }).first().waitFor({ state: 'visible', timeout: 90_000 }).catch(() => {})
+  await delay(1500)
   applyClientAttention(state, true)
-  await page.evaluate(() => {
+  await page.evaluate(async () => {
+    window.localStorage.removeItem('luxor_notified_toast_ids_v1')
+    await fetch('/api/portal/notifications/summary', { cache: 'no-store' })
     window.dispatchEvent(new Event('luxor:inquiries-updated'))
   })
-  await page.getByText('Client update: Sample Guest').first().waitFor({ timeout: 30_000 })
+  await delay(800)
+  await page.locator('.portal-toast').filter({ hasText: 'Client update: Sample Guest' }).first().waitFor({ state: 'visible', timeout: 60_000 })
   await page.setViewportSize({ width, height: 900 })
   await delay(300)
   await screenshot(page, fileName)
@@ -429,16 +520,17 @@ async function captureThemeScreenshots(page, state, theme, reducedMotion = false
     await delay(200)
     await screenshot(page, `client-status-leads-list-${theme}-${width}${suffix}.png`)
 
-    await openNotificationsPanel(page)
-    await screenshot(page, `client-status-bell-${theme}-${width}${suffix}.png`)
-    await page.keyboard.press('Escape').catch(() => {})
-    await delay(150)
-
     if (!reducedMotion) {
       await captureToast(page, state, theme, width, `client-status-toast-${theme}-${width}.png`)
       await gotoLeadsList(page)
       await page.setViewportSize({ width, height: 900 })
+      await delay(200)
     }
+
+    await openNotificationsPanel(page)
+    await screenshot(page, `client-status-bell-${theme}-${width}${suffix}.png`)
+    await page.keyboard.press('Escape').catch(() => {})
+    await delay(150)
 
     await page.goto(`${origin}/portal/leads/${ATTENTION_LEAD_ID}?tab=overview`, { waitUntil: 'domcontentloaded' })
     await page.getByText('Client update needs your attention').waitFor({ timeout: 90_000 })
@@ -480,13 +572,15 @@ async function recordFlowVideo(browser, state) {
     window.localStorage.removeItem('luxor_read_notification_ids_v1')
   })
   await page.goto(`${origin}/portal/leads?view=pipeline`, { waitUntil: 'domcontentloaded' })
-  await page.getByText('Sample Guest').first().waitFor({ timeout: 90_000 })
+  await waitForSampleGuestLead(page)
   await delay(1000)
   applyClientAttention(state, true)
-  await page.evaluate(() => {
+  await page.evaluate(async () => {
+    window.localStorage.removeItem('luxor_notified_toast_ids_v1')
+    await fetch('/api/portal/notifications/summary', { cache: 'no-store' })
     window.dispatchEvent(new Event('luxor:inquiries-updated'))
   })
-  await page.getByText('Client update: Sample Guest').first().waitFor({ timeout: 30_000 })
+  await page.locator('.portal-toast').filter({ hasText: 'Client update: Sample Guest' }).first().waitFor({ state: 'visible', timeout: 60_000 }).catch(() => {})
   await delay(800)
   await page.getByRole('button', { name: 'Notifications' }).first().click()
   await delay(600)
@@ -507,7 +601,8 @@ async function main() {
   const state = createFixtureState({ withAttention: true })
   freePort(port)
   freePort(mockSupabasePort)
-  await delay(300)
+  await waitForPortFree()
+  await delay(500)
   const mockSupabase = await startMockSupabase()
 
   if (!fs.existsSync(path.join(root, '.next/BUILD_ID'))) {
@@ -532,13 +627,20 @@ async function main() {
   }
 
   const useDevServer = process.env.CLIENT_STATUS_QA_DEV === '1'
-  const server = spawn('npm', ['run', useDevServer ? 'dev' : 'start', '--', '-H', '127.0.0.1', '-p', String(port)], {
+  const nextCli = path.join(root, 'node_modules', 'next', 'dist', 'bin', 'next')
+  const serverCmd = useDevServer ? nextCli : nextCli
+  const serverArgs = useDevServer
+    ? ['dev', '-H', '127.0.0.1', '-p', String(port)]
+    : ['start', '-H', '127.0.0.1', '-p', String(port)]
+  const server = spawn(process.execPath, [serverCmd, ...serverArgs], {
     cwd: root,
     env: serverEnv,
     stdio: 'ignore',
+    detached: true,
   })
 
   const browser = await chromium.launch({ headless: true, args: ['--no-sandbox'] })
+  let consoleLog = []
 
   try {
     await waitForServer()
@@ -549,14 +651,11 @@ async function main() {
     installApiMocks(context, state)
     const page = await context.newPage()
 
-    const consoleLog = []
-    page.on('response', (response) => {
-      if (response.status() >= 500) consoleLog.push(`response: ${response.status()} ${response.url()}`)
-    })
-    page.on('pageerror', (err) => {
-      consoleLog.push(`pageerror: ${err.message}`)
-      if (err.stack) consoleLog.push(err.stack)
-    })
+    consoleLog = []
+    attachPageDiagnostics(page, consoleLog)
+  page.on('response', (response) => {
+    if (response.status() >= 500) consoleLog.push(`response: ${response.status()} ${response.url()}`)
+  })
 
     for (const theme of ['light', 'dark']) {
       await captureThemeScreenshots(page, state, theme, false)
@@ -566,15 +665,21 @@ async function main() {
     await context.close()
     await recordFlowVideo(browser, state)
 
+    writeConsoleLog(consoleLog)
     const screenshots = fs.readdirSync(artifactDir).filter((name) => name.endsWith('.png') || name.endsWith('.webm')).sort()
     console.log(JSON.stringify({ pass: true, artifactDir, screenshots }))
   } catch (error) {
     fs.mkdirSync(artifactDir, { recursive: true })
+    writeConsoleLog(consoleLog)
     fs.writeFileSync(path.join(artifactDir, 'qa-error.txt'), error instanceof Error ? `${error.stack || error.message}` : String(error))
     throw error
   } finally {
     await browser.close().catch(() => {})
-    server.kill('SIGKILL')
+    try {
+      if (server.pid) process.kill(-server.pid, 'SIGKILL')
+    } catch {
+      server.kill('SIGKILL')
+    }
     mockSupabase.close(() => {})
     freePort(port)
     freePort(mockSupabasePort)
