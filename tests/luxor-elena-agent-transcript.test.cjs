@@ -26,6 +26,7 @@ function loadCallsServer() {
   mod.require = (name) => {
     if (name === 'server-only') return {}
     if (name === './luxorCallTypes') return loadTs(path.resolve(__dirname, '../src/lib/luxorCallTypes.ts'), mod)
+    if (name === './luxorElenaLiveTranscriptSnapshot') return loadTs(path.resolve(__dirname, '../src/lib/luxorElenaLiveTranscriptSnapshot.ts'), mod)
     if (name === './supabaseRestServer') return {
       supabaseRest: async (query, init = {}) => {
         if (!init.method) {
@@ -65,10 +66,10 @@ test('elena live inbound still stores agent ASR rows for fallback', async () => 
     transcriptionData: JSON.stringify({ track: 'inbound_track', transcript: 'Luzor pricing' }), final: 'true',
   })
   const segment = inserted.find((row) => row.query.startsWith('luxor_call_transcript_segments'))?.body
-  assert.equal(segment.track, 'luxor_agent')
+  assert.equal(segment.track, 'caller')
 })
 
-test('completed sideband keeps model agent rows only', () => {
+test('completed sideband keeps model agent rows when coverage matches ASR', () => {
   const { exports } = loadCallsServer()
   const rows = [
     { track: 'caller', transcription_sid: 'GT123', segment_text: 'hello', segment_start_seconds: 1, event_timestamp: '2026-11-14T19:25:01.000Z' },
@@ -77,6 +78,18 @@ test('completed sideband keeps model agent rows only', () => {
   ]
   const selected = exports.elenaLiveSnapshotTranscriptRows(sipCall({ agent_transcript_sideband: 'completed' }), rows)
   assert.deepEqual(selected.map((row) => row.segment_text), ['hello', 'Luxor at Las Palmas'])
+})
+
+test('completed sideband falls back to ASR when model rows are thin', () => {
+  const { exports } = loadCallsServer()
+  const rows = [
+    { track: 'caller', transcription_sid: 'GT123', segment_text: 'hello', segment_start_seconds: 1 },
+    { track: 'luxor_agent', transcription_sid: MODEL_SID, segment_text: 'last reply only', segment_start_seconds: 90 },
+    { track: 'luxor_agent', transcription_sid: 'GT123', segment_text: 'greeting', segment_start_seconds: 2 },
+    { track: 'luxor_agent', transcription_sid: 'GT123', segment_text: 'middle', segment_start_seconds: 40 },
+  ]
+  const selected = exports.elenaLiveSnapshotTranscriptRows(sipCall({ agent_transcript_sideband: 'completed' }), rows)
+  assert.deepEqual(selected.map((row) => row.segment_text), ['hello', 'greeting', 'middle'])
 })
 
 test('partial sideband keeps agent ASR after the last model turn', () => {
@@ -130,6 +143,7 @@ test('getLuxorTranscriptSegments dedupes Elena agent rows for post-call correcti
   mod.require = (name) => {
     if (name === 'server-only') return {}
     if (name === './luxorCallTypes') return loadTs(path.resolve(__dirname, '../src/lib/luxorCallTypes.ts'), mod)
+    if (name === './luxorElenaLiveTranscriptSnapshot') return loadTs(path.resolve(__dirname, '../src/lib/luxorElenaLiveTranscriptSnapshot.ts'), mod)
     if (name === './supabaseRestServer') return {
       supabaseRest: async (query) => {
         if (query.startsWith('luxor_calls?')) return [call]
@@ -148,11 +162,16 @@ test('getLuxorTranscriptSegments dedupes Elena agent rows for post-call correcti
 test('elena agent segments store model output as final luxor_agent rows', async () => {
   const { exports, inserted } = loadCallsServer()
   await exports.saveLuxorElenaAgentTranscriptSegment({
-    callSid: 'CA' + '1'.repeat(32), sessionId: 'live_session', text: 'Luxor at Las Palmas hosts beautiful quinceañeras.', startMs: 1200, endMs: 4800,
+    callSid: 'CA' + '1'.repeat(32), sessionId: 'live_session', text: 'Luxor at Las Palmas hosts beautiful quinceañeras.', startMs: 1200, endMs: 4800, sequenceId: 1,
   })
-  const segment = inserted.find((row) => row.query.startsWith('luxor_call_transcript_segments'))?.body
-  assert.equal(segment.track, 'luxor_agent')
-  assert.equal(segment.is_final, true)
-  assert.equal(segment.transcription_sid, MODEL_SID)
-  assert.match(segment.segment_text, /Luxor at Las Palmas/)
+  await exports.saveLuxorElenaAgentTranscriptSegment({
+    callSid: 'CA' + '1'.repeat(32), sessionId: 'live_session', text: 'Tell me about your guest count.', startMs: 5200, endMs: 9000, sequenceId: 2,
+  })
+  const segments = inserted.filter((row) => row.query.startsWith('luxor_call_transcript_segments')).map((row) => row.body)
+  assert.equal(segments.length, 2)
+  assert.deepEqual(segments.map((row) => row.sequence_id), [1, 2])
+  assert.equal(segments[0].track, 'luxor_agent')
+  assert.equal(segments[0].is_final, true)
+  assert.equal(segments[0].transcription_sid, MODEL_SID)
+  assert.match(segments[0].segment_text, /Luxor at Las Palmas/)
 })

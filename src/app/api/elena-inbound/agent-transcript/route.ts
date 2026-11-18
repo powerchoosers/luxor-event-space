@@ -44,7 +44,12 @@ export async function POST(request: Request) {
     try {
       const result = await runElenaInboundAgentTranscriptSideband(callSid, sessionId)
       if (!result.started) {
-        console.warn('[Elena Inbound] Agent transcript sideband did not start.', { callSid, reason: result.reason })
+        const payload = { callSid, reason: result.reason }
+        if (result.reason === 'already_running') {
+          console.info('[Elena Inbound] Agent transcript sideband already running.', payload)
+        } else {
+          console.warn('[Elena Inbound] Agent transcript sideband did not start.', payload)
+        }
       }
     } catch (error) {
       console.warn('[Elena Inbound] Agent transcript sideband worker failed.', {

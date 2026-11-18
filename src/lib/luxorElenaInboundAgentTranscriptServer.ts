@@ -2,7 +2,16 @@ import 'server-only'
 
 import WebSocket from 'ws'
 import { ELENA_LIVE_CLAIM_MAX_SECONDS, getElenaLiveConfig, signElenaLiveClaim, verifyElenaLiveClaim } from './luxorElenaInboundServer'
-import { ELENA_LIVE_AGENT_TRANSCRIPTION_SID, saveLuxorElenaAgentTranscriptSegment } from './luxorCallsServer'
+import {
+  isResponseOutputComplete,
+  isSessionOutputAudioBufferStopped,
+  responseTurnKey,
+} from './luxorElenaInboundAgentTranscriptEvents'
+import {
+  ELENA_LIVE_AGENT_TRANSCRIPTION_SID,
+  maxElenaModelTranscriptSequenceForCallSid,
+  saveLuxorElenaAgentTranscriptSegment,
+} from './luxorCallsServer'
 import { agentTranscriptSidebandClaimQuerySuffix, resolveElenaInboundAgentTranscriptWorkerOrigin } from './luxorElenaInboundAgentTranscriptClaim'
 import { SupabaseRestError, supabaseRestStrict } from './supabaseRestServer'
 
@@ -118,21 +127,6 @@ async function finishAgentTranscriptSideband(callSid: string, sessionId: string,
   }
 }
 
-async function persistOutputTurn(callSid: string, sessionId: string, buffer: OutputBuffer | null) {
-  if (!buffer?.text.trim()) return
-  await saveLuxorElenaAgentTranscriptSegment({
-    callSid,
-    sessionId,
-    text: buffer.text.trim(),
-    startMs: buffer.startMs,
-    endMs: buffer.endMs,
-  }).catch(() => console.warn('[Elena Inbound] Agent transcript turn could not be saved.'))
-  buffer.text = ''
-  buffer.startMs = null
-  buffer.endMs = null
-  buffer.eventIds.clear()
-}
-
 export async function runElenaInboundAgentTranscriptSideband(callSid: string, sessionId: string) {
   if (!CALL_SID.test(callSid) || !SESSION_ID.test(sessionId)) throw new Error('Invalid live transcript capture request.')
   const row = await readBoundLiveCall(callSid, sessionId)
@@ -145,6 +139,35 @@ export async function runElenaInboundAgentTranscriptSideband(callSid: string, se
   let current: OutputBuffer | null = null
   let closed = false
   let finishStatus: SidebandFinishStatus = 'completed'
+  let modelSequence = await maxElenaModelTranscriptSequenceForCallSid(callSid)
+  const persistedTurns = new Set<string>()
+
+  const turnKeyForBuffer = (event: Record<string, unknown>, nested: Record<string, unknown> | null | undefined, buffer: OutputBuffer) => (
+    responseTurnKey(event, nested) || `content:${buffer.text.trim().slice(0, 200)}`
+  )
+
+  const persistOutputTurn = async (
+    buffer: OutputBuffer | null,
+    turnKey?: string | null,
+  ) => {
+    if (!buffer?.text.trim()) return
+    const key = turnKey || `turn:${modelSequence + 1}:${buffer.text.trim().slice(0, 48)}`
+    if (persistedTurns.has(key)) return
+    modelSequence += 1
+    await saveLuxorElenaAgentTranscriptSegment({
+      callSid,
+      sessionId,
+      text: buffer.text.trim(),
+      startMs: buffer.startMs,
+      endMs: buffer.endMs,
+      sequenceId: modelSequence,
+    }).catch(() => console.warn('[Elena Inbound] Agent transcript turn could not be saved.'))
+    persistedTurns.add(key)
+    buffer.text = ''
+    buffer.startMs = null
+    buffer.endMs = null
+    buffer.eventIds.clear()
+  }
 
   await new Promise<void>((resolve) => {
     const socket = new WebSocket(`wss://api.openai.com/v1/live/sessions/${encodeURIComponent(sessionId)}/attach`, {
@@ -158,7 +181,7 @@ export async function runElenaInboundAgentTranscriptSideband(callSid: string, se
       closed = true
       finishStatus = status
       clearTimeout(deadline)
-      void persistOutputTurn(callSid, sessionId, current).finally(() => {
+      void persistOutputTurn(current).finally(() => {
         socket.removeAllListeners()
         if (socket.readyState === WebSocket.OPEN) socket.close()
         else socket.terminate()
@@ -185,14 +208,21 @@ export async function runElenaInboundAgentTranscriptSideband(callSid: string, se
         const nestedType = String(nested.type || '')
         if (nestedType === 'response.output_text.delta' && typeof nested.delta === 'string') {
           current = bufferFromOutput(current)
-          appendOutputDelta(current, nested.delta)
+          appendOutputDelta(current, nested.delta, nested.start_ms, nested.end_ms, nested.event_id)
         }
         if (nestedType === 'response.output_text.done' && typeof nested.text === 'string') {
           current = bufferFromOutput(current)
           current.text = nested.text
         }
+        if (isResponseOutputComplete(nestedType) && current) {
+          const turnKey = turnKeyForBuffer(event, nested, current)
+          void persistOutputTurn(current, turnKey).then(() => { current = null })
+        }
       }
-      if (type === 'session.output_audio.buffer.stopped') void persistOutputTurn(callSid, sessionId, current).then(() => { current = null })
+      if (isSessionOutputAudioBufferStopped(type) && current) {
+        const turnKey = turnKeyForBuffer(event, nested, current)
+        void persistOutputTurn(current, turnKey).then(() => { current = null })
+      }
       if (type === 'session.closed') finish('completed')
       if (Date.now() - startedAt > 5_000) pollTerminalCall()
     })
