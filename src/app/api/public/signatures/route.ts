@@ -16,6 +16,7 @@ import { sameDayBookingPromotion, sameDayBookingRequiresRevision } from '@/lib/l
 import { SAME_DAY_REVISION_MESSAGE } from '@/lib/luxorSameDayBookingServer'
 import { listLuxorPaymentInstallments } from '@/lib/luxorPaymentInstallmentsServer'
 import { getLuxorSavedPaymentSchedule } from '@/lib/luxorSavedPaymentSchedule'
+import { tryCreatedDocumentSignGet, tryCreatedDocumentSignPost } from '@/app/api/public/created-document-signatures'
 
 function publicSignature(signature: Awaited<ReturnType<typeof getLuxorSignatureRequestByToken>>) {
   if (!signature) return null
@@ -111,6 +112,8 @@ export async function GET(request: NextRequest) {
     const signature = await getLuxorSignatureRequestByToken(token)
 
     if (!signature) {
+      const created = await tryCreatedDocumentSignGet(request, token)
+      if (created) return created
       return NextResponse.json({ error: 'Signature request not found.' }, { status: 404 })
     }
 
@@ -190,6 +193,8 @@ export async function POST(request: NextRequest) {
     const token = String(body.token || '').trim()
     const pendingSignature = await getLuxorSignatureRequestByToken(token)
     if (!pendingSignature) {
+      const created = await tryCreatedDocumentSignPost(request, token, body && typeof body === 'object' ? body as Record<string, unknown> : {})
+      if (created) return created
       return NextResponse.json({ error: 'Signature request not found.' }, { status: 404 })
     }
     const recoveryOnly = pendingSignature.status === 'signed'

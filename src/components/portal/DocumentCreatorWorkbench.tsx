@@ -7,13 +7,17 @@ import { PortalButton, PortalPageFrame, PortalPageHeader } from '@/components/po
 import { DocumentCreatorEditor, type DocumentCreatorEditorHandle } from '@/components/portal/DocumentCreatorEditor'
 import { DocumentCreatorPaperPreview } from '@/components/portal/DocumentCreatorPaperPreview'
 import { DocumentCreatorPdfPreview } from '@/components/portal/DocumentCreatorPdfPreview'
-import { DocumentCreatorStepper } from '@/components/portal/DocumentCreatorStepper'
+import { DocumentCreatorStepper, type DocumentCreatorStep } from '@/components/portal/DocumentCreatorStepper'
+import { DocumentCreatorFieldsStep } from '@/components/portal/DocumentCreatorFieldsStep'
+import { canEditCreatedDocumentFields } from '@/lib/luxorCreatedDocumentFieldTypes'
 import type { LuxorCreatedDocumentRow, LuxorCreatedDocumentType } from '@/lib/luxorDocumentCreatorTypes'
 import { stashCreatedDocumentHandoff } from '@/lib/luxorDocumentCreatorHandoff'
 import { ArrowLeft, ChevronDown, FileText } from '@/lib/icons/phosphor-compat'
 
 type Props = {
   initial?: LuxorCreatedDocumentRow | null
+  initialStep?: DocumentCreatorStep
+  onStepChange?: (step: DocumentCreatorStep) => void
 }
 
 type FormPreview = {
@@ -22,7 +26,7 @@ type FormPreview = {
   bodyHtml: string
 }
 
-export function DocumentCreatorWorkbench({ initial }: Props) {
+export function DocumentCreatorWorkbench({ initial, initialStep = 'create', onStepChange }: Props) {
   const router = useRouter()
   const reduceMotion = useReducedMotion()
   const editorRef = useRef<DocumentCreatorEditorHandle>(null)
@@ -30,6 +34,7 @@ export function DocumentCreatorWorkbench({ initial }: Props) {
   const [signedUrl, setSignedUrl] = useState<string | null>(null)
   const [previewLoading, setPreviewLoading] = useState(false)
   const [previewError, setPreviewError] = useState<string | null>(null)
+  const [activeStep, setActiveStep] = useState<DocumentCreatorStep>(initialStep)
   const [formOpen, setFormOpen] = useState(true)
   const [saving, setSaving] = useState(false)
   const pdfPreviewChain = useRef<Promise<void>>(Promise.resolve())
@@ -93,6 +98,15 @@ export function DocumentCreatorWorkbench({ initial }: Props) {
   }
 
   const accordionTransition = reduceMotion ? 'none' : 'grid-template-rows 420ms cubic-bezier(0.4, 0, 0.2, 1)'
+  const fieldsEnabled = Boolean(record?.id)
+  const canEditFields = record ? canEditCreatedDocumentFields(record.status, record.archived_at) : true
+
+  const goToStep = (step: DocumentCreatorStep) => {
+    if (step === 'fields' && !fieldsEnabled) return
+    if (step === 'send') return
+    setActiveStep(step)
+    onStepChange?.(step)
+  }
 
   return (
     <PortalPageFrame className="h-full min-h-0 gap-4 overflow-x-hidden pb-[calc(4.5rem+env(safe-area-inset-bottom))] min-[1280px]:pb-0">
@@ -110,7 +124,7 @@ export function DocumentCreatorWorkbench({ initial }: Props) {
               </PortalButton>
             )}
           />
-          <DocumentCreatorStepper />
+          <DocumentCreatorStepper activeStep={activeStep} fieldsEnabled={fieldsEnabled} onStepChange={goToStep} />
         </div>
         <div className="hidden min-[1280px]:flex shrink-0 flex-wrap gap-2">
           <PortalButton type="button" variant="secondary" className="min-h-11" disabled={saving} onClick={() => void runSave('template')}>
@@ -123,6 +137,9 @@ export function DocumentCreatorWorkbench({ initial }: Props) {
       </div>
 
       <div className="min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden portal-scrollbar min-[1280px]:overflow-hidden">
+        {activeStep === 'fields' && record?.id ? (
+          <DocumentCreatorFieldsStep documentId={record.id} canEdit={canEditFields} />
+        ) : (
         <div className="flex min-h-0 min-w-0 flex-col gap-4 min-[1280px]:grid min-[1280px]:h-full min-[1280px]:min-w-0 min-[1280px]:grid-cols-[minmax(0,360px)_minmax(0,1fr)_minmax(0,280px)] min-[1280px]:gap-6 min-[1280px]:overflow-hidden">
           <section className="min-h-0 min-w-0 shrink-0 overflow-x-hidden px-4 sm:px-0 min-[1280px]:overflow-y-auto min-[1280px]:px-0 min-[1280px]:portal-scrollbar">
             <button
@@ -183,6 +200,7 @@ export function DocumentCreatorWorkbench({ initial }: Props) {
             />
           </section>
         </div>
+        )}
       </div>
 
       <div className="fixed inset-x-0 bottom-0 z-20 border-t border-[color:var(--portal-border)] bg-[color:var(--portal-frame)] p-3 min-[1280px]:hidden">

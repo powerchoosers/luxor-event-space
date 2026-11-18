@@ -26,6 +26,7 @@ import { SavedPaymentSchedule } from '@/components/proposal/SavedPaymentSchedule
 import { SameDayBookingNotice } from '@/components/proposal/SameDayBookingNotice'
 import type { LuxorSameDayBookingSnapshot } from '@/lib/luxorSameDayBooking'
 import { LUXOR_LEGACY_CONTRACT_SIGNATURE_PLACEMENT, type LuxorContractSignaturePlacement } from '@/lib/luxorSignaturePlacement'
+import { CreatedDocumentSignFlow, type CreatedDocumentSignPayload } from '@/components/secure-portal/CreatedDocumentSignFlow'
 
 const ContractPdfViewer = dynamic(() => import('./ContractPdfViewer'), {
   ssr: false,
@@ -270,6 +271,7 @@ function LoadingState() {
 export default function SignaturePage() {
   const params = useParams<{ token: string }>()
   const [signature, setSignature] = useState<PublicLuxorSignatureRequest | null>(null)
+  const [createdSign, setCreatedSign] = useState<CreatedDocumentSignPayload | null>(null)
   const [signedName, setSignedName] = useState('')
   const [mode, setMode] = useState<SignatureMode>('type')
   const [signatureDataUrl, setSignatureDataUrl] = useState<string | null>(null)
@@ -311,7 +313,8 @@ export default function SignaturePage() {
         const data = await response.json()
         if (!response.ok) throw new Error(data.error || 'Unable to open this agreement.')
         if (!active) return
-        setSignature(data)
+        if (data.flow === 'created_document') setCreatedSign(data)
+        else setSignature(data)
         setSignedName(data.signed_name || data.client_name || '')
         const executionReady = data.agreement_execution_ready === true
         setComplete(data.status === 'signed' && executionReady)
@@ -493,6 +496,10 @@ export default function SignaturePage() {
   }
 
   if (loading) return <LoadingState />
+
+  if (createdSign) {
+    return <CreatedDocumentSignFlow token={params.token} initial={createdSign} />
+  }
 
   if (!signature) {
     return (
