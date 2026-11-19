@@ -60,7 +60,19 @@ type Props = {
   className?: string
 }
 
-export function CreatedDocumentFieldPdfCanvas({
+export function CreatedDocumentFieldPdfCanvas(props: Props) {
+  ensureLuxorPdfJsWorker()
+  if (!props.pdfUrl) {
+    return (
+      <div className={`flex min-h-[360px] items-center justify-center rounded-xl border border-dashed border-[#caa24c]/35 bg-white text-sm text-[#6f665b] ${props.className || ''}`}>
+        PDF preview is not ready yet.
+      </div>
+    )
+  }
+  return <CreatedDocumentFieldPdfCanvasLoaded key={props.pdfUrl} {...props} pdfUrl={props.pdfUrl} />
+}
+
+function CreatedDocumentFieldPdfCanvasLoaded({
   pdfUrl,
   fields,
   pageWidth,
@@ -71,10 +83,35 @@ export function CreatedDocumentFieldPdfCanvas({
   onNumPages,
   onError,
   className = '',
-}: Props) {
-  ensureLuxorPdfJsWorker()
+}: Props & { pdfUrl: string }) {
   const [numPages, setNumPages] = useState(0)
+  const [pdfFile, setPdfFile] = useState<Blob | null>(null)
+  const [pdfFetchFailed, setPdfFetchFailed] = useState(false)
   const renderPageWidth = pageWidth > 0 ? pageWidth : 520
+  const pdfLoading = !pdfFile && !pdfFetchFailed
+
+  useEffect(() => {
+    let cancelled = false
+    fetch(pdfUrl, { credentials: 'same-origin' })
+      .then(async (response) => {
+        if (!response.ok) throw new Error('PDF unavailable')
+        const contentType = response.headers.get('content-type') || ''
+        if (contentType.includes('application/json')) throw new Error('PDF unavailable')
+        const blob = await response.blob()
+        if (blob.size < 64) throw new Error('PDF unavailable')
+        if (cancelled) return
+        setPdfFile(blob)
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setPdfFetchFailed(true)
+          onError?.()
+        }
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [onError, pdfUrl])
   const pageRange = useMemo(() => {
     if (mode === 'layout') return [layoutPageIndex]
     return Array.from({ length: numPages }, (_, index) => index)
@@ -85,10 +122,19 @@ export function CreatedDocumentFieldPdfCanvas({
     onNumPages?.(count)
   }, [onNumPages])
 
-  if (!pdfUrl) {
+  if (pdfFetchFailed) {
     return (
-      <div className={`flex min-h-[360px] items-center justify-center rounded-xl border border-dashed border-[#caa24c]/35 bg-white text-sm text-[#6f665b] ${className}`}>
-        PDF preview is not ready yet.
+      <div className={`flex min-h-[360px] items-center justify-center rounded-xl border border-dashed border-[#caa24c]/35 bg-white px-4 text-center text-sm text-[#6f665b] ${className}`}>
+        PDF preview could not be loaded. Use Download if you need a copy.
+      </div>
+    )
+  }
+
+  if (pdfLoading || !pdfFile) {
+    return (
+      <div className={`flex min-h-[360px] items-center justify-center text-[#b9afa3] ${className}`}>
+        <LoaderCircle className="mr-2 motion-reduce:animate-none animate-spin" size={18} aria-hidden />
+        Loading PDF…
       </div>
     )
   }
@@ -96,17 +142,21 @@ export function CreatedDocumentFieldPdfCanvas({
   return (
     <Document
       key={pdfUrl}
-      file={pdfUrl}
+      file={pdfFile}
       onLoadSuccess={({ numPages: count }) => onLoad(count)}
-      onLoadError={() => onError?.()}
+      onLoadError={() => {
+        setPdfFetchFailed(true)
+        onError?.()
+      }}
       loading={(
         <div className={`flex min-h-[360px] items-center justify-center text-[#b9afa3] ${className}`}>
-          <LoaderCircle className="mr-2 animate-spin" size={18} /> Loading PDF…
+          <LoaderCircle className="mr-2 motion-reduce:animate-none animate-spin" size={18} aria-hidden />
+          Loading PDF…
         </div>
       )}
       className={mode === 'sign' ? 'flex flex-col items-center gap-6' : 'flex justify-center'}
     >
-      {pageRange.map((pageIndex) => (
+      {numPages > 0 ? pageRange.map((pageIndex) => (
         <CreatedDocumentPdfPage
           key={pageIndex}
           pageIndex={pageIndex}
@@ -117,7 +167,7 @@ export function CreatedDocumentFieldPdfCanvas({
           layout={layout}
           sign={sign}
         />
-      ))}
+      )) : null}
     </Document>
   )
 }

@@ -146,7 +146,7 @@ export function DocumentCreatorLibrary() {
   }
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-hidden">
+    <div className="isolate flex min-h-0 min-w-0 max-w-full flex-1 flex-col gap-4 overflow-hidden overflow-x-clip">
       <PortalMobileTabPicker
         tabs={libraryTabs}
         activeTab={primaryTab}
@@ -259,7 +259,7 @@ export function DocumentCreatorLibrary() {
       <PortalTableCard
         mobilePageScroll
         mobilePageScrollUntil="lg"
-        className={`${PORTAL_TABLE_LIST_CARD_CLASS} ${PORTAL_TABLE_LIST_EDGE_CLASS}`}
+        className={`${PORTAL_TABLE_LIST_CARD_CLASS} ${PORTAL_TABLE_LIST_EDGE_CLASS} max-xl:overflow-x-clip max-xl:[box-shadow:none!important]`}
       >
         {loading ? (
           <PortalCardSkeleton count={5} />

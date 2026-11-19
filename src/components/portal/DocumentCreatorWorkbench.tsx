@@ -209,7 +209,7 @@ export function DocumentCreatorWorkbench({ initial, initialStep = 'create', onSt
             onBack={requestLeaveToDocuments}
             backButtonLabel="Back to all documents"
           />
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex min-w-0 items-center gap-2 overflow-x-auto flex-nowrap [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             <DocumentCreatorStepper activeStep={activeStep} fieldsEnabled={fieldsEnabled} onStepChange={goToStep} />
             {statusPresentation ? <PortalStatusBadge status={statusPresentation.label} tone={statusPresentation.tone} /> : null}
           </div>

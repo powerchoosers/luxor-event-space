@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { PortalButton, PortalCheckbox, PortalStatusBadge } from '@/components/portal/PortalUI'
+import { PortalButton, PortalCheckbox, PortalModal, PortalStatusBadge } from '@/components/portal/PortalUI'
 import { createdDocumentStatusPresentation } from '@/lib/luxorDocumentCreatorStatus'
 import { displayStatusForDocument, type LuxorCreatedDocumentRow, type LuxorCreatedDocumentSigningOrder } from '@/lib/luxorDocumentCreatorTypes'
 import type { LuxorCreatedDocumentSignerRow } from '@/lib/luxorCreatedDocumentFieldTypes'
@@ -115,6 +115,7 @@ export function DocumentCreatorSendStep({
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState<'send' | 'remind' | 'void' | null>(null)
   const [error, setError] = useState('')
+  const [voidConfirmOpen, setVoidConfirmOpen] = useState(false)
   const locked = status !== 'draft' && status !== 'template'
   const presentation = createdDocumentStatusPresentation(displayStatusForDocument({
     status,
@@ -309,8 +310,8 @@ export function DocumentCreatorSendStep({
           </PortalButton>
         ) : null}
         {locked && status !== 'voided' ? (
-          <PortalButton type="button" variant="secondary" className="min-h-11" disabled={busy !== null} onClick={() => void submit('void')}>
-            {busy === 'void' ? 'Voiding…' : 'Void'}
+          <PortalButton type="button" variant="secondary" className="min-h-11" disabled={busy !== null} onClick={() => setVoidConfirmOpen(true)}>
+            Void
           </PortalButton>
         ) : null}
         {finalPdfPath ? (
@@ -322,6 +323,34 @@ export function DocumentCreatorSendStep({
           </a>
         ) : null}
       </div>
+
+      <PortalModal
+        isOpen={voidConfirmOpen}
+        onClose={() => {
+          if (busy !== 'void') setVoidConfirmOpen(false)
+        }}
+        title="Void this document?"
+        description="Signing links will stop working."
+        footer={(
+          <>
+            <PortalButton type="button" disabled={busy === 'void'} onClick={() => setVoidConfirmOpen(false)}>
+              Cancel
+            </PortalButton>
+            <PortalButton
+              type="button"
+              variant="danger"
+              disabled={busy !== null}
+              onClick={() => {
+                void submit('void').finally(() => setVoidConfirmOpen(false))
+              }}
+            >
+              {busy === 'void' ? 'Voiding…' : 'Void'}
+            </PortalButton>
+          </>
+        )}
+      >
+        <span className="sr-only">Confirm void document</span>
+      </PortalModal>
     </div>
   )
 }
