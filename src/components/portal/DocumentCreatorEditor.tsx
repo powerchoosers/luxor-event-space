@@ -386,7 +386,7 @@ export const DocumentCreatorEditor = forwardRef<DocumentCreatorEditorHandle, Pro
       </label>
 
       <div className="space-y-2">
-        <div className="flex flex-wrap items-center gap-1 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-1">
+        <div className="flex items-center gap-0.5 overflow-x-auto rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-1 flex-nowrap [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           <ToolbarButton label="Bold" disabled={readOnly} active={editor?.isActive('bold')} onClick={() => editor?.chain().focus().toggleBold().run()}><Bold size={14} /></ToolbarButton>
           <ToolbarButton label="Italic" disabled={readOnly} active={editor?.isActive('italic')} onClick={() => editor?.chain().focus().toggleItalic().run()}><Italic size={14} /></ToolbarButton>
           <ToolbarButton label="Underline" disabled={readOnly} active={editor?.isActive('underline')} onClick={() => editor?.chain().focus().toggleUnderline().run()}><UnderlineIcon size={14} /></ToolbarButton>
@@ -427,7 +427,7 @@ function ToolbarButton({
       title={label}
       disabled={disabled}
       onClick={onClick}
-      className={`inline-flex h-8 min-w-8 items-center justify-center rounded-md px-2 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 motion-reduce:transition-none ${
+      className={`inline-flex h-7 min-w-7 shrink-0 items-center justify-center rounded-md px-1.5 text-[11px] font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 motion-reduce:transition-none sm:h-8 sm:min-w-8 sm:px-2 sm:text-xs ${
         active
           ? 'bg-[#caa24c]/20 text-[#8c6529] dark:text-[#f1d27a]'
           : 'text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-card)] hover:text-[color:var(--portal-text)]'
