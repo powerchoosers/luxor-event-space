@@ -9,9 +9,11 @@ const ts = require('typescript')
 
 const MODEL_SID = 'elena_live_model_output'
 
-function loadCallsServer() {
+function loadCallsServer(options = {}) {
   const filename = path.resolve(__dirname, '../src/lib/luxorCallsServer.ts')
   const inserted = []
+  const modelRows = []
+  let concurrentTurnKeyInserts = 0
   const mod = new Module(filename, module)
   mod.filename = filename
   mod.paths = Module._nodeModulePaths(path.dirname(filename))
@@ -27,22 +29,40 @@ function loadCallsServer() {
     if (name === 'server-only') return {}
     if (name === './luxorCallTypes') return loadTs(path.resolve(__dirname, '../src/lib/luxorCallTypes.ts'), mod)
     if (name === './luxorElenaLiveTranscriptSnapshot') return loadTs(path.resolve(__dirname, '../src/lib/luxorElenaLiveTranscriptSnapshot.ts'), mod)
-    if (name === './supabaseRestServer') return {
+    if (name === './supabaseRestServer') {
+      const rest = loadTs(path.resolve(__dirname, '../src/lib/supabaseRestServer.ts'), mod)
+      return {
+      SupabaseRestError: rest.SupabaseRestError,
       supabaseRest: async (query, init = {}) => {
         if (!init.method) {
           if (query.includes('luxor_calls?') && query.includes('twilio_call_sid')) {
             return [{
-              id: 'call-id', twilio_call_sid: 'CA' + '1'.repeat(32), recording_consent_status: 'automatic', metadata: { scope: 'elena_live_inbound', openai_session_id: 'live_session' },
+              id: 'call-id', twilio_call_sid: 'CA' + '1'.repeat(32), recording_consent_status: 'automatic', metadata: { scope: 'elena_live_inbound', openai_session_id: 'live_session', accepted_at: '2026-11-14T19:25:00.000Z' },
               recording_started_at: '2026-11-14T19:25:00.000Z', answered_at: '2026-11-14T19:25:00.000Z', started_at: '2026-11-14T19:24:50.000Z',
               transcription_status: 'processing', summary_status: 'not_generated', updated_at: '2026-11-14T19:25:00.000Z', last_sequence_number: 0,
             }]
           }
-          if (query.includes('transcription_sid=eq.elena_live_model_output')) return []
+          if (query.includes('agent_turn_key=eq.')) {
+            if (options.raceTurnKeyInsert) return []
+            const match = query.match(/agent_turn_key=eq\.([^&]+)/)
+            const key = match ? decodeURIComponent(match[1]) : ''
+            return modelRows.filter((row) => row.agent_turn_key === key).map(() => ({ id: 'seg-existing' }))
+          }
+          if (query.includes('transcription_sid=eq.elena_live_model_output')) return modelRows
           return []
         }
-        inserted.push({ query, body: JSON.parse(init.body) })
+        const body = JSON.parse(init.body)
+        if (body.agent_turn_key && options.raceTurnKeyInsert) {
+          concurrentTurnKeyInserts += 1
+          if (concurrentTurnKeyInserts > 1) {
+            throw new rest.SupabaseRestError('duplicate key value violates unique constraint "luxor_call_transcript_segments_agent_turn_key_idx"', 409, '23505')
+          }
+        }
+        inserted.push({ query, body })
+        if (body.agent_turn_key) modelRows.push(body)
         return init.headers?.Prefer?.includes('return=representation') ? [{ id: 'seg-id' }] : []
       },
+    }
     }
     if (name === './luxorInquiriesServer') return { listLuxorInquiries: async () => [], getLuxorInquiry: async () => null }
     return Module.prototype.require.call(mod, name)
@@ -267,4 +287,29 @@ test('elena agent segments store model output as final luxor_agent rows', async 
   assert.equal(segments[0].is_final, true)
   assert.equal(segments[0].transcription_sid, MODEL_SID)
   assert.match(segments[0].segment_text, /Luxor at Las Palmas/)
+})
+
+test('elena agent segments treat concurrent agent_turn_key 23505 as already saved', async () => {
+  const { exports, inserted } = loadCallsServer({ raceTurnKeyInsert: true })
+  const payload = {
+    callSid: 'CA' + '1'.repeat(32), sessionId: 'live_session', text: 'Concurrent row.', startMs: 7000, endMs: 9000, sequenceId: 1, turnKey: 'agent-turn:resp_race',
+  }
+  await exports.saveLuxorElenaAgentTranscriptSegment(payload)
+  await exports.saveLuxorElenaAgentTranscriptSegment({ ...payload, sequenceId: 2, text: 'Lost race.' })
+  const segments = inserted.filter((row) => row.query.startsWith('luxor_call_transcript_segments') && row.body.agent_turn_key).map((row) => row.body)
+  assert.equal(segments.length, 1)
+  assert.match(inserted[0].query, /on_conflict=call_id%2Ctranscription_sid%2Cagent_turn_key/)
+})
+
+test('elena agent segments dedupe by turn key', async () => {
+  const { exports, inserted } = loadCallsServer()
+  const payload = {
+    callSid: 'CA' + '1'.repeat(32), sessionId: 'live_session', text: 'One greeting.', startMs: 7000, endMs: 9000, sequenceId: 1, turnKey: 'agent-turn:resp_1',
+  }
+  await exports.saveLuxorElenaAgentTranscriptSegment(payload)
+  await exports.saveLuxorElenaAgentTranscriptSegment({ ...payload, sequenceId: 2, text: 'Duplicate attempt.' })
+  const segments = inserted.filter((row) => row.query.startsWith('luxor_call_transcript_segments')).map((row) => row.body)
+  assert.equal(segments.length, 1)
+  assert.equal(segments[0].agent_turn_key, 'agent-turn:resp_1')
+  assert.equal(segments[0].segment_start_seconds, 7)
 })

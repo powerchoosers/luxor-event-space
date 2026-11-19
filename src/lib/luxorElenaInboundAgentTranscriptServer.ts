@@ -2,11 +2,7 @@ import 'server-only'
 
 import WebSocket from 'ws'
 import { ELENA_LIVE_CLAIM_MAX_SECONDS, getElenaLiveConfig, signElenaLiveClaim, verifyElenaLiveClaim } from './luxorElenaInboundServer'
-import {
-  isResponseOutputComplete,
-  isSessionOutputAudioBufferStopped,
-  responseTurnKey,
-} from './luxorElenaInboundAgentTranscriptEvents'
+import { createElenaInboundAgentTranscriptTurnCollector } from './luxorElenaInboundAgentTranscriptTurns'
 import {
   ELENA_LIVE_AGENT_TRANSCRIPTION_SID,
   maxElenaModelTranscriptSequenceForCallSid,
@@ -26,8 +22,6 @@ export const ELENA_INBOUND_AGENT_TRANSCRIPT_STALE_RUNNING_MS = ELENA_INBOUND_AGE
 
 type LiveCall = { id: string; twilio_call_sid: string; status: string; metadata: Record<string, unknown>; updated_at: string }
 
-type OutputBuffer = { text: string; startMs: number | null; endMs: number | null; eventIds: Set<string> }
-
 type SidebandFinishStatus = 'completed' | 'failed' | 'partial'
 
 function parseLiveEvent(raw: string): Record<string, unknown> | null {
@@ -37,27 +31,6 @@ function parseLiveEvent(raw: string): Record<string, unknown> | null {
   } catch {
     return null
   }
-}
-
-function nestedResponseEvent(event: Record<string, unknown>) {
-  if (event.type !== 'response.event') return null
-  const nested = event.event
-  return nested && typeof nested === 'object' && !Array.isArray(nested) ? nested as Record<string, unknown> : null
-}
-
-function bufferFromOutput(buffer: OutputBuffer | null): OutputBuffer {
-  return buffer || { text: '', startMs: null, endMs: null, eventIds: new Set() }
-}
-
-function appendOutputDelta(buffer: OutputBuffer, delta: string, startMs?: unknown, endMs?: unknown, eventId?: unknown) {
-  if (!delta) return
-  if (typeof eventId === 'string' && eventId) {
-    if (buffer.eventIds.has(eventId)) return
-    buffer.eventIds.add(eventId)
-  }
-  buffer.text += delta
-  if (typeof startMs === 'number' && Number.isFinite(startMs)) buffer.startMs = buffer.startMs == null ? startMs : Math.min(buffer.startMs, startMs)
-  if (typeof endMs === 'number' && Number.isFinite(endMs)) buffer.endMs = Math.max(buffer.endMs ?? endMs, endMs)
 }
 
 function sidebandStartedAt(metadata: Record<string, unknown>) {
@@ -136,37 +109,28 @@ export async function runElenaInboundAgentTranscriptSideband(callSid: string, se
 
   const config = getElenaLiveConfig()
   const startedAt = Date.now()
-  let current: OutputBuffer | null = null
   let closed = false
   let finishStatus: SidebandFinishStatus = 'completed'
   let modelSequence = await maxElenaModelTranscriptSequenceForCallSid(callSid)
-  const persistedTurns = new Set<string>()
+  const collector = createElenaInboundAgentTranscriptTurnCollector()
+  let persistChain = Promise.resolve()
 
-  const turnKeyForBuffer = (event: Record<string, unknown>, nested: Record<string, unknown> | null | undefined, buffer: OutputBuffer) => (
-    responseTurnKey(event, nested) || `content:${buffer.text.trim().slice(0, 200)}`
-  )
-
-  const persistOutputTurn = async (
-    buffer: OutputBuffer | null,
-    turnKey?: string | null,
-  ) => {
-    if (!buffer?.text.trim()) return
-    const key = turnKey || `turn:${modelSequence + 1}:${buffer.text.trim().slice(0, 48)}`
-    if (persistedTurns.has(key)) return
-    modelSequence += 1
-    await saveLuxorElenaAgentTranscriptSegment({
-      callSid,
-      sessionId,
-      text: buffer.text.trim(),
-      startMs: buffer.startMs,
-      endMs: buffer.endMs,
-      sequenceId: modelSequence,
+  const enqueueAgentTurn = (turn: { text: string; startMs: number | null; endMs: number | null; turnKey: string }) => {
+    persistChain = persistChain.then(async () => {
+      const maxSeq = await maxElenaModelTranscriptSequenceForCallSid(callSid)
+      modelSequence = Math.max(modelSequence, maxSeq)
+      const sequenceId = modelSequence + 1
+      const saved = await saveLuxorElenaAgentTranscriptSegment({
+        callSid,
+        sessionId,
+        text: turn.text,
+        startMs: turn.startMs,
+        endMs: turn.endMs,
+        sequenceId,
+        turnKey: turn.turnKey,
+      })
+      if (saved) modelSequence = sequenceId
     }).catch(() => console.warn('[Elena Inbound] Agent transcript turn could not be saved.'))
-    persistedTurns.add(key)
-    buffer.text = ''
-    buffer.startMs = null
-    buffer.endMs = null
-    buffer.eventIds.clear()
   }
 
   await new Promise<void>((resolve) => {
@@ -181,7 +145,9 @@ export async function runElenaInboundAgentTranscriptSideband(callSid: string, se
       closed = true
       finishStatus = status
       clearTimeout(deadline)
-      void persistOutputTurn(current).finally(() => {
+      const pending = collector.drainPartial()
+      if (pending) enqueueAgentTurn(pending)
+      void persistChain.finally(() => {
         socket.removeAllListeners()
         if (socket.readyState === WebSocket.OPEN) socket.close()
         else socket.terminate()
@@ -198,32 +164,8 @@ export async function runElenaInboundAgentTranscriptSideband(callSid: string, se
     socket.on('message', (bytes) => {
       const event = parseLiveEvent(bytes.toString())
       if (!event) return
-      const type = String(event.type || '')
-      if (type === 'session.output_transcript.delta' && typeof event.delta === 'string') {
-        current = bufferFromOutput(current)
-        appendOutputDelta(current, event.delta, event.start_ms, event.end_ms, event.event_id)
-      }
-      const nested = nestedResponseEvent(event)
-      if (nested) {
-        const nestedType = String(nested.type || '')
-        if (nestedType === 'response.output_text.delta' && typeof nested.delta === 'string') {
-          current = bufferFromOutput(current)
-          appendOutputDelta(current, nested.delta, nested.start_ms, nested.end_ms, nested.event_id)
-        }
-        if (nestedType === 'response.output_text.done' && typeof nested.text === 'string') {
-          current = bufferFromOutput(current)
-          current.text = nested.text
-        }
-        if (isResponseOutputComplete(nestedType) && current) {
-          const turnKey = turnKeyForBuffer(event, nested, current)
-          void persistOutputTurn(current, turnKey).then(() => { current = null })
-        }
-      }
-      if (isSessionOutputAudioBufferStopped(type) && current) {
-        const turnKey = turnKeyForBuffer(event, nested, current)
-        void persistOutputTurn(current, turnKey).then(() => { current = null })
-      }
-      if (type === 'session.closed') finish('completed')
+      for (const turn of collector.ingest(event)) enqueueAgentTurn(turn)
+      if (event.type === 'session.closed') finish('completed')
       if (Date.now() - startedAt > 5_000) pollTerminalCall()
     })
     socket.on('unexpected-response', (_req, response) => {

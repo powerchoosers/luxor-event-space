@@ -14,7 +14,7 @@ import {
   shouldRepairThinPostCallTranscriptSnapshot,
 } from './luxorElenaLiveTranscriptSnapshot'
 import { getLuxorInquiry, listLuxorInquiries } from './luxorInquiriesServer'
-import { supabaseRest } from './supabaseRestServer'
+import { SupabaseRestError, supabaseRest } from './supabaseRestServer'
 
 export const ELENA_LIVE_AGENT_TRANSCRIPTION_SID = 'elena_live_model_output'
 
@@ -585,12 +585,20 @@ export async function saveLuxorElenaAgentTranscriptSegment(input: {
   endMs?: number | null
   eventTimestamp?: string | null
   sequenceId?: number | null
+  turnKey?: string | null
 }) {
   let call = await getLuxorCallBySid(input.callSid)
   if (!call || !canProcessLuxorRecording(call) || !luxorElenaLiveInboundTranscriptUsesSipBridge(call.metadata)) return null
   if (call.metadata.openai_session_id !== input.sessionId) return null
   const text = input.text.trim().slice(0, 4000)
   if (!text) return null
+  const turnKey = typeof input.turnKey === 'string' && input.turnKey.trim() ? input.turnKey.trim().slice(0, 200) : null
+  if (turnKey) {
+    const existingTurn = await supabaseRest<Array<{ id: string }>>(
+      `luxor_call_transcript_segments?select=id&call_id=eq.${encodeURIComponent(call.id)}&transcription_sid=eq.${encodeURIComponent(ELENA_LIVE_AGENT_TRANSCRIPTION_SID)}&agent_turn_key=eq.${encodeURIComponent(turnKey)}&limit=1`,
+    )
+    if (existingTurn.length) return call
+  }
   const existing = await getTranscriptRows(`call_id=eq.${encodeURIComponent(call.id)}&transcription_sid=eq.${encodeURIComponent(ELENA_LIVE_AGENT_TRANSCRIPTION_SID)}`)
   const sequenceId = typeof input.sequenceId === 'number' && Number.isFinite(input.sequenceId) && input.sequenceId > 0
     ? Math.trunc(input.sequenceId)
@@ -609,23 +617,34 @@ export async function saveLuxorElenaAgentTranscriptSegment(input: {
   if (startSeconds == null && Number.isFinite(recordingStartMs) && Number.isFinite(eventMs)) {
     startSeconds = Math.max(0, (eventMs - recordingStartMs) / 1000)
   }
-  const inserted = await supabaseRest<Array<{ id: string }>>('luxor_call_transcript_segments?on_conflict=call_id%2Ctranscription_sid%2Csequence_id%2Ctrack', {
-    method: 'POST', headers: { Prefer: 'resolution=ignore-duplicates,return=representation' },
-    body: JSON.stringify({
-      call_id: call.id,
-      transcription_sid: ELENA_LIVE_AGENT_TRANSCRIPTION_SID,
-      sequence_id: sequenceId,
-      track: 'luxor_agent',
-      segment_start_seconds: startSeconds,
-      segment_audio_timestamp: null,
-      segment_text: text,
-      english_text: text,
-      spoken_languages: ['English'],
-      translation_status: 'not_requested',
-      is_final: true,
-      event_timestamp: eventTime,
-    }),
-  })
+  const conflictTarget = turnKey
+    ? 'call_id%2Ctranscription_sid%2Cagent_turn_key'
+    : 'call_id%2Ctranscription_sid%2Csequence_id%2Ctrack'
+  const segmentBody = {
+    call_id: call.id,
+    transcription_sid: ELENA_LIVE_AGENT_TRANSCRIPTION_SID,
+    sequence_id: sequenceId,
+    track: 'luxor_agent',
+    segment_start_seconds: startSeconds,
+    segment_audio_timestamp: null,
+    segment_text: text,
+    english_text: text,
+    spoken_languages: ['English'],
+    translation_status: 'not_requested',
+    is_final: true,
+    event_timestamp: eventTime,
+    agent_turn_key: turnKey,
+  }
+  let inserted: Array<{ id: string }>
+  try {
+    inserted = await supabaseRest<Array<{ id: string }>>(`luxor_call_transcript_segments?on_conflict=${conflictTarget}`, {
+      method: 'POST', headers: { Prefer: 'resolution=ignore-duplicates,return=representation' },
+      body: JSON.stringify(segmentBody),
+    })
+  } catch (error) {
+    if (turnKey && error instanceof SupabaseRestError && error.code === '23505') return call
+    throw error
+  }
   if (!inserted.length) return call
   call = await syncLuxorCallTranscriptSnapshot(call, sequenceId)
   return call

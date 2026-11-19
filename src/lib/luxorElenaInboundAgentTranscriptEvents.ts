@@ -2,10 +2,15 @@ export function isSessionOutputAudioBufferStopped(eventType: string) {
   return eventType === 'session.output_audio_buffer.stopped' || eventType === 'session.output_audio.buffer.stopped'
 }
 
+/** @deprecated Prefer isResponseTurnFinished for persisting agent turns. */
 export function isResponseOutputComplete(nestedType: string) {
   return nestedType === 'response.output_text.done'
     || nestedType === 'response.done'
     || nestedType === 'response.completed'
+}
+
+export function isResponseTurnFinished(nestedType: string) {
+  return nestedType === 'response.done' || nestedType === 'response.completed'
 }
 
 export function responseTurnKey(parent: Record<string, unknown>, nested?: Record<string, unknown> | null) {
