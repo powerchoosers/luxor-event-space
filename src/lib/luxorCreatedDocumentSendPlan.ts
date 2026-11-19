@@ -46,13 +46,19 @@ export function createdDocumentReminderSchedule(enabled: boolean, afterDays: num
   return new Date(now + days * 24 * 60 * 60 * 1000).toISOString()
 }
 
-export function rollupCreatedDocumentStatus(signers: Array<{ status: string }>) {
-  if (!signers.length) return null
-  if (signers.some((signer) => signer.status === 'declined')) return 'declined' as const
-  const signedCount = signers.filter((signer) => signer.status === 'signed').length
-  if (signedCount === signers.length) return 'signed' as const
+export function rollupCreatedDocumentStatus(signers: Array<{ status: string; name?: string; email?: string; invited_at?: string | null }>) {
+  const counted = signers.filter((signer) => {
+    if (!('name' in signer) && !('email' in signer)) return true
+    const name = typeof signer.name === 'string' ? signer.name.trim() : ''
+    const email = typeof signer.email === 'string' ? signer.email.trim() : ''
+    return Boolean(name || email || signer.invited_at)
+  })
+  if (!counted.length) return null
+  if (counted.some((signer) => signer.status === 'declined')) return 'declined' as const
+  const signedCount = counted.filter((signer) => signer.status === 'signed').length
+  if (signedCount === counted.length) return 'signed' as const
   if (signedCount > 0) return 'partially_signed' as const
-  if (signers.some((signer) => signer.status === 'viewed')) return 'opened' as const
+  if (counted.some((signer) => signer.status === 'viewed')) return 'opened' as const
   return 'sent' as const
 }
 

@@ -278,6 +278,10 @@ export async function latestLuxorCreatedDocumentSignedEventPayload(signerId: str
     : null
 }
 
+export async function deleteLuxorCreatedDocumentSigner(id: string) {
+  await supabaseRestStrict(`${SIGNER_TABLE}?id=eq.${encodeURIComponent(id)}`, { method: 'DELETE' })
+}
+
 export async function updateLuxorCreatedDocumentSigner(
   id: string,
   patch: Record<string, unknown>,

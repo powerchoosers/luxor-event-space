@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useReducedMotion } from 'framer-motion'
-import { PortalButton, PortalModal, PortalPageFrame, PortalPageHeader } from '@/components/portal/PortalUI'
+import { PortalButton, PortalModal, PortalPageFrame, PortalPageHeader, PortalStatusBadge } from '@/components/portal/PortalUI'
 import { useToast } from '@/components/portal/ToastProvider'
 import { DocumentCreatorEditor, type DocumentCreatorEditorHandle } from '@/components/portal/DocumentCreatorEditor'
 import { DocumentCreatorPaperPreview } from '@/components/portal/DocumentCreatorPaperPreview'
@@ -12,7 +12,8 @@ import { DocumentCreatorStepper, type DocumentCreatorStep } from '@/components/p
 import { DocumentCreatorFieldsStep } from '@/components/portal/DocumentCreatorFieldsStep'
 import { DocumentCreatorSendStep } from '@/components/portal/DocumentCreatorSendStep'
 import { canEditCreatedDocumentFields } from '@/lib/luxorCreatedDocumentFieldTypes'
-import type { LuxorCreatedDocumentRow, LuxorCreatedDocumentType } from '@/lib/luxorDocumentCreatorTypes'
+import { displayStatusForDocument, type LuxorCreatedDocumentRow, type LuxorCreatedDocumentType } from '@/lib/luxorDocumentCreatorTypes'
+import { createdDocumentStatusPresentation } from '@/lib/luxorDocumentCreatorStatus'
 import { stashCreatedDocumentHandoff } from '@/lib/luxorDocumentCreatorHandoff'
 import { ChevronDown, FileText } from '@/lib/icons/phosphor-compat'
 
@@ -55,12 +56,12 @@ export function DocumentCreatorWorkbench({ initial, initialStep = 'create', onSt
   const [leaveConfirmOpen, setLeaveConfirmOpen] = useState(false)
   const workbenchDirty = editorDirty || fieldsDirty
 
-  const refreshPreview = useCallback((document: LuxorCreatedDocumentRow) => {
+  const refreshPreview = useCallback((document: LuxorCreatedDocumentRow, refresh = true) => {
     const task = (async () => {
       setPreviewLoading(true)
       setPreviewError(null)
       try {
-        const response = await fetch(`/api/operations/documents/${encodeURIComponent(document.id)}/pdf?refresh=1`, { cache: 'no-store' })
+        const response = await fetch(`/api/operations/documents/${encodeURIComponent(document.id)}/pdf${refresh ? '?refresh=1' : ''}`, { cache: 'no-store' })
         const body = await response.json()
         if (!response.ok) throw new Error(body.error || 'PDF preview is unavailable.')
         setSignedUrl(body.signedUrl)
@@ -80,12 +81,16 @@ export function DocumentCreatorWorkbench({ initial, initialStep = 'create', onSt
   }, [])
 
   useEffect(() => {
-    if (record?.id) void refreshPreview(record)
-  }, [record?.id, record?.version, refreshPreview])
+    if (!record?.id) return
+    const locked = !canEditCreatedDocumentFields(record.status, record.archived_at)
+    void refreshPreview(record, !locked)
+    // Preview follows identity and version. The returned document must not retrigger this effect.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [record?.id, record?.version, record?.status, record?.archived_at, refreshPreview])
 
   useEffect(() => {
     if (activeStep === 'fields' && record?.id && !signedUrl && !previewLoading) {
-      void refreshPreview(record)
+      void refreshPreview(record, canEditCreatedDocumentFields(record.status, record.archived_at))
     }
   }, [activeStep, previewLoading, record, refreshPreview, signedUrl])
 
@@ -163,6 +168,7 @@ export function DocumentCreatorWorkbench({ initial, initialStep = 'create', onSt
   const accordionTransition = reduceMotion ? 'none' : 'grid-template-rows 420ms cubic-bezier(0.4, 0, 0.2, 1)'
   const fieldsEnabled = Boolean(record?.id)
   const canEditFields = record ? canEditCreatedDocumentFields(record.status, record.archived_at) : true
+  const statusPresentation = record ? createdDocumentStatusPresentation(displayStatusForDocument(record)) : null
 
   const goToStep = (step: DocumentCreatorStep) => {
     if ((step === 'fields' || step === 'send') && !fieldsEnabled) return
@@ -175,25 +181,25 @@ export function DocumentCreatorWorkbench({ initial, initialStep = 'create', onSt
   }, [router])
 
   const requestLeaveToDocuments = useCallback(() => {
-    if (!workbenchDirty) {
+    if (!workbenchDirty || !canEditFields) {
       navigateToDocuments()
       return
     }
     setLeaveConfirmOpen(true)
-  }, [navigateToDocuments, workbenchDirty])
+  }, [canEditFields, navigateToDocuments, workbenchDirty])
 
   useEffect(() => {
-    if (!workbenchDirty) return
+    if (!workbenchDirty || !canEditFields) return
     const warnBeforeLeaving = (event: BeforeUnloadEvent) => {
       event.preventDefault()
       event.returnValue = ''
     }
     window.addEventListener('beforeunload', warnBeforeLeaving)
     return () => window.removeEventListener('beforeunload', warnBeforeLeaving)
-  }, [workbenchDirty])
+  }, [canEditFields, workbenchDirty])
 
   return (
-    <PortalPageFrame className="h-full min-h-0 gap-4 overflow-x-hidden pb-[calc(4.5rem+env(safe-area-inset-bottom))] min-[1280px]:pb-0">
+    <PortalPageFrame className={`h-full min-h-0 gap-4 overflow-x-hidden ${canEditFields ? 'pb-[calc(4.5rem+env(safe-area-inset-bottom))] min-[1280px]:pb-0' : 'pb-4'}`}>
       <div className="flex min-w-0 flex-col gap-3 min-[1280px]:flex-row min-[1280px]:items-end min-[1280px]:justify-between">
         <div className="min-w-0 flex-1 space-y-3">
           <PortalPageHeader
@@ -203,16 +209,21 @@ export function DocumentCreatorWorkbench({ initial, initialStep = 'create', onSt
             onBack={requestLeaveToDocuments}
             backButtonLabel="Back to all documents"
           />
-          <DocumentCreatorStepper activeStep={activeStep} fieldsEnabled={fieldsEnabled} onStepChange={goToStep} />
+          <div className="flex flex-wrap items-center gap-2">
+            <DocumentCreatorStepper activeStep={activeStep} fieldsEnabled={fieldsEnabled} onStepChange={goToStep} />
+            {statusPresentation ? <PortalStatusBadge status={statusPresentation.label} tone={statusPresentation.tone} /> : null}
+          </div>
         </div>
+        {canEditFields ? (
         <div className="hidden min-[1280px]:flex shrink-0 flex-wrap gap-2">
-          <PortalButton type="button" variant="secondary" className="min-h-11" disabled={saving || activeStep === 'send' || Boolean(record && !canEditFields)} onClick={() => void runSave('template')}>
+          <PortalButton type="button" variant="secondary" className="min-h-11" disabled={saving || activeStep === 'send'} onClick={() => void runSave('template')}>
             Save as template
           </PortalButton>
-          <PortalButton type="button" variant="primary" className="min-h-11" disabled={saving || activeStep === 'send' || Boolean(record && !canEditFields)} onClick={() => void runSave('draft')}>
+          <PortalButton type="button" variant="primary" className="min-h-11" disabled={saving || activeStep === 'send'} onClick={() => void runSave('draft')}>
             Save draft
           </PortalButton>
         </div>
+        ) : null}
       </div>
 
       <div className="min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden portal-scrollbar min-[1280px]:overflow-hidden">
@@ -279,7 +290,7 @@ export function DocumentCreatorWorkbench({ initial, initialStep = 'create', onSt
             <p className="text-xs font-medium text-[color:var(--portal-muted)] min-[1280px]:sr-only">Live paper preview</p>
             <div className="min-w-0 w-full max-w-full overflow-x-hidden">
               <DocumentCreatorPaperPreview
-                title={form.title}
+                title={(canEditFields ? form.title : record?.title) || ''}
                 documentType={form.documentType}
                 bodyHtml={form.bodyHtml}
                 className="mx-auto w-full max-w-full min-[1280px]:max-w-[min(100%,508px)]"
@@ -303,13 +314,13 @@ export function DocumentCreatorWorkbench({ initial, initialStep = 'create', onSt
         )}
       </div>
 
-      {activeStep === 'send' ? null : (
+      {activeStep === 'send' || !canEditFields ? null : (
       <div className="fixed inset-x-0 bottom-0 z-20 border-t border-[color:var(--portal-border)] bg-[color:var(--portal-frame)] p-3 min-[1280px]:hidden">
         <div className="mx-auto flex max-w-xl flex-col gap-2">
-          <PortalButton type="button" variant="primary" className="min-h-11 w-full" disabled={saving || Boolean(record && !canEditFields)} onClick={() => void runSave('draft')}>
+          <PortalButton type="button" variant="primary" className="min-h-11 w-full" disabled={saving} onClick={() => void runSave('draft')}>
             Save draft
           </PortalButton>
-          <PortalButton type="button" variant="secondary" className="min-h-11 w-full" disabled={saving || Boolean(record && !canEditFields)} onClick={() => void runSave('template')}>
+          <PortalButton type="button" variant="secondary" className="min-h-11 w-full" disabled={saving} onClick={() => void runSave('template')}>
             Save as template
           </PortalButton>
         </div>

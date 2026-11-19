@@ -20,7 +20,11 @@ type SignerDraft = {
   declined_at?: string | null
 }
 
-function signerProgressLabel(signer: Pick<SignerDraft, 'status' | 'viewed_at' | 'signed_at' | 'declined_at'>) {
+function signerProgressLabel(
+  signer: Pick<SignerDraft, 'status' | 'viewed_at' | 'signed_at' | 'declined_at'>,
+  documentStatus?: string,
+) {
+  if (documentStatus === 'voided' && signer.status !== 'signed' && signer.status !== 'declined') return 'Voided'
   const label = signer.status === 'signed'
     ? 'Signed'
     : signer.status === 'declined'
@@ -41,7 +45,7 @@ function signerProgressLabel(signer: Pick<SignerDraft, 'status' | 'viewed_at' | 
   return `${label} · ${parsed.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}`
 }
 
-export function DocumentCreatorSignerStatus({ documentId }: { documentId: string }) {
+export function DocumentCreatorSignerStatus({ documentId, documentStatus }: { documentId: string; documentStatus?: string }) {
   const [lines, setLines] = useState<Array<{ id: string; label: string; detail: string }>>([])
   useEffect(() => {
     let cancelled = false
@@ -51,10 +55,13 @@ export function DocumentCreatorSignerStatus({ documentId }: { documentId: string
         const body = await response.json()
         if (!response.ok || cancelled) return
         const rows = Array.isArray(body.signers) ? body.signers as LuxorCreatedDocumentSignerRow[] : []
-        setLines(rows.filter((signer) => signer.name.trim() || signer.email.trim()).map((signer) => ({
+        const visible = documentStatus === 'voided'
+          ? rows
+          : rows.filter((signer) => signer.name.trim() || signer.email.trim())
+        setLines(visible.map((signer) => ({
           id: signer.id,
           label: signer.name.trim() || signer.email.trim() || signer.role_label,
-          detail: signerProgressLabel(signer),
+          detail: signerProgressLabel(signer, documentStatus),
         })))
       } catch {
         if (!cancelled) setLines([])
@@ -62,7 +69,7 @@ export function DocumentCreatorSignerStatus({ documentId }: { documentId: string
     }
     void load()
     return () => { cancelled = true }
-  }, [documentId])
+  }, [documentId, documentStatus])
   if (!lines.length) return null
   return (
     <ul className="space-y-1">
@@ -229,7 +236,7 @@ export function DocumentCreatorSendStep({
                   onChange={(event) => setSigners((current) => current.map((row, rowIndex) => rowIndex === index ? { ...row, role_label: event.target.value } : row))}
                 />
               </label>
-              <p className="text-xs tabular-nums text-[color:var(--portal-muted)] sm:col-span-3">{signerProgressLabel(signer)}</p>
+              <p className="text-xs tabular-nums text-[color:var(--portal-muted)] sm:col-span-3">{signerProgressLabel(signer, status)}</p>
             </div>
           ))}
         </div>

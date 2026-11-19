@@ -4,6 +4,7 @@ import { renderLuxorSystemEmail } from './luxorEmailDesignSystem'
 import { createLuxorEmailJob } from './luxorEmailJobsServer'
 import {
   latestLuxorCreatedDocumentSignedEventPayload,
+  deleteLuxorCreatedDocumentSigner,
   listLuxorCreatedDocumentSigners,
   updateLuxorCreatedDocumentSigner,
 } from './luxorCreatedDocumentFieldsServer'
@@ -199,6 +200,10 @@ export async function sendLuxorCreatedDocumentForSignature(input: {
     throw new Error('Each recipient needs a name and a valid email.')
   }
   for (const signer of prepared) {
+    if (!signer.name && !signer.email) {
+      await deleteLuxorCreatedDocumentSigner(signer.id)
+      continue
+    }
     await updateLuxorCreatedDocumentSigner(signer.id, {
       name: signer.name,
       email: signer.email,

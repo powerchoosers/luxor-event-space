@@ -70,8 +70,10 @@ export const DocumentCreatorEditor = forwardRef<DocumentCreatorEditorHandle, Pro
   const tiptapRef = useRef<Editor | null>(null)
   const titleRef = useRef(title)
   const documentTypeRef = useRef(documentType)
+  const readOnlyRef = useRef(readOnly)
   titleRef.current = title
   documentTypeRef.current = documentType
+  readOnlyRef.current = readOnly
 
   const markDirty = useCallback(() => {
     dirtyRef.current = true
@@ -119,6 +121,7 @@ export const DocumentCreatorEditor = forwardRef<DocumentCreatorEditorHandle, Pro
       tiptapRef.current = null
     },
     onUpdate: ({ editor: tiptap }) => {
+      if (readOnlyRef.current) return
       markDirty()
       setSaveState('idle')
       onFormChange?.({
@@ -213,7 +216,8 @@ export const DocumentCreatorEditor = forwardRef<DocumentCreatorEditorHandle, Pro
 
   useEffect(() => {
     editor?.setEditable(!readOnly)
-  }, [editor, readOnly])
+    if (readOnly) clearDirty()
+  }, [clearDirty, editor, readOnly])
 
   const persist = useCallback(async (asTemplate: boolean) => {
     if (readOnly) return null
@@ -319,7 +323,9 @@ export const DocumentCreatorEditor = forwardRef<DocumentCreatorEditorHandle, Pro
     }
   }, [title, documentType, editor, persist, readOnly, record?.id])
 
-  const autosaveLabel = saveState === 'saving'
+  const autosaveLabel = readOnly && record
+    ? createdDocumentStatusPresentation(displayStatusForDocument(record)).label
+    : saveState === 'saving'
     ? 'Saving…'
     : saveState === 'error'
       ? 'Save failed'
@@ -341,7 +347,7 @@ export const DocumentCreatorEditor = forwardRef<DocumentCreatorEditorHandle, Pro
         <h2 className="text-sm font-semibold text-[color:var(--portal-text)]">Create</h2>
         <PortalStatusBadge status={autosaveLabel} tone={record && record.status !== 'draft' ? createdDocumentStatusPresentation(displayStatusForDocument(record)).tone : 'neutral'} />
       </div>
-      {readOnly && record?.id ? <DocumentCreatorSignerStatus documentId={record.id} /> : null}
+      {readOnly && record?.id ? <DocumentCreatorSignerStatus documentId={record.id} documentStatus={record.status} /> : null}
       <label className="block space-y-1.5">
         <span className="text-xs font-medium text-[color:var(--portal-muted)]">Title</span>
         <input

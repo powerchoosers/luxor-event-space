@@ -147,10 +147,14 @@ export function DocumentCreatorFieldsStep({ documentId, pdfUrl, canEdit, isTempl
   useEffect(() => { void load() }, [load])
 
   useEffect(() => {
+    if (!canEdit) {
+      onDirtyChange?.(false)
+      return
+    }
     if (loading || saving) return
     const dirty = fieldsPlacementSnapshot(fields, signers) !== savedSnapshotRef.current
     onDirtyChange?.(dirty)
-  }, [fields, loading, onDirtyChange, saving, signers])
+  }, [canEdit, fields, loading, onDirtyChange, saving, signers])
 
   const measureCanvasWidth = useCallback(() => {
     const wrap = canvasWrapRef.current

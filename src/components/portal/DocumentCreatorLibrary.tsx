@@ -182,21 +182,48 @@ export function DocumentCreatorLibrary() {
       </div>
 
       {primaryTab === 'my_documents' && !showArchived ? (
-        <div className="min-w-0 max-w-full overflow-x-auto px-4 pb-1 sm:px-0">
-          <PortalAnimatedTabs
-            variant="slider"
-            ariaLabel="Document groupings"
-            tabs={[
-              { id: 'my_documents', label: 'Drafts', icon: <FileText size={15} /> },
-              { id: 'out_for_signature', label: 'Out for signature', icon: <FileText size={15} /> },
-              { id: 'completed', label: 'Completed', icon: <FileText size={15} /> },
-            ]}
-            activeTab={documentGroup}
-            onTabChange={(tab) => {
-              if (tab === 'my_documents' || tab === 'out_for_signature' || tab === 'completed') setDocumentGroup(tab)
-            }}
-          />
-        </div>
+        <>
+          <div className="relative z-[64] grid grid-cols-3 gap-1 px-4 sm:hidden" role="tablist" aria-label="Document groupings">
+            {([
+              ['my_documents', 'Drafts'],
+              ['out_for_signature', 'Out for signature'],
+              ['completed', 'Completed'],
+            ] as const).map(([id, label]) => {
+              const selected = documentGroup === id
+              return (
+                <button
+                  key={id}
+                  type="button"
+                  role="tab"
+                  aria-selected={selected}
+                  onClick={() => setDocumentGroup(id)}
+                  className={`relative z-[64] min-h-11 rounded-lg border px-1.5 text-center text-[11px] font-semibold leading-tight ${
+                    selected
+                      ? 'border-[color:var(--portal-border)] bg-[color:var(--portal-card)] text-[color:var(--portal-text)]'
+                      : 'border-transparent bg-[color:var(--portal-soft)] text-[color:var(--portal-muted)]'
+                  }`}
+                >
+                  {label}
+                </button>
+              )
+            })}
+          </div>
+          <div className="relative z-[64] hidden min-w-0 max-w-full overflow-x-auto px-4 pb-1 sm:block sm:px-0">
+            <PortalAnimatedTabs
+              variant="slider"
+              ariaLabel="Document groupings"
+              tabs={[
+                { id: 'my_documents', label: 'Drafts', icon: <FileText size={15} /> },
+                { id: 'out_for_signature', label: 'Out for signature', icon: <FileText size={15} /> },
+                { id: 'completed', label: 'Completed', icon: <FileText size={15} /> },
+              ]}
+              activeTab={documentGroup}
+              onTabChange={(tab) => {
+                if (tab === 'my_documents' || tab === 'out_for_signature' || tab === 'completed') setDocumentGroup(tab)
+              }}
+            />
+          </div>
+        </>
       ) : null}
 
       <PortalFilterBar searchValue={search} onSearchChange={setSearch} searchPlaceholder="Search by title">

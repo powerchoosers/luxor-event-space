@@ -97,6 +97,17 @@ test('signature emails prefer the request host, then the preview deployment', ()
   }), 'https://www.luxoratlaspalmas.com')
 })
 
+test('a blank uninvited role does not block fully signed', () => {
+  assert.equal(plan.rollupCreatedDocumentStatus([
+    { status: 'signed', name: 'Ada', email: 'ada@example.com', invited_at: '2026-11-19T00:00:00.000Z' },
+    { status: 'pending', name: '', email: '', invited_at: null, role_key: 'luxor' },
+  ]), 'signed')
+  assert.equal(plan.rollupCreatedDocumentStatus([
+    { status: 'signed', name: 'Ada', email: 'ada@example.com', invited_at: '2026-11-19T00:00:00.000Z' },
+    { status: 'pending', name: 'Bea', email: 'bea@example.com', invited_at: null },
+  ]), 'partially_signed')
+})
+
 test('blank Luxor and extra roles are not required when one recipient is filled', () => {
   const addressed = plan.addressedCreatedDocumentRecipients([
     { name: 'Ada', email: 'ada@example.com' },
@@ -290,6 +301,13 @@ test('sequential follow-up invites use the test-recipient guard', async () => {
   const sequential = source.slice(source.indexOf("current.signing_order === 'sequential'"))
   assert.match(sequential, /confirmLiveSend:\s*false/)
   assert.doesNotMatch(sequential, /confirmLiveSend:\s*true/)
+})
+
+test('send drops signer rows that have no name and email', () => {
+  const delivery = fs.readFileSync(path.join(root, 'src/lib/luxorCreatedDocumentDeliveryServer.ts'), 'utf8')
+  const send = delivery.slice(delivery.indexOf('export async function sendLuxorCreatedDocumentForSignature'), delivery.indexOf('export async function remindLuxorCreatedDocumentSigners'))
+  assert.match(send, /deleteLuxorCreatedDocumentSigner/)
+  assert.match(send, /!signer\.name && !signer\.email/)
 })
 
 test('send route and delivery queue use the existing email job helper', () => {
