@@ -5,6 +5,7 @@ import { postgrestSchemaUnavailable } from './luxorPostgrestSchema'
 import { supabaseRest, supabaseRestStrict, SupabaseRestError } from './supabaseRestServer'
 import { buildLuxorCreatedDocumentPdf } from './luxorDocumentCreatorPdfServer'
 import { copyLuxorCreatedDocumentFieldsAndSigners } from './luxorCreatedDocumentFieldsServer'
+import { canEditCreatedDocumentFields } from './luxorCreatedDocumentFieldTypes'
 import { createdDocumentLibraryStatusFilter } from './luxorCreatedDocumentSendPlan'
 import {
   isLuxorCreatedDocumentType,
@@ -54,6 +55,7 @@ function rowFromRecord(record: Record<string, unknown>): LuxorCreatedDocumentRow
     voided_at: typeof record.voided_at === 'string' ? record.voided_at : null,
     final_pdf_path: typeof record.final_pdf_path === 'string' ? record.final_pdf_path : null,
     recipient_summary: typeof record.recipient_summary === 'string' ? record.recipient_summary : null,
+    signing_link_origin: typeof record.signing_link_origin === 'string' ? record.signing_link_origin : null,
   }
 }
 
@@ -181,6 +183,9 @@ export async function updateLuxorCreatedDocument(input: {
   }
   const existing = await getLuxorCreatedDocument(input.id)
   if (!existing) throw new SupabaseRestError('Document not found.', 404, 'PGRST116')
+  if (!canEditCreatedDocumentFields(existing.status, existing.archived_at)) {
+    throw new Error('This document is read-only after it is sent.')
+  }
   patch.version = existing.version + 1
 
   const rows = await supabaseRestStrict<Record<string, unknown>[]>(

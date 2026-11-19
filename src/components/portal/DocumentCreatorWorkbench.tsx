@@ -206,10 +206,10 @@ export function DocumentCreatorWorkbench({ initial, initialStep = 'create', onSt
           <DocumentCreatorStepper activeStep={activeStep} fieldsEnabled={fieldsEnabled} onStepChange={goToStep} />
         </div>
         <div className="hidden min-[1280px]:flex shrink-0 flex-wrap gap-2">
-          <PortalButton type="button" variant="secondary" className="min-h-11" disabled={saving || activeStep === 'send'} onClick={() => void runSave('template')}>
+          <PortalButton type="button" variant="secondary" className="min-h-11" disabled={saving || activeStep === 'send' || Boolean(record && !canEditFields)} onClick={() => void runSave('template')}>
             Save as template
           </PortalButton>
-          <PortalButton type="button" variant="primary" className="min-h-11" disabled={saving || activeStep === 'send'} onClick={() => void runSave('draft')}>
+          <PortalButton type="button" variant="primary" className="min-h-11" disabled={saving || activeStep === 'send' || Boolean(record && !canEditFields)} onClick={() => void runSave('draft')}>
             Save draft
           </PortalButton>
         </div>
@@ -262,6 +262,7 @@ export function DocumentCreatorWorkbench({ initial, initialStep = 'create', onSt
                   ref={editorRef}
                   bootstrap={initial ?? undefined}
                   revision={record}
+                  readOnly={Boolean(record && !canEditFields)}
                   onSaved={onSaved}
                   onFormChange={setForm}
                   onDirtyChange={setEditorDirty}
@@ -305,10 +306,10 @@ export function DocumentCreatorWorkbench({ initial, initialStep = 'create', onSt
       {activeStep === 'send' ? null : (
       <div className="fixed inset-x-0 bottom-0 z-20 border-t border-[color:var(--portal-border)] bg-[color:var(--portal-frame)] p-3 min-[1280px]:hidden">
         <div className="mx-auto flex max-w-xl flex-col gap-2">
-          <PortalButton type="button" variant="primary" className="min-h-11 w-full" disabled={saving} onClick={() => void runSave('draft')}>
+          <PortalButton type="button" variant="primary" className="min-h-11 w-full" disabled={saving || Boolean(record && !canEditFields)} onClick={() => void runSave('draft')}>
             Save draft
           </PortalButton>
-          <PortalButton type="button" variant="secondary" className="min-h-11 w-full" disabled={saving} onClick={() => void runSave('template')}>
+          <PortalButton type="button" variant="secondary" className="min-h-11 w-full" disabled={saving || Boolean(record && !canEditFields)} onClick={() => void runSave('template')}>
             Save as template
           </PortalButton>
         </div>

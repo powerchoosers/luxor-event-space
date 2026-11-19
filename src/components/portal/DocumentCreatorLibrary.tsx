@@ -182,7 +182,7 @@ export function DocumentCreatorLibrary() {
       </div>
 
       {primaryTab === 'my_documents' && !showArchived ? (
-        <div className="px-4 sm:px-0">
+        <div className="min-w-0 max-w-full overflow-x-auto px-4 pb-1 sm:px-0">
           <PortalAnimatedTabs
             variant="slider"
             ariaLabel="Document groupings"

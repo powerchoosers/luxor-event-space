@@ -11,16 +11,22 @@ import {
   buildLuxorCreatedDocumentExecutedPdf,
 } from './luxorCreatedDocumentSignedPdfServer'
 import {
+  addressedCreatedDocumentRecipients,
   assertCreatedDocumentQueueRecipient,
   createdDocumentRecipientSummary,
   createdDocumentReminderSchedule,
+  createdDocumentSigningOrigin,
   isCreatedDocumentRecipientEmail,
   planCreatedDocumentInvitations,
   rollupCreatedDocumentStatus,
   type CreatedDocumentInviteSigner,
   type CreatedDocumentSigningOrder,
 } from './luxorCreatedDocumentSendPlan'
-import { createLuxorCreatedDocumentSigningToken } from './luxorCreatedDocumentToken'
+import {
+  createLuxorCreatedDocumentSigningToken,
+  decryptLuxorCreatedDocumentSigningToken,
+  encryptLuxorCreatedDocumentSigningToken,
+} from './luxorCreatedDocumentToken'
 import {
   getLuxorCreatedDocument,
   patchLuxorCreatedDocumentRecord,
@@ -37,8 +43,13 @@ function escapeHtml(value: string) {
     .replaceAll('"', '&quot;')
 }
 
-function siteOrigin() {
-  return (process.env.NEXT_PUBLIC_SITE_URL || 'https://www.luxoratlaspalmas.com').replace(/\/$/, '')
+function signingOrigin(stored?: string | null) {
+  if (stored?.trim()) return stored.trim().replace(/\/$/, '')
+  return createdDocumentSigningOrigin({
+    vercelEnv: process.env.VERCEL_ENV,
+    vercelUrl: process.env.VERCEL_URL,
+    siteUrl: process.env.NEXT_PUBLIC_SITE_URL,
+  })
 }
 
 function signatureEmail(input: { recipientName: string; subject: string; message: string; url: string; reminder: boolean }) {
@@ -104,7 +115,7 @@ async function inviteSigner(input: {
   confirmLiveSend: boolean
 }) {
   const issued = createLuxorCreatedDocumentSigningToken()
-  const url = `${siteOrigin()}/secure-portal/sign/${encodeURIComponent(issued.token)}`
+  const url = `${signingOrigin(input.document.signing_link_origin)}/secure-portal/sign/${encodeURIComponent(issued.token)}`
   const invitation = signatureEmail({
     recipientName: input.signer.name,
     subject: input.subject,
@@ -147,6 +158,7 @@ async function inviteSigner(input: {
   }
   await updateLuxorCreatedDocumentSigner(input.signer.id, {
     token_hash: issued.tokenHash,
+    token_ciphertext: encryptLuxorCreatedDocumentSigningToken(issued.token),
     token_expires_at: issued.expiresAt,
     invited_at: new Date().toISOString(),
     name: input.signer.name,
@@ -163,6 +175,7 @@ export async function sendLuxorCreatedDocumentForSignature(input: {
   reminderEnabled: boolean
   reminderAfterDays: number
   confirmLiveSend: boolean
+  linkOrigin?: string | null
 }) {
   const document = await getLuxorCreatedDocument(input.documentId)
   if (!document) throw new Error('Document not found.')
@@ -180,7 +193,9 @@ export async function sendLuxorCreatedDocumentForSignature(input: {
     email: signer.email.trim().slice(0, 320),
     role_label: signer.role_label.trim().slice(0, 120),
   }))
-  if (prepared.some((signer) => !signer.name || !isCreatedDocumentRecipientEmail(signer.email))) {
+  const addressed = addressedCreatedDocumentRecipients(prepared)
+  if (!addressed.length) throw new Error('Add at least one recipient before sending.')
+  if (addressed.some((signer) => !signer.name || !isCreatedDocumentRecipientEmail(signer.email))) {
     throw new Error('Each recipient needs a name and a valid email.')
   }
   for (const signer of prepared) {
@@ -204,6 +219,7 @@ export async function sendLuxorCreatedDocumentForSignature(input: {
   const draft = {
     ...document,
     signing_order: input.signingOrder,
+    signing_link_origin: input.linkOrigin || document.signing_link_origin || null,
   }
   for (const signer of plan) {
     await inviteSigner({
@@ -223,7 +239,8 @@ export async function sendLuxorCreatedDocumentForSignature(input: {
     sent_subject: subject,
     sent_message: message,
     sent_at: new Date().toISOString(),
-    recipient_summary: createdDocumentRecipientSummary(merged),
+    recipient_summary: createdDocumentRecipientSummary(addressed),
+    signing_link_origin: draft.signing_link_origin,
   })
 }
 
@@ -244,10 +261,14 @@ export async function remindLuxorCreatedDocumentSigners(input: {
     .sort((left, right) => left.sign_order - right.sign_order)
   const targets = document.signing_order === 'sequential' ? outstanding.slice(0, 1) : outstanding
   if (!targets.length) throw new Error('There is no signer left to remind.')
+  const reminderAt = document.reminder_enabled
+    ? createdDocumentReminderSchedule(true, document.reminder_after_days || 3)
+    : null
   for (const signer of targets) {
+    if (!signer.token_ciphertext) throw new Error('The original signing link is not available for a reminder.')
+    const token = decryptLuxorCreatedDocumentSigningToken(signer.token_ciphertext)
+    const url = `${signingOrigin(document.signing_link_origin)}/secure-portal/sign/${encodeURIComponent(token)}`
     await cancelQueuedCreatedDocumentEmails(document.id, signer.id)
-    const issued = createLuxorCreatedDocumentSigningToken()
-    const url = `${siteOrigin()}/secure-portal/sign/${encodeURIComponent(issued.token)}`
     const reminder = signatureEmail({
       recipientName: signer.name,
       subject,
@@ -264,12 +285,24 @@ export async function remindLuxorCreatedDocumentSigners(input: {
         kind: 'created_document_reminder',
         created_document_id: document.id,
         signer_id: signer.id,
+        manual: true,
       },
     })
-    await updateLuxorCreatedDocumentSigner(signer.id, {
-      token_hash: issued.tokenHash,
-      token_expires_at: issued.expiresAt,
-    })
+    if (reminderAt) {
+      await queueCreatedDocumentEmail({
+        recipientEmail: signer.email,
+        subject: reminder.subject,
+        html: reminder.html,
+        scheduledFor: reminderAt,
+        confirmLiveSend: input.confirmLiveSend,
+        metadata: {
+          kind: 'created_document_reminder',
+          created_document_id: document.id,
+          signer_id: signer.id,
+          manual: false,
+        },
+      })
+    }
   }
   return document
 }
@@ -281,15 +314,6 @@ export async function voidLuxorCreatedDocument(documentId: string) {
     throw new Error('Only a sent document can be voided.')
   }
   if (document.status === 'voided') return document
-  const signers = await listLuxorCreatedDocumentSigners(documentId)
-  for (const signer of signers) {
-    if (signer.status === 'signed') continue
-    await updateLuxorCreatedDocumentSigner(signer.id, {
-      token_hash: null,
-      token_expires_at: null,
-      status: signer.status === 'declined' ? 'declined' : 'expired',
-    })
-  }
   await cancelQueuedCreatedDocumentEmails(documentId)
   return patchLuxorCreatedDocumentRecord(documentId, {
     status: 'voided',
@@ -347,7 +371,7 @@ export async function syncLuxorCreatedDocumentDeliveryStatus(documentId: string)
         subject,
         message,
         reminderAt,
-        confirmLiveSend: true,
+        confirmLiveSend: false,
       })
     }
   }

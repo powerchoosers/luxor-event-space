@@ -228,6 +228,7 @@ export function PortalCheckbox({
   sublabel,
   disabled = false,
   className = '',
+  boxClassName = '',
   id,
 }: {
   checked: boolean
@@ -236,6 +237,7 @@ export function PortalCheckbox({
   sublabel?: React.ReactNode
   disabled?: boolean
   className?: string
+  boxClassName?: string
   id?: string
 }) {
   return (
@@ -253,7 +255,7 @@ export function PortalCheckbox({
           checked
             ? 'border-[#caa24c] bg-[#caa24c] text-white shadow-sm'
             : 'border-[color:var(--portal-border)] bg-[color:var(--portal-bg)] hover:border-[#caa24c]/40'
-        }`}
+        } ${boxClassName}`}
       >
         {checked && <Check size={11} strokeWidth={3.5} className="!text-white !stroke-white text-white stroke-white" style={{ color: '#ffffff', stroke: '#ffffff' }} />}
       </div>

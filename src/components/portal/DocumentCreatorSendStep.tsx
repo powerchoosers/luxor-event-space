@@ -6,6 +6,8 @@ import { createdDocumentStatusPresentation } from '@/lib/luxorDocumentCreatorSta
 import { displayStatusForDocument, type LuxorCreatedDocumentRow, type LuxorCreatedDocumentSigningOrder } from '@/lib/luxorDocumentCreatorTypes'
 import type { LuxorCreatedDocumentSignerRow } from '@/lib/luxorCreatedDocumentFieldTypes'
 
+const sendFieldClass = 'portal-input mt-1 w-full min-h-11 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-2 text-sm text-[color:var(--portal-text)] outline-none placeholder:text-[color:var(--portal-faint)] focus:border-[#caa24c]/50 dark:border-[#f1d27a]/50 dark:bg-[#141210]'
+
 type SignerDraft = {
   id: string
   name: string
@@ -13,6 +15,65 @@ type SignerDraft = {
   role_label: string
   sign_order: number
   status: string
+  viewed_at?: string | null
+  signed_at?: string | null
+  declined_at?: string | null
+}
+
+function signerProgressLabel(signer: Pick<SignerDraft, 'status' | 'viewed_at' | 'signed_at' | 'declined_at'>) {
+  const label = signer.status === 'signed'
+    ? 'Signed'
+    : signer.status === 'declined'
+      ? 'Declined'
+      : signer.status === 'viewed'
+        ? 'Viewed'
+        : 'Pending'
+  const when = signer.status === 'signed'
+    ? signer.signed_at
+    : signer.status === 'declined'
+      ? signer.declined_at
+      : signer.status === 'viewed'
+        ? signer.viewed_at
+        : null
+  if (!when) return label
+  const parsed = new Date(when)
+  if (Number.isNaN(parsed.getTime())) return label
+  return `${label} · ${parsed.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}`
+}
+
+export function DocumentCreatorSignerStatus({ documentId }: { documentId: string }) {
+  const [lines, setLines] = useState<Array<{ id: string; label: string; detail: string }>>([])
+  useEffect(() => {
+    let cancelled = false
+    const load = async () => {
+      try {
+        const response = await fetch(`/api/operations/documents/${encodeURIComponent(documentId)}/fields`, { cache: 'no-store' })
+        const body = await response.json()
+        if (!response.ok || cancelled) return
+        const rows = Array.isArray(body.signers) ? body.signers as LuxorCreatedDocumentSignerRow[] : []
+        setLines(rows.filter((signer) => signer.name.trim() || signer.email.trim()).map((signer) => ({
+          id: signer.id,
+          label: signer.name.trim() || signer.email.trim() || signer.role_label,
+          detail: signerProgressLabel(signer),
+        })))
+      } catch {
+        if (!cancelled) setLines([])
+      }
+    }
+    void load()
+    return () => { cancelled = true }
+  }, [documentId])
+  if (!lines.length) return null
+  return (
+    <ul className="space-y-1">
+      {lines.map((line) => (
+        <li key={line.id} className="flex flex-wrap items-baseline justify-between gap-2 text-xs">
+          <span className="font-medium text-[color:var(--portal-text)]">{line.label}</span>
+          <span className="tabular-nums text-[color:var(--portal-muted)]">{line.detail}</span>
+        </li>
+      ))}
+    </ul>
+  )
 }
 
 export function DocumentCreatorSendStep({
@@ -72,6 +133,9 @@ export function DocumentCreatorSendStep({
           role_label: signer.role_label || 'Signer',
           sign_order: signer.sign_order,
           status: signer.status,
+          viewed_at: signer.viewed_at,
+          signed_at: signer.signed_at,
+          declined_at: signer.declined_at,
         })))
       } catch (loadError) {
         if (!cancelled) setError(loadError instanceof Error ? loadError.message : 'Recipients could not be loaded.')
@@ -140,7 +204,7 @@ export function DocumentCreatorSendStep({
               <label className="block text-xs font-semibold text-[color:var(--portal-text)]">
                 Name
                 <input
-                  className="portal-input mt-1 w-full"
+                  className={sendFieldClass}
                   value={signer.name}
                   disabled={locked || busy !== null}
                   onChange={(event) => setSigners((current) => current.map((row, rowIndex) => rowIndex === index ? { ...row, name: event.target.value } : row))}
@@ -150,7 +214,7 @@ export function DocumentCreatorSendStep({
                 Email
                 <input
                   type="email"
-                  className="portal-input mt-1 w-full"
+                  className={sendFieldClass}
                   value={signer.email}
                   disabled={locked || busy !== null}
                   onChange={(event) => setSigners((current) => current.map((row, rowIndex) => rowIndex === index ? { ...row, email: event.target.value } : row))}
@@ -159,12 +223,13 @@ export function DocumentCreatorSendStep({
               <label className="block text-xs font-semibold text-[color:var(--portal-text)]">
                 Role
                 <input
-                  className="portal-input mt-1 w-full"
+                  className={sendFieldClass}
                   value={signer.role_label}
                   disabled={locked || busy !== null}
                   onChange={(event) => setSigners((current) => current.map((row, rowIndex) => rowIndex === index ? { ...row, role_label: event.target.value } : row))}
                 />
               </label>
+              <p className="text-xs tabular-nums text-[color:var(--portal-muted)] sm:col-span-3">{signerProgressLabel(signer)}</p>
             </div>
           ))}
         </div>
@@ -172,11 +237,11 @@ export function DocumentCreatorSendStep({
 
       <label className="block text-xs font-semibold text-[color:var(--portal-text)]">
         Subject
-        <input className="portal-input mt-1 w-full" value={subject} disabled={locked || busy !== null} onChange={(event) => setSubject(event.target.value)} />
+        <input className={sendFieldClass} value={subject} disabled={locked || busy !== null} onChange={(event) => setSubject(event.target.value)} />
       </label>
       <label className="block text-xs font-semibold text-[color:var(--portal-text)]">
         Message
-        <textarea className="portal-input mt-1 min-h-28 w-full" value={message} disabled={locked || busy !== null} onChange={(event) => setMessage(event.target.value)} />
+        <textarea className={`${sendFieldClass} min-h-28`} value={message} disabled={locked || busy !== null} onChange={(event) => setMessage(event.target.value)} />
       </label>
 
       <fieldset className="flex flex-wrap gap-2" disabled={locked || busy !== null}>
@@ -209,6 +274,7 @@ export function DocumentCreatorSendStep({
           onChange={setReminders}
           label="Queue a reminder"
           sublabel="Only after you click Send."
+          boxClassName="dark:!border-[#f1d27a]"
         />
         <label className="block text-xs font-semibold text-[color:var(--portal-text)]">
           Days after send
@@ -216,7 +282,7 @@ export function DocumentCreatorSendStep({
             type="number"
             min={1}
             max={30}
-            className="portal-input mt-1 w-24"
+            className={`${sendFieldClass} w-24`}
             value={reminderDays}
             disabled={!reminders || locked || busy !== null}
             onChange={(event) => setReminderDays(Number(event.target.value))}

@@ -496,13 +496,21 @@ function SignPane(props: {
             </div>
           </>
         ) : null}
-        <label className="mt-4 flex items-start gap-2 text-xs leading-5 text-[#5f554a]">
-          <input type="checkbox" checked={accepted} onChange={(event) => setAccepted(event.target.checked)} className="mt-0.5" />
-          I agree to sign electronically and understand this is legally binding.
-        </label>
-        {error ? <p role="alert" className="mt-3 text-xs text-[#a04b39]">{error}</p> : null}
+        {error && error !== 'Please accept the signing acknowledgement.' ? <p role="alert" className="mt-3 text-xs text-[#a04b39]">{error}</p> : null}
       </div>
       <div className="shrink-0 space-y-2 border-t border-[#ded5c8] bg-[#eee8df] p-4">
+        <label className="flex items-start gap-2 text-xs leading-5 text-[#5f554a]">
+          <input
+            type="checkbox"
+            checked={accepted}
+            onChange={(event) => setAccepted(event.target.checked)}
+            className="mt-0.5"
+          />
+          I agree to sign electronically and understand this is legally binding.
+        </label>
+        {error === 'Please accept the signing acknowledgement.' ? (
+          <p role="alert" className="text-xs text-[#a04b39]">{error}</p>
+        ) : null}
         <button ref={finishRef} type="submit" disabled={submitting} className="inline-flex h-12 w-full items-center justify-center rounded-xl bg-[#c89d4b] text-sm font-semibold text-[#20170d] disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#c89d4b]/50">Finish</button>
         <SignFlowFooter onPrev={onPrev} onNext={onNext} onDecline={onDecline} />
       </div>

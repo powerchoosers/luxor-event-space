@@ -78,3 +78,27 @@ export function executedCreatedDocumentPdfPath(documentId: string) {
 export function isCreatedDocumentRecipientEmail(value: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim())
 }
+
+export function createdDocumentSigningOrigin(input?: {
+  forwardedHost?: string | null
+  host?: string | null
+  forwardedProto?: string | null
+  vercelEnv?: string | null
+  vercelUrl?: string | null
+  siteUrl?: string | null
+}) {
+  const host = input?.forwardedHost?.split(',')[0]?.trim() || input?.host?.split(',')[0]?.trim() || ''
+  if (host) {
+    const proto = input?.forwardedProto?.split(',')[0]?.trim() || (host.includes('localhost') ? 'http' : 'https')
+    return `${proto}://${host}`.replace(/\/$/, '')
+  }
+  if (input?.vercelEnv === 'preview' && input.vercelUrl) {
+    const bare = input.vercelUrl.replace(/^https?:\/\//, '').replace(/\/$/, '')
+    return `https://${bare}`
+  }
+  return (input?.siteUrl || 'https://www.luxoratlaspalmas.com').replace(/\/$/, '')
+}
+
+export function addressedCreatedDocumentRecipients<T extends { name: string; email: string }>(signers: T[]) {
+  return signers.filter((signer) => signer.name.trim() || signer.email.trim())
+}

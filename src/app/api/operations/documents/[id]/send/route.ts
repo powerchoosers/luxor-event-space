@@ -6,7 +6,7 @@ import {
   voidLuxorCreatedDocument,
 } from '@/lib/luxorCreatedDocumentDeliveryServer'
 import { schemaUnavailable } from '@/lib/luxorDocumentCreatorServer'
-import type { CreatedDocumentSigningOrder } from '@/lib/luxorCreatedDocumentSendPlan'
+import { createdDocumentSigningOrigin, type CreatedDocumentSigningOrder } from '@/lib/luxorCreatedDocumentSendPlan'
 
 type RouteContext = { params: Promise<{ id: string }> }
 
@@ -59,6 +59,14 @@ export async function POST(request: NextRequest, context: RouteContext) {
       reminderEnabled: body?.reminderEnabled === true,
       reminderAfterDays: Number(body?.reminderAfterDays ?? 3),
       confirmLiveSend: true,
+      linkOrigin: createdDocumentSigningOrigin({
+        forwardedHost: request.headers.get('x-forwarded-host'),
+        host: request.headers.get('host'),
+        forwardedProto: request.headers.get('x-forwarded-proto'),
+        vercelEnv: process.env.VERCEL_ENV,
+        vercelUrl: process.env.VERCEL_URL,
+        siteUrl: process.env.NEXT_PUBLIC_SITE_URL,
+      }),
     })
     return NextResponse.json({ document })
   } catch (error) {

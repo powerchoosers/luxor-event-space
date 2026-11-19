@@ -79,6 +79,7 @@ export type LuxorCreatedDocumentRow = {
   voided_at?: string | null
   final_pdf_path?: string | null
   recipient_summary?: string | null
+  signing_link_origin?: string | null
 }
 
 export type LuxorCreatedDocumentSummary = Pick<
