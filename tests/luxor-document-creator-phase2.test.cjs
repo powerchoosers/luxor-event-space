@@ -6,6 +6,7 @@ const path = require('node:path')
 const Module = require('node:module')
 const ts = require('typescript')
 const crypto = require('node:crypto')
+const os = require('node:os')
 const { PDFDocument } = require('pdf-lib')
 
 const root = path.resolve(__dirname, '..')
@@ -108,10 +109,14 @@ test('stamped QA pdf artifact is written for visual review', async () => {
     fonts: { regular: font, oblique: font },
   })
   const bytes = await pdf.save()
-  const artifactPath = '/opt/cursor/artifacts/stamped-document.pdf'
-  fs.mkdirSync(path.dirname(artifactPath), { recursive: true })
+  const artifactPath = path.join(os.tmpdir(), 'luxor-stamped-document.pdf')
   fs.writeFileSync(artifactPath, Buffer.from(bytes))
   assert.ok(fs.statSync(artifactPath).size > 500)
+  const artifactsDir = '/opt/cursor/artifacts'
+  if (fs.existsSync(artifactsDir)) {
+    fs.mkdirSync(artifactsDir, { recursive: true })
+    fs.copyFileSync(artifactPath, path.join(artifactsDir, 'stamped-document.pdf'))
+  }
   const rect = luxorPdfRectFromNormalized(page, fields[0])
   assert.ok(rect.x > 50)
 })

@@ -2,15 +2,11 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { LoaderCircle } from '@/lib/icons/phosphor-compat'
-import { Document, Page, pdfjs } from 'react-pdf'
+import { Document, Page } from 'react-pdf'
 import type { LuxorCreatedDocumentFieldType } from '@/lib/luxorCreatedDocumentFieldTypes'
 import { LUXOR_CREATED_DOCUMENT_FIELD_TYPE_LABELS } from '@/lib/luxorCreatedDocumentFieldTypes'
 import { normalizedFieldOverlayStyle, luxorChicagoDateString } from '@/lib/luxorCreatedDocumentFieldLayout'
-
-pdfjs.GlobalWorkerOptions.workerSrc = new URL(
-  'pdfjs-dist/build/pdf.worker.min.mjs',
-  import.meta.url,
-).toString()
+import { ensureLuxorPdfJsWorker } from '@/lib/luxorPdfJsWorkerClient'
 
 export type CreatedDocumentPdfField = {
   id: string
@@ -73,7 +69,9 @@ export function CreatedDocumentFieldPdfCanvas({
   onError,
   className = '',
 }: Props) {
+  ensureLuxorPdfJsWorker()
   const [numPages, setNumPages] = useState(0)
+  const renderPageWidth = pageWidth > 0 ? pageWidth : 520
   const pageRange = useMemo(() => {
     if (mode === 'layout') return [layoutPageIndex]
     return Array.from({ length: numPages }, (_, index) => index)
@@ -105,12 +103,12 @@ export function CreatedDocumentFieldPdfCanvas({
       )}
       className={mode === 'sign' ? 'flex flex-col items-center gap-6' : 'flex justify-center'}
     >
-      {pageWidth > 0 && pageRange.map((pageIndex) => (
+      {pageRange.map((pageIndex) => (
         <CreatedDocumentPdfPage
           key={pageIndex}
           pageIndex={pageIndex}
           pageNumber={pageIndex + 1}
-          pageWidth={pageWidth}
+          pageWidth={renderPageWidth}
           fields={fields.filter((field) => field.page_index === pageIndex)}
           mode={mode}
           layout={layout}

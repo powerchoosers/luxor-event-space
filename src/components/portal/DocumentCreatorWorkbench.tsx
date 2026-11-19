@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useReducedMotion } from 'framer-motion'
 import { PortalButton, PortalModal, PortalPageFrame, PortalPageHeader } from '@/components/portal/PortalUI'
+import { useToast } from '@/components/portal/ToastProvider'
 import { DocumentCreatorEditor, type DocumentCreatorEditorHandle } from '@/components/portal/DocumentCreatorEditor'
 import { DocumentCreatorPaperPreview } from '@/components/portal/DocumentCreatorPaperPreview'
 import { DocumentCreatorPdfPreview } from '@/components/portal/DocumentCreatorPdfPreview'
@@ -30,6 +31,7 @@ const DOCUMENTS_LIBRARY_HREF = '/portal/operations?tab=documents'
 
 export function DocumentCreatorWorkbench({ initial, initialStep = 'create', onStepChange }: Props) {
   const router = useRouter()
+  const { notify } = useToast()
   const reduceMotion = useReducedMotion()
   const editorRef = useRef<DocumentCreatorEditorHandle>(null)
   const [record, setRecord] = useState<LuxorCreatedDocumentRow | null>(initial ?? null)
@@ -80,6 +82,12 @@ export function DocumentCreatorWorkbench({ initial, initialStep = 'create', onSt
     if (record?.id) void refreshPreview(record)
   }, [record?.id, record?.version, refreshPreview])
 
+  useEffect(() => {
+    if (activeStep === 'fields' && record?.id && !signedUrl && !previewLoading) {
+      void refreshPreview(record)
+    }
+  }, [activeStep, previewLoading, record, refreshPreview, signedUrl])
+
   const onSaved = (document: LuxorCreatedDocumentRow) => {
     setRecord(document)
     setEditorDirty(false)
@@ -98,7 +106,28 @@ export function DocumentCreatorWorkbench({ initial, initialStep = 'create', onSt
     setSaving(true)
     try {
       const result = mode === 'draft' ? await editorRef.current?.saveDraft() : await editorRef.current?.saveTemplate()
-      if (result) onSaved(result)
+      if (result) {
+        onSaved(result)
+        if (mode === 'template') {
+          notify({ title: 'Saved as template', description: `${result.title || 'Document'} is available in the document library.`, variant: 'success' })
+        }
+        return
+      }
+      if (mode === 'template') {
+        notify({
+          title: 'Template could not be saved',
+          description: 'Add a title and try again. Unsaved editor changes may still need a manual save.',
+          variant: 'error',
+        })
+      }
+    } catch (error) {
+      if (mode === 'template') {
+        notify({
+          title: 'Template could not be saved',
+          description: error instanceof Error ? error.message : 'Please try again.',
+          variant: 'error',
+        })
+      }
     } finally {
       setSaving(false)
     }

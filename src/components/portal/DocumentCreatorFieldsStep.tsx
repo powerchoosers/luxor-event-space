@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import dynamic from 'next/dynamic'
 import {
   LUXOR_CREATED_DOCUMENT_FIELD_TYPE_LABELS,
@@ -122,15 +122,21 @@ export function DocumentCreatorFieldsStep({ documentId, pdfUrl, canEdit, onDirty
     onDirtyChange?.(dirty)
   }, [fields, loading, onDirtyChange, signers])
 
-  useEffect(() => {
+  const measureCanvasWidth = useCallback(() => {
     const wrap = canvasWrapRef.current
     if (!wrap) return
-    const measure = () => setPageWidth(Math.max(260, Math.min(620, wrap.clientWidth)))
-    measure()
-    const observer = new ResizeObserver(measure)
+    const width = wrap.clientWidth
+    if (width > 0) setPageWidth(Math.max(260, Math.min(620, width)))
+  }, [])
+
+  useLayoutEffect(() => {
+    measureCanvasWidth()
+    const wrap = canvasWrapRef.current
+    if (!wrap) return
+    const observer = new ResizeObserver(() => measureCanvasWidth())
     observer.observe(wrap)
     return () => observer.disconnect()
-  }, [])
+  }, [loading, measureCanvasWidth, pdfUrl])
 
   useEffect(() => {
     setPageIndex((value) => Math.max(0, Math.min(numPages - 1, value)))
@@ -227,6 +233,17 @@ export function DocumentCreatorFieldsStep({ documentId, pdfUrl, canEdit, onDirty
     setTestBusy(true)
     setTestLink('')
     setError('')
+    if (fields.length === 0) {
+      setError('Add at least one field before creating a test signing link.')
+      setTestBusy(false)
+      return
+    }
+    const roleFields = fields.filter((field) => field.role_key === roleKey)
+    if (roleFields.length === 0) {
+      setError('Add at least one field for this signer role before creating a test link.')
+      setTestBusy(false)
+      return
+    }
     try {
       const response = await fetch(`/api/operations/documents/${encodeURIComponent(documentId)}/test-signing-link`, {
         method: 'POST',
