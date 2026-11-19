@@ -206,6 +206,36 @@ function CreatedDocumentPdfPage({
   )
 }
 
+function useFitInputFontSize(inputRef: React.RefObject<HTMLInputElement | null>, text: string, maxPx = 11, minPx = 6) {
+  const [fontSize, setFontSize] = useState(maxPx)
+  useLayoutEffect(() => {
+    const input = inputRef.current
+    if (!input) return
+    const measure = () => {
+      const node = inputRef.current
+      if (!node || node.clientWidth <= 0) return
+      const previous = node.style.fontSize
+      let size = maxPx
+      node.style.fontSize = `${size}px`
+      while (size > minPx && node.scrollWidth > node.clientWidth + 1) {
+        size = Math.round((size - 0.5) * 10) / 10
+        node.style.fontSize = `${size}px`
+      }
+      node.style.fontSize = previous
+      const next = Math.max(minPx, size)
+      setFontSize((current) => (Math.abs(current - next) < 0.1 ? current : next))
+    }
+    const frame = requestAnimationFrame(measure)
+    const observer = new ResizeObserver(() => requestAnimationFrame(measure))
+    observer.observe(input)
+    return () => {
+      cancelAnimationFrame(frame)
+      observer.disconnect()
+    }
+  }, [inputRef, maxPx, minPx, text])
+  return fontSize
+}
+
 function useFitOverlayFontSize(containerRef: React.RefObject<HTMLElement | null>, text: string, maxPx = 11, minPx = 6) {
   const [fit, setFit] = useState({ fontSize: maxPx, overflows: false })
   useLayoutEffect(() => {
@@ -275,6 +305,7 @@ function SignFieldOverlay({
   registerRef: (node: HTMLDivElement | null) => void
 }) {
   const ref = useRef<HTMLDivElement | null>(null)
+  const inputRef = useRef<HTMLInputElement | null>(null)
   useEffect(() => {
     registerRef(ref.current)
     return () => registerRef(null)
@@ -292,6 +323,7 @@ function SignFieldOverlay({
         ? (stringValue || signerEmail)
         : stringValue
   const fit = useFitOverlayFontSize(ref, textForFit)
+  const inputFontSize = useFitInputFontSize(inputRef, textForFit)
   const frozenShell = valuesFrozen ? 'bg-white' : 'bg-white/92'
 
   if (field.field_type === 'signature' || field.field_type === 'initials') {
@@ -362,8 +394,10 @@ function SignFieldOverlay({
         onClick={(event) => { event.stopPropagation(); onActive() }}
       >
         <input
+          ref={inputRef}
+          data-overlay-fit=""
           className="h-full min-w-0 w-full bg-transparent px-1 outline-none"
-          style={{ fontSize: `${fit.fontSize}px` }}
+          style={{ fontSize: `${inputFontSize}px` }}
           value={stringValue}
           placeholder={dateFallback}
           onChange={(event) => onValue(event.target.value)}
@@ -391,8 +425,10 @@ function SignFieldOverlay({
       onClick={(event) => { event.stopPropagation(); onActive() }}
     >
       <input
-        className="h-full min-w-0 w-full bg-transparent px-1 outline-none placeholder:text-[#8a8074]"
-        style={{ fontSize: `${fit.fontSize}px` }}
+        ref={inputRef}
+        data-overlay-fit=""
+        className="h-full min-w-0 w-full overflow-hidden bg-transparent px-1 outline-none placeholder:text-[#8a8074]"
+        style={{ fontSize: `${inputFontSize}px` }}
         value={stringValue}
         placeholder={placeholder}
         onChange={(event) => onValue(event.target.value)}
@@ -407,7 +443,4 @@ function SignFieldOverlay({
   )
 }
 
-export function scrollToSignField(node: HTMLDivElement | null) {
-  if (!node) return
-  node.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' })
-}
+export { scrollToSignField } from './scrollToSignField'

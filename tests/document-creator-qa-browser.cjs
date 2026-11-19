@@ -35,6 +35,25 @@ test('document creator QA harness screenshots', { timeout: 180_000 }, async () =
         const themeToggle = page.getByRole('button', { name: /Portal dark/i })
         if (await themeToggle.isVisible()) await themeToggle.click()
       }
+      if (scenario.view === 'signer' && scenario.viewport === '390') {
+        const name = page.getByRole('textbox', { name: 'Printed name' })
+        const email = page.getByRole('textbox', { name: 'Email' })
+        await name.waitFor({ timeout: 60_000 })
+        await email.fill('qa.test@example.com')
+        await name.fill('QA Test Signer')
+        await email.blur()
+        await page.waitForTimeout(300)
+        for (const locator of [name, email]) {
+          const fit = await locator.evaluate((node) => ({
+            fontSize: Number.parseFloat(getComputedStyle(node).fontSize),
+            scrollWidth: node.scrollWidth,
+            clientWidth: node.clientWidth,
+          }))
+          assert.ok(fit.fontSize <= 11.1, `expected overlay font <= 11px, got ${fit.fontSize}`)
+          assert.ok(fit.scrollWidth <= fit.clientWidth + 1, `text overflows ${fit.scrollWidth} > ${fit.clientWidth}`)
+        }
+        await screenshot(page, 'signer-390-field-fit')
+      }
       if (scenario.view === 'fields' && scenario.viewport === '1440') {
         await page.waitForSelector('[data-pdf-page-canvas]', { timeout: 60_000 })
         const before = await page.locator('[data-layout-field-overlay]').count()
@@ -55,6 +74,40 @@ test('document creator QA harness screenshots', { timeout: 180_000 }, async () =
       await screenshot(page, scenario.name)
       await page.close()
     }
+  } finally {
+    await browser.close()
+  }
+})
+
+test('palette click and touch tap arm click-to-place', { timeout: 180_000 }, async () => {
+  const browser = await chromium.launch({ headless: true })
+  try {
+    const desktop = await browser.newContext({ viewport: { width: 1280, height: 900 }, hasTouch: true })
+    const page = await desktop.newPage()
+    await page.goto(baseUrl, { waitUntil: 'networkidle', timeout: 120_000 })
+    await page.getByRole('button', { name: 'Fields step' }).click()
+    await page.getByRole('button', { name: '1440px' }).click()
+    await page.waitForSelector('[data-pdf-page-canvas]', { timeout: 60_000 })
+    const palette = page.getByTestId('palette-field-email')
+    const canvas = page.locator('[data-pdf-page-canvas]').first()
+    const before = await page.locator('[data-layout-field-overlay]').count()
+    await palette.click()
+    await page.getByText(/Click on the PDF to place/i).waitFor()
+    const box = await canvas.boundingBox()
+    assert.ok(box)
+    await page.mouse.click(box.x + box.width * 0.25, box.y + box.height * 0.3)
+    await page.waitForTimeout(300)
+    assert.equal(await page.locator('[data-layout-field-overlay]').count(), before + 1)
+
+    const touchBefore = await page.locator('[data-layout-field-overlay]').count()
+    const paletteBox = await page.getByTestId('palette-field-text').boundingBox()
+    assert.ok(paletteBox)
+    await page.touchscreen.tap(paletteBox.x + paletteBox.width / 2, paletteBox.y + paletteBox.height / 2)
+    await page.getByText(/Click on the PDF to place a Text/i).waitFor()
+    await page.touchscreen.tap(box.x + box.width * 0.55, box.y + box.height * 0.55)
+    await page.waitForTimeout(300)
+    assert.equal(await page.locator('[data-layout-field-overlay]').count(), touchBefore + 1)
+    await desktop.close()
   } finally {
     await browser.close()
   }

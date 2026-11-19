@@ -11,7 +11,7 @@ import {
 } from '@/lib/luxorCreatedDocumentFieldTypes'
 import { luxorChicagoDateString, signerNeedsAdoptedSignature } from '@/lib/luxorCreatedDocumentFieldLayout'
 import { createTypedSignature, DrawSignature } from '@/components/secure-portal/SecurePortalSignatureAdopt'
-import { scrollToSignField } from '@/components/created-document/CreatedDocumentFieldPdfCanvas'
+import { scrollToSignField } from '@/components/created-document/scrollToSignField'
 
 const CreatedDocumentFieldPdfCanvas = dynamic(
   () => import('@/components/created-document/CreatedDocumentFieldPdfCanvas').then((mod) => mod.CreatedDocumentFieldPdfCanvas),

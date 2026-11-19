@@ -271,10 +271,13 @@ export function DocumentCreatorFieldsStep({ documentId, pdfUrl, canEdit, isTempl
       if (!drag || !samePointer(native)) return
       detach()
       const point = native as MouseEvent
-      if (drag.moved) {
-        const page = findPdfPageAtPoint(document.body, point.clientX, point.clientY)
-        if (page) placeFromPointerRef.current(point, drag.fieldType, page)
+      const page = findPdfPageAtPoint(document.body, point.clientX, point.clientY)
+      const overPalette = point.target instanceof Element && Boolean(point.target.closest('[data-testid^="palette-field-"]'))
+      if (drag.moved && page && !overPalette) {
+        placeFromPointerRef.current(point, drag.fieldType, page)
         paletteSuppressClickRef.current = true
+      } else {
+        setPlacingType(drag.fieldType)
       }
       paletteDragRef.current = null
       setPaletteGhost(null)
