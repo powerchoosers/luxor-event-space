@@ -1,15 +1,16 @@
 import 'server-only'
 
-import { fieldValuesComplete } from './luxorCreatedDocumentFieldTypes'
+import { fieldValuesComplete, resolveEffectiveSignerFieldValues } from './luxorCreatedDocumentFieldTypes'
 import {
   createLuxorCreatedDocumentSigningToken,
   hashLuxorCreatedDocumentSigningToken,
   luxorCreatedDocumentTokenExpired,
 } from './luxorCreatedDocumentToken'
-import { signerNeedsAdoptedSignature } from './luxorCreatedDocumentFieldLayout'
+import { luxorChicagoDateString, signerNeedsAdoptedSignature } from './luxorCreatedDocumentFieldLayout'
 import {
   getLuxorCreatedDocumentSignerById,
   getLuxorCreatedDocumentSignerByTokenHash,
+  latestLuxorCreatedDocumentSignedEventPayload,
   listLuxorCreatedDocumentFieldsForRole,
   listLuxorCreatedDocumentSigners,
   recordLuxorCreatedDocumentEvent,
@@ -61,6 +62,17 @@ export async function publicCreatedDocumentSignaturePayload(signer: LuxorCreated
   const document = await getLuxorCreatedDocument(signer.document_id)
   if (!document) return null
   const fields = await listLuxorCreatedDocumentFieldsForRole(document.id, signer.role_key)
+  const signedPayload = signer.status === 'signed'
+    ? await latestLuxorCreatedDocumentSignedEventPayload(signer.id)
+    : null
+  const savedFieldValues = signedPayload?.field_values
+    && typeof signedPayload.field_values === 'object'
+    && !Array.isArray(signedPayload.field_values)
+      ? signedPayload.field_values as Record<string, unknown>
+      : undefined
+  const adoptedSignatureDataUrl = typeof signedPayload?.signature_data_url === 'string'
+    ? signedPayload.signature_data_url
+    : undefined
   return {
     flow: 'created_document' as const,
     token,
@@ -72,6 +84,8 @@ export async function publicCreatedDocumentSignaturePayload(signer: LuxorCreated
     signer_name: signer.name,
     signer_email: signer.email,
     decline_reason: signer.decline_reason,
+    field_values: savedFieldValues,
+    adopted_signature_data_url: adoptedSignatureDataUrl,
     fields: fields.map((field) => ({
       id: field.id,
       field_type: field.field_type,
@@ -153,15 +167,21 @@ export async function completeLuxorCreatedDocumentSigner(input: {
   if (signer.status === 'declined' || signer.status === 'expired') throw new Error('This signing link is no longer active.')
   if (luxorCreatedDocumentTokenExpired(signer.token_expires_at)) throw new Error('This signing link has expired.')
   if (!input.accepted) throw new Error('Please accept the signing acknowledgement.')
-  const signedName = input.signedName.trim()
-  if (!signedName) throw new Error('Please type your legal name.')
 
   const roleFields = await listLuxorCreatedDocumentFieldsForRole(signer.document_id, signer.role_key)
   const needsSignature = signerNeedsAdoptedSignature(roleFields.map((field) => field.field_type))
+  const signedName = input.signedName.trim() || (needsSignature ? '' : signer.name.trim() || 'Signer')
+  if (needsSignature && !signedName) throw new Error('Please type your legal name.')
   if (needsSignature && !/^data:image\/png;base64,[a-z0-9+/=]+$/i.test(input.signatureDataUrl)) {
     throw new Error('Please add your signature before finishing.')
   }
-  const completion = fieldValuesComplete(roleFields, input.fieldValues)
+  const mergedFieldValues = resolveEffectiveSignerFieldValues(roleFields, input.fieldValues, {
+    signerName: signedName,
+    signerEmail: signer.email,
+    signatureAdopted: needsSignature && /^data:image\/png;base64,/i.test(input.signatureDataUrl),
+    defaultDate: luxorChicagoDateString(),
+  })
+  const completion = fieldValuesComplete(roleFields, mergedFieldValues)
   if (!completion.ok) throw new Error('Please complete all required fields.')
 
   const signedPath = await buildLuxorCreatedDocumentSignedPdf({
@@ -169,7 +189,7 @@ export async function completeLuxorCreatedDocumentSigner(input: {
     signerId: signer.id,
     roleKey: signer.role_key,
     fieldValues: {
-      ...input.fieldValues,
+      ...mergedFieldValues,
       ...Object.fromEntries(
         roleFields
           .filter((field) => field.field_type === 'name')
@@ -192,7 +212,13 @@ export async function completeLuxorCreatedDocumentSigner(input: {
     documentId: signer.document_id,
     signerId: signer.id,
     eventType: 'signed',
-    payload: { signed_name: signedName, at: now, field_ids: roleFields.map((field) => field.id) },
+    payload: {
+      signed_name: signedName,
+      at: now,
+      field_ids: roleFields.map((field) => field.id),
+      field_values: mergedFieldValues,
+      signature_data_url: needsSignature ? input.signatureDataUrl : null,
+    },
   })
   return updated || signer
 }
@@ -206,6 +232,7 @@ export async function createLuxorCreatedDocumentTestSigningLink(input: {
 }) {
   const document = await getLuxorCreatedDocument(input.documentId)
   if (!document) throw new Error('Document not found.')
+  if (document.is_template) throw new Error('Test signing links are only available for draft documents, not templates.')
   if (document.status !== 'draft') throw new Error('Test signing links are only available for draft documents.')
 
   const signers = await listLuxorCreatedDocumentSigners(input.documentId)

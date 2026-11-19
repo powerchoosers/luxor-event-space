@@ -3,7 +3,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import dynamic from 'next/dynamic'
 import { CheckCircle2, Download, FileText, LoaderCircle, LockKeyhole, PenLine, Type } from '@/lib/icons/phosphor-compat'
-import { fieldValuesComplete, type LuxorCreatedDocumentFieldType } from '@/lib/luxorCreatedDocumentFieldTypes'
+import {
+  fieldValuesComplete,
+  resolveEffectiveSignerFieldValues,
+  type LuxorCreatedDocumentFieldType,
+} from '@/lib/luxorCreatedDocumentFieldTypes'
 import { luxorChicagoDateString, signerNeedsAdoptedSignature } from '@/lib/luxorCreatedDocumentFieldLayout'
 import { createTypedSignature, DrawSignature } from '@/components/secure-portal/SecurePortalSignatureAdopt'
 import { scrollToSignField } from '@/components/created-document/CreatedDocumentFieldPdfCanvas'
@@ -40,6 +44,8 @@ export type CreatedDocumentSignPayload = {
   signer_name: string
   signer_email?: string
   fields: SignField[]
+  field_values?: Record<string, unknown>
+  adopted_signature_data_url?: string
   agreement_execution_ready?: boolean
 }
 
@@ -49,13 +55,13 @@ export function CreatedDocumentSignFlow({ token, initial }: { token: string; ini
   const [payload, setPayload] = useState(initial)
   const [signedName, setSignedName] = useState(initial.signer_name || '')
   const [mode, setMode] = useState<SignatureMode>('type')
-  const [signatureDataUrl, setSignatureDataUrl] = useState<string | null>(null)
+  const [signatureDataUrl, setSignatureDataUrl] = useState<string | null>(initial.adopted_signature_data_url || null)
   const [accepted, setAccepted] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [pageWidth, setPageWidth] = useState(0)
   const [activeFieldId, setActiveFieldId] = useState<string | null>(null)
-  const [fieldValues, setFieldValues] = useState<Record<string, unknown>>({})
+  const [fieldValues, setFieldValues] = useState<Record<string, unknown>>(initial.field_values || {})
   const viewerRef = useRef<HTMLDivElement | null>(null)
   const fieldRefs = useRef<Map<string, HTMLDivElement | null>>(new Map())
 
@@ -95,6 +101,43 @@ export function CreatedDocumentSignFlow({ token, initial }: { token: string; ini
     setSignatureDataUrl(name ? createTypedSignature(name) : null)
   }, [complete, mode, needsSignature, signedName])
 
+  const signatureAdopted = Boolean(signatureDataUrl)
+
+  const effectiveFieldValues = useMemo(
+    () => resolveEffectiveSignerFieldValues(
+      payload.fields.map((field) => ({
+        id: field.id,
+        field_type: field.field_type as LuxorCreatedDocumentFieldType,
+      })),
+      fieldValues,
+      {
+        signerName: signedName,
+        signerEmail: initial.signer_email || '',
+        signatureAdopted,
+        defaultDate: luxorChicagoDateString(),
+      },
+    ),
+    [fieldValues, initial.signer_email, payload.fields, signatureAdopted, signedName],
+  )
+
+  const markSignatureFieldsAdopted = useCallback(() => {
+    if (!signatureDataUrl) return
+    const marker = signedName.trim() || 'Signed'
+    setFieldValues((current) => {
+      const next = { ...current }
+      for (const field of payload.fields) {
+        if (field.field_type === 'signature' || field.field_type === 'initials') {
+          next[field.id] = marker
+        }
+      }
+      return next
+    })
+  }, [payload.fields, signatureDataUrl, signedName])
+
+  useEffect(() => {
+    markSignatureFieldsAdopted()
+  }, [markSignatureFieldsAdopted])
+
   const chooseMode = (nextMode: SignatureMode) => {
     setMode(nextMode)
     setSignatureDataUrl(nextMode === 'type' && signedName.trim() ? createTypedSignature(signedName.trim()) : null)
@@ -113,16 +156,13 @@ export function CreatedDocumentSignFlow({ token, initial }: { token: string; ini
     scrollToSignField(fieldRefs.current.get(fieldId) ?? null)
   }, [])
 
-  const applySignatureToField = useCallback((field: SignField) => {
+  const applySignatureToField = useCallback(() => {
     if (!signatureDataUrl) {
       setError('Adopt your signature first, then tap the field again.')
       return
     }
-    const marker = field.field_type === 'initials'
-      ? signedName.trim().split(/\s+/).map((part) => part[0] || '').join('').slice(0, 3).toUpperCase() || 'Signed'
-      : signedName.trim() || 'Signed'
-    setFieldValue(field.id, marker)
-  }, [setFieldValue, signatureDataUrl, signedName])
+    markSignatureFieldsAdopted()
+  }, [markSignatureFieldsAdopted, signatureDataUrl])
 
   const fillActiveField = () => {
     if (!activeField) return
@@ -136,7 +176,7 @@ export function CreatedDocumentSignFlow({ token, initial }: { token: string; ini
       return
     }
     if (activeField.field_type === 'signature' || activeField.field_type === 'initials') {
-      applySignatureToField(activeField)
+      applySignatureToField()
       return
     }
     if (activeField.field_type === 'name') {
@@ -164,7 +204,7 @@ export function CreatedDocumentSignFlow({ token, initial }: { token: string; ini
         required: field.required,
         field_type: field.field_type as LuxorCreatedDocumentFieldType,
       })),
-      fieldValues,
+      effectiveFieldValues,
     )
     if (!completion.ok) {
       const nextField = visibleFields.find((field) => completion.missing.includes(field.id))
@@ -172,6 +212,7 @@ export function CreatedDocumentSignFlow({ token, initial }: { token: string; ini
       setError('Please complete all required fields.')
       return
     }
+    const submitSignedName = needsSignature ? signedName.trim() : (signedName.trim() || payload.signer_name || 'Signer')
     setSubmitting(true)
     setError(null)
     try {
@@ -180,10 +221,10 @@ export function CreatedDocumentSignFlow({ token, initial }: { token: string; ini
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           token,
-          signedName,
+          signedName: submitSignedName,
           accepted,
           signatureDataUrl: signatureDataUrl || '',
-          fieldValues,
+          fieldValues: effectiveFieldValues,
         }),
       })
       const data = await response.json()
@@ -264,9 +305,23 @@ export function CreatedDocumentSignFlow({ token, initial }: { token: string; ini
                 if (prev) focusField(prev.id)
               }}
               onNext={() => {
+                const completion = fieldValuesComplete(
+                  payload.fields.map((field) => ({
+                    id: field.id,
+                    required: field.required,
+                    field_type: field.field_type as LuxorCreatedDocumentFieldType,
+                  })),
+                  effectiveFieldValues,
+                )
+                const nextMissing = visibleFields.find((field) => completion.missing.includes(field.id))
+                if (nextMissing) {
+                  focusField(nextMissing.id)
+                  return
+                }
                 const next = visibleFields[Math.min(visibleFields.length - 1, activeFieldIndex + 1)]
                 if (next) focusField(next.id)
               }}
+              effectiveFieldValues={effectiveFieldValues}
               onDecline={() => void decline()}
             />
           )}
@@ -311,6 +366,7 @@ function SignPane(props: {
   activeFieldIndex: number
   visibleCount: number
   fieldValues: Record<string, unknown>
+  effectiveFieldValues: Record<string, unknown>
   fillActiveField: () => void
   needsSignature: boolean
   mode: SignatureMode
@@ -345,7 +401,7 @@ function SignPane(props: {
             Fill this field
           </button>
         ) : null}
-        {activeField?.required && !fieldHasValue(activeField, props.fieldValues) ? (
+        {activeField?.required && !fieldHasValue(activeField, props.effectiveFieldValues) ? (
           <p className="mt-2 text-xs text-[#a8792f]">This required field still needs a value.</p>
         ) : null}
         {needsSignature ? (

@@ -4,6 +4,7 @@ import { supabaseRestStrict } from './supabaseRestServer'
 import {
   DEFAULT_CREATED_DOCUMENT_SIGNER_ROLES,
   isLuxorCreatedDocumentFieldType,
+  clampNormalizedFieldRect,
   validateNormalizedFieldRect,
   type LuxorCreatedDocumentFieldRow,
   type LuxorCreatedDocumentFieldType,
@@ -121,6 +122,8 @@ export type UpsertFieldInput = {
 
 export function validateLuxorCreatedFieldInput(field: UpsertFieldInput) {
   if (!field.role_key.trim()) return 'Each field needs a signer role.'
+  const clamped = clampNormalizedFieldRect(field)
+  Object.assign(field, { x: clamped.x, y: clamped.y, w: clamped.w, h: clamped.h })
   const rectError = validateNormalizedFieldRect(field)
   if (rectError) return rectError
   if (!field.label.trim()) return 'Each field needs a label.'
@@ -261,6 +264,16 @@ export async function recordLuxorCreatedDocumentEvent(input: {
       payload: input.payload ?? {},
     }),
   })
+}
+
+export async function latestLuxorCreatedDocumentSignedEventPayload(signerId: string) {
+  const rows = await supabaseRestStrict<Array<{ payload?: unknown }>>(
+    `${EVENT_TABLE}?signer_id=eq.${encodeURIComponent(signerId)}&event_type=eq.signed&select=payload&order=created_at.desc&limit=1`,
+  )
+  const payload = rows[0]?.payload
+  return payload && typeof payload === 'object' && !Array.isArray(payload)
+    ? payload as Record<string, unknown>
+    : null
 }
 
 export async function updateLuxorCreatedDocumentSigner(

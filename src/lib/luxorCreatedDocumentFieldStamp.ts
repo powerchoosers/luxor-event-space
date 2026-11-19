@@ -64,14 +64,21 @@ export async function stampLuxorFieldsOnPdf(input: {
     const text = typeof stamp.value === 'string' ? stamp.value.trim() : ''
     if (!text) continue
     const font = type === 'signature' || type === 'initials' ? input.fonts.oblique : input.fonts.regular
-    const size = Math.min(14, Math.max(9, rect.height * 0.55))
+    const maxWidth = Math.max(8, rect.width - 8)
+    const maxHeight = Math.max(8, rect.height - 4)
+    let size = Math.min(14, maxHeight * 0.85)
+    const minSize = 6
+    while (size > minSize && font.widthOfTextAtSize(text, size) > maxWidth) {
+      size -= 0.4
+    }
+    size = Math.max(minSize, size)
     page.drawText(text, {
       x: rect.x + 4,
       y: rect.y + Math.max(2, (rect.height - size) / 2),
       size,
       font,
       color: ink,
-      maxWidth: rect.width - 8,
+      maxWidth,
     })
   }
 }

@@ -53,10 +53,30 @@ const stampLib = compile('src/lib/luxorCreatedDocumentFieldStamp.ts', path.join(
   '@/lib/luxorCreatedDocumentFieldTypes': fieldTypes,
 })
 
-test('field rectangle validation rejects out-of-bounds placement', () => {
-  const { validateNormalizedFieldRect } = fieldTypes
+test('field rectangle validation and clamp keep placement on the page', () => {
+  const { validateNormalizedFieldRect, clampNormalizedFieldRect } = fieldTypes
   assert.equal(validateNormalizedFieldRect({ page_index: 0, x: 0.2, y: 0.2, w: 0.3, h: 0.1 }), null)
-  assert.match(validateNormalizedFieldRect({ page_index: 0, x: 0.8, y: 0.2, w: 0.3, h: 0.1 }), /within the page/)
+  const clamped = clampNormalizedFieldRect({ page_index: 0, x: 0.8, y: 0.2, w: 0.3, h: 0.1 })
+  assert.ok(clamped.x + clamped.w <= 1.0001)
+  assert.equal(validateNormalizedFieldRect(clamped), null)
+})
+
+test('effective signer values treat prefilled name, date, and adopted signature as filled', () => {
+  const { resolveEffectiveSignerFieldValues } = fieldTypes
+  const fields = [
+    { id: 'n', field_type: 'name' },
+    { id: 'd', field_type: 'date' },
+    { id: 's', field_type: 'signature' },
+  ]
+  const values = resolveEffectiveSignerFieldValues(fields, {}, {
+    signerName: 'Pat Smith',
+    signerEmail: 'pat@example.com',
+    signatureAdopted: true,
+    defaultDate: '1/2/2026',
+  })
+  assert.equal(values.n, 'Pat Smith')
+  assert.equal(values.d, '1/2/2026')
+  assert.equal(values.s, 'Pat Smith')
 })
 
 test('required field completion detects missing values', () => {

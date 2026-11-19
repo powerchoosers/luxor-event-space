@@ -105,11 +105,37 @@ export function DocumentCreatorWorkbench({ initial, initialStep = 'create', onSt
   const runSave = async (mode: 'draft' | 'template') => {
     setSaving(true)
     try {
+      if (mode === 'template' && record?.id) {
+        const title = (form.title || record.title).trim()
+        if (!title) {
+          notify({
+            title: 'Template could not be saved',
+            description: 'Add a title before saving as a template.',
+            variant: 'error',
+          })
+          return
+        }
+        if (activeStep === 'fields' || !editorRef.current) {
+          const response = await fetch(`/api/operations/documents/${encodeURIComponent(record.id)}/template`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ title }),
+          })
+          const json = await response.json()
+          if (!response.ok) throw new Error(json.error || 'Template could not be saved.')
+          notify({
+            title: 'Saved as template',
+            description: `${json.document?.title || title} is available in the document library. Your draft is unchanged.`,
+            variant: 'success',
+          })
+          return
+        }
+      }
       const result = mode === 'draft' ? await editorRef.current?.saveDraft() : await editorRef.current?.saveTemplate()
       if (result) {
-        onSaved(result)
+        if (mode === 'draft') onSaved(result)
         if (mode === 'template') {
-          notify({ title: 'Saved as template', description: `${result.title || 'Document'} is available in the document library.`, variant: 'success' })
+          notify({ title: 'Saved as template', description: `${result.title || 'Document'} is available in the document library. Your draft is unchanged.`, variant: 'success' })
         }
         return
       }

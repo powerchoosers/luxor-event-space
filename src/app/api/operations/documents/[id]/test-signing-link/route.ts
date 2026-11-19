@@ -44,6 +44,8 @@ export async function POST(request: NextRequest, context: RouteContext) {
     if (schemaUnavailable(error)) {
       return NextResponse.json({ error: 'Signing tables are not stored yet.' }, { status: 409 })
     }
-    return NextResponse.json({ error: error instanceof Error ? error.message : 'Test signing link could not be created.' }, { status: 503 })
+    const message = error instanceof Error ? error.message : 'Test signing link could not be created.'
+    const status = /draft documents|not found|signer role/i.test(message) ? 400 : 503
+    return NextResponse.json({ error: message }, { status })
   }
 }

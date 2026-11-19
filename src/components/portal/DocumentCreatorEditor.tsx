@@ -248,6 +248,29 @@ export const DocumentCreatorEditor = forwardRef<DocumentCreatorEditorHandle, Pro
         onSaved?.(json.document)
         return json.document as LuxorCreatedDocumentRow
       }
+      if (asTemplate) {
+        if (dirtyRef.current) {
+          const snapshot: DocumentSaveContentSnapshot = {
+            title: body.title,
+            documentType: body.documentType,
+            bodyJson: body.bodyJson,
+            bodyHtml: body.bodyHtml,
+            version: saveTarget.version,
+          }
+          const savedDraft = await patchDocument(saveTarget.id, saveTarget.updated_at, body, false, snapshot, true)
+          setRecord(savedDraft)
+          clearDirty()
+        }
+        const templateResponse = await fetch(`/api/operations/documents/${encodeURIComponent(saveTarget.id)}/template`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ title: body.title.trim() || saveTarget.title }),
+        })
+        const templateJson = await templateResponse.json()
+        if (!templateResponse.ok) throw new Error(templateJson.error || 'Template could not be saved.')
+        setSaveState('saved')
+        return templateJson.document as LuxorCreatedDocumentRow
+      }
       const snapshot: DocumentSaveContentSnapshot = {
         title: body.title,
         documentType: body.documentType,
@@ -255,7 +278,7 @@ export const DocumentCreatorEditor = forwardRef<DocumentCreatorEditorHandle, Pro
         bodyHtml: body.bodyHtml,
         version: saveTarget.version,
       }
-      const document = await patchDocument(saveTarget.id, saveTarget.updated_at, body, asTemplate, snapshot, true)
+      const document = await patchDocument(saveTarget.id, saveTarget.updated_at, body, false, snapshot, true)
       setRecord(document)
       clearDirty()
       setSaveState('saved')

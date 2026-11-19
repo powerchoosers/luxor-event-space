@@ -90,14 +90,60 @@ export type LuxorNormalizedFieldRect = {
   h: number
 }
 
+export function clampNormalizedFieldRect(rect: LuxorNormalizedFieldRect): LuxorNormalizedFieldRect {
+  const w = Math.min(1, Math.max(0.04, rect.w))
+  const h = Math.min(1, Math.max(0.025, rect.h))
+  const x = Math.max(0, Math.min(1 - w, rect.x))
+  const y = Math.max(0, Math.min(1 - h, rect.y))
+  return { ...rect, x, y, w, h }
+}
+
 export function validateNormalizedFieldRect(rect: LuxorNormalizedFieldRect): string | null {
-  const values = [rect.x, rect.y, rect.w, rect.h]
+  const clamped = clampNormalizedFieldRect(rect)
+  const values = [clamped.x, clamped.y, clamped.w, clamped.h]
   if (values.some((value) => !Number.isFinite(value))) return 'Field position must be numeric.'
-  if (rect.page_index < 0 || !Number.isInteger(rect.page_index)) return 'Page index must be a whole number.'
-  if (rect.x < 0 || rect.y < 0 || rect.w <= 0 || rect.h <= 0) return 'Field size is invalid.'
-  if (rect.x > 1 || rect.y > 1 || rect.w > 1 || rect.h > 1) return 'Field must stay within the page.'
-  if (rect.x + rect.w > 1.0001 || rect.y + rect.h > 1.0001) return 'Field must stay within the page.'
+  if (clamped.page_index < 0 || !Number.isInteger(clamped.page_index)) return 'Page index must be a whole number.'
+  if (clamped.x < 0 || clamped.y < 0 || clamped.w <= 0 || clamped.h <= 0) return 'Field size is invalid.'
+  if (clamped.x + clamped.w > 1.0001 || clamped.y + clamped.h > 1.0001) return 'Field must stay within the page.'
   return null
+}
+
+export function resolveEffectiveSignerFieldValues(
+  fields: Array<Pick<LuxorCreatedDocumentFieldRow, 'id' | 'field_type'>>,
+  values: Record<string, unknown>,
+  context: {
+    signerName: string
+    signerEmail: string
+    signatureAdopted: boolean
+    defaultDate: string
+  },
+): Record<string, unknown> {
+  const merged: Record<string, unknown> = { ...values }
+  for (const field of fields) {
+    const existing = merged[field.id]
+    if (field.field_type === 'checkbox') {
+      if (existing === true) continue
+      continue
+    }
+    if (typeof existing === 'string' && existing.trim()) continue
+    if (field.field_type === 'name' && context.signerName.trim()) {
+      merged[field.id] = context.signerName.trim()
+      continue
+    }
+    if (field.field_type === 'email' && context.signerEmail.trim()) {
+      merged[field.id] = context.signerEmail.trim()
+      continue
+    }
+    if (field.field_type === 'date' && context.defaultDate) {
+      merged[field.id] = context.defaultDate
+      continue
+    }
+    if ((field.field_type === 'signature' || field.field_type === 'initials') && context.signatureAdopted) {
+      const marker = context.signerName.trim() || 'Signed'
+      merged[field.id] = marker
+    }
+  }
+  return merged
 }
 
 export function fieldValuesComplete(

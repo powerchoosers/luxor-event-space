@@ -144,8 +144,14 @@ function CreatedDocumentPdfPage({
       className="relative inline-block overflow-hidden bg-white shadow-[0_18px_50px_rgba(0,0,0,0.22)]"
       data-page-index={pageIndex}
       onClick={mode === 'layout' ? () => layout?.onCanvasBackgroundClick?.() : undefined}
-      onDragOver={mode === 'layout' ? (event) => { event.preventDefault() } : undefined}
-      onDrop={mode === 'layout' ? (event) => layout?.onDropField?.(event) : undefined}
+      onDragOver={mode === 'layout' ? (event) => {
+        event.preventDefault()
+        event.dataTransfer.dropEffect = 'copy'
+      } : undefined}
+      onDrop={mode === 'layout' ? (event) => {
+        event.preventDefault()
+        layout?.onDropField?.(event)
+      } : undefined}
       onPointerUp={mode === 'layout' ? (event) => layout?.onCanvasPlacePointerUp?.(event) : undefined}
     >
       <Page
@@ -232,7 +238,7 @@ function SignFieldOverlay({
   const ring = active ? 'border-[#c89d4b] ring-2 ring-[#c89d4b]/80' : 'border-[#c89d4b]/55'
 
   if (field.field_type === 'signature' || field.field_type === 'initials') {
-    const filled = typeof value === 'string' && value.trim()
+    const showAdopted = Boolean(signatureDataUrl)
     return (
       <div
         ref={ref}
@@ -243,8 +249,8 @@ function SignFieldOverlay({
         onClick={(event) => { event.stopPropagation(); onActive(); onSignatureTap() }}
         onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onActive(); onSignatureTap() } }}
       >
-        {signatureDataUrl && filled ? (
-          <img src={signatureDataUrl} alt="" className="h-full w-full object-contain p-0.5" />
+        {showAdopted ? (
+          <img src={signatureDataUrl!} alt="" className="h-full w-full object-contain p-0.5" />
         ) : (
           <span className="px-1 text-center text-[9px] font-semibold uppercase tracking-wide text-[#8b642e]">
             {field.field_type === 'initials' ? 'Initials' : 'Sign'}
@@ -311,7 +317,7 @@ function SignFieldOverlay({
       onClick={(event) => { event.stopPropagation(); onActive() }}
     >
       <input
-        className="h-full w-full bg-transparent px-1 text-[11px] outline-none"
+        className="h-full min-w-0 w-full truncate bg-transparent px-1 text-[11px] outline-none"
         value={displayValue}
         onChange={(event) => onValue(event.target.value)}
         onFocus={() => {

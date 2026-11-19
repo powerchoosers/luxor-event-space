@@ -14,6 +14,7 @@ import {
   nextPaletteFieldPlacement,
   pointerToNormalizedTopLeft,
 } from '@/lib/luxorCreatedDocumentFieldLayout'
+import { clampNormalizedFieldRect } from '@/lib/luxorCreatedDocumentFieldTypes'
 import { signerRoleTintClass, toneForRoleKey } from '@/lib/luxorCreatedDocumentFieldColors'
 import { PortalButton, PortalCheckbox, PortalSelect } from '@/components/portal/PortalUI'
 
@@ -117,10 +118,10 @@ export function DocumentCreatorFieldsStep({ documentId, pdfUrl, canEdit, onDirty
   useEffect(() => { void load() }, [load])
 
   useEffect(() => {
-    if (loading) return
+    if (loading || saving) return
     const dirty = fieldsPlacementSnapshot(fields, signers) !== savedSnapshotRef.current
     onDirtyChange?.(dirty)
-  }, [fields, loading, onDirtyChange, signers])
+  }, [fields, loading, onDirtyChange, saving, signers])
 
   const measureCanvasWidth = useCallback(() => {
     const wrap = canvasWrapRef.current
@@ -292,7 +293,15 @@ export function DocumentCreatorFieldsStep({ documentId, pdfUrl, canEdit, onDirty
     }))
   }
 
-  const endDrag = () => { dragRef.current = null }
+  const endDrag = () => {
+    if (dragRef.current) {
+      setFields((current) => current.map((field) => {
+        const clamped = clampNormalizedFieldRect(field)
+        return { ...field, x: clamped.x, y: clamped.y, w: clamped.w, h: clamped.h }
+      }))
+    }
+    dragRef.current = null
+  }
 
   if (loading) return <p className="text-sm text-[color:var(--portal-muted)]">Loading fields…</p>
 
@@ -300,7 +309,7 @@ export function DocumentCreatorFieldsStep({ documentId, pdfUrl, canEdit, onDirty
     <div className="flex min-h-0 flex-1 flex-col gap-4 min-[1280px]:grid min-[1280px]:h-full min-[1280px]:grid-cols-[220px_minmax(0,1fr)_280px] min-[1280px]:gap-6">
       <aside className="hidden min-[820px]:block">
         <h2 className="text-sm font-semibold text-[color:var(--portal-text)]">Field palette</h2>
-        <p className="mt-1 text-xs text-[color:var(--portal-muted)]">Drag onto the page, or choose a type then click to place.</p>
+        <p className="mt-1 text-xs text-[color:var(--portal-muted)]">Choose a type, then drag onto the page or click to place.</p>
         <div className="mt-3 grid gap-2">
           {(Object.keys(LUXOR_CREATED_DOCUMENT_FIELD_TYPE_LABELS) as LuxorCreatedDocumentFieldType[]).map((type) => (
             <PortalButton
@@ -310,7 +319,11 @@ export function DocumentCreatorFieldsStep({ documentId, pdfUrl, canEdit, onDirty
               className="min-h-10 w-full justify-start"
               disabled={!canEdit}
               draggable={canEdit}
-              onDragStart={(event) => event.dataTransfer.setData('field-type', type)}
+              onDragStart={(event) => {
+                event.dataTransfer.setData('field-type', type)
+                event.dataTransfer.setData('text/plain', type)
+                event.dataTransfer.effectAllowed = 'copy'
+              }}
               onClick={() => setPlacingType(type)}
               onDoubleClick={() => addFieldFromPalette(type)}
             >
@@ -322,6 +335,47 @@ export function DocumentCreatorFieldsStep({ documentId, pdfUrl, canEdit, onDirty
           <p className="mt-2 text-xs text-[#a8792f]">Click on the PDF to place a {LUXOR_CREATED_DOCUMENT_FIELD_TYPE_LABELS[placingType]} field.</p>
         ) : null}
       </aside>
+
+      <section className="min-[820px]:hidden">
+        <h2 className="text-sm font-semibold text-[color:var(--portal-text)]">Field list</h2>
+        <p className="mt-1 text-xs text-[color:var(--portal-muted)]">Edit roles, required, and remove fields when the canvas is too small.</p>
+        <ul className="mt-3 space-y-2">
+          {fields.length === 0 ? (
+            <li className="text-xs text-[color:var(--portal-muted)]">No fields yet. Add one from the palette on desktop or tap a type below.</li>
+          ) : fields.map((field) => (
+            <li key={field.clientId} className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-3">
+              <p className="text-sm font-semibold text-[color:var(--portal-text)]">{field.label || LUXOR_CREATED_DOCUMENT_FIELD_TYPE_LABELS[field.field_type]}</p>
+              <p className="text-[10px] text-[color:var(--portal-muted)]">Page {field.page_index + 1} · {LUXOR_CREATED_DOCUMENT_FIELD_TYPE_LABELS[field.field_type]}</p>
+              <PortalSelect
+                className="mt-2"
+                aria-label={`Role for ${field.label}`}
+                value={field.role_key}
+                disabled={!canEdit}
+                options={signers.map((signer) => ({ value: signer.role_key, label: signer.role_label }))}
+                onChange={(value) => setFields((current) => current.map((row) => (row.clientId === field.clientId ? { ...row, role_key: value } : row)))}
+              />
+              <div className="mt-2 flex items-center justify-between gap-2">
+                <PortalCheckbox
+                  checked={field.required}
+                  disabled={!canEdit}
+                  onChange={(checked) => setFields((current) => current.map((row) => (row.clientId === field.clientId ? { ...row, required: checked } : row)))}
+                  label="Required"
+                />
+                <PortalButton type="button" variant="secondary" className="min-h-9" disabled={!canEdit} onClick={() => setFields((current) => current.filter((row) => row.clientId !== field.clientId))}>
+                  Delete
+                </PortalButton>
+              </div>
+            </li>
+          ))}
+        </ul>
+        <div className="mt-4 grid grid-cols-2 gap-2">
+          {(Object.keys(LUXOR_CREATED_DOCUMENT_FIELD_TYPE_LABELS) as LuxorCreatedDocumentFieldType[]).map((type) => (
+            <PortalButton key={`mobile-${type}`} type="button" variant="secondary" className="min-h-10" disabled={!canEdit} onClick={() => setPlacingType(type)}>
+              {LUXOR_CREATED_DOCUMENT_FIELD_TYPE_LABELS[type]}
+            </PortalButton>
+          ))}
+        </div>
+      </section>
 
       <section className="min-h-0 min-w-0">
         <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
@@ -362,8 +416,8 @@ export function DocumentCreatorFieldsStep({ documentId, pdfUrl, canEdit, onDirty
                 },
                 onDropField: (event) => {
                   if (!canEdit) return
-                  const type = event.dataTransfer.getData('field-type') as LuxorCreatedDocumentFieldType
-                  if (!type) return
+                  const type = (event.dataTransfer.getData('field-type') || event.dataTransfer.getData('text/plain')) as LuxorCreatedDocumentFieldType
+                  if (!type || !(type in LUXOR_CREATED_DOCUMENT_FIELD_TYPE_LABELS)) return
                   placeFromPointer(event, type)
                 },
               }}

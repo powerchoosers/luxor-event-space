@@ -185,6 +185,28 @@ export async function archiveLuxorCreatedDocument(input: {
   return document
 }
 
+export async function createLuxorCreatedDocumentTemplateFromDocument(input: {
+  sourceId: string
+  createdBy: string
+  title?: string
+}): Promise<LuxorCreatedDocumentRow> {
+  const source = await getLuxorCreatedDocument(input.sourceId)
+  if (!source) throw new SupabaseRestError('Document not found.', 404, 'PGRST116')
+  const title = (input.title?.trim() || source.title.trim() || 'Untitled template').slice(0, 300)
+  if (!title) throw new Error('Add a title before saving as a template.')
+  const created = await createLuxorCreatedDocument({
+    title,
+    documentType: source.document_type,
+    bodyJson: source.body_json,
+    bodyHtml: source.body_html,
+    isTemplate: true,
+    createdBy: input.createdBy,
+    sourceTemplateId: source.id,
+  })
+  await copyLuxorCreatedDocumentFieldsAndSigners(source.id, created.id)
+  return created
+}
+
 export async function duplicateLuxorCreatedDocument(input: {
   sourceId: string
   createdBy: string
