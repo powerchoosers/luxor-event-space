@@ -7,6 +7,7 @@ import {
   publicCreatedDocumentSignaturePayload,
   resolveLuxorCreatedDocumentSignerFromToken,
 } from '@/lib/luxorCreatedDocumentSigningServer'
+import { createdDocumentSignClientStatus } from '@/lib/luxorCreatedDocumentFieldLayout'
 
 export async function tryCreatedDocumentSignGet(request: NextRequest, token: string) {
   const signer = await resolveLuxorCreatedDocumentSignerFromToken(token)
@@ -31,30 +32,36 @@ export async function tryCreatedDocumentSignPost(request: NextRequest, token: st
     ip: request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || request.headers.get('x-real-ip'),
     userAgent: request.headers.get('user-agent'),
   }
-  if (body.decline === true) {
-    const declined = await declineLuxorCreatedDocumentSigner({
+  try {
+    if (body.decline === true) {
+      const declined = await declineLuxorCreatedDocumentSigner({
+        token,
+        reason: String(body.reason || ''),
+        ...meta,
+      })
+      const payload = await publicCreatedDocumentSignaturePayload(declined, token)
+      return NextResponse.json(payload)
+    }
+    const completed = await completeLuxorCreatedDocumentSigner({
       token,
-      reason: String(body.reason || ''),
+      signedName: String(body.signedName || ''),
+      accepted: Boolean(body.accepted),
+      signatureDataUrl: String(body.signatureDataUrl || ''),
+      fieldValues: body.fieldValues && typeof body.fieldValues === 'object' && !Array.isArray(body.fieldValues)
+        ? body.fieldValues as Record<string, unknown>
+        : {},
       ...meta,
     })
-    const payload = await publicCreatedDocumentSignaturePayload(declined, token)
-    return NextResponse.json(payload)
+    const payload = await publicCreatedDocumentSignaturePayload(completed, token)
+    if (!payload) return NextResponse.json({ error: 'Signing link not found.' }, { status: 404 })
+    return NextResponse.json({
+      ...payload,
+      agreement_execution_ready: completed.status === 'signed' && Boolean(completed.signed_pdf_path),
+      status: completed.status,
+    })
+  } catch (error) {
+    console.error('Created document signing POST failed', error)
+    const message = error instanceof Error ? error.message : 'Unable to submit signature.'
+    return NextResponse.json({ error: message }, { status: createdDocumentSignClientStatus(message) })
   }
-  const completed = await completeLuxorCreatedDocumentSigner({
-    token,
-    signedName: String(body.signedName || ''),
-    accepted: Boolean(body.accepted),
-    signatureDataUrl: String(body.signatureDataUrl || ''),
-    fieldValues: body.fieldValues && typeof body.fieldValues === 'object' && !Array.isArray(body.fieldValues)
-      ? body.fieldValues as Record<string, unknown>
-      : {},
-    ...meta,
-  })
-  const payload = await publicCreatedDocumentSignaturePayload(completed, token)
-  if (!payload) return NextResponse.json({ error: 'Signing link not found.' }, { status: 404 })
-  return NextResponse.json({
-    ...payload,
-    agreement_execution_ready: completed.status === 'signed' && Boolean(completed.signed_pdf_path),
-    status: completed.status,
-  })
 }

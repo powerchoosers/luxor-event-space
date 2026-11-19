@@ -5,6 +5,15 @@ import { createLuxorCreatedDocumentTestSigningLink } from '@/lib/luxorCreatedDoc
 
 type RouteContext = { params: Promise<{ id: string }> }
 
+function requestSiteOrigin(request: NextRequest): string {
+  const forwardedHost = request.headers.get('x-forwarded-host')?.split(',')[0]?.trim()
+  const host = forwardedHost || request.headers.get('host')
+  if (!host) return (process.env.NEXT_PUBLIC_SITE_URL || 'https://www.luxoratlaspalmas.com').replace(/\/$/, '')
+  const proto = request.headers.get('x-forwarded-proto')?.split(',')[0]?.trim()
+    || (host.includes('localhost') ? 'http' : 'https')
+  return `${proto}://${host}`.replace(/\/$/, '')
+}
+
 export async function POST(request: NextRequest, context: RouteContext) {
   const session = await getOperationsSession()
   if (!session) return NextResponse.json({ error: 'Operations access required.' }, { status: 401 })
@@ -20,6 +29,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
     const result = await createLuxorCreatedDocumentTestSigningLink({
       documentId: id,
       roleKey,
+      siteOrigin: requestSiteOrigin(request),
       signerName: typeof body?.signerName === 'string' ? body.signerName : undefined,
       signerEmail: typeof body?.signerEmail === 'string' ? body.signerEmail : undefined,
     })

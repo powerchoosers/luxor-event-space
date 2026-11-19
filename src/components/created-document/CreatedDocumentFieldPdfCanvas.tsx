@@ -1,0 +1,335 @@
+'use client'
+
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { LoaderCircle } from '@/lib/icons/phosphor-compat'
+import { Document, Page, pdfjs } from 'react-pdf'
+import type { LuxorCreatedDocumentFieldType } from '@/lib/luxorCreatedDocumentFieldTypes'
+import { LUXOR_CREATED_DOCUMENT_FIELD_TYPE_LABELS } from '@/lib/luxorCreatedDocumentFieldTypes'
+import { normalizedFieldOverlayStyle, luxorChicagoDateString } from '@/lib/luxorCreatedDocumentFieldLayout'
+
+pdfjs.GlobalWorkerOptions.workerSrc = new URL(
+  'pdfjs-dist/build/pdf.worker.min.mjs',
+  import.meta.url,
+).toString()
+
+export type CreatedDocumentPdfField = {
+  id: string
+  field_type: LuxorCreatedDocumentFieldType | string
+  label: string
+  required: boolean
+  page_index: number
+  role_key?: string
+  x: number
+  y: number
+  w: number
+  h: number
+}
+
+type LayoutHandlers = {
+  selectedId: string | null
+  tintClassForField: (field: CreatedDocumentPdfField) => string
+  onSelect: (fieldId: string | null) => void
+  onMovePointerDown: (event: React.PointerEvent, field: CreatedDocumentPdfField) => void
+  onResizePointerDown: (event: React.PointerEvent, field: CreatedDocumentPdfField) => void
+  onCanvasBackgroundClick?: () => void
+  onCanvasPlacePointerUp?: (event: React.PointerEvent) => void
+  onDropField?: (event: React.DragEvent) => void
+}
+
+type SignHandlers = {
+  activeFieldId: string | null
+  fieldValues: Record<string, unknown>
+  onActiveField: (fieldId: string) => void
+  onFieldValue: (fieldId: string, value: string | boolean) => void
+  onSignatureFieldTap: (field: CreatedDocumentPdfField) => void
+  signerName: string
+  signerEmail: string
+  signatureDataUrl: string | null
+  registerFieldRef: (fieldId: string, node: HTMLDivElement | null) => void
+}
+
+type Props = {
+  pdfUrl: string | null
+  fields: CreatedDocumentPdfField[]
+  pageWidth: number
+  mode: 'layout' | 'sign'
+  layoutPageIndex?: number
+  layout?: LayoutHandlers
+  sign?: SignHandlers
+  onNumPages?: (count: number) => void
+  onError?: () => void
+  className?: string
+}
+
+export function CreatedDocumentFieldPdfCanvas({
+  pdfUrl,
+  fields,
+  pageWidth,
+  mode,
+  layoutPageIndex = 0,
+  layout,
+  sign,
+  onNumPages,
+  onError,
+  className = '',
+}: Props) {
+  const [numPages, setNumPages] = useState(0)
+  const pageRange = useMemo(() => {
+    if (mode === 'layout') return [layoutPageIndex]
+    return Array.from({ length: numPages }, (_, index) => index)
+  }, [layoutPageIndex, mode, numPages])
+
+  const onLoad = useCallback((count: number) => {
+    setNumPages(count)
+    onNumPages?.(count)
+  }, [onNumPages])
+
+  if (!pdfUrl) {
+    return (
+      <div className={`flex min-h-[360px] items-center justify-center rounded-xl border border-dashed border-[#caa24c]/35 bg-white text-sm text-[#6f665b] ${className}`}>
+        PDF preview is not ready yet.
+      </div>
+    )
+  }
+
+  return (
+    <Document
+      key={pdfUrl}
+      file={pdfUrl}
+      onLoadSuccess={({ numPages: count }) => onLoad(count)}
+      onLoadError={() => onError?.()}
+      loading={(
+        <div className={`flex min-h-[360px] items-center justify-center text-[#b9afa3] ${className}`}>
+          <LoaderCircle className="mr-2 animate-spin" size={18} /> Loading PDF…
+        </div>
+      )}
+      className={mode === 'sign' ? 'flex flex-col items-center gap-6' : 'flex justify-center'}
+    >
+      {pageWidth > 0 && pageRange.map((pageIndex) => (
+        <CreatedDocumentPdfPage
+          key={pageIndex}
+          pageIndex={pageIndex}
+          pageNumber={pageIndex + 1}
+          pageWidth={pageWidth}
+          fields={fields.filter((field) => field.page_index === pageIndex)}
+          mode={mode}
+          layout={layout}
+          sign={sign}
+        />
+      ))}
+    </Document>
+  )
+}
+
+function CreatedDocumentPdfPage({
+  pageIndex,
+  pageNumber,
+  pageWidth,
+  fields,
+  mode,
+  layout,
+  sign,
+}: {
+  pageIndex: number
+  pageNumber: number
+  pageWidth: number
+  fields: CreatedDocumentPdfField[]
+  mode: 'layout' | 'sign'
+  layout?: LayoutHandlers
+  sign?: SignHandlers
+}) {
+  const pageRef = useRef<HTMLDivElement | null>(null)
+
+  return (
+    <div
+      ref={pageRef}
+      className="relative inline-block overflow-hidden bg-white shadow-[0_18px_50px_rgba(0,0,0,0.22)]"
+      data-page-index={pageIndex}
+      onClick={mode === 'layout' ? () => layout?.onCanvasBackgroundClick?.() : undefined}
+      onDragOver={mode === 'layout' ? (event) => { event.preventDefault() } : undefined}
+      onDrop={mode === 'layout' ? (event) => layout?.onDropField?.(event) : undefined}
+      onPointerUp={mode === 'layout' ? (event) => layout?.onCanvasPlacePointerUp?.(event) : undefined}
+    >
+      <Page
+        pageNumber={pageNumber}
+        width={pageWidth}
+        renderTextLayer={false}
+        renderAnnotationLayer={false}
+        loading={<div style={{ width: pageWidth, height: pageWidth * 1.294 }} className="bg-[#f7f0e4]" />}
+      />
+      {fields.map((field) => {
+        if (mode === 'layout' && layout) {
+          const selected = layout.selectedId === field.id
+          const tint = layout.tintClassForField(field)
+          return (
+            <button
+              key={field.id}
+              type="button"
+              style={normalizedFieldOverlayStyle(field)}
+              className={`absolute border text-left text-[10px] font-semibold text-[#1a1816] ${tint} ${selected ? 'ring-2 ring-[#caa24c]' : ''} ${'cursor-move'}`}
+              onClick={(event) => { event.stopPropagation(); layout.onSelect(field.id) }}
+              onPointerDown={(event) => layout.onMovePointerDown(event, field)}
+            >
+              <span className="block truncate px-1 py-0.5">{field.label || LUXOR_CREATED_DOCUMENT_FIELD_TYPE_LABELS[field.field_type as LuxorCreatedDocumentFieldType] || field.field_type}</span>
+              <span
+                className="absolute bottom-0 right-0 h-3 w-3 cursor-se-resize bg-[#caa24c]/70"
+                onPointerDown={(event) => layout.onResizePointerDown(event, field)}
+              />
+            </button>
+          )
+        }
+        if (mode === 'sign' && sign) {
+          return (
+            <SignFieldOverlay
+              key={field.id}
+              field={field}
+              active={sign.activeFieldId === field.id}
+              value={sign.fieldValues[field.id]}
+              signerName={sign.signerName}
+              signerEmail={sign.signerEmail}
+              signatureDataUrl={sign.signatureDataUrl}
+              onActive={() => sign.onActiveField(field.id)}
+              onValue={(value) => sign.onFieldValue(field.id, value)}
+              onSignatureTap={() => sign.onSignatureFieldTap(field)}
+              registerRef={(node) => sign.registerFieldRef(field.id, node)}
+            />
+          )
+        }
+        return null
+      })}
+    </div>
+  )
+}
+
+function SignFieldOverlay({
+  field,
+  active,
+  value,
+  signerName,
+  signerEmail,
+  signatureDataUrl,
+  onActive,
+  onValue,
+  onSignatureTap,
+  registerRef,
+}: {
+  field: CreatedDocumentPdfField
+  active: boolean
+  value: unknown
+  signerName: string
+  signerEmail: string
+  signatureDataUrl: string | null
+  onActive: () => void
+  onValue: (value: string | boolean) => void
+  onSignatureTap: () => void
+  registerRef: (node: HTMLDivElement | null) => void
+}) {
+  const ref = useRef<HTMLDivElement | null>(null)
+  useEffect(() => {
+    registerRef(ref.current)
+    return () => registerRef(null)
+  }, [registerRef])
+
+  const base = 'absolute z-10 overflow-hidden rounded-sm border bg-white/92 text-[#1a1816] shadow-sm'
+  const ring = active ? 'border-[#c89d4b] ring-2 ring-[#c89d4b]/80' : 'border-[#c89d4b]/55'
+
+  if (field.field_type === 'signature' || field.field_type === 'initials') {
+    const filled = typeof value === 'string' && value.trim()
+    return (
+      <div
+        ref={ref}
+        role="button"
+        tabIndex={0}
+        style={normalizedFieldOverlayStyle(field)}
+        className={`${base} ${ring} flex cursor-pointer items-center justify-center`}
+        onClick={(event) => { event.stopPropagation(); onActive(); onSignatureTap() }}
+        onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onActive(); onSignatureTap() } }}
+      >
+        {signatureDataUrl && filled ? (
+          <img src={signatureDataUrl} alt="" className="h-full w-full object-contain p-0.5" />
+        ) : (
+          <span className="px-1 text-center text-[9px] font-semibold uppercase tracking-wide text-[#8b642e]">
+            {field.field_type === 'initials' ? 'Initials' : 'Sign'}
+          </span>
+        )}
+      </div>
+    )
+  }
+
+  if (field.field_type === 'checkbox') {
+    return (
+      <div
+        ref={ref}
+        style={normalizedFieldOverlayStyle(field)}
+        className={`${base} ${ring} flex items-center justify-center`}
+      >
+        <label className="flex h-full w-full cursor-pointer items-center justify-center">
+          <input
+            type="checkbox"
+            className="h-4 w-4 accent-[#c89d4b]"
+            checked={value === true}
+            onChange={(event) => { onActive(); onValue(event.target.checked) }}
+          />
+        </label>
+      </div>
+    )
+  }
+
+  const stringValue = typeof value === 'string' ? value : ''
+
+  if (field.field_type === 'date') {
+    return (
+      <div
+        ref={ref}
+        style={normalizedFieldOverlayStyle(field)}
+        className={`${base} ${ring}`}
+        onClick={(event) => { event.stopPropagation(); onActive() }}
+      >
+        <input
+          className="h-full w-full bg-transparent px-1 text-[11px] outline-none"
+          value={stringValue || luxorChicagoDateString()}
+          onChange={(event) => onValue(event.target.value)}
+          onFocus={() => {
+            onActive()
+            if (!stringValue) onValue(luxorChicagoDateString())
+          }}
+          aria-label={field.label}
+        />
+      </div>
+    )
+  }
+
+  const displayValue = field.field_type === 'name'
+    ? (stringValue || signerName)
+    : field.field_type === 'email'
+      ? (stringValue || signerEmail)
+      : stringValue
+
+  return (
+    <div
+      ref={ref}
+      style={normalizedFieldOverlayStyle(field)}
+      className={`${base} ${ring}`}
+      onClick={(event) => { event.stopPropagation(); onActive() }}
+    >
+      <input
+        className="h-full w-full bg-transparent px-1 text-[11px] outline-none"
+        value={displayValue}
+        onChange={(event) => onValue(event.target.value)}
+        onFocus={() => {
+          onActive()
+          if (!stringValue) {
+            if (field.field_type === 'name' && signerName.trim()) onValue(signerName.trim())
+            if (field.field_type === 'email' && signerEmail.trim()) onValue(signerEmail.trim())
+          }
+        }}
+        aria-label={field.label}
+      />
+    </div>
+  )
+}
+
+export function scrollToSignField(node: HTMLDivElement | null) {
+  if (!node) return
+  node.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' })
+}

@@ -1,24 +1,24 @@
 'use client'
 
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import dynamic from 'next/dynamic'
-import { CheckCircle2, ChevronLeft, ChevronRight, Download, FileText, LoaderCircle, LockKeyhole, PenLine, Type } from '@/lib/icons/phosphor-compat'
-import { LUXOR_LEGACY_CONTRACT_SIGNATURE_PLACEMENT } from '@/lib/luxorSignaturePlacement'
+import { CheckCircle2, Download, FileText, LoaderCircle, LockKeyhole, PenLine, Type } from '@/lib/icons/phosphor-compat'
+import { fieldValuesComplete, type LuxorCreatedDocumentFieldType } from '@/lib/luxorCreatedDocumentFieldTypes'
+import { luxorChicagoDateString, signerNeedsAdoptedSignature } from '@/lib/luxorCreatedDocumentFieldLayout'
 import { createTypedSignature, DrawSignature } from '@/components/secure-portal/SecurePortalSignatureAdopt'
+import { scrollToSignField } from '@/components/created-document/CreatedDocumentFieldPdfCanvas'
 
-const ContractPdfViewer = dynamic(() => import('@/app/secure-portal/sign/[token]/ContractPdfViewer'), {
-  ssr: false,
-  loading: () => (
-    <div className="flex min-h-[420px] items-center justify-center text-[#b9afa3]">
-      <LoaderCircle className="mr-2 animate-spin" size={18} /> Preparing document…
-    </div>
-  ),
-})
-
-const HIDDEN_SIGNATURE_PLACEMENT = {
-  ...LUXOR_LEGACY_CONTRACT_SIGNATURE_PLACEMENT,
-  pageIndex: 9_999,
-}
+const CreatedDocumentFieldPdfCanvas = dynamic(
+  () => import('@/components/created-document/CreatedDocumentFieldPdfCanvas').then((mod) => mod.CreatedDocumentFieldPdfCanvas),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="flex min-h-[420px] items-center justify-center text-[#b9afa3]">
+        <LoaderCircle className="mr-2 animate-spin" size={18} /> Preparing document…
+      </div>
+    ),
+  },
+)
 
 type SignField = {
   id: string
@@ -26,6 +26,10 @@ type SignField = {
   label: string
   required: boolean
   page_index: number
+  x: number
+  y: number
+  w: number
+  h: number
 }
 
 export type CreatedDocumentSignPayload = {
@@ -34,6 +38,7 @@ export type CreatedDocumentSignPayload = {
   document_title: string
   role_label: string
   signer_name: string
+  signer_email?: string
   fields: SignField[]
   agreement_execution_ready?: boolean
 }
@@ -48,20 +53,31 @@ export function CreatedDocumentSignFlow({ token, initial }: { token: string; ini
   const [accepted, setAccepted] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [pageNumber, setPageNumber] = useState(1)
-  const [numPages, setNumPages] = useState(0)
   const [pageWidth, setPageWidth] = useState(0)
-  const [activeFieldIndex, setActiveFieldIndex] = useState(0)
+  const [activeFieldId, setActiveFieldId] = useState<string | null>(null)
   const [fieldValues, setFieldValues] = useState<Record<string, unknown>>({})
   const viewerRef = useRef<HTMLDivElement | null>(null)
+  const fieldRefs = useRef<Map<string, HTMLDivElement | null>>(new Map())
 
   const complete = payload.status === 'signed' && payload.agreement_execution_ready === true
   const pdfUrl = `/api/public/signatures/download?token=${encodeURIComponent(token)}&kind=${complete ? 'executed' : 'contract'}`
+  const needsSignature = useMemo(
+    () => signerNeedsAdoptedSignature(payload.fields.map((field) => field.field_type)),
+    [payload.fields],
+  )
   const visibleFields = useMemo(
     () => payload.fields.slice().sort((a, b) => a.page_index - b.page_index || a.label.localeCompare(b.label)),
     [payload.fields],
   )
-  const activeField = visibleFields[activeFieldIndex] || null
+  const activeFieldIndex = useMemo(
+    () => (activeFieldId ? visibleFields.findIndex((field) => field.id === activeFieldId) : 0),
+    [activeFieldId, visibleFields],
+  )
+  const activeField = activeFieldId ? visibleFields.find((field) => field.id === activeFieldId) || null : visibleFields[0] || null
+
+  useEffect(() => {
+    if (visibleFields.length && !activeFieldId) setActiveFieldId(visibleFields[0]?.id || null)
+  }, [activeFieldId, visibleFields])
 
   useEffect(() => {
     const viewer = viewerRef.current
@@ -74,59 +90,87 @@ export function CreatedDocumentSignFlow({ token, initial }: { token: string; ini
   }, [])
 
   useEffect(() => {
-    if (complete || mode !== 'type') return
+    if (complete || !needsSignature || mode !== 'type') return
     const name = signedName.trim()
     setSignatureDataUrl(name ? createTypedSignature(name) : null)
-  }, [complete, mode, signedName])
+  }, [complete, mode, needsSignature, signedName])
 
   const chooseMode = (nextMode: SignatureMode) => {
     setMode(nextMode)
     setSignatureDataUrl(nextMode === 'type' && signedName.trim() ? createTypedSignature(signedName.trim()) : null)
   }
 
-  useEffect(() => {
-    if (!activeField) return
-    setPageNumber(activeField.page_index + 1)
-  }, [activeField])
+  const setFieldValue = useCallback((fieldId: string, value: string | boolean) => {
+    setFieldValues((current) => ({ ...current, [fieldId]: value }))
+  }, [])
 
-  const setFieldValue = (field: SignField, value: string | boolean) => {
-    setFieldValues((current) => ({ ...current, [field.id]: value }))
-  }
+  const registerFieldRef = useCallback((fieldId: string, node: HTMLDivElement | null) => {
+    fieldRefs.current.set(fieldId, node)
+  }, [])
+
+  const focusField = useCallback((fieldId: string) => {
+    setActiveFieldId(fieldId)
+    scrollToSignField(fieldRefs.current.get(fieldId) ?? null)
+  }, [])
+
+  const applySignatureToField = useCallback((field: SignField) => {
+    if (!signatureDataUrl) {
+      setError('Adopt your signature first, then tap the field again.')
+      return
+    }
+    const marker = field.field_type === 'initials'
+      ? signedName.trim().split(/\s+/).map((part) => part[0] || '').join('').slice(0, 3).toUpperCase() || 'Signed'
+      : signedName.trim() || 'Signed'
+    setFieldValue(field.id, marker)
+  }, [setFieldValue, signatureDataUrl, signedName])
 
   const fillActiveField = () => {
     if (!activeField) return
+    focusField(activeField.id)
     if (activeField.field_type === 'checkbox') {
-      setFieldValue(activeField, true)
+      setFieldValue(activeField.id, true)
       return
     }
     if (activeField.field_type === 'date') {
-      setFieldValue(activeField, new Date().toLocaleDateString('en-US'))
+      setFieldValue(activeField.id, luxorChicagoDateString())
       return
     }
     if (activeField.field_type === 'signature' || activeField.field_type === 'initials') {
-      if (!signatureDataUrl) return
-      setFieldValue(activeField, signedName.trim() || 'Signed')
+      applySignatureToField(activeField)
       return
     }
     if (activeField.field_type === 'name') {
-      setFieldValue(activeField, signedName.trim())
+      setFieldValue(activeField.id, signedName.trim())
+      return
+    }
+    if (activeField.field_type === 'email') {
+      setFieldValue(activeField.id, (initial.signer_email || '').trim())
     }
   }
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault()
-    if (!signatureDataUrl) {
+    if (!accepted) {
+      setError('Please accept the signing acknowledgement.')
+      return
+    }
+    if (needsSignature && !signatureDataUrl) {
       setError('Please adopt your signature first.')
       return
     }
-    const filled = { ...fieldValues }
-    for (const field of payload.fields) {
-      if (field.field_type === 'signature' || field.field_type === 'initials' || field.field_type === 'name') {
-        if (!filled[field.id]) filled[field.id] = signedName.trim()
-      }
-      if (field.field_type === 'date' && !filled[field.id]) {
-        filled[field.id] = new Date().toLocaleDateString('en-US')
-      }
+    const completion = fieldValuesComplete(
+      payload.fields.map((field) => ({
+        id: field.id,
+        required: field.required,
+        field_type: field.field_type as LuxorCreatedDocumentFieldType,
+      })),
+      fieldValues,
+    )
+    if (!completion.ok) {
+      const nextField = visibleFields.find((field) => completion.missing.includes(field.id))
+      if (nextField) focusField(nextField.id)
+      setError('Please complete all required fields.')
+      return
     }
     setSubmitting(true)
     setError(null)
@@ -134,7 +178,13 @@ export function CreatedDocumentSignFlow({ token, initial }: { token: string; ini
       const response = await fetch('/api/public/signatures', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token, signedName, accepted, signatureDataUrl, fieldValues: filled }),
+        body: JSON.stringify({
+          token,
+          signedName,
+          accepted,
+          signatureDataUrl: signatureDataUrl || '',
+          fieldValues,
+        }),
       })
       const data = await response.json()
       if (!response.ok) throw new Error(data.error || 'Unable to finish signing.')
@@ -162,39 +212,66 @@ export function CreatedDocumentSignFlow({ token, initial }: { token: string; ini
   return (
     <div className="mx-auto flex w-full max-w-[1600px] flex-col px-3 py-3 sm:px-5 lg:h-full lg:min-h-0 lg:overflow-hidden lg:py-3">
       <SignFlowHeader payload={payload} complete={complete} pdfUrl={pdfUrl} />
-      <SignFlowBody
-        viewerRef={viewerRef}
-        pdfUrl={pdfUrl}
-        pageNumber={pageNumber}
-        pageWidth={pageWidth}
-        signatureDataUrl={signatureDataUrl}
-        complete={complete}
-        numPages={numPages}
-        setNumPages={setNumPages}
-        setPageNumber={setPageNumber}
-        setError={setError}
-        payload={payload}
-        activeField={activeField}
-        activeFieldIndex={activeFieldIndex}
-        visibleCount={visibleFields.length}
-        fieldValues={fieldValues}
-        setFieldValue={setFieldValue}
-        fillActiveField={fillActiveField}
-        mode={mode}
-        chooseMode={chooseMode}
-        signedName={signedName}
-        setSignedName={setSignedName}
-        setSignatureDataUrl={setSignatureDataUrl}
-        accepted={accepted}
-        setAccepted={setAccepted}
-        error={error}
-        submitting={submitting}
-        onSubmit={submit}
-        onPrev={() => setActiveFieldIndex((index) => Math.max(0, index - 1))}
-        onNext={() => setActiveFieldIndex((index) => Math.min(visibleFields.length - 1, index + 1))}
-        onDecline={() => void decline()}
-        pdfUrlComplete={pdfUrl}
-      />
+      <div className="grid grid-cols-1 overflow-hidden rounded-xl border border-white/10 bg-[#211d18] shadow-[0_24px_70px_rgba(0,0,0,0.34)] lg:min-h-0 lg:flex-1 lg:grid-cols-[minmax(0,1fr)_390px]">
+        <section className="flex min-w-0 flex-col border-b border-white/10 lg:min-h-0 lg:border-b-0 lg:border-r">
+          <div ref={viewerRef} className="h-[68svh] min-h-[500px] overflow-auto bg-[#302b25] p-3 sm:p-5 lg:h-auto lg:min-h-0 lg:flex-1">
+            <CreatedDocumentFieldPdfCanvas
+              pdfUrl={pdfUrl}
+              fields={payload.fields}
+              pageWidth={pageWidth}
+              mode="sign"
+              onError={() => setError('The PDF could not be displayed. You can still download it above.')}
+              sign={{
+                activeFieldId,
+                fieldValues,
+                onActiveField: focusField,
+                onFieldValue: setFieldValue,
+                onSignatureFieldTap: applySignatureToField,
+                signerName: signedName,
+                signerEmail: initial.signer_email || '',
+                signatureDataUrl,
+                registerFieldRef,
+              }}
+            />
+          </div>
+        </section>
+        <aside className="flex min-h-0 flex-col bg-[#f4efe7] text-[#2d251e]">
+          {complete ? (
+            <CompletePane pdfUrl={pdfUrl} />
+          ) : payload.status === 'declined' ? (
+            <div className="p-6 text-sm text-[#6f665b]">You declined this document. Luxor may send an updated link if needed.</div>
+          ) : (
+            <SignPane
+              activeField={activeField}
+              activeFieldIndex={activeFieldIndex}
+              visibleCount={visibleFields.length}
+              fieldValues={fieldValues}
+              fillActiveField={fillActiveField}
+              needsSignature={needsSignature}
+              mode={mode}
+              chooseMode={chooseMode}
+              signedName={signedName}
+              setSignedName={setSignedName}
+              signatureDataUrl={signatureDataUrl}
+              setSignatureDataUrl={setSignatureDataUrl}
+              accepted={accepted}
+              setAccepted={setAccepted}
+              error={error}
+              submitting={submitting}
+              onSubmit={submit}
+              onPrev={() => {
+                const prev = visibleFields[Math.max(0, activeFieldIndex - 1)]
+                if (prev) focusField(prev.id)
+              }}
+              onNext={() => {
+                const next = visibleFields[Math.min(visibleFields.length - 1, activeFieldIndex + 1)]
+                if (next) focusField(next.id)
+              }}
+              onDecline={() => void decline()}
+            />
+          )}
+        </aside>
+      </div>
     </div>
   )
 }
@@ -212,108 +289,6 @@ function SignFlowHeader({ payload, complete, pdfUrl }: { payload: CreatedDocumen
       <a href={pdfUrl} download className="inline-flex h-9 w-fit shrink-0 items-center gap-2 rounded-lg border border-white/12 bg-white/[0.025] px-3 text-[11px] font-semibold text-[#d9cec0]">
         <Download size={14} /> Download PDF
       </a>
-    </div>
-  )
-}
-
-function SignFlowBody(props: {
-  viewerRef: React.RefObject<HTMLDivElement | null>
-  pdfUrl: string
-  pageNumber: number
-  pageWidth: number
-  signatureDataUrl: string | null
-  complete: boolean
-  numPages: number
-  setNumPages: (value: number) => void
-  setPageNumber: React.Dispatch<React.SetStateAction<number>>
-  setError: (value: string | null) => void
-  payload: CreatedDocumentSignPayload
-  activeField: SignField | null
-  activeFieldIndex: number
-  visibleCount: number
-  fieldValues: Record<string, unknown>
-  setFieldValue: (field: SignField, value: string | boolean) => void
-  fillActiveField: () => void
-  mode: SignatureMode
-  chooseMode: (value: SignatureMode) => void
-  signedName: string
-  setSignedName: (value: string) => void
-  setSignatureDataUrl: (value: string | null) => void
-  accepted: boolean
-  setAccepted: (value: boolean) => void
-  error: string | null
-  submitting: boolean
-  onSubmit: (event: React.FormEvent) => void
-  onPrev: () => void
-  onNext: () => void
-  onDecline: () => void
-  pdfUrlComplete: string
-}) {
-  const {
-    viewerRef, pdfUrl, pageNumber, pageWidth, signatureDataUrl, complete, numPages, setNumPages, setPageNumber, setError,
-    payload, activeField, activeFieldIndex, visibleCount, fieldValues, setFieldValue, fillActiveField,
-    mode, chooseMode, signedName, setSignedName, setSignatureDataUrl, accepted, setAccepted, error, submitting, onSubmit, onPrev, onNext, onDecline, pdfUrlComplete,
-  } = props
-
-  return (
-    <div className="grid grid-cols-1 overflow-hidden rounded-xl border border-white/10 bg-[#211d18] shadow-[0_24px_70px_rgba(0,0,0,0.34)] lg:min-h-0 lg:flex-1 lg:grid-cols-[minmax(0,1fr)_390px]">
-      <section className="flex min-w-0 flex-col border-b border-white/10 lg:min-h-0 lg:border-b-0 lg:border-r">
-        <div ref={viewerRef} className="h-[68svh] min-h-[500px] overflow-auto bg-[#302b25] p-3 sm:p-5 lg:h-auto lg:min-h-0 lg:flex-1">
-          <ContractPdfViewer
-            pdfUrl={pdfUrl}
-            pageNumber={pageNumber}
-            pageWidth={pageWidth}
-            signaturePlacement={HIDDEN_SIGNATURE_PLACEMENT}
-            signatureDataUrl={signatureDataUrl}
-            complete={complete}
-            onLoad={(count) => { setNumPages(count); setPageNumber((page) => Math.min(page, count)) }}
-            onError={() => setError('The PDF could not be displayed. You can still download it above.')}
-          />
-        </div>
-        <PageControls pageNumber={pageNumber} numPages={numPages} setPageNumber={setPageNumber} />
-      </section>
-      <aside className="flex min-h-0 flex-col bg-[#f4efe7] text-[#2d251e]">
-        {complete ? (
-          <CompletePane pdfUrl={pdfUrlComplete} />
-        ) : payload.status === 'declined' ? (
-          <div className="p-6 text-sm text-[#6f665b]">You declined this document. Luxor may send an updated link if needed.</div>
-        ) : (
-          <SignPane
-            activeField={activeField}
-            activeFieldIndex={activeFieldIndex}
-            visibleCount={visibleCount}
-            fieldValues={fieldValues}
-            setFieldValue={setFieldValue}
-            fillActiveField={fillActiveField}
-            mode={mode}
-            chooseMode={chooseMode}
-            signedName={signedName}
-            setSignedName={setSignedName}
-            signatureDataUrl={signatureDataUrl}
-            setSignatureDataUrl={setSignatureDataUrl}
-            accepted={accepted}
-            setAccepted={setAccepted}
-            error={error}
-            submitting={submitting}
-            onSubmit={onSubmit}
-            onPrev={onPrev}
-            onNext={onNext}
-            onDecline={onDecline}
-          />
-        )}
-      </aside>
-    </div>
-  )
-}
-
-function PageControls({ pageNumber, numPages, setPageNumber }: { pageNumber: number; numPages: number; setPageNumber: React.Dispatch<React.SetStateAction<number>> }) {
-  return (
-    <div className="flex h-11 shrink-0 items-center justify-center border-t border-white/10 bg-[#1b1814] px-3">
-      <div className="flex items-center rounded-lg border border-white/10 bg-[#12100d] p-0.5">
-        <button type="button" aria-label="Previous page" onClick={() => setPageNumber((page) => Math.max(1, page - 1))} disabled={pageNumber <= 1} className="flex h-7 w-7 items-center justify-center rounded-md text-[#d9cec0] disabled:opacity-25"><ChevronLeft size={15} /></button>
-        <span className="min-w-[66px] px-2 text-center text-[10px] font-bold tabular-nums text-[#c5baad]">{pageNumber} of {numPages || '—'}</span>
-        <button type="button" aria-label="Next page" onClick={() => setPageNumber((page) => Math.min(numPages || page, page + 1))} disabled={!numPages || pageNumber >= numPages} className="flex h-7 w-7 items-center justify-center rounded-md text-[#d9cec0] disabled:opacity-25"><ChevronRight size={15} /></button>
-      </div>
     </div>
   )
 }
@@ -336,8 +311,8 @@ function SignPane(props: {
   activeFieldIndex: number
   visibleCount: number
   fieldValues: Record<string, unknown>
-  setFieldValue: (field: SignField, value: string | boolean) => void
   fillActiveField: () => void
+  needsSignature: boolean
   mode: SignatureMode
   chooseMode: (value: SignatureMode) => void
   signedName: string
@@ -354,80 +329,78 @@ function SignPane(props: {
   onDecline: () => void
 }) {
   const {
-    activeField, activeFieldIndex, visibleCount, fieldValues, setFieldValue, fillActiveField,
+    activeField, activeFieldIndex, visibleCount, fillActiveField, needsSignature,
     mode, chooseMode, signedName, setSignedName, signatureDataUrl, setSignatureDataUrl,
     accepted, setAccepted, error, submitting, onSubmit, onPrev, onNext, onDecline,
   } = props
+
   return (
     <form onSubmit={onSubmit} className="flex min-h-[650px] flex-1 flex-col lg:min-h-0">
       <div className="flex-1 overflow-y-auto p-5 sm:p-6">
         <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#9b7740]"><LockKeyhole size={13} className="inline" /> Field {activeFieldIndex + 1} of {visibleCount}</p>
         <h2 className="mt-3 font-serif text-3xl font-medium leading-tight">{activeField?.label || 'Review fields'}</h2>
-        {activeField?.field_type === 'text' || activeField?.field_type === 'email' ? (
-          <input className="mt-4 w-full min-h-11 rounded-xl border border-[#d8d0c4] bg-white px-3 text-sm" value={String(fieldValues[activeField.id] || '')} onChange={(event) => setFieldValue(activeField, event.target.value)} />
-        ) : null}
-        {activeField?.field_type === 'checkbox' ? (
-          <label className="mt-4 flex items-center gap-2 text-sm">
-            <input type="checkbox" checked={fieldValues[activeField.id] === true} onChange={(event) => setFieldValue(activeField, event.target.checked)} />
-            {activeField.label}
-          </label>
-        ) : null}
+        <p className="mt-2 text-xs text-[#6f665b]">Tap a highlighted field on the PDF, or use the buttons below.</p>
         {activeField ? (
           <button type="button" onClick={fillActiveField} className="mt-3 min-h-11 rounded-xl border border-[#d7c59f] bg-white px-4 text-sm font-semibold">
             Fill this field
           </button>
         ) : null}
-        <p className="mt-5 text-[10px] font-bold uppercase tracking-[0.16em] text-[#9b7740]">Adopt signature once</p>
-        <label className="mt-2 block text-xs font-semibold text-[#554b41]" htmlFor="created-doc-legal-name">Full legal name</label>
-        <input
-          id="created-doc-legal-name"
-          className="mt-2 h-11 w-full rounded-xl border border-[#d8d0c4] bg-[#fffdfa] px-3.5 text-sm text-[#2d251e] outline-none transition placeholder:text-[#aaa095] focus:border-[#b88a44] focus:ring-2 focus:ring-[#b88a44]/15"
-          value={signedName}
-          onChange={(event) => setSignedName(event.target.value)}
-          autoComplete="name"
-          placeholder="Legal name"
-        />
-        <div className="mt-5 grid grid-cols-2 gap-1 rounded-xl bg-[#e8e1d7] p-1">
-          <button
-            type="button"
-            onClick={() => chooseMode('type')}
-            className={`flex h-9 items-center justify-center gap-2 rounded-lg text-xs font-semibold transition ${mode === 'type' ? 'bg-[#fffdfa] text-[#2d251e] shadow-sm' : 'text-[#776d61] hover:text-[#2d251e]'}`}
-          >
-            <Type size={14} /> Type
-          </button>
-          <button
-            type="button"
-            onClick={() => chooseMode('draw')}
-            className={`flex h-9 items-center justify-center gap-2 rounded-lg text-xs font-semibold transition ${mode === 'draw' ? 'bg-[#fffdfa] text-[#2d251e] shadow-sm' : 'text-[#776d61] hover:text-[#2d251e]'}`}
-          >
-            <PenLine size={14} /> Draw
-          </button>
-        </div>
-        <div className="mt-3">
-          {mode === 'type' ? (
-            <div className="flex h-36 items-center justify-center overflow-hidden rounded-xl border border-[#d8d0c4] bg-[#fffdfa] px-5">
-              {signedName.trim() ? (
-                <span className="max-w-full truncate text-4xl text-[#2d251e]" style={{ fontFamily: 'var(--font-signature)' }}>{signedName}</span>
+        {activeField?.required && !fieldHasValue(activeField, props.fieldValues) ? (
+          <p className="mt-2 text-xs text-[#a8792f]">This required field still needs a value.</p>
+        ) : null}
+        {needsSignature ? (
+          <>
+            <p className="mt-5 text-[10px] font-bold uppercase tracking-[0.16em] text-[#9b7740]">Adopt signature once</p>
+            <label className="mt-2 block text-xs font-semibold text-[#554b41]" htmlFor="created-doc-legal-name">Full legal name</label>
+            <input
+              id="created-doc-legal-name"
+              className="mt-2 h-11 w-full rounded-xl border border-[#d8d0c4] bg-[#fffdfa] px-3.5 text-sm text-[#2d251e] outline-none transition placeholder:text-[#aaa095] focus:border-[#b88a44] focus:ring-2 focus:ring-[#b88a44]/15"
+              value={signedName}
+              onChange={(event) => setSignedName(event.target.value)}
+              autoComplete="name"
+              placeholder="Legal name"
+            />
+            <div className="mt-5 grid grid-cols-2 gap-1 rounded-xl bg-[#e8e1d7] p-1">
+              <button type="button" onClick={() => chooseMode('type')} className={`flex h-9 items-center justify-center gap-2 rounded-lg text-xs font-semibold transition ${mode === 'type' ? 'bg-[#fffdfa] text-[#2d251e] shadow-sm' : 'text-[#776d61] hover:text-[#2d251e]'}`}>
+                <Type size={14} /> Type
+              </button>
+              <button type="button" onClick={() => chooseMode('draw')} className={`flex h-9 items-center justify-center gap-2 rounded-lg text-xs font-semibold transition ${mode === 'draw' ? 'bg-[#fffdfa] text-[#2d251e] shadow-sm' : 'text-[#776d61] hover:text-[#2d251e]'}`}>
+                <PenLine size={14} /> Draw
+              </button>
+            </div>
+            <div className="mt-3">
+              {mode === 'type' ? (
+                <div className="flex h-36 items-center justify-center overflow-hidden rounded-xl border border-[#d8d0c4] bg-[#fffdfa] px-5">
+                  {signedName.trim() ? (
+                    <span className="max-w-full truncate text-4xl text-[#2d251e]" style={{ fontFamily: 'var(--font-signature)' }}>{signedName}</span>
+                  ) : (
+                    <span className="text-sm text-[#a39a8d]">Type your name above</span>
+                  )}
+                </div>
               ) : (
-                <span className="text-sm text-[#a39a8d]">Type your name above</span>
+                <DrawSignature value={signatureDataUrl} onChange={setSignatureDataUrl} />
               )}
             </div>
-          ) : (
-            <DrawSignature value={signatureDataUrl} onChange={setSignatureDataUrl} />
-          )}
-        </div>
+          </>
+        ) : null}
         <label className="mt-4 flex items-start gap-2 text-xs leading-5 text-[#5f554a]">
           <input type="checkbox" checked={accepted} onChange={(event) => setAccepted(event.target.checked)} className="mt-0.5" />
           I agree to sign electronically and understand this is legally binding.
         </label>
         {error ? <p role="alert" className="mt-3 text-xs text-[#a04b39]">{error}</p> : null}
       </div>
-      <div className="shrink-0 border-t border-[#ded5c8] bg-[#eee8df] p-4 space-y-2">
+      <div className="shrink-0 space-y-2 border-t border-[#ded5c8] bg-[#eee8df] p-4">
         <button type="submit" disabled={submitting} className="inline-flex h-12 w-full items-center justify-center rounded-xl bg-[#c89d4b] text-sm font-semibold text-[#20170d] disabled:opacity-60">Finish</button>
         <SignFlowFooter onPrev={onPrev} onNext={onNext} onDecline={onDecline} />
       </div>
     </form>
   )
+}
+
+function fieldHasValue(field: SignField, values: Record<string, unknown>) {
+  const value = values[field.id]
+  if (field.field_type === 'checkbox') return value === true
+  return typeof value === 'string' && value.trim().length > 0
 }
 
 function SignFlowFooter({ onPrev, onNext, onDecline }: { onPrev: () => void; onNext: () => void; onDecline: () => void }) {

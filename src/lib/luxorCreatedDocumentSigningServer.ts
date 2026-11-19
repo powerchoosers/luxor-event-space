@@ -6,6 +6,7 @@ import {
   hashLuxorCreatedDocumentSigningToken,
   luxorCreatedDocumentTokenExpired,
 } from './luxorCreatedDocumentToken'
+import { signerNeedsAdoptedSignature } from './luxorCreatedDocumentFieldLayout'
 import {
   getLuxorCreatedDocumentSignerById,
   getLuxorCreatedDocumentSignerByTokenHash,
@@ -154,11 +155,12 @@ export async function completeLuxorCreatedDocumentSigner(input: {
   if (!input.accepted) throw new Error('Please accept the signing acknowledgement.')
   const signedName = input.signedName.trim()
   if (!signedName) throw new Error('Please type your legal name.')
-  if (!/^data:image\/png;base64,[a-z0-9+/=]+$/i.test(input.signatureDataUrl)) {
-    throw new Error('Please add your signature before finishing.')
-  }
 
   const roleFields = await listLuxorCreatedDocumentFieldsForRole(signer.document_id, signer.role_key)
+  const needsSignature = signerNeedsAdoptedSignature(roleFields.map((field) => field.field_type))
+  if (needsSignature && !/^data:image\/png;base64,[a-z0-9+/=]+$/i.test(input.signatureDataUrl)) {
+    throw new Error('Please add your signature before finishing.')
+  }
   const completion = fieldValuesComplete(roleFields, input.fieldValues)
   if (!completion.ok) throw new Error('Please complete all required fields.')
 
@@ -200,6 +202,7 @@ export async function createLuxorCreatedDocumentTestSigningLink(input: {
   roleKey: string
   signerName?: string
   signerEmail?: string
+  siteOrigin?: string
 }) {
   const document = await getLuxorCreatedDocument(input.documentId)
   if (!document) throw new Error('Document not found.')
@@ -227,7 +230,7 @@ export async function createLuxorCreatedDocumentTestSigningLink(input: {
     eventType: 'test_link_created',
     payload: { expires_at: expiresAt, role_key: signer.role_key },
   })
-  const origin = (process.env.NEXT_PUBLIC_SITE_URL || 'https://www.luxoratlaspalmas.com').replace(/\/$/, '')
+  const origin = (input.siteOrigin || process.env.NEXT_PUBLIC_SITE_URL || 'https://www.luxoratlaspalmas.com').replace(/\/$/, '')
   return {
     signer: updated || signer,
     token,

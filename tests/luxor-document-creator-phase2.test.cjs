@@ -43,6 +43,10 @@ const fieldTypes = compile('src/lib/luxorCreatedDocumentFieldTypes.ts', path.joi
 
 const tokenLib = compile('src/lib/luxorCreatedDocumentToken.ts', path.join(root, 'luxor-created-token.synthetic.cjs'))
 
+const layoutLib = compile('src/lib/luxorCreatedDocumentFieldLayout.ts', path.join(root, 'luxor-created-layout.synthetic.cjs'), {
+  './luxorCreatedDocumentFieldTypes': fieldTypes,
+})
+
 const stampLib = compile('src/lib/luxorCreatedDocumentFieldStamp.ts', path.join(root, 'luxor-created-stamp.synthetic.cjs'), {
   './luxorCreatedDocumentFieldTypes': fieldTypes,
   '@/lib/luxorCreatedDocumentFieldTypes': fieldTypes,
@@ -76,6 +80,40 @@ test('signing token hashing uses sha256 and supports expiry checks', () => {
   const minted = createLuxorCreatedDocumentSigningToken()
   assert.ok(minted.token.length >= 32)
   assert.ok(minted.tokenHash)
+})
+
+test('stamped QA pdf artifact is written for visual review', async () => {
+  const { luxorPdfRectFromNormalized, stampLuxorFieldsOnPdf } = stampLib
+  const pdf = await PDFDocument.create()
+  const page = pdf.addPage([612, 792])
+  const font = await pdf.embedFont(require('pdf-lib').StandardFonts.Helvetica)
+  const fields = [{
+    id: 'f1',
+    document_id: 'd1',
+    field_type: 'name',
+    role_key: 'signer_1',
+    label: 'Name',
+    required: true,
+    page_index: 0,
+    x: 0.12,
+    y: 0.72,
+    w: 0.34,
+    h: 0.05,
+    sort_order: 0,
+  }]
+  await stampLuxorFieldsOnPdf({
+    pdf,
+    fields,
+    stamps: [{ fieldId: 'f1', fieldType: 'name', value: 'Arianna Patterson' }],
+    fonts: { regular: font, oblique: font },
+  })
+  const bytes = await pdf.save()
+  const artifactPath = '/opt/cursor/artifacts/stamped-document.pdf'
+  fs.mkdirSync(path.dirname(artifactPath), { recursive: true })
+  fs.writeFileSync(artifactPath, Buffer.from(bytes))
+  assert.ok(fs.statSync(artifactPath).size > 500)
+  const rect = luxorPdfRectFromNormalized(page, fields[0])
+  assert.ok(rect.x > 50)
 })
 
 test('pdf stamping places text inside normalized field rectangle', async () => {
@@ -146,6 +184,7 @@ test('created-document signer gate rejects expired and declined tokens', async (
   const signingStubs = {
     './luxorCreatedDocumentToken': tokenLib,
     './luxorCreatedDocumentFieldTypes': fieldTypes,
+    './luxorCreatedDocumentFieldLayout': layoutLib,
     './luxorCreatedDocumentFieldsServer': {
       getLuxorCreatedDocumentSignerByTokenHash: async () => null,
       updateLuxorCreatedDocumentSigner: async () => null,
@@ -183,6 +222,7 @@ function signingGateModule(document) {
   return compile('src/lib/luxorCreatedDocumentSigningServer.ts', path.join(root, 'luxor-created-signing-download.synthetic.cjs'), {
     './luxorCreatedDocumentToken': tokenLib,
     './luxorCreatedDocumentFieldTypes': fieldTypes,
+    './luxorCreatedDocumentFieldLayout': layoutLib,
     './luxorCreatedDocumentFieldsServer': {
       getLuxorCreatedDocumentSignerByTokenHash: async () => null,
       updateLuxorCreatedDocumentSigner: async () => null,
@@ -231,6 +271,61 @@ test('created-document PDF download refuses expired and declined tokens', async 
     const body = await response.json()
     assert.ok(body.error)
   }
+})
+
+test('field layout mapping and required defaults follow phase-2 rules', () => {
+  const {
+    defaultCreatedDocumentFieldRequired,
+    normalizedFieldOverlayStyle,
+    pointerToNormalizedTopLeft,
+    createdDocumentSignClientStatus,
+    signerNeedsAdoptedSignature,
+  } = layoutLib
+  assert.equal(defaultCreatedDocumentFieldRequired('initials'), true)
+  assert.equal(defaultCreatedDocumentFieldRequired('text'), false)
+  assert.equal(defaultCreatedDocumentFieldRequired('checkbox'), false)
+  assert.deepEqual(normalizedFieldOverlayStyle({ x: 0.1, y: 0.2, w: 0.3, h: 0.08 }), {
+    left: '10%',
+    top: '20%',
+    width: '30%',
+    height: '8%',
+  })
+  const point = pointerToNormalizedTopLeft(150, 220, { left: 100, top: 200, width: 400, height: 520 }, { w: 0.2, h: 0.05 })
+  assert.ok(point.x >= 0 && point.x <= 0.8)
+  assert.ok(point.y >= 0 && point.y <= 0.95)
+  assert.equal(createdDocumentSignClientStatus('Please complete all required fields.'), 400)
+  assert.equal(createdDocumentSignClientStatus('This signing link has expired.'), 410)
+  assert.equal(signerNeedsAdoptedSignature(['name', 'text']), false)
+  assert.equal(signerNeedsAdoptedSignature(['initials']), true)
+})
+
+test('created-document POST maps validation errors to 4xx', async () => {
+  const postMod = compile('src/app/api/public/created-document-signatures.ts', path.join(root, 'luxor-created-post.synthetic.cjs'), {
+    '@/lib/luxorCreatedDocumentSigningServer': {
+      resolveLuxorCreatedDocumentSignerFromToken: async () => signerRow(),
+      luxorCreatedDocumentSignerGateResponse: async () => null,
+      markLuxorCreatedDocumentSignerViewed: async (s) => s,
+      publicCreatedDocumentSignaturePayload: async () => ({ flow: 'created_document' }),
+      completeLuxorCreatedDocumentSigner: async () => { throw new Error('Please complete all required fields.') },
+      declineLuxorCreatedDocumentSigner: async () => signerRow(),
+    },
+    '@/lib/luxorCreatedDocumentFieldLayout': layoutLib,
+    'next/server': {
+      NextResponse: class NextResponse extends Response {
+        static json(body, init) {
+          return new NextResponse(JSON.stringify(body), {
+            ...init,
+            headers: { 'content-type': 'application/json', ...(init?.headers || {}) },
+          })
+        }
+      },
+    },
+  })
+  const request = { headers: { get: () => null } }
+  const response = await postMod.tryCreatedDocumentSignPost(request, 'token', { accepted: true, signedName: 'Pat' })
+  assert.equal(response.status, 400)
+  const body = await response.json()
+  assert.match(body.error, /required fields/i)
 })
 
 test('created-document sign GET and POST refuse expired and declined tokens', async () => {

@@ -138,7 +138,7 @@ export function DocumentCreatorWorkbench({ initial, initialStep = 'create', onSt
 
       <div className="min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden portal-scrollbar min-[1280px]:overflow-hidden">
         {activeStep === 'fields' && record?.id ? (
-          <DocumentCreatorFieldsStep documentId={record.id} canEdit={canEditFields} />
+          <DocumentCreatorFieldsStep documentId={record.id} pdfUrl={signedUrl} canEdit={canEditFields} />
         ) : (
         <div className="flex min-h-0 min-w-0 flex-col gap-4 min-[1280px]:grid min-[1280px]:h-full min-[1280px]:min-w-0 min-[1280px]:grid-cols-[minmax(0,360px)_minmax(0,1fr)_minmax(0,280px)] min-[1280px]:gap-6 min-[1280px]:overflow-hidden">
           <section className="min-h-0 min-w-0 shrink-0 overflow-x-hidden px-4 sm:px-0 min-[1280px]:overflow-y-auto min-[1280px]:px-0 min-[1280px]:portal-scrollbar">

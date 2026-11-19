@@ -29,7 +29,7 @@ export async function buildLuxorCreatedDocumentSignedPdf(input: {
   const pdfBytes = await downloadLuxorPrivatePdf(document.pdf_storage_path)
   const pdf = await PDFDocument.load(pdfBytes)
   const fonts = await embedLuxorCreatedDocumentFonts(pdf)
-  const signaturePng = decodeLuxorSignaturePng(input.signatureDataUrl)
+  const signaturePng = input.signatureDataUrl ? decodeLuxorSignaturePng(input.signatureDataUrl) : null
 
   const stamps: LuxorFieldStampValue[] = roleFields.map((field) => {
     const raw = input.fieldValues[field.id]
