@@ -104,6 +104,8 @@ export function PortalPageHeader({
   actions,
   mobileActionsInline = false,
   hideBackButton = false,
+  onBack,
+  backButtonLabel = 'Go back',
   titleClassName,
 }: {
   icon?: React.ReactNode
@@ -114,6 +116,9 @@ export function PortalPageHeader({
   actions?: React.ReactNode
   mobileActionsInline?: boolean
   hideBackButton?: boolean
+  /** When set, replaces the default history back behavior (e.g. guarded navigation to a list). */
+  onBack?: () => void
+  backButtonLabel?: string
   titleClassName?: string
 }) {
   const router = useRouter()
@@ -122,6 +127,10 @@ export function PortalPageHeader({
   const isPortalHome = pathname === '/portal' || pathname === '/portal/'
 
   const goBack = () => {
+    if (onBack) {
+      onBack()
+      return
+    }
     if (window.history.length > 1) {
       router.back()
       return
@@ -130,7 +139,7 @@ export function PortalPageHeader({
     router.push('/portal')
   }
 
-  const showBackButton = canGoBack && !hideBackButton
+  const showBackButton = !hideBackButton && (canGoBack || Boolean(onBack))
 
   return (
     <div className={`flex shrink-0 gap-2 sm:gap-3 ${mobileActionsInline ? 'flex-wrap items-center justify-between gap-x-2 sm:flex-nowrap sm:gap-3' : 'flex-col md:flex-row md:items-start md:justify-between'}`}>
@@ -140,8 +149,8 @@ export function PortalPageHeader({
         {showBackButton ? (
           <PortalGhostIconButton
             onClick={goBack}
-            aria-label="Go back"
-            title="Go back"
+            aria-label={backButtonLabel}
+            title={backButtonLabel}
             className="shrink-0"
           >
             <ArrowLeft size={15} />

@@ -12,7 +12,7 @@ import { DocumentCreatorFieldsStep } from '@/components/portal/DocumentCreatorFi
 import { canEditCreatedDocumentFields } from '@/lib/luxorCreatedDocumentFieldTypes'
 import type { LuxorCreatedDocumentRow, LuxorCreatedDocumentType } from '@/lib/luxorDocumentCreatorTypes'
 import { stashCreatedDocumentHandoff } from '@/lib/luxorDocumentCreatorHandoff'
-import { ArrowLeft, ChevronDown, FileText } from '@/lib/icons/phosphor-compat'
+import { ChevronDown, FileText } from '@/lib/icons/phosphor-compat'
 
 type Props = {
   initial?: LuxorCreatedDocumentRow | null
@@ -119,7 +119,7 @@ export function DocumentCreatorWorkbench({ initial, initialStep = 'create', onSt
     router.push(DOCUMENTS_LIBRARY_HREF)
   }, [router])
 
-  const requestAllDocuments = useCallback(() => {
+  const requestLeaveToDocuments = useCallback(() => {
     if (!workbenchDirty) {
       navigateToDocuments()
       return
@@ -141,24 +141,13 @@ export function DocumentCreatorWorkbench({ initial, initialStep = 'create', onSt
     <PortalPageFrame className="h-full min-h-0 gap-4 overflow-x-hidden pb-[calc(4.5rem+env(safe-area-inset-bottom))] min-[1280px]:pb-0">
       <div className="flex min-w-0 flex-col gap-3 min-[1280px]:flex-row min-[1280px]:items-end min-[1280px]:justify-between">
         <div className="min-w-0 flex-1 space-y-3">
-          <div className="flex min-w-0 items-start gap-2.5 sm:gap-3">
-            <button
-              type="button"
-              onClick={requestAllDocuments}
-              className="inline-flex min-h-10 shrink-0 items-center gap-2 rounded-lg px-2 text-sm font-semibold text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45"
-            >
-              <ArrowLeft size={15} />
-              All documents
-            </button>
-            <div className="min-w-0 flex-1">
-              <PortalPageHeader
-                icon={<FileText size={18} />}
-                title={form.title || record?.title || 'New document'}
-                hideBackButton
-                mobileActionsInline
-              />
-            </div>
-          </div>
+          <PortalPageHeader
+            icon={<FileText size={18} />}
+            title={form.title || record?.title || 'New document'}
+            mobileActionsInline
+            onBack={requestLeaveToDocuments}
+            backButtonLabel="Back to all documents"
+          />
           <DocumentCreatorStepper activeStep={activeStep} fieldsEnabled={fieldsEnabled} onStepChange={goToStep} />
         </div>
         <div className="hidden min-[1280px]:flex shrink-0 flex-wrap gap-2">
