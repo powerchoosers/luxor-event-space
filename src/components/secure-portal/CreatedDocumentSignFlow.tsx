@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import dynamic from 'next/dynamic'
 import { CheckCircle2, Download, FileText, LoaderCircle, LockKeyhole, PenLine, Type } from '@/lib/icons/phosphor-compat'
 import {
+  derivedSignerInitials,
   fieldValuesComplete,
   resolveEffectiveSignerFieldValues,
   type LuxorCreatedDocumentFieldType,
@@ -46,6 +47,7 @@ export type CreatedDocumentSignPayload = {
   fields: SignField[]
   field_values?: Record<string, unknown>
   adopted_signature_data_url?: string
+  adopted_initials_data_url?: string
   agreement_execution_ready?: boolean
 }
 
@@ -56,6 +58,7 @@ export function CreatedDocumentSignFlow({ token, initial }: { token: string; ini
   const [signedName, setSignedName] = useState(initial.signer_name || '')
   const [mode, setMode] = useState<SignatureMode>('type')
   const [signatureDataUrl, setSignatureDataUrl] = useState<string | null>(initial.adopted_signature_data_url || null)
+  const [initialsDataUrl, setInitialsDataUrl] = useState<string | null>(initial.adopted_initials_data_url || null)
   const [accepted, setAccepted] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -101,6 +104,8 @@ export function CreatedDocumentSignFlow({ token, initial }: { token: string; ini
     if (complete || !needsSignature || mode !== 'type') return
     const name = signedName.trim()
     setSignatureDataUrl(name ? createTypedSignature(name) : null)
+    const initials = derivedSignerInitials(name)
+    setInitialsDataUrl(initials ? createTypedSignature(initials) : null)
   }, [complete, mode, needsSignature, signedName])
 
   const signatureAdopted = Boolean(signatureDataUrl)
@@ -125,12 +130,12 @@ export function CreatedDocumentSignFlow({ token, initial }: { token: string; ini
   const markSignatureFieldsAdopted = useCallback(() => {
     if (!signatureDataUrl) return
     const marker = signedName.trim() || 'Signed'
+    const initials = derivedSignerInitials(signedName) || 'IN'
     setFieldValues((current) => {
       const next = { ...current }
       for (const field of payload.fields) {
-        if (field.field_type === 'signature' || field.field_type === 'initials') {
-          next[field.id] = marker
-        }
+        if (field.field_type === 'signature') next[field.id] = marker
+        if (field.field_type === 'initials') next[field.id] = initials
       }
       return next
     })
@@ -161,7 +166,14 @@ export function CreatedDocumentSignFlow({ token, initial }: { token: string; ini
 
   const chooseMode = (nextMode: SignatureMode) => {
     setMode(nextMode)
-    setSignatureDataUrl(nextMode === 'type' && signedName.trim() ? createTypedSignature(signedName.trim()) : null)
+    if (nextMode === 'type' && signedName.trim()) {
+      setSignatureDataUrl(createTypedSignature(signedName.trim()))
+      const initials = derivedSignerInitials(signedName)
+      setInitialsDataUrl(initials ? createTypedSignature(initials) : null)
+      return
+    }
+    setSignatureDataUrl(null)
+    setInitialsDataUrl(null)
   }
 
   const setFieldValue = useCallback((fieldId: string, value: string | boolean) => {
@@ -245,6 +257,7 @@ export function CreatedDocumentSignFlow({ token, initial }: { token: string; ini
           signedName: submitSignedName,
           accepted,
           signatureDataUrl: signatureDataUrl || '',
+          initialsDataUrl: initialsDataUrl || (signedName.trim() ? createTypedSignature(derivedSignerInitials(signedName)) : '') || '',
           fieldValues: effectiveFieldValues,
         }),
       })
@@ -274,9 +287,9 @@ export function CreatedDocumentSignFlow({ token, initial }: { token: string; ini
   return (
     <div className="mx-auto flex w-full max-w-[1600px] flex-col px-3 py-3 sm:px-5 lg:h-full lg:min-h-0 lg:overflow-hidden lg:py-3">
       <SignFlowHeader payload={payload} complete={complete} pdfUrl={pdfUrl} />
-      <div className="grid grid-cols-1 overflow-hidden rounded-xl border border-white/10 bg-[#211d18] shadow-[0_24px_70px_rgba(0,0,0,0.34)] lg:min-h-0 lg:flex-1 lg:grid-cols-[minmax(0,1fr)_390px]">
+      <div className="grid grid-cols-1 overflow-hidden rounded-xl border border-white/10 bg-[#211d18] shadow-[0_24px_70px_rgba(0,0,0,0.34)] max-lg:pb-[60svh] lg:min-h-0 lg:flex-1 lg:grid-cols-[minmax(0,1fr)_390px] lg:pb-0">
         <section className="flex min-w-0 flex-col border-b border-white/10 lg:min-h-0 lg:border-b-0 lg:border-r">
-          <div ref={viewerRef} className="h-[68svh] min-h-[500px] overflow-auto bg-[#302b25] p-3 sm:p-5 lg:h-auto lg:min-h-0 lg:flex-1">
+          <div ref={viewerRef} className="h-[38svh] min-h-0 overflow-auto bg-[#302b25] p-3 sm:p-5 lg:h-auto lg:min-h-0 lg:flex-1">
             <CreatedDocumentFieldPdfCanvas
               pdfUrl={pdfUrl}
               fields={payload.fields}
@@ -292,13 +305,14 @@ export function CreatedDocumentSignFlow({ token, initial }: { token: string; ini
                 signerName: signedName,
                 signerEmail: initial.signer_email || '',
                 signatureDataUrl,
+                initialsDataUrl,
                 valuesFrozen: payload.status === 'signed',
                 registerFieldRef,
               }}
             />
           </div>
         </section>
-        <aside className="flex max-h-[60svh] min-h-0 flex-col bg-[#f4efe7] text-[#2d251e] lg:max-h-none">
+        <aside className="fixed inset-x-0 bottom-0 z-30 flex max-h-[60svh] min-h-0 flex-col bg-[#f4efe7] text-[#2d251e] shadow-[0_-12px_40px_rgba(0,0,0,0.28)] lg:static lg:z-auto lg:max-h-none lg:shadow-none">
           {complete ? (
             <CompletePane pdfUrl={pdfUrl} />
           ) : payload.status === 'declined' ? (
@@ -317,6 +331,8 @@ export function CreatedDocumentSignFlow({ token, initial }: { token: string; ini
               setSignedName={setSignedName}
               signatureDataUrl={signatureDataUrl}
               setSignatureDataUrl={setSignatureDataUrl}
+              initialsDataUrl={initialsDataUrl}
+              setInitialsDataUrl={setInitialsDataUrl}
               accepted={accepted}
               setAccepted={setAccepted}
               error={error}
@@ -400,6 +416,8 @@ function SignPane(props: {
   setSignedName: (value: string) => void
   signatureDataUrl: string | null
   setSignatureDataUrl: (value: string | null) => void
+  initialsDataUrl: string | null
+  setInitialsDataUrl: (value: string | null) => void
   accepted: boolean
   setAccepted: (value: boolean) => void
   error: string | null
@@ -413,7 +431,7 @@ function SignPane(props: {
 }) {
   const {
     activeField, activeFieldIndex, visibleCount, fillActiveField, needsSignature,
-    mode, chooseMode, signedName, setSignedName, signatureDataUrl, setSignatureDataUrl,
+    mode, chooseMode, signedName, setSignedName, signatureDataUrl, setSignatureDataUrl, initialsDataUrl, setInitialsDataUrl,
     accepted, setAccepted, error, submitting, onSubmit, onPrev, onNext, onDecline,
     allRequiredComplete, finishRef,
   } = props
@@ -465,7 +483,12 @@ function SignPane(props: {
                   )}
                 </div>
               ) : (
-                <DrawSignature value={signatureDataUrl} onChange={setSignatureDataUrl} />
+                <>
+                  <DrawSignature value={signatureDataUrl} onChange={setSignatureDataUrl} />
+                  <p className="mb-1 mt-3 text-[10px] font-bold uppercase tracking-[0.16em] text-[#9b7740]">Initials</p>
+                  <DrawSignature value={initialsDataUrl} onChange={setInitialsDataUrl} compact placeholder="Initials" />
+                  <p className="mt-1 text-[11px] text-[#6f665b]">Leave initials blank to use {derivedSignerInitials(signedName) || 'your initials'} from your legal name.</p>
+                </>
               )}
             </div>
           </>

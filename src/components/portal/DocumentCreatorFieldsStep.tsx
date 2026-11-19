@@ -219,56 +219,76 @@ export function DocumentCreatorFieldsStep({ documentId, pdfUrl, canEdit, isTempl
     addFieldAt(fieldType, x, y, targetPage)
   }
 
-  const onPalettePointerMove = useCallback((event: PointerEvent) => {
-    const drag = paletteDragRef.current
-    if (!drag || drag.pointerId !== event.pointerId) return
-    const moved = drag.moved
-      || Math.hypot(event.clientX - drag.startX, event.clientY - drag.startY) > 6
-    paletteDragRef.current = {
-      ...drag,
-      moved,
-      ghostX: event.clientX,
-      ghostY: event.clientY,
-    }
-    if (moved) {
-      setPaletteGhost({
-        label: LUXOR_CREATED_DOCUMENT_FIELD_TYPE_LABELS[drag.fieldType],
-        x: event.clientX,
-        y: event.clientY,
-      })
-    }
-  }, [])
+  const placeFromPointerRef = useRef(placeFromPointer)
+  placeFromPointerRef.current = placeFromPointer
 
-  const endPalettePointerDrag = useCallback((event: PointerEvent) => {
-    const drag = paletteDragRef.current
-    if (!drag || drag.pointerId !== event.pointerId) return
-    window.removeEventListener('pointermove', onPalettePointerMove)
-    window.removeEventListener('pointerup', endPalettePointerDrag)
-    window.removeEventListener('pointercancel', endPalettePointerDrag)
-    if (drag.moved) {
-      const page = findPdfPageAtPoint(pageRef.current, event.clientX, event.clientY)
-      if (page) placeFromPointer(event, drag.fieldType, page)
-      paletteSuppressClickRef.current = true
-    }
-    paletteDragRef.current = null
-    setPaletteGhost(null)
-  }, [onPalettePointerMove, pageIndex])
-
-  const beginPalettePointer = (event: React.PointerEvent, fieldType: LuxorCreatedDocumentFieldType) => {
+  const beginPalettePointer = (event: React.PointerEvent | React.MouseEvent, fieldType: LuxorCreatedDocumentFieldType) => {
     if (!canEdit || event.button !== 0) return
-    event.preventDefault()
+    if (paletteDragRef.current) return
+    const pointerId = 'pointerId' in event ? event.pointerId : -1
     paletteDragRef.current = {
       fieldType,
-      pointerId: event.pointerId,
+      pointerId,
       startX: event.clientX,
       startY: event.clientY,
       moved: false,
       ghostX: event.clientX,
       ghostY: event.clientY,
     }
-    window.addEventListener('pointermove', onPalettePointerMove)
-    window.addEventListener('pointerup', endPalettePointerDrag)
-    window.addEventListener('pointercancel', endPalettePointerDrag)
+    const detach = () => {
+      window.removeEventListener('pointermove', onMove)
+      window.removeEventListener('pointerup', onUp)
+      window.removeEventListener('pointercancel', onUp)
+      document.removeEventListener('pointermove', onMove)
+      document.removeEventListener('pointerup', onUp)
+      document.removeEventListener('pointercancel', onUp)
+      window.removeEventListener('mousemove', onMove)
+      window.removeEventListener('mouseup', onUp)
+      document.removeEventListener('mousemove', onMove)
+      document.removeEventListener('mouseup', onUp)
+    }
+    const samePointer = (native: Event) => {
+      const drag = paletteDragRef.current
+      if (!drag) return false
+      if (native instanceof PointerEvent && drag.pointerId >= 0 && native.pointerId !== drag.pointerId) return false
+      return true
+    }
+    const onMove = (native: Event) => {
+      const drag = paletteDragRef.current
+      if (!drag || !samePointer(native)) return
+      const point = native as MouseEvent
+      const moved = drag.moved || Math.hypot(point.clientX - drag.startX, point.clientY - drag.startY) >= 4
+      paletteDragRef.current = { ...drag, moved, ghostX: point.clientX, ghostY: point.clientY }
+      if (!moved) return
+      setPaletteGhost({
+        label: LUXOR_CREATED_DOCUMENT_FIELD_TYPE_LABELS[drag.fieldType],
+        x: point.clientX,
+        y: point.clientY,
+      })
+    }
+    const onUp = (native: Event) => {
+      const drag = paletteDragRef.current
+      if (!drag || !samePointer(native)) return
+      detach()
+      const point = native as MouseEvent
+      if (drag.moved) {
+        const page = findPdfPageAtPoint(document.body, point.clientX, point.clientY)
+        if (page) placeFromPointerRef.current(point, drag.fieldType, page)
+        paletteSuppressClickRef.current = true
+      }
+      paletteDragRef.current = null
+      setPaletteGhost(null)
+    }
+    window.addEventListener('pointermove', onMove)
+    window.addEventListener('pointerup', onUp)
+    window.addEventListener('pointercancel', onUp)
+    document.addEventListener('pointermove', onMove)
+    document.addEventListener('pointerup', onUp)
+    document.addEventListener('pointercancel', onUp)
+    window.addEventListener('mousemove', onMove)
+    window.addEventListener('mouseup', onUp)
+    document.addEventListener('mousemove', onMove)
+    document.addEventListener('mouseup', onUp)
   }
 
   const save = async () => {
@@ -410,9 +430,13 @@ export function DocumentCreatorFieldsStep({ documentId, pdfUrl, canEdit, isTempl
               type="button"
               variant="secondary"
               className="min-h-10 w-full justify-start touch-none"
+              style={{ touchAction: 'none' }}
               disabled={!canEdit}
+              draggable={false}
               data-testid={`palette-field-${type}`}
+              onDragStart={(event) => event.preventDefault()}
               onPointerDown={(event) => beginPalettePointer(event, type)}
+              onMouseDown={(event) => beginPalettePointer(event, type)}
               onClick={() => {
                 if (paletteSuppressClickRef.current) {
                   paletteSuppressClickRef.current = false
@@ -566,7 +590,7 @@ export function DocumentCreatorFieldsStep({ documentId, pdfUrl, canEdit, isTempl
 
       {paletteGhost ? (
         <div
-          className="pointer-events-none fixed z-[200] rounded-lg border border-[#caa24c] bg-white/95 px-2 py-1 text-xs font-semibold text-[#4a3b28] shadow-lg"
+          className="pointer-events-none fixed z-[400] select-none rounded-lg border border-[#caa24c] bg-white/95 px-2 py-1 text-xs font-semibold text-[#4a3b28] shadow-lg"
           style={{ left: paletteGhost.x + 12, top: paletteGhost.y + 12 }}
         >
           {paletteGhost.label}

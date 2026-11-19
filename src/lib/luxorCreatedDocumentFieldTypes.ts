@@ -108,6 +108,17 @@ export function validateNormalizedFieldRect(rect: LuxorNormalizedFieldRect): str
   return null
 }
 
+export function derivedSignerInitials(name: string) {
+  const letters = name
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((part) => part[0] || '')
+    .join('')
+    .toUpperCase()
+  return letters.slice(0, 3)
+}
+
 export function resolveEffectiveSignerFieldValues(
   fields: Array<Pick<LuxorCreatedDocumentFieldRow, 'id' | 'field_type'>>,
   values: Record<string, unknown>,
@@ -125,6 +136,10 @@ export function resolveEffectiveSignerFieldValues(
       if (existing === true) continue
       continue
     }
+    if (field.field_type === 'initials' && context.signatureAdopted) {
+      merged[field.id] = derivedSignerInitials(context.signerName) || 'IN'
+      continue
+    }
     if (typeof existing === 'string' && existing.trim()) continue
     if (field.field_type === 'name' && context.signerName.trim()) {
       merged[field.id] = context.signerName.trim()
@@ -138,9 +153,8 @@ export function resolveEffectiveSignerFieldValues(
       merged[field.id] = context.defaultDate
       continue
     }
-    if ((field.field_type === 'signature' || field.field_type === 'initials') && context.signatureAdopted) {
-      const marker = context.signerName.trim() || 'Signed'
-      merged[field.id] = marker
+    if (field.field_type === 'signature' && context.signatureAdopted) {
+      merged[field.id] = context.signerName.trim() || 'Signed'
     }
   }
   return merged

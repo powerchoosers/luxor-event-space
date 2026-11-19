@@ -77,6 +77,15 @@ test('effective signer values treat prefilled name, date, and adopted signature 
   assert.equal(values.n, 'Pat Smith')
   assert.equal(values.d, '1/2/2026')
   assert.equal(values.s, 'Pat Smith')
+  const { derivedSignerInitials } = fieldTypes
+  assert.equal(derivedSignerInitials('QA Test Signer'), 'QTS')
+  const initials = resolveEffectiveSignerFieldValues([{ id: 'i', field_type: 'initials' }], { i: 'QA Test Signer' }, {
+    signerName: 'QA Test Signer',
+    signerEmail: '',
+    signatureAdopted: true,
+    defaultDate: '1/2/2026',
+  })
+  assert.equal(initials.i, 'QTS')
 })
 
 test('required field completion detects missing values', () => {

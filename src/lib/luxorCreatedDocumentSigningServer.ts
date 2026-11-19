@@ -1,6 +1,6 @@
 import 'server-only'
 
-import { fieldValuesComplete, resolveEffectiveSignerFieldValues } from './luxorCreatedDocumentFieldTypes'
+import { derivedSignerInitials, fieldValuesComplete, resolveEffectiveSignerFieldValues } from './luxorCreatedDocumentFieldTypes'
 import {
   createLuxorCreatedDocumentSigningToken,
   hashLuxorCreatedDocumentSigningToken,
@@ -73,6 +73,9 @@ export async function publicCreatedDocumentSignaturePayload(signer: LuxorCreated
   const adoptedSignatureDataUrl = typeof signedPayload?.signature_data_url === 'string'
     ? signedPayload.signature_data_url
     : undefined
+  const adoptedInitialsDataUrl = typeof signedPayload?.initials_data_url === 'string'
+    ? signedPayload.initials_data_url
+    : undefined
   return {
     flow: 'created_document' as const,
     token,
@@ -86,6 +89,7 @@ export async function publicCreatedDocumentSignaturePayload(signer: LuxorCreated
     decline_reason: signer.decline_reason,
     field_values: savedFieldValues,
     adopted_signature_data_url: adoptedSignatureDataUrl,
+    adopted_initials_data_url: adoptedInitialsDataUrl,
     fields: fields.map((field) => ({
       id: field.id,
       field_type: field.field_type,
@@ -157,6 +161,7 @@ export async function completeLuxorCreatedDocumentSigner(input: {
   signedName: string
   accepted: boolean
   signatureDataUrl: string
+  initialsDataUrl?: string
   fieldValues: Record<string, unknown>
   ip?: string | null
   userAgent?: string | null
@@ -181,6 +186,11 @@ export async function completeLuxorCreatedDocumentSigner(input: {
     signatureAdopted: needsSignature && /^data:image\/png;base64,/i.test(input.signatureDataUrl),
     defaultDate: luxorChicagoDateString(),
   })
+  for (const field of roleFields) {
+    if (field.field_type === 'initials') {
+      mergedFieldValues[field.id] = derivedSignerInitials(signedName) || 'IN'
+    }
+  }
   const completion = fieldValuesComplete(roleFields, mergedFieldValues)
   if (!completion.ok) throw new Error('Please complete all required fields.')
 
@@ -197,6 +207,7 @@ export async function completeLuxorCreatedDocumentSigner(input: {
       ),
     },
     signatureDataUrl: input.signatureDataUrl,
+    initialsDataUrl: input.initialsDataUrl,
   })
 
   const now = new Date().toISOString()
@@ -218,6 +229,7 @@ export async function completeLuxorCreatedDocumentSigner(input: {
       field_ids: roleFields.map((field) => field.id),
       field_values: mergedFieldValues,
       signature_data_url: needsSignature ? input.signatureDataUrl : null,
+      initials_data_url: needsSignature ? input.initialsDataUrl || null : null,
     },
   })
   return updated || signer

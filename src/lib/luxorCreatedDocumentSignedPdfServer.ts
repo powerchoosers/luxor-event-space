@@ -21,6 +21,7 @@ export async function buildLuxorCreatedDocumentSignedPdf(input: {
   roleKey: string
   fieldValues: Record<string, unknown>
   signatureDataUrl: string
+  initialsDataUrl?: string
 }) {
   const document = await getLuxorCreatedDocument(input.documentId)
   if (!document?.pdf_storage_path) throw new Error('The document PDF is not ready yet.')
@@ -30,6 +31,7 @@ export async function buildLuxorCreatedDocumentSignedPdf(input: {
   const pdf = await PDFDocument.load(pdfBytes)
   const fonts = await embedLuxorCreatedDocumentFonts(pdf)
   const signaturePng = input.signatureDataUrl ? decodeLuxorSignaturePng(input.signatureDataUrl) : null
+  const initialsPng = input.initialsDataUrl ? decodeLuxorSignaturePng(input.initialsDataUrl) : null
 
   const stamps: LuxorFieldStampValue[] = roleFields.map((field) => {
     const raw = input.fieldValues[field.id]
@@ -37,12 +39,16 @@ export async function buildLuxorCreatedDocumentSignedPdf(input: {
       return { fieldId: field.id, fieldType: field.field_type, value: raw === true }
     }
     const text = typeof raw === 'string' ? raw : ''
-    const needsImage = field.field_type === 'signature' || field.field_type === 'initials'
+    const image = field.field_type === 'signature'
+      ? signaturePng
+      : field.field_type === 'initials'
+        ? initialsPng
+        : null
     return {
       fieldId: field.id,
       fieldType: field.field_type,
       value: text,
-      ...(needsImage && signaturePng ? { signaturePng } : {}),
+      ...(image ? { signaturePng: image } : {}),
     }
   })
 

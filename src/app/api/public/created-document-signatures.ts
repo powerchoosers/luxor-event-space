@@ -47,6 +47,7 @@ export async function tryCreatedDocumentSignPost(request: NextRequest, token: st
       signedName: String(body.signedName || ''),
       accepted: Boolean(body.accepted),
       signatureDataUrl: String(body.signatureDataUrl || ''),
+      initialsDataUrl: typeof body.initialsDataUrl === 'string' ? body.initialsDataUrl : undefined,
       fieldValues: body.fieldValues && typeof body.fieldValues === 'object' && !Array.isArray(body.fieldValues)
         ? body.fieldValues as Record<string, unknown>
         : {},

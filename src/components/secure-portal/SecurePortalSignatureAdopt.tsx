@@ -25,7 +25,17 @@ export function createTypedSignature(name: string) {
   return canvas.toDataURL('image/png')
 }
 
-export function DrawSignature({ value, onChange }: { value: string | null; onChange: (value: string | null) => void }) {
+export function DrawSignature({
+  value,
+  onChange,
+  compact = false,
+  placeholder = 'Sign here',
+}: {
+  value: string | null
+  onChange: (value: string | null) => void
+  compact?: boolean
+  placeholder?: string
+}) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const drawingRef = useRef(false)
 
@@ -86,7 +96,7 @@ export function DrawSignature({ value, onChange }: { value: string | null; onCha
           ref={canvasRef}
           width={900}
           height={240}
-          className="block h-36 w-full touch-none cursor-crosshair"
+          className={`block w-full touch-none cursor-crosshair ${compact ? 'h-20' : 'h-36'}`}
           onPointerDown={start}
           onPointerMove={draw}
           onPointerUp={finish}
@@ -94,7 +104,7 @@ export function DrawSignature({ value, onChange }: { value: string | null; onCha
         />
         {!value && (
           <div className="pointer-events-none absolute inset-0 flex items-center justify-center text-sm text-[#a39a8d]">
-            Sign here
+            {placeholder}
           </div>
         )}
         <div className="pointer-events-none absolute inset-x-7 bottom-8 border-b border-[#d8d0c4]" />

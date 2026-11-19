@@ -41,6 +41,7 @@ type SignHandlers = {
   signerName: string
   signerEmail: string
   signatureDataUrl: string | null
+  initialsDataUrl?: string | null
   registerFieldRef: (fieldId: string, node: HTMLDivElement | null) => void
   valuesFrozen?: boolean
 }
@@ -190,6 +191,7 @@ function CreatedDocumentPdfPage({
               signerName={sign.signerName}
               signerEmail={sign.signerEmail}
               signatureDataUrl={sign.signatureDataUrl}
+              initialsDataUrl={sign.initialsDataUrl}
               valuesFrozen={sign.valuesFrozen}
               onActive={() => sign.onActiveField(field.id)}
               onValue={(value) => sign.onFieldValue(field.id, value)}
@@ -205,38 +207,44 @@ function CreatedDocumentPdfPage({
 }
 
 function useFitOverlayFontSize(containerRef: React.RefObject<HTMLElement | null>, text: string, maxPx = 11, minPx = 6) {
-  const [fontSize, setFontSize] = useState(maxPx)
+  const [fit, setFit] = useState({ fontSize: maxPx, overflows: false })
   useLayoutEffect(() => {
-    let cancelled = false
-    const applySize = () => {
-      if (cancelled) return
-      const node = containerRef.current
-      if (!node || !text) {
-        setFontSize(maxPx)
+    const node = containerRef.current
+    if (!node) return
+    const measure = () => {
+      if (!containerRef.current) return
+      if (!text) {
+        setFit({ fontSize: maxPx, overflows: false })
         return
       }
       let size = maxPx
       const probe = document.createElement('span')
-      probe.style.visibility = 'hidden'
       probe.style.position = 'absolute'
+      probe.style.visibility = 'hidden'
       probe.style.whiteSpace = 'nowrap'
+      probe.style.pointerEvents = 'none'
       probe.textContent = text
+      probe.style.fontSize = `${size}px`
       node.appendChild(probe)
-      while (size > minPx) {
-        probe.style.fontSize = `${size}px`
-        if (probe.offsetWidth <= node.clientWidth - 6) break
+      const limit = Math.max(8, node.clientWidth - 6)
+      while (size > minPx && probe.offsetWidth > limit) {
         size -= 0.5
+        probe.style.fontSize = `${size}px`
       }
+      probe.style.fontSize = `${size}px`
+      const overflows = probe.offsetWidth > limit
       node.removeChild(probe)
-      setFontSize(Math.max(minPx, size))
+      setFit({ fontSize: Math.max(minPx, size), overflows })
     }
-    const frame = requestAnimationFrame(applySize)
+    const frame = requestAnimationFrame(measure)
+    const observer = new ResizeObserver(() => requestAnimationFrame(measure))
+    observer.observe(node)
     return () => {
-      cancelled = true
       cancelAnimationFrame(frame)
+      observer.disconnect()
     }
   }, [containerRef, maxPx, minPx, text])
-  return fontSize
+  return fit
 }
 
 function SignFieldOverlay({
@@ -246,6 +254,7 @@ function SignFieldOverlay({
   signerName,
   signerEmail,
   signatureDataUrl,
+  initialsDataUrl,
   valuesFrozen,
   onActive,
   onValue,
@@ -258,6 +267,7 @@ function SignFieldOverlay({
   signerName: string
   signerEmail: string
   signatureDataUrl: string | null
+  initialsDataUrl?: string | null
   valuesFrozen?: boolean
   onActive: () => void
   onValue: (value: string | boolean) => void
@@ -270,7 +280,7 @@ function SignFieldOverlay({
     return () => registerRef(null)
   }, [registerRef])
 
-  const base = 'absolute z-10 overflow-hidden rounded-sm border bg-white/92 text-[#1a1816] shadow-sm'
+  const base = 'absolute z-10 overflow-hidden rounded-sm border text-[#1a1816] shadow-sm'
   const ring = active ? 'border-[#c89d4b] ring-2 ring-[#c89d4b]/80' : 'border-[#c89d4b]/55'
   const stringValue = typeof value === 'string' ? value : ''
   const dateFallback = luxorChicagoDateString()
@@ -281,22 +291,26 @@ function SignFieldOverlay({
       : field.field_type === 'email'
         ? (stringValue || signerEmail)
         : stringValue
-  const fitFontSize = useFitOverlayFontSize(ref, textForFit)
+  const fit = useFitOverlayFontSize(ref, textForFit)
+  const frozenShell = valuesFrozen ? 'bg-white' : 'bg-white/92'
 
   if (field.field_type === 'signature' || field.field_type === 'initials') {
-    const showAdopted = Boolean(signatureDataUrl)
+    const image = field.field_type === 'initials' ? (initialsDataUrl || null) : signatureDataUrl
+    const initialsText = field.field_type === 'initials' && stringValue.trim() ? stringValue.trim() : ''
     return (
       <div
         ref={ref}
         role="button"
         tabIndex={0}
         style={normalizedFieldOverlayStyle(field)}
-        className={`${base} ${ring} flex cursor-pointer items-center justify-center`}
-        onClick={(event) => { event.stopPropagation(); onActive(); onSignatureTap() }}
-        onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onActive(); onSignatureTap() } }}
+        className={`${base} ${ring} ${frozenShell} flex cursor-pointer items-center justify-center`}
+        onClick={(event) => { event.stopPropagation(); onActive(); if (!valuesFrozen) onSignatureTap() }}
+        onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onActive(); if (!valuesFrozen) onSignatureTap() } }}
       >
-        {showAdopted ? (
-          <img src={signatureDataUrl!} alt="" className="h-full w-full object-contain p-0.5" />
+        {image ? (
+          <img src={image} alt="" className="h-full w-full object-contain p-0.5" />
+        ) : initialsText ? (
+          <span className="px-1 text-center font-semibold leading-none text-[#1a1816]" style={{ fontSize: `${fit.fontSize}px` }}>{initialsText}</span>
         ) : (
           <span className="px-1 text-center text-[9px] font-semibold uppercase tracking-wide text-[#8b642e]">
             {field.field_type === 'initials' ? 'Initials' : 'Sign'}
@@ -311,7 +325,7 @@ function SignFieldOverlay({
       <div
         ref={ref}
         style={normalizedFieldOverlayStyle(field)}
-        className={`${base} ${ring} flex items-center justify-center`}
+        className={`${base} ${ring} ${frozenShell} flex items-center justify-center`}
       >
         <label className="flex h-full w-full cursor-pointer items-center justify-center">
           <input
@@ -325,24 +339,31 @@ function SignFieldOverlay({
     )
   }
 
+  if (valuesFrozen) {
+    const frozenText = field.field_type === 'date' ? (stringValue || dateFallback) : (stringValue || textForFit)
+    return (
+      <div ref={ref} style={normalizedFieldOverlayStyle(field)} className={`${base} ${ring} ${frozenShell} flex items-center overflow-hidden px-1`}>
+        <span
+          className={`block w-full whitespace-nowrap leading-none text-[#1a1816] ${fit.overflows ? 'overflow-hidden text-ellipsis' : ''}`}
+          style={{ fontSize: `${fit.fontSize}px` }}
+        >
+          {frozenText}
+        </span>
+      </div>
+    )
+  }
+
   if (field.field_type === 'date') {
-    if (valuesFrozen && stringValue.trim()) {
-      return (
-        <div ref={ref} style={normalizedFieldOverlayStyle(field)} className={`${base} ${ring} flex items-center px-1`}>
-          <span className="block w-full truncate leading-none text-[#1a1816]" style={{ fontSize: `${fitFontSize}px` }}>{stringValue}</span>
-        </div>
-      )
-    }
     return (
       <div
         ref={ref}
         style={normalizedFieldOverlayStyle(field)}
-        className={`${base} ${ring}`}
+        className={`${base} ${ring} bg-white/92`}
         onClick={(event) => { event.stopPropagation(); onActive() }}
       >
         <input
           className="h-full min-w-0 w-full bg-transparent px-1 outline-none"
-          style={{ fontSize: `${fitFontSize}px` }}
+          style={{ fontSize: `${fit.fontSize}px` }}
           value={stringValue}
           placeholder={dateFallback}
           onChange={(event) => onValue(event.target.value)}
@@ -352,14 +373,6 @@ function SignFieldOverlay({
           }}
           aria-label={field.label}
         />
-      </div>
-    )
-  }
-
-  if (valuesFrozen && stringValue.trim()) {
-    return (
-      <div ref={ref} style={normalizedFieldOverlayStyle(field)} className={`${base} ${ring} flex items-center px-1`}>
-        <span className="block w-full truncate leading-none text-[#1a1816]" style={{ fontSize: `${fitFontSize}px` }}>{stringValue}</span>
       </div>
     )
   }
@@ -374,12 +387,12 @@ function SignFieldOverlay({
     <div
       ref={ref}
       style={normalizedFieldOverlayStyle(field)}
-      className={`${base} ${ring}`}
+      className={`${base} ${ring} bg-white/92`}
       onClick={(event) => { event.stopPropagation(); onActive() }}
     >
       <input
         className="h-full min-w-0 w-full bg-transparent px-1 outline-none placeholder:text-[#8a8074]"
-        style={{ fontSize: `${fitFontSize}px` }}
+        style={{ fontSize: `${fit.fontSize}px` }}
         value={stringValue}
         placeholder={placeholder}
         onChange={(event) => onValue(event.target.value)}
