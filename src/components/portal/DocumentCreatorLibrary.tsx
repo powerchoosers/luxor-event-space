@@ -59,7 +59,8 @@ function formatLastChange(value: string) {
 
 export function DocumentCreatorLibrary() {
   const router = useRouter()
-  const [primaryTab, setPrimaryTab] = useState<Exclude<LuxorCreatedDocumentLibrarySection, 'archived'>>('my_documents')
+  const [primaryTab, setPrimaryTab] = useState<'my_documents' | 'templates'>('my_documents')
+  const [documentGroup, setDocumentGroup] = useState<'my_documents' | 'out_for_signature' | 'completed'>('my_documents')
   const [showArchived, setShowArchived] = useState(false)
   const [pickerOpen, setPickerOpen] = useState(false)
   const [search, setSearch] = useState('')
@@ -73,7 +74,11 @@ export function DocumentCreatorLibrary() {
   const [error, setError] = useState('')
   const [busyId, setBusyId] = useState<string | null>(null)
 
-  const section: LuxorCreatedDocumentLibrarySection = showArchived ? 'archived' : primaryTab
+  const section: LuxorCreatedDocumentLibrarySection = showArchived
+    ? 'archived'
+    : primaryTab === 'templates'
+      ? 'templates'
+      : documentGroup
   const hasActiveFilters = Boolean(
     search.trim()
     || typeFilter !== 'all'
@@ -176,6 +181,51 @@ export function DocumentCreatorLibrary() {
         />
       </div>
 
+      {primaryTab === 'my_documents' && !showArchived ? (
+        <>
+          <div className="relative z-[64] grid grid-cols-3 gap-1 px-4 sm:hidden" role="tablist" aria-label="Document groupings">
+            {([
+              ['my_documents', 'Drafts'],
+              ['out_for_signature', 'Out for signature'],
+              ['completed', 'Completed'],
+            ] as const).map(([id, label]) => {
+              const selected = documentGroup === id
+              return (
+                <button
+                  key={id}
+                  type="button"
+                  role="tab"
+                  aria-selected={selected}
+                  onClick={() => setDocumentGroup(id)}
+                  className={`relative z-[64] min-h-11 rounded-lg border px-1.5 text-center text-[11px] font-semibold leading-tight ${
+                    selected
+                      ? 'border-[color:var(--portal-border)] bg-[color:var(--portal-card)] text-[color:var(--portal-text)]'
+                      : 'border-transparent bg-[color:var(--portal-soft)] text-[color:var(--portal-muted)]'
+                  }`}
+                >
+                  {label}
+                </button>
+              )
+            })}
+          </div>
+          <div className="relative z-[64] hidden min-w-0 max-w-full overflow-x-auto px-4 pb-1 sm:block sm:px-0">
+            <PortalAnimatedTabs
+              variant="slider"
+              ariaLabel="Document groupings"
+              tabs={[
+                { id: 'my_documents', label: 'Drafts', icon: <FileText size={15} /> },
+                { id: 'out_for_signature', label: 'Out for signature', icon: <FileText size={15} /> },
+                { id: 'completed', label: 'Completed', icon: <FileText size={15} /> },
+              ]}
+              activeTab={documentGroup}
+              onTabChange={(tab) => {
+                if (tab === 'my_documents' || tab === 'out_for_signature' || tab === 'completed') setDocumentGroup(tab)
+              }}
+            />
+          </div>
+        </>
+      ) : null}
+
       <PortalFilterBar searchValue={search} onSearchChange={setSearch} searchPlaceholder="Search by title">
         <div className="grid w-full gap-3 min-[1280px]:grid-cols-2 xl:grid-cols-4">
           <PortalSelect value={typeFilter} onChange={setTypeFilter} options={typeFilterOptions} aria-label="Document type filter" />
@@ -239,7 +289,7 @@ export function DocumentCreatorLibrary() {
           ) : (
             <PortalEmptyState
               icon={<FileText size={24} />}
-              title={showArchived ? 'No archived documents' : primaryTab === 'templates' ? 'No templates yet' : 'No documents yet'}
+              title={showArchived ? 'No archived documents' : primaryTab === 'templates' ? 'No templates yet' : documentGroup === 'out_for_signature' ? 'Nothing out for signature' : documentGroup === 'completed' ? 'No completed documents' : 'No documents yet'}
               description={
                 showArchived
                   ? 'Archived agreements appear here when you archive them from Documents or Templates.'
@@ -271,6 +321,9 @@ export function DocumentCreatorLibrary() {
                       <p className="mt-1 text-xs text-[color:var(--portal-muted)]">
                         {LUXOR_CREATED_DOCUMENT_TYPE_LABELS[document.document_type]} · {formatLastChange(document.updated_at)}
                       </p>
+                      {document.recipient_summary ? (
+                        <p className="mt-1 truncate text-xs text-[color:var(--portal-muted)]">{document.recipient_summary}</p>
+                      ) : null}
                       <div className="mt-2">
                         <PortalStatusBadge status={presentation.label} tone={presentation.tone} />
                       </div>
@@ -353,7 +406,7 @@ export function DocumentCreatorLibrary() {
                         <td className="px-4 sm:px-6">
                           <PortalStatusBadge status={presentation.label} tone={presentation.tone} />
                         </td>
-                        <td className="px-4 tabular-nums text-[color:var(--portal-faint)] sm:px-6">—</td>
+                        <td className="max-w-[14rem] truncate px-4 text-[color:var(--portal-muted)] sm:px-6">{document.recipient_summary || '—'}</td>
                         <td className="px-4 tabular-nums text-[color:var(--portal-muted)] sm:px-6">{formatLastChange(document.updated_at)}</td>
                         <td className="px-4 sm:px-6">
                           <div className="flex flex-wrap items-center justify-end gap-2">

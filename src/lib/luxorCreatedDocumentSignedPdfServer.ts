@@ -9,6 +9,7 @@ import {
   type LuxorFieldStampValue,
 } from './luxorCreatedDocumentFieldStamp'
 import { listLuxorCreatedDocumentFieldsForRole } from './luxorCreatedDocumentFieldsServer'
+import { executedCreatedDocumentPdfPath } from './luxorCreatedDocumentSendPlan'
 import { getLuxorCreatedDocument } from './luxorDocumentCreatorServer'
 
 function signedPdfPath(documentId: string, signerId: string) {
@@ -55,6 +56,50 @@ export async function buildLuxorCreatedDocumentSignedPdf(input: {
   await stampLuxorFieldsOnPdf({ pdf, fields: roleFields, stamps, fonts })
   const output = await pdf.save()
   const path = signedPdfPath(input.documentId, input.signerId)
+  await saveLuxorPrivatePdf(path, Buffer.from(output))
+  return path
+}
+
+export async function buildLuxorCreatedDocumentExecutedPdf(input: {
+  documentId: string
+  signers: Array<{
+    roleKey: string
+    fieldValues: Record<string, unknown>
+    signatureDataUrl?: string | null
+    initialsDataUrl?: string | null
+  }>
+}) {
+  const document = await getLuxorCreatedDocument(input.documentId)
+  if (!document?.pdf_storage_path) throw new Error('The document PDF is not ready yet.')
+  const pdfBytes = await downloadLuxorPrivatePdf(document.pdf_storage_path)
+  const pdf = await PDFDocument.load(pdfBytes)
+  const fonts = await embedLuxorCreatedDocumentFonts(pdf)
+  for (const signer of input.signers) {
+    const roleFields = await listLuxorCreatedDocumentFieldsForRole(input.documentId, signer.roleKey)
+    const signaturePng = signer.signatureDataUrl ? decodeLuxorSignaturePng(signer.signatureDataUrl) : null
+    const initialsPng = signer.initialsDataUrl ? decodeLuxorSignaturePng(signer.initialsDataUrl) : null
+    const stamps: LuxorFieldStampValue[] = roleFields.map((field) => {
+      const raw = signer.fieldValues[field.id]
+      if (field.field_type === 'checkbox') {
+        return { fieldId: field.id, fieldType: field.field_type, value: raw === true }
+      }
+      const text = typeof raw === 'string' ? raw : ''
+      const image = field.field_type === 'signature'
+        ? signaturePng
+        : field.field_type === 'initials'
+          ? initialsPng
+          : null
+      return {
+        fieldId: field.id,
+        fieldType: field.field_type,
+        value: text,
+        ...(image ? { signaturePng: image } : {}),
+      }
+    })
+    await stampLuxorFieldsOnPdf({ pdf, fields: roleFields, stamps, fonts })
+  }
+  const output = await pdf.save()
+  const path = executedCreatedDocumentPdfPath(input.documentId)
   await saveLuxorPrivatePdf(path, Buffer.from(output))
   return path
 }

@@ -65,6 +65,8 @@ export type LuxorCreatedDocumentSignerRow = {
   last_ip: string | null
   last_user_agent: string | null
   signed_pdf_path: string | null
+  invited_at?: string | null
+  token_ciphertext?: string | null
   created_at?: string
   updated_at?: string
 }

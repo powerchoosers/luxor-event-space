@@ -12,7 +12,10 @@ import {
   PortalSelect,
   PortalStatusBadge,
 } from '@/components/portal/PortalUI'
+import { DocumentCreatorSignerStatus } from '@/components/portal/DocumentCreatorSendStep'
+import { createdDocumentStatusPresentation } from '@/lib/luxorDocumentCreatorStatus'
 import {
+  displayStatusForDocument,
   LUXOR_CREATED_DOCUMENT_TYPES,
   LUXOR_CREATED_DOCUMENT_TYPE_LABELS,
   type LuxorCreatedDocumentRow,
@@ -48,10 +51,11 @@ type Props = {
   onFormChange?: (form: { title: string; documentType: LuxorCreatedDocumentType; bodyHtml: string }) => void
   onDirtyChange?: (dirty: boolean) => void
   waitForPdfIdle?: () => Promise<LuxorCreatedDocumentRow | null | void>
+  readOnly?: boolean
 }
 
 export const DocumentCreatorEditor = forwardRef<DocumentCreatorEditorHandle, Props>(function DocumentCreatorEditor(
-  { bootstrap, revision, onSaved, onFormChange, onDirtyChange, waitForPdfIdle },
+  { bootstrap, revision, onSaved, onFormChange, onDirtyChange, waitForPdfIdle, readOnly = false },
   ref,
 ) {
   const reduceMotion = useReducedMotion()
@@ -66,8 +70,10 @@ export const DocumentCreatorEditor = forwardRef<DocumentCreatorEditorHandle, Pro
   const tiptapRef = useRef<Editor | null>(null)
   const titleRef = useRef(title)
   const documentTypeRef = useRef(documentType)
+  const readOnlyRef = useRef(readOnly)
   titleRef.current = title
   documentTypeRef.current = documentType
+  readOnlyRef.current = readOnly
 
   const markDirty = useCallback(() => {
     dirtyRef.current = true
@@ -90,6 +96,7 @@ export const DocumentCreatorEditor = forwardRef<DocumentCreatorEditorHandle, Pro
       Placeholder.configure({ placeholder: 'Paste or type agreement text. Formatting is preserved; text is not rewritten.' }),
     ],
     content: { type: 'doc', content: [{ type: 'paragraph' }] },
+    editable: !readOnly,
     editorProps: {
       attributes: { class: editorBodyClass },
       handlePaste: (_view, event) => {
@@ -114,6 +121,7 @@ export const DocumentCreatorEditor = forwardRef<DocumentCreatorEditorHandle, Pro
       tiptapRef.current = null
     },
     onUpdate: ({ editor: tiptap }) => {
+      if (readOnlyRef.current) return
       markDirty()
       setSaveState('idle')
       onFormChange?.({
@@ -206,7 +214,13 @@ export const DocumentCreatorEditor = forwardRef<DocumentCreatorEditorHandle, Pro
     return json.document as LuxorCreatedDocumentRow
   }
 
+  useEffect(() => {
+    editor?.setEditable(!readOnly)
+    if (readOnly) clearDirty()
+  }, [clearDirty, editor, readOnly])
+
   const persist = useCallback(async (asTemplate: boolean) => {
+    if (readOnly) return null
     const body = payload()
     if (!body || !body.title.trim()) {
       setSaveError('Add a title before saving.')
@@ -289,7 +303,7 @@ export const DocumentCreatorEditor = forwardRef<DocumentCreatorEditorHandle, Pro
       setSaveError(error instanceof Error ? error.message : 'Document could not be saved.')
       return null
     }
-  }, [clearDirty, onSaved, payload, record, waitForPdfIdle])
+  }, [clearDirty, onSaved, payload, readOnly, record, waitForPdfIdle])
 
   useImperativeHandle(ref, () => ({
     saveDraft: () => persist(false),
@@ -299,7 +313,7 @@ export const DocumentCreatorEditor = forwardRef<DocumentCreatorEditorHandle, Pro
   }), [persist, saveState])
 
   useEffect(() => {
-    if (!record?.id || !dirtyRef.current) return
+    if (readOnly || !record?.id || !dirtyRef.current) return
     if (autosaveTimer.current) clearTimeout(autosaveTimer.current)
     autosaveTimer.current = setTimeout(() => {
       void persist(false)
@@ -307,22 +321,21 @@ export const DocumentCreatorEditor = forwardRef<DocumentCreatorEditorHandle, Pro
     return () => {
       if (autosaveTimer.current) clearTimeout(autosaveTimer.current)
     }
-  }, [title, documentType, editor, persist, record?.id])
+  }, [title, documentType, editor, persist, readOnly, record?.id])
 
-  const autosaveLabel =
-    saveState === 'saving'
-      ? 'Saving…'
-      : saveState === 'saved' && record
-        ? `Saved · v${record.version}`
-        : saveState === 'error'
-          ? 'Save failed'
-          : dirtyRef.current
-            ? 'Unsaved changes'
-            : record?.is_template
-              ? 'Template'
-              : record
-                ? `Draft · v${record.version}`
-                : 'New draft'
+  const autosaveLabel = readOnly && record
+    ? createdDocumentStatusPresentation(displayStatusForDocument(record)).label
+    : saveState === 'saving'
+    ? 'Saving…'
+    : saveState === 'error'
+      ? 'Save failed'
+      : dirtyRef.current
+        ? 'Unsaved changes'
+        : record
+          ? (record.status === 'draft' && !record.is_template && !record.archived_at
+            ? (saveState === 'saved' ? `Saved · v${record.version}` : `Draft · v${record.version}`)
+            : createdDocumentStatusPresentation(displayStatusForDocument(record)).label)
+          : 'New draft'
 
   const runHeading = (level: 1 | 2 | 3) => {
     editor?.chain().focus().toggleHeading({ level }).run()
@@ -332,13 +345,15 @@ export const DocumentCreatorEditor = forwardRef<DocumentCreatorEditorHandle, Pro
     <div className="min-w-0 max-w-full space-y-4 overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-4 sm:p-5">
       <div className="flex items-center justify-between gap-2">
         <h2 className="text-sm font-semibold text-[color:var(--portal-text)]">Create</h2>
-        <PortalStatusBadge status={autosaveLabel} tone="neutral" />
+        <PortalStatusBadge status={autosaveLabel} tone={record && record.status !== 'draft' ? createdDocumentStatusPresentation(displayStatusForDocument(record)).tone : 'neutral'} />
       </div>
+      {readOnly && record?.id ? <DocumentCreatorSignerStatus documentId={record.id} documentStatus={record.status} /> : null}
       <label className="block space-y-1.5">
         <span className="text-xs font-medium text-[color:var(--portal-muted)]">Title</span>
         <input
           className={`${editorFieldClassBase} ${reduceMotion ? 'motion-reduce:transition-none' : 'transition-colors'}`}
           value={title}
+          disabled={readOnly}
           onChange={(event) => {
             markDirty()
             setTitle(event.target.value)
@@ -366,19 +381,20 @@ export const DocumentCreatorEditor = forwardRef<DocumentCreatorEditorHandle, Pro
           }}
           options={typeOptions}
           aria-label="Document type"
+          disabled={readOnly}
         />
       </label>
 
       <div className="space-y-2">
         <div className="flex flex-wrap items-center gap-1 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-1">
-          <ToolbarButton label="Bold" active={editor?.isActive('bold')} onClick={() => editor?.chain().focus().toggleBold().run()}><Bold size={14} /></ToolbarButton>
-          <ToolbarButton label="Italic" active={editor?.isActive('italic')} onClick={() => editor?.chain().focus().toggleItalic().run()}><Italic size={14} /></ToolbarButton>
-          <ToolbarButton label="Underline" active={editor?.isActive('underline')} onClick={() => editor?.chain().focus().toggleUnderline().run()}><UnderlineIcon size={14} /></ToolbarButton>
-          <ToolbarButton label="Heading 1" active={editor?.isActive('heading', { level: 1 })} onClick={() => runHeading(1)}>H1</ToolbarButton>
-          <ToolbarButton label="Heading 2" active={editor?.isActive('heading', { level: 2 })} onClick={() => runHeading(2)}>H2</ToolbarButton>
-          <ToolbarButton label="Heading 3" active={editor?.isActive('heading', { level: 3 })} onClick={() => runHeading(3)}>H3</ToolbarButton>
-          <ToolbarButton label="Bullet list" active={editor?.isActive('bulletList')} onClick={() => editor?.chain().focus().toggleBulletList().run()}><List size={14} /></ToolbarButton>
-          <ToolbarButton label="Numbered list" active={editor?.isActive('orderedList')} onClick={() => editor?.chain().focus().toggleOrderedList().run()}><ListTodo size={14} /></ToolbarButton>
+          <ToolbarButton label="Bold" disabled={readOnly} active={editor?.isActive('bold')} onClick={() => editor?.chain().focus().toggleBold().run()}><Bold size={14} /></ToolbarButton>
+          <ToolbarButton label="Italic" disabled={readOnly} active={editor?.isActive('italic')} onClick={() => editor?.chain().focus().toggleItalic().run()}><Italic size={14} /></ToolbarButton>
+          <ToolbarButton label="Underline" disabled={readOnly} active={editor?.isActive('underline')} onClick={() => editor?.chain().focus().toggleUnderline().run()}><UnderlineIcon size={14} /></ToolbarButton>
+          <ToolbarButton label="Heading 1" disabled={readOnly} active={editor?.isActive('heading', { level: 1 })} onClick={() => runHeading(1)}>H1</ToolbarButton>
+          <ToolbarButton label="Heading 2" disabled={readOnly} active={editor?.isActive('heading', { level: 2 })} onClick={() => runHeading(2)}>H2</ToolbarButton>
+          <ToolbarButton label="Heading 3" disabled={readOnly} active={editor?.isActive('heading', { level: 3 })} onClick={() => runHeading(3)}>H3</ToolbarButton>
+          <ToolbarButton label="Bullet list" disabled={readOnly} active={editor?.isActive('bulletList')} onClick={() => editor?.chain().focus().toggleBulletList().run()}><List size={14} /></ToolbarButton>
+          <ToolbarButton label="Numbered list" disabled={readOnly} active={editor?.isActive('orderedList')} onClick={() => editor?.chain().focus().toggleOrderedList().run()}><ListTodo size={14} /></ToolbarButton>
         </div>
         <fieldset className="min-w-0 overflow-hidden rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]">
           <legend className="sr-only">Agreement body</legend>
@@ -396,17 +412,20 @@ function ToolbarButton({
   active,
   onClick,
   children,
+  disabled = false,
 }: {
   label: string
   active?: boolean
   onClick: () => void
   children: ReactNode
+  disabled?: boolean
 }) {
   return (
     <button
       type="button"
       aria-label={label}
       title={label}
+      disabled={disabled}
       onClick={onClick}
       className={`inline-flex h-8 min-w-8 items-center justify-center rounded-md px-2 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 motion-reduce:transition-none ${
         active

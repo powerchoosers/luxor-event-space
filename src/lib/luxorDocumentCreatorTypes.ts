@@ -37,16 +37,23 @@ export const LUXOR_CREATED_DOCUMENT_STATUS_LABELS: Record<LuxorCreatedDocumentSt
   draft: 'Draft',
   template: 'Template',
   sent: 'Sent',
-  opened: 'Opened',
+  opened: 'Viewed',
   partially_signed: 'Partially signed',
-  signed: 'Signed',
+  signed: 'Fully signed',
   declined: 'Declined',
   expired: 'Expired',
   voided: 'Voided',
   archived: 'Archived',
 }
 
-export type LuxorCreatedDocumentLibrarySection = 'my_documents' | 'templates' | 'archived'
+export type LuxorCreatedDocumentLibrarySection =
+  | 'my_documents'
+  | 'out_for_signature'
+  | 'completed'
+  | 'templates'
+  | 'archived'
+
+export type LuxorCreatedDocumentSigningOrder = 'parallel' | 'sequential'
 
 export type LuxorCreatedDocumentRow = {
   id: string
@@ -63,11 +70,21 @@ export type LuxorCreatedDocumentRow = {
   version: number
   pdf_storage_path: string | null
   source_template_id: string | null
+  signing_order?: LuxorCreatedDocumentSigningOrder
+  reminder_enabled?: boolean
+  reminder_after_days?: number
+  sent_subject?: string | null
+  sent_message?: string | null
+  sent_at?: string | null
+  voided_at?: string | null
+  final_pdf_path?: string | null
+  recipient_summary?: string | null
+  signing_link_origin?: string | null
 }
 
 export type LuxorCreatedDocumentSummary = Pick<
   LuxorCreatedDocumentRow,
-  'id' | 'created_at' | 'updated_at' | 'title' | 'document_type' | 'is_template' | 'status' | 'archived_at' | 'created_by' | 'version'
+  'id' | 'created_at' | 'updated_at' | 'title' | 'document_type' | 'is_template' | 'status' | 'archived_at' | 'created_by' | 'version' | 'recipient_summary'
 >
 
 export function isLuxorCreatedDocumentType(value: unknown): value is LuxorCreatedDocumentType {

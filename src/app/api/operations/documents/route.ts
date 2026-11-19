@@ -7,7 +7,7 @@ import {
 } from '@/lib/luxorDocumentCreatorServer'
 import { isLuxorCreatedDocumentType, type LuxorCreatedDocumentLibrarySection } from '@/lib/luxorDocumentCreatorTypes'
 
-const SECTIONS: LuxorCreatedDocumentLibrarySection[] = ['my_documents', 'templates', 'archived']
+const SECTIONS: LuxorCreatedDocumentLibrarySection[] = ['my_documents', 'out_for_signature', 'completed', 'templates', 'archived']
 
 export async function GET(request: NextRequest) {
   const session = await getOperationsSession()

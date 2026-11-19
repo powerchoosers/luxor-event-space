@@ -7,6 +7,7 @@ import type { LuxorCreatedDocumentFieldType } from '@/lib/luxorCreatedDocumentFi
 import { LUXOR_CREATED_DOCUMENT_FIELD_TYPE_LABELS } from '@/lib/luxorCreatedDocumentFieldTypes'
 import { normalizedFieldOverlayStyle, luxorChicagoDateString } from '@/lib/luxorCreatedDocumentFieldLayout'
 import { ensureLuxorPdfJsWorker } from '@/lib/luxorPdfJsWorkerClient'
+import { resetSignerPageZoom, signerOverlayInputPresentation } from '@/lib/luxorCreatedDocumentSignerOverlay'
 
 export type CreatedDocumentPdfField = {
   id: string
@@ -213,15 +214,23 @@ function useFitInputFontSize(inputRef: React.RefObject<HTMLInputElement | null>,
     if (!input) return
     const measure = () => {
       const node = inputRef.current
-      if (!node || node.clientWidth <= 0) return
-      const previous = node.style.fontSize
+      const box = node?.parentElement
+      const boxWidth = box?.clientWidth ?? 0
+      if (!node || boxWidth <= 0) return
+      const previousFont = node.style.fontSize
+      const previousWidth = node.style.width
+      const previousTransform = node.style.transform
+      node.style.transform = 'none'
+      node.style.width = `${boxWidth}px`
       let size = maxPx
       node.style.fontSize = `${size}px`
-      while (size > minPx && node.scrollWidth > node.clientWidth + 1) {
+      while (size > minPx && node.scrollWidth > boxWidth + 1) {
         size = Math.round((size - 0.5) * 10) / 10
         node.style.fontSize = `${size}px`
       }
-      node.style.fontSize = previous
+      node.style.fontSize = previousFont
+      node.style.width = previousWidth
+      node.style.transform = previousTransform
       const next = Math.max(minPx, size)
       setFontSize((current) => (Math.abs(current - next) < 0.1 ? current : next))
     }
@@ -324,6 +333,7 @@ function SignFieldOverlay({
         : stringValue
   const fit = useFitOverlayFontSize(ref, textForFit)
   const inputFontSize = useFitInputFontSize(inputRef, textForFit)
+  const overlayInputStyle = signerOverlayInputPresentation(inputFontSize)
   const frozenShell = valuesFrozen ? 'bg-white' : 'bg-white/92'
 
   if (field.field_type === 'signature' || field.field_type === 'initials') {
@@ -397,10 +407,11 @@ function SignFieldOverlay({
           ref={inputRef}
           data-overlay-fit=""
           className="h-full min-w-0 w-full bg-transparent px-1 outline-none"
-          style={{ fontSize: `${inputFontSize}px` }}
+          style={overlayInputStyle}
           value={stringValue}
           placeholder={dateFallback}
           onChange={(event) => onValue(event.target.value)}
+          onBlur={() => resetSignerPageZoom()}
           onFocus={() => {
             onActive()
             if (!stringValue) onValue(dateFallback)
@@ -428,10 +439,11 @@ function SignFieldOverlay({
         ref={inputRef}
         data-overlay-fit=""
         className="h-full min-w-0 w-full overflow-hidden bg-transparent px-1 outline-none placeholder:text-[#8a8074]"
-        style={{ fontSize: `${inputFontSize}px` }}
+        style={overlayInputStyle}
         value={stringValue}
         placeholder={placeholder}
         onChange={(event) => onValue(event.target.value)}
+        onBlur={() => resetSignerPageZoom()}
         onFocus={() => {
           onActive()
           if (field.field_type === 'name' && !stringValue && signerName.trim()) onValue(signerName.trim())

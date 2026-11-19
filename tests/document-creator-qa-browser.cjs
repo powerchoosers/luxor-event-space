@@ -46,10 +46,12 @@ test('document creator QA harness screenshots', { timeout: 180_000 }, async () =
         for (const locator of [name, email]) {
           const fit = await locator.evaluate((node) => ({
             fontSize: Number.parseFloat(getComputedStyle(node).fontSize),
+            transform: getComputedStyle(node).transform,
             scrollWidth: node.scrollWidth,
             clientWidth: node.clientWidth,
           }))
-          assert.ok(fit.fontSize <= 11.1, `expected overlay font <= 11px, got ${fit.fontSize}`)
+          assert.ok(fit.fontSize >= 16, `expected overlay font at least 16px so iOS does not zoom, got ${fit.fontSize}`)
+          assert.ok(fit.transform !== 'none', 'expected a scale transform to fit the overlay')
           assert.ok(fit.scrollWidth <= fit.clientWidth + 1, `text overflows ${fit.scrollWidth} > ${fit.clientWidth}`)
         }
         await screenshot(page, 'signer-390-field-fit')
