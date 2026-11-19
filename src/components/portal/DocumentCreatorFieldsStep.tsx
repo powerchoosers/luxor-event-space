@@ -28,13 +28,37 @@ type Props = {
   documentId: string
   pdfUrl: string | null
   canEdit: boolean
+  onDirtyChange?: (dirty: boolean) => void
+}
+
+function fieldsPlacementSnapshot(fields: LocalField[], signers: LuxorCreatedDocumentSignerRow[]) {
+  return JSON.stringify({
+    fields: fields.map((field) => ({
+      field_type: field.field_type,
+      role_key: field.role_key,
+      label: field.label,
+      required: field.required,
+      page_index: field.page_index,
+      x: field.x,
+      y: field.y,
+      w: field.w,
+      h: field.h,
+      sort_order: field.sort_order,
+    })),
+    signers: signers.map((signer) => ({
+      id: signer.id,
+      role_label: signer.role_label,
+      name: signer.name,
+      email: signer.email,
+    })),
+  })
 }
 
 function newClientId() {
   return `field_${Math.random().toString(36).slice(2, 10)}`
 }
 
-export function DocumentCreatorFieldsStep({ documentId, pdfUrl, canEdit }: Props) {
+export function DocumentCreatorFieldsStep({ documentId, pdfUrl, canEdit, onDirtyChange }: Props) {
   const [fields, setFields] = useState<LocalField[]>([])
   const [signers, setSigners] = useState<LuxorCreatedDocumentSignerRow[]>([])
   const [selectedId, setSelectedId] = useState<string | null>(null)
@@ -51,6 +75,7 @@ export function DocumentCreatorFieldsStep({ documentId, pdfUrl, canEdit }: Props
   const canvasWrapRef = useRef<HTMLDivElement | null>(null)
   const pageRef = useRef<HTMLDivElement | null>(null)
   const dragRef = useRef<{ id: string; mode: 'move' | 'resize'; startX: number; startY: number; origin: LocalField } | null>(null)
+  const savedSnapshotRef = useRef('')
 
   const roleOrder = useMemo(() => signers.map((signer) => signer.role_key), [signers])
   const selected = fields.find((field) => field.clientId === selectedId) || null
@@ -64,7 +89,7 @@ export function DocumentCreatorFieldsStep({ documentId, pdfUrl, canEdit }: Props
       if (!response.ok) throw new Error(body.error || 'Fields could not be loaded.')
       setSigners(body.signers || [])
       setTestRoleKey(body.signers?.[0]?.role_key || '')
-      setFields((body.fields || []).map((field: LuxorCreatedDocumentFieldRow) => ({
+      const nextFields = (body.fields || []).map((field: LuxorCreatedDocumentFieldRow) => ({
         clientId: field.id,
         id: field.id,
         field_type: field.field_type,
@@ -77,15 +102,25 @@ export function DocumentCreatorFieldsStep({ documentId, pdfUrl, canEdit }: Props
         w: field.w,
         h: field.h,
         sort_order: field.sort_order,
-      })))
+      }))
+      const nextSigners = body.signers || []
+      setFields(nextFields)
+      savedSnapshotRef.current = fieldsPlacementSnapshot(nextFields, nextSigners)
+      onDirtyChange?.(false)
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : 'Fields could not be loaded.')
     } finally {
       setLoading(false)
     }
-  }, [documentId])
+  }, [documentId, onDirtyChange])
 
   useEffect(() => { void load() }, [load])
+
+  useEffect(() => {
+    if (loading) return
+    const dirty = fieldsPlacementSnapshot(fields, signers) !== savedSnapshotRef.current
+    onDirtyChange?.(dirty)
+  }, [fields, loading, onDirtyChange, signers])
 
   useEffect(() => {
     const wrap = canvasWrapRef.current
@@ -172,11 +207,15 @@ export function DocumentCreatorFieldsStep({ documentId, pdfUrl, canEdit }: Props
       })
       const body = await response.json()
       if (!response.ok) throw new Error(body.error || 'Fields could not be saved.')
-      setFields((body.fields || []).map((field: LuxorCreatedDocumentFieldRow) => ({
+      const nextFields = (body.fields || []).map((field: LuxorCreatedDocumentFieldRow) => ({
         clientId: field.id,
         ...field,
-      })))
-      setSigners(body.signers || [])
+      }))
+      const nextSigners = body.signers || []
+      setFields(nextFields)
+      setSigners(nextSigners)
+      savedSnapshotRef.current = fieldsPlacementSnapshot(nextFields, nextSigners)
+      onDirtyChange?.(false)
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : 'Fields could not be saved.')
     } finally {

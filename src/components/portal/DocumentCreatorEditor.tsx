@@ -38,6 +38,7 @@ export type DocumentCreatorEditorHandle = {
   saveDraft: () => Promise<LuxorCreatedDocumentRow | null>
   saveTemplate: () => Promise<LuxorCreatedDocumentRow | null>
   isSaving: boolean
+  isDirty: () => boolean
 }
 
 type Props = {
@@ -45,11 +46,12 @@ type Props = {
   revision?: LuxorCreatedDocumentRow | null
   onSaved?: (document: LuxorCreatedDocumentRow) => void
   onFormChange?: (form: { title: string; documentType: LuxorCreatedDocumentType; bodyHtml: string }) => void
+  onDirtyChange?: (dirty: boolean) => void
   waitForPdfIdle?: () => Promise<LuxorCreatedDocumentRow | null | void>
 }
 
 export const DocumentCreatorEditor = forwardRef<DocumentCreatorEditorHandle, Props>(function DocumentCreatorEditor(
-  { bootstrap, revision, onSaved, onFormChange, waitForPdfIdle },
+  { bootstrap, revision, onSaved, onFormChange, onDirtyChange, waitForPdfIdle },
   ref,
 ) {
   const reduceMotion = useReducedMotion()
@@ -66,6 +68,16 @@ export const DocumentCreatorEditor = forwardRef<DocumentCreatorEditorHandle, Pro
   const documentTypeRef = useRef(documentType)
   titleRef.current = title
   documentTypeRef.current = documentType
+
+  const markDirty = useCallback(() => {
+    dirtyRef.current = true
+    onDirtyChange?.(true)
+  }, [onDirtyChange])
+
+  const clearDirty = useCallback(() => {
+    dirtyRef.current = false
+    onDirtyChange?.(false)
+  }, [onDirtyChange])
 
   const editor = useEditor({
     extensions: [
@@ -102,7 +114,7 @@ export const DocumentCreatorEditor = forwardRef<DocumentCreatorEditorHandle, Pro
       tiptapRef.current = null
     },
     onUpdate: ({ editor: tiptap }) => {
-      dirtyRef.current = true
+      markDirty()
       setSaveState('idle')
       onFormChange?.({
         title: titleRef.current,
@@ -121,12 +133,13 @@ export const DocumentCreatorEditor = forwardRef<DocumentCreatorEditorHandle, Pro
     setRecord(bootstrap)
     const safeDoc = sanitizeTipTapDocumentForEditor(bootstrap.body_json || { type: 'doc', content: [{ type: 'paragraph' }] })
     editor.commands.setContent(safeDoc as Content, { emitUpdate: false })
+    clearDirty()
     onFormChange?.({
       title: bootstrap.title,
       documentType: bootstrap.document_type,
       bodyHtml: bootstrap.body_html || editor.getHTML(),
     })
-  }, [bootstrap, editor, onFormChange])
+  }, [bootstrap, clearDirty, editor, onFormChange])
 
   useEffect(() => {
     if (!revision?.id) return
@@ -230,7 +243,7 @@ export const DocumentCreatorEditor = forwardRef<DocumentCreatorEditorHandle, Pro
         const json = await response.json()
         if (!response.ok) throw new Error(json.error || 'Document could not be saved.')
         setRecord(json.document)
-        dirtyRef.current = false
+        clearDirty()
         setSaveState('saved')
         onSaved?.(json.document)
         return json.document as LuxorCreatedDocumentRow
@@ -244,7 +257,7 @@ export const DocumentCreatorEditor = forwardRef<DocumentCreatorEditorHandle, Pro
       }
       const document = await patchDocument(saveTarget.id, saveTarget.updated_at, body, asTemplate, snapshot, true)
       setRecord(document)
-      dirtyRef.current = false
+      clearDirty()
       setSaveState('saved')
       onSaved?.(document)
       return document
@@ -253,12 +266,13 @@ export const DocumentCreatorEditor = forwardRef<DocumentCreatorEditorHandle, Pro
       setSaveError(error instanceof Error ? error.message : 'Document could not be saved.')
       return null
     }
-  }, [onSaved, payload, record, waitForPdfIdle])
+  }, [clearDirty, onSaved, payload, record, waitForPdfIdle])
 
   useImperativeHandle(ref, () => ({
     saveDraft: () => persist(false),
     saveTemplate: () => persist(true),
     isSaving: saveState === 'saving',
+    isDirty: () => dirtyRef.current,
   }), [persist, saveState])
 
   useEffect(() => {
@@ -300,7 +314,15 @@ export const DocumentCreatorEditor = forwardRef<DocumentCreatorEditorHandle, Pro
         <input
           className={`${editorFieldClassBase} ${reduceMotion ? 'motion-reduce:transition-none' : 'transition-colors'}`}
           value={title}
-          onChange={(event) => setTitle(event.target.value)}
+          onChange={(event) => {
+            markDirty()
+            setTitle(event.target.value)
+            onFormChange?.({
+              title: event.target.value,
+              documentType: documentTypeRef.current,
+              bodyHtml: editor?.getHTML() || '',
+            })
+          }}
           maxLength={300}
         />
       </label>
@@ -308,7 +330,15 @@ export const DocumentCreatorEditor = forwardRef<DocumentCreatorEditorHandle, Pro
         <span className="text-xs font-medium text-[color:var(--portal-muted)]">Document type</span>
         <PortalSelect
           value={documentType}
-          onChange={(value) => setDocumentType(value as LuxorCreatedDocumentType)}
+          onChange={(value) => {
+            markDirty()
+            setDocumentType(value as LuxorCreatedDocumentType)
+            onFormChange?.({
+              title: titleRef.current,
+              documentType: value as LuxorCreatedDocumentType,
+              bodyHtml: editor?.getHTML() || '',
+            })
+          }}
           options={typeOptions}
           aria-label="Document type"
         />

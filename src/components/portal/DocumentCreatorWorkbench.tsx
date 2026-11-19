@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useReducedMotion } from 'framer-motion'
-import { PortalButton, PortalPageFrame, PortalPageHeader } from '@/components/portal/PortalUI'
+import { PortalButton, PortalModal, PortalPageFrame, PortalPageHeader } from '@/components/portal/PortalUI'
 import { DocumentCreatorEditor, type DocumentCreatorEditorHandle } from '@/components/portal/DocumentCreatorEditor'
 import { DocumentCreatorPaperPreview } from '@/components/portal/DocumentCreatorPaperPreview'
 import { DocumentCreatorPdfPreview } from '@/components/portal/DocumentCreatorPdfPreview'
@@ -26,6 +26,8 @@ type FormPreview = {
   bodyHtml: string
 }
 
+const DOCUMENTS_LIBRARY_HREF = '/portal/operations?tab=documents'
+
 export function DocumentCreatorWorkbench({ initial, initialStep = 'create', onStepChange }: Props) {
   const router = useRouter()
   const reduceMotion = useReducedMotion()
@@ -45,6 +47,10 @@ export function DocumentCreatorWorkbench({ initial, initialStep = 'create', onSt
     documentType: initial?.document_type || 'venue_use_agreement',
     bodyHtml: initial?.body_html || '',
   })
+  const [editorDirty, setEditorDirty] = useState(false)
+  const [fieldsDirty, setFieldsDirty] = useState(false)
+  const [leaveConfirmOpen, setLeaveConfirmOpen] = useState(false)
+  const workbenchDirty = editorDirty || fieldsDirty
 
   const refreshPreview = useCallback((document: LuxorCreatedDocumentRow) => {
     const task = (async () => {
@@ -76,6 +82,7 @@ export function DocumentCreatorWorkbench({ initial, initialStep = 'create', onSt
 
   const onSaved = (document: LuxorCreatedDocumentRow) => {
     setRecord(document)
+    setEditorDirty(false)
     setForm((current) => ({
       title: document.title || current.title,
       documentType: document.document_type,
@@ -108,22 +115,50 @@ export function DocumentCreatorWorkbench({ initial, initialStep = 'create', onSt
     onStepChange?.(step)
   }
 
+  const navigateToDocuments = useCallback(() => {
+    router.push(DOCUMENTS_LIBRARY_HREF)
+  }, [router])
+
+  const requestAllDocuments = useCallback(() => {
+    if (!workbenchDirty) {
+      navigateToDocuments()
+      return
+    }
+    setLeaveConfirmOpen(true)
+  }, [navigateToDocuments, workbenchDirty])
+
+  useEffect(() => {
+    if (!workbenchDirty) return
+    const warnBeforeLeaving = (event: BeforeUnloadEvent) => {
+      event.preventDefault()
+      event.returnValue = ''
+    }
+    window.addEventListener('beforeunload', warnBeforeLeaving)
+    return () => window.removeEventListener('beforeunload', warnBeforeLeaving)
+  }, [workbenchDirty])
+
   return (
     <PortalPageFrame className="h-full min-h-0 gap-4 overflow-x-hidden pb-[calc(4.5rem+env(safe-area-inset-bottom))] min-[1280px]:pb-0">
       <div className="flex min-w-0 flex-col gap-3 min-[1280px]:flex-row min-[1280px]:items-end min-[1280px]:justify-between">
         <div className="min-w-0 flex-1 space-y-3">
-          <PortalPageHeader
-            icon={<FileText size={18} />}
-            title={form.title || record?.title || 'New document'}
-            hideBackButton
-            mobileActionsInline
-            actions={(
-              <PortalButton type="button" variant="secondary" className="min-h-11" onClick={() => router.push('/portal/operations?tab=documents')}>
-                <ArrowLeft size={14} />
-                Back
-              </PortalButton>
-            )}
-          />
+          <div className="flex min-w-0 items-start gap-2.5 sm:gap-3">
+            <button
+              type="button"
+              onClick={requestAllDocuments}
+              className="inline-flex min-h-10 shrink-0 items-center gap-2 rounded-lg px-2 text-sm font-semibold text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45"
+            >
+              <ArrowLeft size={15} />
+              All documents
+            </button>
+            <div className="min-w-0 flex-1">
+              <PortalPageHeader
+                icon={<FileText size={18} />}
+                title={form.title || record?.title || 'New document'}
+                hideBackButton
+                mobileActionsInline
+              />
+            </div>
+          </div>
           <DocumentCreatorStepper activeStep={activeStep} fieldsEnabled={fieldsEnabled} onStepChange={goToStep} />
         </div>
         <div className="hidden min-[1280px]:flex shrink-0 flex-wrap gap-2">
@@ -138,7 +173,12 @@ export function DocumentCreatorWorkbench({ initial, initialStep = 'create', onSt
 
       <div className="min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden portal-scrollbar min-[1280px]:overflow-hidden">
         {activeStep === 'fields' && record?.id ? (
-          <DocumentCreatorFieldsStep documentId={record.id} pdfUrl={signedUrl} canEdit={canEditFields} />
+          <DocumentCreatorFieldsStep
+            documentId={record.id}
+            pdfUrl={signedUrl}
+            canEdit={canEditFields}
+            onDirtyChange={setFieldsDirty}
+          />
         ) : (
         <div className="flex min-h-0 min-w-0 flex-col gap-4 min-[1280px]:grid min-[1280px]:h-full min-[1280px]:min-w-0 min-[1280px]:grid-cols-[minmax(0,360px)_minmax(0,1fr)_minmax(0,280px)] min-[1280px]:gap-6 min-[1280px]:overflow-hidden">
           <section className="min-h-0 min-w-0 shrink-0 overflow-x-hidden px-4 sm:px-0 min-[1280px]:overflow-y-auto min-[1280px]:px-0 min-[1280px]:portal-scrollbar">
@@ -166,6 +206,7 @@ export function DocumentCreatorWorkbench({ initial, initialStep = 'create', onSt
                   revision={record}
                   onSaved={onSaved}
                   onFormChange={setForm}
+                  onDirtyChange={setEditorDirty}
                   waitForPdfIdle={async () => {
                     await pdfPreviewChain.current
                     return recordRef.current
@@ -213,6 +254,36 @@ export function DocumentCreatorWorkbench({ initial, initialStep = 'create', onSt
           </PortalButton>
         </div>
       </div>
+      <PortalModal
+        isOpen={leaveConfirmOpen}
+        onClose={() => setLeaveConfirmOpen(false)}
+        title="Leave without saving?"
+        maxWidth="max-w-md"
+        footer={(
+          <div className="flex flex-wrap justify-end gap-2">
+            <PortalButton type="button" variant="ghost" onClick={() => setLeaveConfirmOpen(false)}>Keep editing</PortalButton>
+            <PortalButton
+              type="button"
+              variant="primary"
+              onClick={() => {
+                setLeaveConfirmOpen(false)
+                navigateToDocuments()
+              }}
+            >
+              Leave without saving
+            </PortalButton>
+          </div>
+        )}
+      >
+        <p className="text-sm leading-relaxed text-[color:var(--portal-muted)]">
+          {editorDirty && fieldsDirty
+            ? 'This document body and field placements have unsaved changes.'
+            : fieldsDirty
+              ? 'Field placements have unsaved changes.'
+              : 'This document body has unsaved changes.'}{' '}
+          Save your work before returning to the document library, or leave and discard those edits.
+        </p>
+      </PortalModal>
     </PortalPageFrame>
   )
 }
