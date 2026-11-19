@@ -1,13 +1,40 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { downloadLuxorPrivatePdf } from '@/lib/luxorDocumentsServer'
 import { getLuxorSignatureRequestByToken, recordLuxorSignatureEvent } from '@/lib/luxorSignaturesServer'
+import {
+  createdDocumentPdfDownloadPath,
+  luxorCreatedDocumentSignerGateResponse,
+  resolveLuxorCreatedDocumentSignerFromToken,
+} from '@/lib/luxorCreatedDocumentSigningServer'
+import { recordLuxorCreatedDocumentEvent } from '@/lib/luxorCreatedDocumentFieldsServer'
 
 export async function GET(request: NextRequest) {
   try {
     const token = request.nextUrl.searchParams.get('token') || ''
     const kind = request.nextUrl.searchParams.get('kind') || 'contract'
     const signature = await getLuxorSignatureRequestByToken(token)
-    if (!signature) return NextResponse.json({ error: 'Signature request not found.' }, { status: 404 })
+    if (!signature) {
+      const createdSigner = await resolveLuxorCreatedDocumentSignerFromToken(token)
+      if (!createdSigner) return NextResponse.json({ error: 'Signature request not found.' }, { status: 404 })
+      const createdDenied = await luxorCreatedDocumentSignerGateResponse(createdSigner)
+      if (createdDenied) return NextResponse.json({ error: createdDenied.error }, { status: createdDenied.status })
+      const path = await createdDocumentPdfDownloadPath(createdSigner, kind)
+      if (!path) return NextResponse.json({ error: 'The PDF is not ready.' }, { status: 404 })
+      const pdf = await downloadLuxorPrivatePdf(path)
+      await recordLuxorCreatedDocumentEvent({
+        documentId: createdSigner.document_id,
+        signerId: createdSigner.id,
+        eventType: kind === 'executed' || kind === 'signed' ? 'signed_copy_downloaded' : 'contract_downloaded',
+        payload: {},
+      })
+      return new NextResponse(Buffer.from(pdf), {
+        headers: {
+          'Content-Type': 'application/pdf',
+          'Content-Disposition': 'inline; filename="Luxor-Document.pdf"',
+          'Cache-Control': 'private, no-store',
+        },
+      })
+    }
     if (signature.status === 'void') {
       return NextResponse.json({ error: 'This signing link was cancelled.' }, { status: 410 })
     }

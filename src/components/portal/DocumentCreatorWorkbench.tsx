@@ -3,17 +3,22 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useReducedMotion } from 'framer-motion'
-import { PortalButton, PortalPageFrame, PortalPageHeader } from '@/components/portal/PortalUI'
+import { PortalButton, PortalModal, PortalPageFrame, PortalPageHeader } from '@/components/portal/PortalUI'
+import { useToast } from '@/components/portal/ToastProvider'
 import { DocumentCreatorEditor, type DocumentCreatorEditorHandle } from '@/components/portal/DocumentCreatorEditor'
 import { DocumentCreatorPaperPreview } from '@/components/portal/DocumentCreatorPaperPreview'
 import { DocumentCreatorPdfPreview } from '@/components/portal/DocumentCreatorPdfPreview'
-import { DocumentCreatorStepper } from '@/components/portal/DocumentCreatorStepper'
+import { DocumentCreatorStepper, type DocumentCreatorStep } from '@/components/portal/DocumentCreatorStepper'
+import { DocumentCreatorFieldsStep } from '@/components/portal/DocumentCreatorFieldsStep'
+import { canEditCreatedDocumentFields } from '@/lib/luxorCreatedDocumentFieldTypes'
 import type { LuxorCreatedDocumentRow, LuxorCreatedDocumentType } from '@/lib/luxorDocumentCreatorTypes'
 import { stashCreatedDocumentHandoff } from '@/lib/luxorDocumentCreatorHandoff'
-import { ArrowLeft, ChevronDown, FileText } from '@/lib/icons/phosphor-compat'
+import { ChevronDown, FileText } from '@/lib/icons/phosphor-compat'
 
 type Props = {
   initial?: LuxorCreatedDocumentRow | null
+  initialStep?: DocumentCreatorStep
+  onStepChange?: (step: DocumentCreatorStep) => void
 }
 
 type FormPreview = {
@@ -22,14 +27,18 @@ type FormPreview = {
   bodyHtml: string
 }
 
-export function DocumentCreatorWorkbench({ initial }: Props) {
+const DOCUMENTS_LIBRARY_HREF = '/portal/operations?tab=documents'
+
+export function DocumentCreatorWorkbench({ initial, initialStep = 'create', onStepChange }: Props) {
   const router = useRouter()
+  const { notify } = useToast()
   const reduceMotion = useReducedMotion()
   const editorRef = useRef<DocumentCreatorEditorHandle>(null)
   const [record, setRecord] = useState<LuxorCreatedDocumentRow | null>(initial ?? null)
   const [signedUrl, setSignedUrl] = useState<string | null>(null)
   const [previewLoading, setPreviewLoading] = useState(false)
   const [previewError, setPreviewError] = useState<string | null>(null)
+  const [activeStep, setActiveStep] = useState<DocumentCreatorStep>(initialStep)
   const [formOpen, setFormOpen] = useState(true)
   const [saving, setSaving] = useState(false)
   const pdfPreviewChain = useRef<Promise<void>>(Promise.resolve())
@@ -40,6 +49,10 @@ export function DocumentCreatorWorkbench({ initial }: Props) {
     documentType: initial?.document_type || 'venue_use_agreement',
     bodyHtml: initial?.body_html || '',
   })
+  const [editorDirty, setEditorDirty] = useState(false)
+  const [fieldsDirty, setFieldsDirty] = useState(false)
+  const [leaveConfirmOpen, setLeaveConfirmOpen] = useState(false)
+  const workbenchDirty = editorDirty || fieldsDirty
 
   const refreshPreview = useCallback((document: LuxorCreatedDocumentRow) => {
     const task = (async () => {
@@ -69,8 +82,15 @@ export function DocumentCreatorWorkbench({ initial }: Props) {
     if (record?.id) void refreshPreview(record)
   }, [record?.id, record?.version, refreshPreview])
 
+  useEffect(() => {
+    if (activeStep === 'fields' && record?.id && !signedUrl && !previewLoading) {
+      void refreshPreview(record)
+    }
+  }, [activeStep, previewLoading, record, refreshPreview, signedUrl])
+
   const onSaved = (document: LuxorCreatedDocumentRow) => {
     setRecord(document)
+    setEditorDirty(false)
     setForm((current) => ({
       title: document.title || current.title,
       documentType: document.document_type,
@@ -85,14 +105,92 @@ export function DocumentCreatorWorkbench({ initial }: Props) {
   const runSave = async (mode: 'draft' | 'template') => {
     setSaving(true)
     try {
+      if (mode === 'template' && record?.id) {
+        const title = (form.title || record.title).trim()
+        if (!title) {
+          notify({
+            title: 'Template could not be saved',
+            description: 'Add a title before saving as a template.',
+            variant: 'error',
+          })
+          return
+        }
+        if (activeStep === 'fields' || !editorRef.current) {
+          const response = await fetch(`/api/operations/documents/${encodeURIComponent(record.id)}/template`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ title }),
+          })
+          const json = await response.json()
+          if (!response.ok) throw new Error(json.error || 'Template could not be saved.')
+          notify({
+            title: 'Saved as template',
+            description: `${json.document?.title || title} is available in the document library. Your draft is unchanged.`,
+            variant: 'success',
+          })
+          return
+        }
+      }
       const result = mode === 'draft' ? await editorRef.current?.saveDraft() : await editorRef.current?.saveTemplate()
-      if (result) onSaved(result)
+      if (result) {
+        if (mode === 'draft') onSaved(result)
+        if (mode === 'template') {
+          notify({ title: 'Saved as template', description: `${result.title || 'Document'} is available in the document library. Your draft is unchanged.`, variant: 'success' })
+        }
+        return
+      }
+      if (mode === 'template') {
+        notify({
+          title: 'Template could not be saved',
+          description: 'Add a title and try again. Unsaved editor changes may still need a manual save.',
+          variant: 'error',
+        })
+      }
+    } catch (error) {
+      if (mode === 'template') {
+        notify({
+          title: 'Template could not be saved',
+          description: error instanceof Error ? error.message : 'Please try again.',
+          variant: 'error',
+        })
+      }
     } finally {
       setSaving(false)
     }
   }
 
   const accordionTransition = reduceMotion ? 'none' : 'grid-template-rows 420ms cubic-bezier(0.4, 0, 0.2, 1)'
+  const fieldsEnabled = Boolean(record?.id)
+  const canEditFields = record ? canEditCreatedDocumentFields(record.status, record.archived_at) : true
+
+  const goToStep = (step: DocumentCreatorStep) => {
+    if (step === 'fields' && !fieldsEnabled) return
+    if (step === 'send') return
+    setActiveStep(step)
+    onStepChange?.(step)
+  }
+
+  const navigateToDocuments = useCallback(() => {
+    router.push(DOCUMENTS_LIBRARY_HREF)
+  }, [router])
+
+  const requestLeaveToDocuments = useCallback(() => {
+    if (!workbenchDirty) {
+      navigateToDocuments()
+      return
+    }
+    setLeaveConfirmOpen(true)
+  }, [navigateToDocuments, workbenchDirty])
+
+  useEffect(() => {
+    if (!workbenchDirty) return
+    const warnBeforeLeaving = (event: BeforeUnloadEvent) => {
+      event.preventDefault()
+      event.returnValue = ''
+    }
+    window.addEventListener('beforeunload', warnBeforeLeaving)
+    return () => window.removeEventListener('beforeunload', warnBeforeLeaving)
+  }, [workbenchDirty])
 
   return (
     <PortalPageFrame className="h-full min-h-0 gap-4 overflow-x-hidden pb-[calc(4.5rem+env(safe-area-inset-bottom))] min-[1280px]:pb-0">
@@ -101,16 +199,11 @@ export function DocumentCreatorWorkbench({ initial }: Props) {
           <PortalPageHeader
             icon={<FileText size={18} />}
             title={form.title || record?.title || 'New document'}
-            hideBackButton
             mobileActionsInline
-            actions={(
-              <PortalButton type="button" variant="secondary" className="min-h-11" onClick={() => router.push('/portal/operations?tab=documents')}>
-                <ArrowLeft size={14} />
-                Back
-              </PortalButton>
-            )}
+            onBack={requestLeaveToDocuments}
+            backButtonLabel="Back to all documents"
           />
-          <DocumentCreatorStepper />
+          <DocumentCreatorStepper activeStep={activeStep} fieldsEnabled={fieldsEnabled} onStepChange={goToStep} />
         </div>
         <div className="hidden min-[1280px]:flex shrink-0 flex-wrap gap-2">
           <PortalButton type="button" variant="secondary" className="min-h-11" disabled={saving} onClick={() => void runSave('template')}>
@@ -123,6 +216,15 @@ export function DocumentCreatorWorkbench({ initial }: Props) {
       </div>
 
       <div className="min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden portal-scrollbar min-[1280px]:overflow-hidden">
+        {activeStep === 'fields' && record?.id ? (
+          <DocumentCreatorFieldsStep
+            documentId={record.id}
+            pdfUrl={signedUrl}
+            canEdit={canEditFields}
+            isTemplate={record.is_template}
+            onDirtyChange={setFieldsDirty}
+          />
+        ) : (
         <div className="flex min-h-0 min-w-0 flex-col gap-4 min-[1280px]:grid min-[1280px]:h-full min-[1280px]:min-w-0 min-[1280px]:grid-cols-[minmax(0,360px)_minmax(0,1fr)_minmax(0,280px)] min-[1280px]:gap-6 min-[1280px]:overflow-hidden">
           <section className="min-h-0 min-w-0 shrink-0 overflow-x-hidden px-4 sm:px-0 min-[1280px]:overflow-y-auto min-[1280px]:px-0 min-[1280px]:portal-scrollbar">
             <button
@@ -149,6 +251,7 @@ export function DocumentCreatorWorkbench({ initial }: Props) {
                   revision={record}
                   onSaved={onSaved}
                   onFormChange={setForm}
+                  onDirtyChange={setEditorDirty}
                   waitForPdfIdle={async () => {
                     await pdfPreviewChain.current
                     return recordRef.current
@@ -183,6 +286,7 @@ export function DocumentCreatorWorkbench({ initial }: Props) {
             />
           </section>
         </div>
+        )}
       </div>
 
       <div className="fixed inset-x-0 bottom-0 z-20 border-t border-[color:var(--portal-border)] bg-[color:var(--portal-frame)] p-3 min-[1280px]:hidden">
@@ -195,6 +299,36 @@ export function DocumentCreatorWorkbench({ initial }: Props) {
           </PortalButton>
         </div>
       </div>
+      <PortalModal
+        isOpen={leaveConfirmOpen}
+        onClose={() => setLeaveConfirmOpen(false)}
+        title="Leave without saving?"
+        maxWidth="max-w-md"
+        footer={(
+          <div className="flex flex-wrap justify-end gap-2">
+            <PortalButton type="button" variant="ghost" onClick={() => setLeaveConfirmOpen(false)}>Keep editing</PortalButton>
+            <PortalButton
+              type="button"
+              variant="primary"
+              onClick={() => {
+                setLeaveConfirmOpen(false)
+                navigateToDocuments()
+              }}
+            >
+              Leave without saving
+            </PortalButton>
+          </div>
+        )}
+      >
+        <p className="text-sm leading-relaxed text-[color:var(--portal-muted)]">
+          {editorDirty && fieldsDirty
+            ? 'This document body and field placements have unsaved changes.'
+            : fieldsDirty
+              ? 'Field placements have unsaved changes.'
+              : 'This document body has unsaved changes.'}{' '}
+          Save your work before returning to the document library, or leave and discard those edits.
+        </p>
+      </PortalModal>
     </PortalPageFrame>
   )
 }

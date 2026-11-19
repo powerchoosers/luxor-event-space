@@ -4,6 +4,7 @@ import { saveLuxorPrivatePdf } from './luxorDocumentsServer'
 import { postgrestSchemaUnavailable } from './luxorPostgrestSchema'
 import { supabaseRest, supabaseRestStrict, SupabaseRestError } from './supabaseRestServer'
 import { buildLuxorCreatedDocumentPdf } from './luxorDocumentCreatorPdfServer'
+import { copyLuxorCreatedDocumentFieldsAndSigners } from './luxorCreatedDocumentFieldsServer'
 import {
   isLuxorCreatedDocumentType,
   type LuxorCreatedDocumentLibrarySection,
@@ -184,13 +185,35 @@ export async function archiveLuxorCreatedDocument(input: {
   return document
 }
 
+export async function createLuxorCreatedDocumentTemplateFromDocument(input: {
+  sourceId: string
+  createdBy: string
+  title?: string
+}): Promise<LuxorCreatedDocumentRow> {
+  const source = await getLuxorCreatedDocument(input.sourceId)
+  if (!source) throw new SupabaseRestError('Document not found.', 404, 'PGRST116')
+  const title = (input.title?.trim() || source.title.trim() || 'Untitled template').slice(0, 300)
+  if (!title) throw new Error('Add a title before saving as a template.')
+  const created = await createLuxorCreatedDocument({
+    title,
+    documentType: source.document_type,
+    bodyJson: source.body_json,
+    bodyHtml: source.body_html,
+    isTemplate: true,
+    createdBy: input.createdBy,
+    sourceTemplateId: source.id,
+  })
+  await copyLuxorCreatedDocumentFieldsAndSigners(source.id, created.id)
+  return created
+}
+
 export async function duplicateLuxorCreatedDocument(input: {
   sourceId: string
   createdBy: string
 }): Promise<LuxorCreatedDocumentRow> {
   const source = await getLuxorCreatedDocument(input.sourceId)
   if (!source) throw new SupabaseRestError('Template not found.', 404, 'PGRST116')
-  return createLuxorCreatedDocument({
+  const created = await createLuxorCreatedDocument({
     title: `${source.title} (copy)`.slice(0, 300),
     documentType: source.document_type,
     bodyJson: source.body_json,
@@ -199,6 +222,8 @@ export async function duplicateLuxorCreatedDocument(input: {
     createdBy: input.createdBy,
     sourceTemplateId: source.is_template ? source.id : source.source_template_id,
   })
+  await copyLuxorCreatedDocumentFieldsAndSigners(source.id, created.id)
+  return created
 }
 
 export async function renderLuxorCreatedDocumentPdf(document: LuxorCreatedDocumentRow): Promise<LuxorCreatedDocumentRow> {

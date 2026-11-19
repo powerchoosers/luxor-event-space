@@ -49,6 +49,15 @@ export function selectCreatedDocumentBodyFont(fonts: LuxorCreatedDocumentPdfFont
   return fonts.regular
 }
 
+export async function embedLuxorCreatedDocumentFonts(pdf: PDFDocument) {
+  pdf.registerFontkit(fontkit)
+  const bytes = await loadFontBytes()
+  const regular = await pdf.embedFont(bytes.regular, { subset: true })
+  const oblique = await pdf.embedFont(bytes.oblique, { subset: true })
+  const bold = await pdf.embedFont(bytes.bold, { subset: true })
+  return { regular, oblique, bold }
+}
+
 export async function createLuxorCreatedDocumentPdfKit() {
   const pdf = await PDFDocument.create()
   pdf.registerFontkit(fontkit)

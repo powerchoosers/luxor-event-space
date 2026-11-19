@@ -1,7 +1,8 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { useParams } from 'next/navigation'
+import { useParams, useSearchParams, useRouter } from 'next/navigation'
+import type { DocumentCreatorStep } from '@/components/portal/DocumentCreatorStepper'
 import { DocumentCreatorWorkbench } from '@/components/portal/DocumentCreatorWorkbench'
 import { PortalCardSkeleton, PortalPageFrame } from '@/components/portal/PortalUI'
 import type { LuxorCreatedDocumentRow } from '@/lib/luxorDocumentCreatorTypes'
@@ -9,6 +10,10 @@ import { takeCreatedDocumentHandoff } from '@/lib/luxorDocumentCreatorHandoff'
 
 export default function EditCreatedDocumentPage() {
   const params = useParams<{ id: string }>()
+  const searchParams = useSearchParams()
+  const router = useRouter()
+  const stepParam = searchParams.get('step')
+  const initialStep: DocumentCreatorStep = stepParam === 'fields' ? 'fields' : 'create'
   const [document, setDocument] = useState<LuxorCreatedDocumentRow | null>(() => takeCreatedDocumentHandoff(params.id))
   const [error, setError] = useState('')
 
@@ -43,5 +48,16 @@ export default function EditCreatedDocumentPage() {
       </PortalPageFrame>
     )
   }
-  return <DocumentCreatorWorkbench initial={document} />
+  return (
+    <DocumentCreatorWorkbench
+      initial={document}
+      initialStep={initialStep}
+      onStepChange={(step) => {
+        const params = new URLSearchParams(searchParams.toString())
+        if (step === 'create') params.delete('step')
+        else params.set('step', step)
+        router.replace(`/portal/operations/documents/${encodeURIComponent(document.id)}?${params.toString()}`, { scroll: false })
+      }}
+    />
+  )
 }
