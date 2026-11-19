@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { LoaderCircle } from '@/lib/icons/phosphor-compat'
 import { Document, Page } from 'react-pdf'
 import type { LuxorCreatedDocumentFieldType } from '@/lib/luxorCreatedDocumentFieldTypes'
@@ -29,7 +29,7 @@ type LayoutHandlers = {
   onResizePointerDown: (event: React.PointerEvent, field: CreatedDocumentPdfField) => void
   onCanvasBackgroundClick?: () => void
   onCanvasPlacePointerUp?: (event: React.PointerEvent) => void
-  onDropField?: (event: React.DragEvent) => void
+  onCanvasPagePointerUp?: (event: React.PointerEvent, pageIndex: number) => void
 }
 
 type SignHandlers = {
@@ -42,6 +42,7 @@ type SignHandlers = {
   signerEmail: string
   signatureDataUrl: string | null
   registerFieldRef: (fieldId: string, node: HTMLDivElement | null) => void
+  valuesFrozen?: boolean
 }
 
 type Props = {
@@ -143,16 +144,12 @@ function CreatedDocumentPdfPage({
       ref={pageRef}
       className="relative inline-block overflow-hidden bg-white shadow-[0_18px_50px_rgba(0,0,0,0.22)]"
       data-page-index={pageIndex}
+      data-pdf-page-canvas=""
       onClick={mode === 'layout' ? () => layout?.onCanvasBackgroundClick?.() : undefined}
-      onDragOver={mode === 'layout' ? (event) => {
-        event.preventDefault()
-        event.dataTransfer.dropEffect = 'copy'
+      onPointerUp={mode === 'layout' ? (event) => {
+        layout?.onCanvasPagePointerUp?.(event, pageIndex)
+        layout?.onCanvasPlacePointerUp?.(event)
       } : undefined}
-      onDrop={mode === 'layout' ? (event) => {
-        event.preventDefault()
-        layout?.onDropField?.(event)
-      } : undefined}
-      onPointerUp={mode === 'layout' ? (event) => layout?.onCanvasPlacePointerUp?.(event) : undefined}
     >
       <Page
         pageNumber={pageNumber}
@@ -170,6 +167,7 @@ function CreatedDocumentPdfPage({
               key={field.id}
               type="button"
               style={normalizedFieldOverlayStyle(field)}
+              data-layout-field-overlay=""
               className={`absolute border text-left text-[10px] font-semibold text-[#1a1816] ${tint} ${selected ? 'ring-2 ring-[#caa24c]' : ''} ${'cursor-move'}`}
               onClick={(event) => { event.stopPropagation(); layout.onSelect(field.id) }}
               onPointerDown={(event) => layout.onMovePointerDown(event, field)}
@@ -192,6 +190,7 @@ function CreatedDocumentPdfPage({
               signerName={sign.signerName}
               signerEmail={sign.signerEmail}
               signatureDataUrl={sign.signatureDataUrl}
+              valuesFrozen={sign.valuesFrozen}
               onActive={() => sign.onActiveField(field.id)}
               onValue={(value) => sign.onFieldValue(field.id, value)}
               onSignatureTap={() => sign.onSignatureFieldTap(field)}
@@ -205,6 +204,41 @@ function CreatedDocumentPdfPage({
   )
 }
 
+function useFitOverlayFontSize(containerRef: React.RefObject<HTMLElement | null>, text: string, maxPx = 11, minPx = 6) {
+  const [fontSize, setFontSize] = useState(maxPx)
+  useLayoutEffect(() => {
+    let cancelled = false
+    const applySize = () => {
+      if (cancelled) return
+      const node = containerRef.current
+      if (!node || !text) {
+        setFontSize(maxPx)
+        return
+      }
+      let size = maxPx
+      const probe = document.createElement('span')
+      probe.style.visibility = 'hidden'
+      probe.style.position = 'absolute'
+      probe.style.whiteSpace = 'nowrap'
+      probe.textContent = text
+      node.appendChild(probe)
+      while (size > minPx) {
+        probe.style.fontSize = `${size}px`
+        if (probe.offsetWidth <= node.clientWidth - 6) break
+        size -= 0.5
+      }
+      node.removeChild(probe)
+      setFontSize(Math.max(minPx, size))
+    }
+    const frame = requestAnimationFrame(applySize)
+    return () => {
+      cancelled = true
+      cancelAnimationFrame(frame)
+    }
+  }, [containerRef, maxPx, minPx, text])
+  return fontSize
+}
+
 function SignFieldOverlay({
   field,
   active,
@@ -212,6 +246,7 @@ function SignFieldOverlay({
   signerName,
   signerEmail,
   signatureDataUrl,
+  valuesFrozen,
   onActive,
   onValue,
   onSignatureTap,
@@ -223,6 +258,7 @@ function SignFieldOverlay({
   signerName: string
   signerEmail: string
   signatureDataUrl: string | null
+  valuesFrozen?: boolean
   onActive: () => void
   onValue: (value: string | boolean) => void
   onSignatureTap: () => void
@@ -236,6 +272,16 @@ function SignFieldOverlay({
 
   const base = 'absolute z-10 overflow-hidden rounded-sm border bg-white/92 text-[#1a1816] shadow-sm'
   const ring = active ? 'border-[#c89d4b] ring-2 ring-[#c89d4b]/80' : 'border-[#c89d4b]/55'
+  const stringValue = typeof value === 'string' ? value : ''
+  const dateFallback = luxorChicagoDateString()
+  const textForFit = field.field_type === 'date'
+    ? (stringValue || dateFallback)
+    : field.field_type === 'name'
+      ? (stringValue || signerName)
+      : field.field_type === 'email'
+        ? (stringValue || signerEmail)
+        : stringValue
+  const fitFontSize = useFitOverlayFontSize(ref, textForFit)
 
   if (field.field_type === 'signature' || field.field_type === 'initials') {
     const showAdopted = Boolean(signatureDataUrl)
@@ -279,9 +325,14 @@ function SignFieldOverlay({
     )
   }
 
-  const stringValue = typeof value === 'string' ? value : ''
-
   if (field.field_type === 'date') {
+    if (valuesFrozen && stringValue.trim()) {
+      return (
+        <div ref={ref} style={normalizedFieldOverlayStyle(field)} className={`${base} ${ring} flex items-center px-1`}>
+          <span className="block w-full truncate leading-none text-[#1a1816]" style={{ fontSize: `${fitFontSize}px` }}>{stringValue}</span>
+        </div>
+      )
+    }
     return (
       <div
         ref={ref}
@@ -290,12 +341,14 @@ function SignFieldOverlay({
         onClick={(event) => { event.stopPropagation(); onActive() }}
       >
         <input
-          className="h-full w-full bg-transparent px-1 text-[11px] outline-none"
-          value={stringValue || luxorChicagoDateString()}
+          className="h-full min-w-0 w-full bg-transparent px-1 outline-none"
+          style={{ fontSize: `${fitFontSize}px` }}
+          value={stringValue}
+          placeholder={dateFallback}
           onChange={(event) => onValue(event.target.value)}
           onFocus={() => {
             onActive()
-            if (!stringValue) onValue(luxorChicagoDateString())
+            if (!stringValue) onValue(dateFallback)
           }}
           aria-label={field.label}
         />
@@ -303,11 +356,19 @@ function SignFieldOverlay({
     )
   }
 
-  const displayValue = field.field_type === 'name'
-    ? (stringValue || signerName)
+  if (valuesFrozen && stringValue.trim()) {
+    return (
+      <div ref={ref} style={normalizedFieldOverlayStyle(field)} className={`${base} ${ring} flex items-center px-1`}>
+        <span className="block w-full truncate leading-none text-[#1a1816]" style={{ fontSize: `${fitFontSize}px` }}>{stringValue}</span>
+      </div>
+    )
+  }
+
+  const placeholder = field.field_type === 'name'
+    ? (signerName || 'Name')
     : field.field_type === 'email'
-      ? (stringValue || signerEmail)
-      : stringValue
+      ? (signerEmail || 'Email')
+      : ''
 
   return (
     <div
@@ -317,15 +378,15 @@ function SignFieldOverlay({
       onClick={(event) => { event.stopPropagation(); onActive() }}
     >
       <input
-        className="h-full min-w-0 w-full truncate bg-transparent px-1 text-[11px] outline-none"
-        value={displayValue}
+        className="h-full min-w-0 w-full bg-transparent px-1 outline-none placeholder:text-[#8a8074]"
+        style={{ fontSize: `${fitFontSize}px` }}
+        value={stringValue}
+        placeholder={placeholder}
         onChange={(event) => onValue(event.target.value)}
         onFocus={() => {
           onActive()
-          if (!stringValue) {
-            if (field.field_type === 'name' && signerName.trim()) onValue(signerName.trim())
-            if (field.field_type === 'email' && signerEmail.trim()) onValue(signerEmail.trim())
-          }
+          if (field.field_type === 'name' && !stringValue && signerName.trim()) onValue(signerName.trim())
+          if (field.field_type === 'email' && !stringValue && signerEmail.trim()) onValue(signerEmail.trim())
         }}
         aria-label={field.label}
       />

@@ -17,6 +17,7 @@ import {
 import { clampNormalizedFieldRect } from '@/lib/luxorCreatedDocumentFieldTypes'
 import { signerRoleTintClass, toneForRoleKey } from '@/lib/luxorCreatedDocumentFieldColors'
 import { PortalButton, PortalCheckbox, PortalSelect } from '@/components/portal/PortalUI'
+import { useToast } from '@/components/portal/ToastProvider'
 
 const CreatedDocumentFieldPdfCanvas = dynamic(
   () => import('@/components/created-document/CreatedDocumentFieldPdfCanvas').then((mod) => mod.CreatedDocumentFieldPdfCanvas),
@@ -29,7 +30,30 @@ type Props = {
   documentId: string
   pdfUrl: string | null
   canEdit: boolean
+  isTemplate?: boolean
   onDirtyChange?: (dirty: boolean) => void
+}
+
+type PalettePointerDrag = {
+  fieldType: LuxorCreatedDocumentFieldType
+  pointerId: number
+  startX: number
+  startY: number
+  moved: boolean
+  ghostX: number
+  ghostY: number
+}
+
+function findPdfPageAtPoint(root: HTMLElement | null, clientX: number, clientY: number): HTMLElement | null {
+  if (!root) return null
+  const pages = root.querySelectorAll<HTMLElement>('[data-pdf-page-canvas]')
+  for (const page of pages) {
+    const rect = page.getBoundingClientRect()
+    if (clientX >= rect.left && clientX <= rect.right && clientY >= rect.top && clientY <= rect.bottom) {
+      return page
+    }
+  }
+  return null
 }
 
 function fieldsPlacementSnapshot(fields: LocalField[], signers: LuxorCreatedDocumentSignerRow[]) {
@@ -59,7 +83,8 @@ function newClientId() {
   return `field_${Math.random().toString(36).slice(2, 10)}`
 }
 
-export function DocumentCreatorFieldsStep({ documentId, pdfUrl, canEdit, onDirtyChange }: Props) {
+export function DocumentCreatorFieldsStep({ documentId, pdfUrl, canEdit, isTemplate = false, onDirtyChange }: Props) {
+  const { notify } = useToast()
   const [fields, setFields] = useState<LocalField[]>([])
   const [signers, setSigners] = useState<LuxorCreatedDocumentSignerRow[]>([])
   const [selectedId, setSelectedId] = useState<string | null>(null)
@@ -70,6 +95,7 @@ export function DocumentCreatorFieldsStep({ documentId, pdfUrl, canEdit, onDirty
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+  const [testLinkError, setTestLinkError] = useState('')
   const [testLink, setTestLink] = useState('')
   const [testBusy, setTestBusy] = useState(false)
   const [testRoleKey, setTestRoleKey] = useState('')
@@ -77,6 +103,9 @@ export function DocumentCreatorFieldsStep({ documentId, pdfUrl, canEdit, onDirty
   const pageRef = useRef<HTMLDivElement | null>(null)
   const dragRef = useRef<{ id: string; mode: 'move' | 'resize'; startX: number; startY: number; origin: LocalField } | null>(null)
   const savedSnapshotRef = useRef('')
+  const paletteDragRef = useRef<PalettePointerDrag | null>(null)
+  const paletteSuppressClickRef = useRef(false)
+  const [paletteGhost, setPaletteGhost] = useState<{ label: string; x: number; y: number } | null>(null)
 
   const roleOrder = useMemo(() => signers.map((signer) => signer.role_key), [signers])
   const selected = fields.find((field) => field.clientId === selectedId) || null
@@ -145,7 +174,7 @@ export function DocumentCreatorFieldsStep({ documentId, pdfUrl, canEdit, onDirty
 
   const pageFields = fields.filter((field) => field.page_index === pageIndex)
 
-  const addFieldAt = (fieldType: LuxorCreatedDocumentFieldType, x: number, y: number) => {
+  const addFieldAt = (fieldType: LuxorCreatedDocumentFieldType, x: number, y: number, targetPageIndex = pageIndex) => {
     if (!canEdit) return
     const signer = signers.find((row) => row.role_key === testRoleKey) || signers[0]
     if (!signer) return
@@ -159,7 +188,7 @@ export function DocumentCreatorFieldsStep({ documentId, pdfUrl, canEdit, onDirty
       role_key: signer.role_key,
       label,
       required: defaultCreatedDocumentFieldRequired(fieldType),
-      page_index: pageIndex,
+      page_index: targetPageIndex,
       x,
       y,
       w: size.w,
@@ -175,13 +204,71 @@ export function DocumentCreatorFieldsStep({ documentId, pdfUrl, canEdit, onDirty
     addFieldAt(fieldType, placement.x, placement.y)
   }
 
-  const placeFromPointer = (event: { clientX: number; clientY: number }, fieldType: LuxorCreatedDocumentFieldType) => {
-    const canvas = pageRef.current?.querySelector('[data-page-index]') as HTMLElement | null
+  const placeFromPointer = (
+    event: { clientX: number; clientY: number },
+    fieldType: LuxorCreatedDocumentFieldType,
+    pageCanvas?: HTMLElement | null,
+  ) => {
+    const canvas = pageCanvas
+      ?? pageRef.current?.querySelector('[data-pdf-page-canvas]') as HTMLElement | null
     if (!canvas) return
     const rect = canvas.getBoundingClientRect()
     const size = defaultCreatedDocumentFieldSize(fieldType)
     const { x, y } = pointerToNormalizedTopLeft(event.clientX, event.clientY, rect, size)
-    addFieldAt(fieldType, x, y)
+    const targetPage = Number(canvas.getAttribute('data-page-index') ?? pageIndex)
+    addFieldAt(fieldType, x, y, targetPage)
+  }
+
+  const onPalettePointerMove = useCallback((event: PointerEvent) => {
+    const drag = paletteDragRef.current
+    if (!drag || drag.pointerId !== event.pointerId) return
+    const moved = drag.moved
+      || Math.hypot(event.clientX - drag.startX, event.clientY - drag.startY) > 6
+    paletteDragRef.current = {
+      ...drag,
+      moved,
+      ghostX: event.clientX,
+      ghostY: event.clientY,
+    }
+    if (moved) {
+      setPaletteGhost({
+        label: LUXOR_CREATED_DOCUMENT_FIELD_TYPE_LABELS[drag.fieldType],
+        x: event.clientX,
+        y: event.clientY,
+      })
+    }
+  }, [])
+
+  const endPalettePointerDrag = useCallback((event: PointerEvent) => {
+    const drag = paletteDragRef.current
+    if (!drag || drag.pointerId !== event.pointerId) return
+    window.removeEventListener('pointermove', onPalettePointerMove)
+    window.removeEventListener('pointerup', endPalettePointerDrag)
+    window.removeEventListener('pointercancel', endPalettePointerDrag)
+    if (drag.moved) {
+      const page = findPdfPageAtPoint(pageRef.current, event.clientX, event.clientY)
+      if (page) placeFromPointer(event, drag.fieldType, page)
+      paletteSuppressClickRef.current = true
+    }
+    paletteDragRef.current = null
+    setPaletteGhost(null)
+  }, [onPalettePointerMove, pageIndex])
+
+  const beginPalettePointer = (event: React.PointerEvent, fieldType: LuxorCreatedDocumentFieldType) => {
+    if (!canEdit || event.button !== 0) return
+    event.preventDefault()
+    paletteDragRef.current = {
+      fieldType,
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      moved: false,
+      ghostX: event.clientX,
+      ghostY: event.clientY,
+    }
+    window.addEventListener('pointermove', onPalettePointerMove)
+    window.addEventListener('pointerup', endPalettePointerDrag)
+    window.addEventListener('pointercancel', endPalettePointerDrag)
   }
 
   const save = async () => {
@@ -223,6 +310,7 @@ export function DocumentCreatorFieldsStep({ documentId, pdfUrl, canEdit, onDirty
       setSigners(nextSigners)
       savedSnapshotRef.current = fieldsPlacementSnapshot(nextFields, nextSigners)
       onDirtyChange?.(false)
+      notify({ title: 'Fields saved', description: 'Field placements and signer roles were updated.', variant: 'success' })
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : 'Fields could not be saved.')
     } finally {
@@ -233,15 +321,20 @@ export function DocumentCreatorFieldsStep({ documentId, pdfUrl, canEdit, onDirty
   const createTestLink = async (roleKey: string) => {
     setTestBusy(true)
     setTestLink('')
-    setError('')
+    setTestLinkError('')
+    if (isTemplate) {
+      setTestLinkError('Test signing links are only available for draft documents, not templates.')
+      setTestBusy(false)
+      return
+    }
     if (fields.length === 0) {
-      setError('Add at least one field before creating a test signing link.')
+      setTestLinkError('Add at least one field before creating a test signing link.')
       setTestBusy(false)
       return
     }
     const roleFields = fields.filter((field) => field.role_key === roleKey)
     if (roleFields.length === 0) {
-      setError('Add at least one field for this signer role before creating a test link.')
+      setTestLinkError('Add at least one field for this signer role before creating a test link.')
       setTestBusy(false)
       return
     }
@@ -255,7 +348,7 @@ export function DocumentCreatorFieldsStep({ documentId, pdfUrl, canEdit, onDirty
       if (!response.ok) throw new Error(body.error || 'Test link could not be created.')
       setTestLink(body.signingUrl)
     } catch (linkError) {
-      setError(linkError instanceof Error ? linkError.message : 'Test link could not be created.')
+      setTestLinkError(linkError instanceof Error ? linkError.message : 'Test link could not be created.')
     } finally {
       setTestBusy(false)
     }
@@ -309,22 +402,24 @@ export function DocumentCreatorFieldsStep({ documentId, pdfUrl, canEdit, onDirty
     <div className="flex min-h-0 flex-1 flex-col gap-4 min-[1280px]:grid min-[1280px]:h-full min-[1280px]:grid-cols-[220px_minmax(0,1fr)_280px] min-[1280px]:gap-6">
       <aside className="hidden min-[820px]:block">
         <h2 className="text-sm font-semibold text-[color:var(--portal-text)]">Field palette</h2>
-        <p className="mt-1 text-xs text-[color:var(--portal-muted)]">Choose a type, then drag onto the page or click to place.</p>
+        <p className="mt-1 text-xs text-[color:var(--portal-muted)]">Press and drag onto the page, or click to place with a tap.</p>
         <div className="mt-3 grid gap-2">
           {(Object.keys(LUXOR_CREATED_DOCUMENT_FIELD_TYPE_LABELS) as LuxorCreatedDocumentFieldType[]).map((type) => (
             <PortalButton
               key={type}
               type="button"
               variant="secondary"
-              className="min-h-10 w-full justify-start"
+              className="min-h-10 w-full justify-start touch-none"
               disabled={!canEdit}
-              draggable={canEdit}
-              onDragStart={(event) => {
-                event.dataTransfer.setData('field-type', type)
-                event.dataTransfer.setData('text/plain', type)
-                event.dataTransfer.effectAllowed = 'copy'
+              data-testid={`palette-field-${type}`}
+              onPointerDown={(event) => beginPalettePointer(event, type)}
+              onClick={() => {
+                if (paletteSuppressClickRef.current) {
+                  paletteSuppressClickRef.current = false
+                  return
+                }
+                setPlacingType(type)
               }}
-              onClick={() => setPlacingType(type)}
               onDoubleClick={() => addFieldFromPalette(type)}
             >
               {LUXOR_CREATED_DOCUMENT_FIELD_TYPE_LABELS[type]}
@@ -414,12 +509,6 @@ export function DocumentCreatorFieldsStep({ documentId, pdfUrl, canEdit, onDirty
                   placeFromPointer(event, placingType)
                   setPlacingType(null)
                 },
-                onDropField: (event) => {
-                  if (!canEdit) return
-                  const type = (event.dataTransfer.getData('field-type') || event.dataTransfer.getData('text/plain')) as LuxorCreatedDocumentFieldType
-                  if (!type || !(type in LUXOR_CREATED_DOCUMENT_FIELD_TYPE_LABELS)) return
-                  placeFromPointer(event, type)
-                },
               }}
             />
           </div>
@@ -470,9 +559,19 @@ export function DocumentCreatorFieldsStep({ documentId, pdfUrl, canEdit, onDirty
           <PortalButton type="button" className="mt-2 min-h-10 w-full" variant="secondary" disabled={!canEdit || testBusy || !testRoleKey} onClick={() => void createTestLink(testRoleKey || signers[0]?.role_key || '')}>
             Create test signing link
           </PortalButton>
+          {testLinkError ? <p role="alert" className="mt-2 text-xs text-rose-600 dark:text-rose-400">{testLinkError}</p> : null}
           {testLink ? <p className="mt-2 break-all text-xs font-medium text-[color:var(--portal-text)]">{testLink}</p> : null}
         </div>
       </aside>
+
+      {paletteGhost ? (
+        <div
+          className="pointer-events-none fixed z-[200] rounded-lg border border-[#caa24c] bg-white/95 px-2 py-1 text-xs font-semibold text-[#4a3b28] shadow-lg"
+          style={{ left: paletteGhost.x + 12, top: paletteGhost.y + 12 }}
+        >
+          {paletteGhost.label}
+        </div>
+      ) : null}
 
       {error ? <p role="alert" className="col-span-full text-sm text-rose-600 dark:text-rose-400">{error}</p> : null}
     </div>

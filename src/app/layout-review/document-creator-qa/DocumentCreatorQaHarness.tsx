@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { PDFDocument, StandardFonts } from 'pdf-lib'
 import { CreatedDocumentSignFlow, type CreatedDocumentSignPayload } from '@/components/secure-portal/CreatedDocumentSignFlow'
 import { DocumentCreatorFieldsStep } from '@/components/portal/DocumentCreatorFieldsStep'
+import { ToastProvider } from '@/components/portal/ToastProvider'
 
 const SAMPLE_FIELDS = [
   { id: 'f-signature', field_type: 'signature', label: 'Signature', required: true, page_index: 0, x: 0.1, y: 0.72, w: 0.42, h: 0.08 },
@@ -98,13 +99,15 @@ export function DocumentCreatorQaHarness() {
   return (
     <div className="mx-auto max-w-[1600px] px-4 py-6" data-qa-view={view} data-qa-viewport={viewport} data-qa-portal-theme={portalTheme}>
       <QaToolbar view={view} setView={setView} viewport={viewport} setViewport={setViewport} portalTheme={portalTheme} setPortalTheme={setPortalTheme} />
-      <QaShell viewport={viewport} portalTheme={portalTheme}>
-        {view === 'signer' ? (
-          <CreatedDocumentSignFlow token="qa-token" initial={signPayload} />
-        ) : (
-          <DocumentCreatorFieldsStep documentId="qa-doc" pdfUrl={pdfUrl} canEdit />
-        )}
-      </QaShell>
+      <ToastProvider>
+        <QaShell viewport={viewport} portalTheme={portalTheme}>
+          {view === 'signer' ? (
+            <CreatedDocumentSignFlow token="qa-token" initial={signPayload} />
+          ) : (
+            <DocumentCreatorFieldsStep documentId="qa-doc" pdfUrl={pdfUrl} canEdit />
+          )}
+        </QaShell>
+      </ToastProvider>
     </div>
   )
 }

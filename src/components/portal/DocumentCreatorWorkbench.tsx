@@ -221,6 +221,7 @@ export function DocumentCreatorWorkbench({ initial, initialStep = 'create', onSt
             documentId={record.id}
             pdfUrl={signedUrl}
             canEdit={canEditFields}
+            isTemplate={record.is_template}
             onDirtyChange={setFieldsDirty}
           />
         ) : (

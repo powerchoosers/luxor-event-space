@@ -318,9 +318,11 @@ export const DocumentCreatorEditor = forwardRef<DocumentCreatorEditorHandle, Pro
           ? 'Save failed'
           : dirtyRef.current
             ? 'Unsaved changes'
-            : record
-              ? `Draft · v${record.version}`
-              : 'New draft'
+            : record?.is_template
+              ? 'Template'
+              : record
+                ? `Draft · v${record.version}`
+                : 'New draft'
 
   const runHeading = (level: 1 | 2 | 3) => {
     editor?.chain().focus().toggleHeading({ level }).run()

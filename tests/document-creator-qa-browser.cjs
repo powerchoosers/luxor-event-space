@@ -35,6 +35,22 @@ test('document creator QA harness screenshots', { timeout: 180_000 }, async () =
         const themeToggle = page.getByRole('button', { name: /Portal dark/i })
         if (await themeToggle.isVisible()) await themeToggle.click()
       }
+      if (scenario.view === 'fields' && scenario.viewport === '1440') {
+        await page.waitForSelector('[data-pdf-page-canvas]', { timeout: 60_000 })
+        const before = await page.locator('[data-layout-field-overlay]').count()
+        const palette = page.getByTestId('palette-field-text')
+        const canvas = page.locator('[data-pdf-page-canvas]').first()
+        const paletteBox = await palette.boundingBox()
+        const canvasBox = await canvas.boundingBox()
+        assert.ok(paletteBox && canvasBox)
+        await page.mouse.move(paletteBox.x + paletteBox.width / 2, paletteBox.y + paletteBox.height / 2)
+        await page.mouse.down()
+        await page.mouse.move(canvasBox.x + canvasBox.width * 0.35, canvasBox.y + canvasBox.height * 0.45, { steps: 12 })
+        await page.mouse.up()
+        await page.waitForTimeout(400)
+        const after = await page.locator('[data-layout-field-overlay]').count()
+        assert.equal(after, before + 1)
+      }
       await page.waitForTimeout(2500)
       await screenshot(page, scenario.name)
       await page.close()

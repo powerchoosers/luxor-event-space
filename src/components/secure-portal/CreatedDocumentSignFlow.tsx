@@ -64,6 +64,8 @@ export function CreatedDocumentSignFlow({ token, initial }: { token: string; ini
   const [fieldValues, setFieldValues] = useState<Record<string, unknown>>(initial.field_values || {})
   const viewerRef = useRef<HTMLDivElement | null>(null)
   const fieldRefs = useRef<Map<string, HTMLDivElement | null>>(new Map())
+  const finishRef = useRef<HTMLButtonElement | null>(null)
+  const [allRequiredComplete, setAllRequiredComplete] = useState(false)
 
   const complete = payload.status === 'signed' && payload.agreement_execution_ready === true
   const pdfUrl = `/api/public/signatures/download?token=${encodeURIComponent(token)}&kind=${complete ? 'executed' : 'contract'}`
@@ -137,6 +139,25 @@ export function CreatedDocumentSignFlow({ token, initial }: { token: string; ini
   useEffect(() => {
     markSignatureFieldsAdopted()
   }, [markSignatureFieldsAdopted])
+
+  useEffect(() => {
+    if (payload.status === 'signed') return
+    setFieldValues((current) => resolveEffectiveSignerFieldValues(
+      payload.fields.map((field) => ({
+        id: field.id,
+        field_type: field.field_type as LuxorCreatedDocumentFieldType,
+      })),
+      current,
+      {
+        signerName: signedName,
+        signerEmail: initial.signer_email || '',
+        signatureAdopted: Boolean(signatureDataUrl),
+        defaultDate: luxorChicagoDateString(),
+      },
+    ))
+    // Seed empty name/email/date once on load; saved field_values from initial state take precedence.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const chooseMode = (nextMode: SignatureMode) => {
     setMode(nextMode)
@@ -271,12 +292,13 @@ export function CreatedDocumentSignFlow({ token, initial }: { token: string; ini
                 signerName: signedName,
                 signerEmail: initial.signer_email || '',
                 signatureDataUrl,
+                valuesFrozen: payload.status === 'signed',
                 registerFieldRef,
               }}
             />
           </div>
         </section>
-        <aside className="flex min-h-0 flex-col bg-[#f4efe7] text-[#2d251e]">
+        <aside className="flex max-h-[60svh] min-h-0 flex-col bg-[#f4efe7] text-[#2d251e] lg:max-h-none">
           {complete ? (
             <CompletePane pdfUrl={pdfUrl} />
           ) : payload.status === 'declined' ? (
@@ -315,13 +337,16 @@ export function CreatedDocumentSignFlow({ token, initial }: { token: string; ini
                 )
                 const nextMissing = visibleFields.find((field) => completion.missing.includes(field.id))
                 if (nextMissing) {
+                  setAllRequiredComplete(false)
                   focusField(nextMissing.id)
                   return
                 }
-                const next = visibleFields[Math.min(visibleFields.length - 1, activeFieldIndex + 1)]
-                if (next) focusField(next.id)
+                setAllRequiredComplete(true)
+                finishRef.current?.focus()
               }}
               effectiveFieldValues={effectiveFieldValues}
+              allRequiredComplete={allRequiredComplete}
+              finishRef={finishRef}
               onDecline={() => void decline()}
             />
           )}
@@ -383,16 +408,19 @@ function SignPane(props: {
   onPrev: () => void
   onNext: () => void
   onDecline: () => void
+  allRequiredComplete: boolean
+  finishRef: React.RefObject<HTMLButtonElement | null>
 }) {
   const {
     activeField, activeFieldIndex, visibleCount, fillActiveField, needsSignature,
     mode, chooseMode, signedName, setSignedName, signatureDataUrl, setSignatureDataUrl,
     accepted, setAccepted, error, submitting, onSubmit, onPrev, onNext, onDecline,
+    allRequiredComplete, finishRef,
   } = props
 
   return (
-    <form onSubmit={onSubmit} className="flex min-h-[650px] flex-1 flex-col lg:min-h-0">
-      <div className="flex-1 overflow-y-auto p-5 sm:p-6">
+    <form onSubmit={onSubmit} className="flex min-h-0 flex-1 flex-col lg:min-h-0">
+      <div className="min-h-0 flex-1 overflow-y-auto p-5 sm:p-6">
         <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#9b7740]"><LockKeyhole size={13} className="inline" /> Field {activeFieldIndex + 1} of {visibleCount}</p>
         <h2 className="mt-3 font-serif text-3xl font-medium leading-tight">{activeField?.label || 'Review fields'}</h2>
         <p className="mt-2 text-xs text-[#6f665b]">Tap a highlighted field on the PDF, or use the buttons below.</p>
@@ -400,6 +428,9 @@ function SignPane(props: {
           <button type="button" onClick={fillActiveField} className="mt-3 min-h-11 rounded-xl border border-[#d7c59f] bg-white px-4 text-sm font-semibold">
             Fill this field
           </button>
+        ) : null}
+        {allRequiredComplete ? (
+          <p className="mt-2 text-xs font-semibold text-[#2f7547]">All required fields complete. Review and tap Finish when you are ready.</p>
         ) : null}
         {activeField?.required && !fieldHasValue(activeField, props.effectiveFieldValues) ? (
           <p className="mt-2 text-xs text-[#a8792f]">This required field still needs a value.</p>
@@ -446,7 +477,7 @@ function SignPane(props: {
         {error ? <p role="alert" className="mt-3 text-xs text-[#a04b39]">{error}</p> : null}
       </div>
       <div className="shrink-0 space-y-2 border-t border-[#ded5c8] bg-[#eee8df] p-4">
-        <button type="submit" disabled={submitting} className="inline-flex h-12 w-full items-center justify-center rounded-xl bg-[#c89d4b] text-sm font-semibold text-[#20170d] disabled:opacity-60">Finish</button>
+        <button ref={finishRef} type="submit" disabled={submitting} className="inline-flex h-12 w-full items-center justify-center rounded-xl bg-[#c89d4b] text-sm font-semibold text-[#20170d] disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#c89d4b]/50">Finish</button>
         <SignFlowFooter onPrev={onPrev} onNext={onNext} onDecline={onDecline} />
       </div>
     </form>
