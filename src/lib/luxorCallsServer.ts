@@ -14,7 +14,7 @@ import {
   shouldRepairThinPostCallTranscriptSnapshot,
 } from './luxorElenaLiveTranscriptSnapshot'
 import { getLuxorInquiry, listLuxorInquiries } from './luxorInquiriesServer'
-import { supabaseRest } from './supabaseRestServer'
+import { SupabaseRestError, supabaseRest } from './supabaseRestServer'
 
 export const ELENA_LIVE_AGENT_TRANSCRIPTION_SID = 'elena_live_model_output'
 
@@ -617,24 +617,34 @@ export async function saveLuxorElenaAgentTranscriptSegment(input: {
   if (startSeconds == null && Number.isFinite(recordingStartMs) && Number.isFinite(eventMs)) {
     startSeconds = Math.max(0, (eventMs - recordingStartMs) / 1000)
   }
-  const inserted = await supabaseRest<Array<{ id: string }>>('luxor_call_transcript_segments?on_conflict=call_id%2Ctranscription_sid%2Csequence_id%2Ctrack', {
-    method: 'POST', headers: { Prefer: 'resolution=ignore-duplicates,return=representation' },
-    body: JSON.stringify({
-      call_id: call.id,
-      transcription_sid: ELENA_LIVE_AGENT_TRANSCRIPTION_SID,
-      sequence_id: sequenceId,
-      track: 'luxor_agent',
-      segment_start_seconds: startSeconds,
-      segment_audio_timestamp: null,
-      segment_text: text,
-      english_text: text,
-      spoken_languages: ['English'],
-      translation_status: 'not_requested',
-      is_final: true,
-      event_timestamp: eventTime,
-      agent_turn_key: turnKey,
-    }),
-  })
+  const conflictTarget = turnKey
+    ? 'call_id%2Ctranscription_sid%2Cagent_turn_key'
+    : 'call_id%2Ctranscription_sid%2Csequence_id%2Ctrack'
+  const segmentBody = {
+    call_id: call.id,
+    transcription_sid: ELENA_LIVE_AGENT_TRANSCRIPTION_SID,
+    sequence_id: sequenceId,
+    track: 'luxor_agent',
+    segment_start_seconds: startSeconds,
+    segment_audio_timestamp: null,
+    segment_text: text,
+    english_text: text,
+    spoken_languages: ['English'],
+    translation_status: 'not_requested',
+    is_final: true,
+    event_timestamp: eventTime,
+    agent_turn_key: turnKey,
+  }
+  let inserted: Array<{ id: string }>
+  try {
+    inserted = await supabaseRest<Array<{ id: string }>>(`luxor_call_transcript_segments?on_conflict=${conflictTarget}`, {
+      method: 'POST', headers: { Prefer: 'resolution=ignore-duplicates,return=representation' },
+      body: JSON.stringify(segmentBody),
+    })
+  } catch (error) {
+    if (turnKey && error instanceof SupabaseRestError && error.code === '23505') return call
+    throw error
+  }
   if (!inserted.length) return call
   call = await syncLuxorCallTranscriptSnapshot(call, sequenceId)
   return call
