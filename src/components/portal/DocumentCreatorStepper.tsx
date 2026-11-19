@@ -22,7 +22,7 @@ export function DocumentCreatorStepper({
       <ol className="flex items-center gap-1 sm:gap-2">
         {STEPS.map((step) => {
           const current = step.id === activeStep
-          const disabled = step.id === 'send' || (step.id === 'fields' && !fieldsEnabled)
+          const disabled = (step.id === 'fields' || step.id === 'send') && !fieldsEnabled
           return (
             <li key={step.id} className="flex min-w-0 items-center gap-1 sm:gap-2">
               <button

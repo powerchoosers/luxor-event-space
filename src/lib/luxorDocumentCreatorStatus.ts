@@ -19,7 +19,7 @@ export function createdDocumentStatusPresentation(
     case 'partially_signed':
       return { label: LUXOR_CREATED_DOCUMENT_STATUS_LABELS.partially_signed, tone: 'gold' }
     case 'signed':
-      return { label: 'Fully signed', tone: 'green' }
+      return { label: LUXOR_CREATED_DOCUMENT_STATUS_LABELS.signed, tone: 'green' }
     case 'declined':
       return { label: LUXOR_CREATED_DOCUMENT_STATUS_LABELS.declined, tone: 'red' }
     case 'expired':

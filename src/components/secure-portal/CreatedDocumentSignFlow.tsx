@@ -49,6 +49,7 @@ export type CreatedDocumentSignPayload = {
   adopted_signature_data_url?: string
   adopted_initials_data_url?: string
   agreement_execution_ready?: boolean
+  final_pdf_ready?: boolean
 }
 
 type SignatureMode = 'type' | 'draw'
@@ -314,7 +315,7 @@ export function CreatedDocumentSignFlow({ token, initial }: { token: string; ini
         </section>
         <aside className="fixed inset-x-0 bottom-0 z-30 flex max-h-[60svh] min-h-0 flex-col bg-[#f4efe7] text-[#2d251e] shadow-[0_-12px_40px_rgba(0,0,0,0.28)] lg:static lg:z-auto lg:max-h-none lg:shadow-none">
           {complete ? (
-            <CompletePane pdfUrl={pdfUrl} />
+            <CompletePane pdfUrl={pdfUrl} finalPdfReady={payload.final_pdf_ready === true} />
           ) : payload.status === 'declined' ? (
             <div className="p-6 text-sm text-[#6f665b]">You declined this document. Luxor may send an updated link if needed.</div>
           ) : (
@@ -389,14 +390,16 @@ function SignFlowHeader({ payload, complete, pdfUrl }: { payload: CreatedDocumen
   )
 }
 
-function CompletePane({ pdfUrl }: { pdfUrl: string }) {
+function CompletePane({ pdfUrl, finalPdfReady }: { pdfUrl: string; finalPdfReady: boolean }) {
   return (
     <div className="flex-1 overflow-y-auto p-6 sm:p-8">
       <CheckCircle2 size={28} className="text-[#2f7547]" />
       <h2 className="mt-4 font-serif text-3xl font-medium">You&apos;re all set.</h2>
-      <p className="mt-3 text-sm leading-6 text-[#6f665b]">Your signed copy is ready to download.</p>
+      <p className="mt-3 text-sm leading-6 text-[#6f665b]">
+        {finalPdfReady ? 'The completed PDF is ready to download.' : 'Your signed copy is ready to download.'}
+      </p>
       <a href={pdfUrl} download className="mt-6 inline-flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#2d251e] text-sm font-semibold text-white">
-        <Download size={16} /> Download signed copy
+        <Download size={16} /> {finalPdfReady ? 'Download completed PDF' : 'Download signed copy'}
       </a>
     </div>
   )

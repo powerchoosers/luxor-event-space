@@ -5,6 +5,7 @@ import { postgrestSchemaUnavailable } from './luxorPostgrestSchema'
 import { supabaseRest, supabaseRestStrict, SupabaseRestError } from './supabaseRestServer'
 import { buildLuxorCreatedDocumentPdf } from './luxorDocumentCreatorPdfServer'
 import { copyLuxorCreatedDocumentFieldsAndSigners } from './luxorCreatedDocumentFieldsServer'
+import { createdDocumentLibraryStatusFilter } from './luxorCreatedDocumentSendPlan'
 import {
   isLuxorCreatedDocumentType,
   type LuxorCreatedDocumentLibrarySection,
@@ -44,6 +45,27 @@ function rowFromRecord(record: Record<string, unknown>): LuxorCreatedDocumentRow
     version: typeof record.version === 'number' ? record.version : 1,
     pdf_storage_path: typeof record.pdf_storage_path === 'string' ? record.pdf_storage_path : null,
     source_template_id: typeof record.source_template_id === 'string' ? record.source_template_id : null,
+    signing_order: record.signing_order === 'sequential' ? 'sequential' : 'parallel',
+    reminder_enabled: Boolean(record.reminder_enabled),
+    reminder_after_days: typeof record.reminder_after_days === 'number' ? record.reminder_after_days : 3,
+    sent_subject: typeof record.sent_subject === 'string' ? record.sent_subject : null,
+    sent_message: typeof record.sent_message === 'string' ? record.sent_message : null,
+    sent_at: typeof record.sent_at === 'string' ? record.sent_at : null,
+    voided_at: typeof record.voided_at === 'string' ? record.voided_at : null,
+    final_pdf_path: typeof record.final_pdf_path === 'string' ? record.final_pdf_path : null,
+    recipient_summary: typeof record.recipient_summary === 'string' ? record.recipient_summary : null,
+  }
+}
+
+async function listCreatedDocumentRows(filters: string[]) {
+  const pathFor = (columns: string[]) => `${TABLE}?${columns.join('&')}`
+  try {
+    return await supabaseRestStrict<Record<string, unknown>[]>(pathFor(filters))
+  } catch (error) {
+    const select = filters[0] || ''
+    if (!schemaUnavailable(error) || !select.includes('recipient_summary')) throw error
+    const fallback = [`${select.replace(',recipient_summary', '')}`, ...filters.slice(1)]
+    return supabaseRestStrict<Record<string, unknown>[]>(pathFor(fallback))
   }
 }
 
@@ -59,7 +81,7 @@ export async function listLuxorCreatedDocuments(input: {
   updatedFrom?: string
   updatedTo?: string
 }): Promise<LuxorCreatedDocumentSummary[]> {
-  const filters: string[] = ['select=id,created_at,updated_at,title,document_type,is_template,status,archived_at,created_by,version', 'order=updated_at.desc']
+  const filters: string[] = ['select=id,created_at,updated_at,title,document_type,is_template,status,archived_at,created_by,version,recipient_summary', 'order=updated_at.desc']
   if (input.section === 'archived') {
     filters.push('archived_at=not.is.null')
   } else if (input.section === 'templates') {
@@ -68,14 +90,14 @@ export async function listLuxorCreatedDocuments(input: {
   } else {
     filters.push('is_template=eq.false')
     filters.push('archived_at=is.null')
-    filters.push('status=eq.draft')
+    const statusFilter = createdDocumentLibraryStatusFilter(input.section)
+    if (statusFilter) filters.push(statusFilter)
   }
   if (input.documentType) filters.push(`document_type=eq.${input.documentType}`)
   if (input.status && input.section !== 'archived') filters.push(`status=eq.${encodeURIComponent(input.status)}`)
   if (input.updatedFrom) filters.push(`updated_at=gte.${encodeURIComponent(input.updatedFrom)}`)
   if (input.updatedTo) filters.push(`updated_at=lte.${encodeURIComponent(input.updatedTo)}`)
-  const path = `${TABLE}?${filters.join('&')}`
-  const rows = await supabaseRestStrict<Record<string, unknown>[]>(path)
+  const rows = await listCreatedDocumentRows(filters)
   let summaries = rows.flatMap((row) => {
     const mapped = rowFromRecord(row)
     return mapped ? [mapped] : []
@@ -85,6 +107,21 @@ export async function listLuxorCreatedDocuments(input: {
     summaries = summaries.filter((row) => row.title.toLowerCase().includes(needle))
   }
   return summaries
+}
+
+export async function patchLuxorCreatedDocumentRecord(id: string, patch: Record<string, unknown>) {
+  const rows = await supabaseRestStrict<Record<string, unknown>[]>(
+    `${TABLE}?id=eq.${encodeURIComponent(id)}&select=*`,
+    {
+      method: 'PATCH',
+      headers: { Prefer: 'return=representation' },
+      body: JSON.stringify(patch),
+    },
+  )
+  const row = Array.isArray(rows) ? rows[0] : undefined
+  const document = row && typeof row === 'object' ? rowFromRecord(row) : null
+  if (!document) throw new Error('The document could not be updated.')
+  return document
 }
 
 export async function getLuxorCreatedDocument(id: string): Promise<LuxorCreatedDocumentRow | null> {

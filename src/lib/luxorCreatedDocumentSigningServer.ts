@@ -102,7 +102,8 @@ export async function publicCreatedDocumentSignaturePayload(signer: LuxorCreated
       h: field.h,
     })),
     signed_pdf_available: Boolean(signer.signed_pdf_path),
-    agreement_execution_ready: signer.status === 'signed' && Boolean(signer.signed_pdf_path),
+    agreement_execution_ready: signer.status === 'signed' && Boolean(signer.signed_pdf_path || document.final_pdf_path),
+    final_pdf_ready: document.status === 'signed' && Boolean(document.final_pdf_path),
   }
 }
 
@@ -124,7 +125,17 @@ export async function markLuxorCreatedDocumentSignerViewed(signer: LuxorCreatedD
       payload: { at: now },
     })
   }
+  await syncCreatedDocumentDelivery(signer.document_id)
   return updated || signer
+}
+
+async function syncCreatedDocumentDelivery(documentId: string) {
+  try {
+    const { syncLuxorCreatedDocumentDeliveryStatus } = await import('./luxorCreatedDocumentDeliveryServer')
+    await syncLuxorCreatedDocumentDeliveryStatus(documentId)
+  } catch (error) {
+    console.error('Created document delivery status sync failed', error)
+  }
 }
 
 export async function declineLuxorCreatedDocumentSigner(input: {
@@ -153,6 +164,7 @@ export async function declineLuxorCreatedDocumentSigner(input: {
     eventType: 'declined',
     payload: { reason, at: now },
   })
+  await syncCreatedDocumentDelivery(signer.document_id)
   return updated || signer
 }
 
@@ -232,6 +244,7 @@ export async function completeLuxorCreatedDocumentSigner(input: {
       initials_data_url: needsSignature ? input.initialsDataUrl || null : null,
     },
   })
+  await syncCreatedDocumentDelivery(signer.document_id)
   return updated || signer
 }
 
@@ -281,7 +294,8 @@ export async function createLuxorCreatedDocumentTestSigningLink(input: {
 export async function createdDocumentPdfDownloadPath(signer: LuxorCreatedDocumentSignerRow, kind: string) {
   const document = await getLuxorCreatedDocument(signer.document_id)
   if (!document) return null
-  if (kind === 'executed' || kind === 'signed') {
+  if (kind === 'executed' || kind === 'signed' || kind === 'final') {
+    if (document.status === 'signed' && document.final_pdf_path) return document.final_pdf_path
     return signer.signed_pdf_path
   }
   return document.pdf_storage_path

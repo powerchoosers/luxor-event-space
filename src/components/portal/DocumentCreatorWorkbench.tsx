@@ -10,6 +10,7 @@ import { DocumentCreatorPaperPreview } from '@/components/portal/DocumentCreator
 import { DocumentCreatorPdfPreview } from '@/components/portal/DocumentCreatorPdfPreview'
 import { DocumentCreatorStepper, type DocumentCreatorStep } from '@/components/portal/DocumentCreatorStepper'
 import { DocumentCreatorFieldsStep } from '@/components/portal/DocumentCreatorFieldsStep'
+import { DocumentCreatorSendStep } from '@/components/portal/DocumentCreatorSendStep'
 import { canEditCreatedDocumentFields } from '@/lib/luxorCreatedDocumentFieldTypes'
 import type { LuxorCreatedDocumentRow, LuxorCreatedDocumentType } from '@/lib/luxorDocumentCreatorTypes'
 import { stashCreatedDocumentHandoff } from '@/lib/luxorDocumentCreatorHandoff'
@@ -164,8 +165,7 @@ export function DocumentCreatorWorkbench({ initial, initialStep = 'create', onSt
   const canEditFields = record ? canEditCreatedDocumentFields(record.status, record.archived_at) : true
 
   const goToStep = (step: DocumentCreatorStep) => {
-    if (step === 'fields' && !fieldsEnabled) return
-    if (step === 'send') return
+    if ((step === 'fields' || step === 'send') && !fieldsEnabled) return
     setActiveStep(step)
     onStepChange?.(step)
   }
@@ -206,17 +206,30 @@ export function DocumentCreatorWorkbench({ initial, initialStep = 'create', onSt
           <DocumentCreatorStepper activeStep={activeStep} fieldsEnabled={fieldsEnabled} onStepChange={goToStep} />
         </div>
         <div className="hidden min-[1280px]:flex shrink-0 flex-wrap gap-2">
-          <PortalButton type="button" variant="secondary" className="min-h-11" disabled={saving} onClick={() => void runSave('template')}>
+          <PortalButton type="button" variant="secondary" className="min-h-11" disabled={saving || activeStep === 'send'} onClick={() => void runSave('template')}>
             Save as template
           </PortalButton>
-          <PortalButton type="button" variant="primary" className="min-h-11" disabled={saving} onClick={() => void runSave('draft')}>
+          <PortalButton type="button" variant="primary" className="min-h-11" disabled={saving || activeStep === 'send'} onClick={() => void runSave('draft')}>
             Save draft
           </PortalButton>
         </div>
       </div>
 
       <div className="min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden portal-scrollbar min-[1280px]:overflow-hidden">
-        {activeStep === 'fields' && record?.id ? (
+        {activeStep === 'send' && record?.id ? (
+          <DocumentCreatorSendStep
+            documentId={record.id}
+            title={record.title}
+            status={record.status}
+            signingOrder={record.signing_order}
+            reminderEnabled={record.reminder_enabled}
+            reminderAfterDays={record.reminder_after_days}
+            sentSubject={record.sent_subject}
+            sentMessage={record.sent_message}
+            finalPdfPath={record.final_pdf_path}
+            onUpdated={setRecord}
+          />
+        ) : activeStep === 'fields' && record?.id ? (
           <DocumentCreatorFieldsStep
             documentId={record.id}
             pdfUrl={signedUrl}
@@ -289,6 +302,7 @@ export function DocumentCreatorWorkbench({ initial, initialStep = 'create', onSt
         )}
       </div>
 
+      {activeStep === 'send' ? null : (
       <div className="fixed inset-x-0 bottom-0 z-20 border-t border-[color:var(--portal-border)] bg-[color:var(--portal-frame)] p-3 min-[1280px]:hidden">
         <div className="mx-auto flex max-w-xl flex-col gap-2">
           <PortalButton type="button" variant="primary" className="min-h-11 w-full" disabled={saving} onClick={() => void runSave('draft')}>
@@ -299,6 +313,7 @@ export function DocumentCreatorWorkbench({ initial, initialStep = 'create', onSt
           </PortalButton>
         </div>
       </div>
+      )}
       <PortalModal
         isOpen={leaveConfirmOpen}
         onClose={() => setLeaveConfirmOpen(false)}

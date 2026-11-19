@@ -60,6 +60,7 @@ function signerFromRecord(row: Record<string, unknown>): LuxorCreatedDocumentSig
     last_ip: typeof row.last_ip === 'string' ? row.last_ip : null,
     last_user_agent: typeof row.last_user_agent === 'string' ? row.last_user_agent : null,
     signed_pdf_path: typeof row.signed_pdf_path === 'string' ? row.signed_pdf_path : null,
+    invited_at: typeof row.invited_at === 'string' ? row.invited_at : null,
     created_at: typeof row.created_at === 'string' ? row.created_at : undefined,
     updated_at: typeof row.updated_at === 'string' ? row.updated_at : undefined,
   }
