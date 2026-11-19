@@ -26,3 +26,8 @@ test('response turn key prefers response_id', () => {
   assert.equal(events.responseTurnKey({ response_id: 'resp_1' }, { item_id: 'item_2' }), 'resp_1')
   assert.equal(events.responseTurnKey({}, { item_id: 'item_2' }), 'item_2')
 })
+
+test('response turn finished excludes output_text.done', () => {
+  assert.equal(events.isResponseTurnFinished('response.done'), true)
+  assert.equal(events.isResponseTurnFinished('response.output_text.done'), false)
+})

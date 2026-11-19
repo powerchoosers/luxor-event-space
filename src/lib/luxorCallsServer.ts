@@ -585,12 +585,20 @@ export async function saveLuxorElenaAgentTranscriptSegment(input: {
   endMs?: number | null
   eventTimestamp?: string | null
   sequenceId?: number | null
+  turnKey?: string | null
 }) {
   let call = await getLuxorCallBySid(input.callSid)
   if (!call || !canProcessLuxorRecording(call) || !luxorElenaLiveInboundTranscriptUsesSipBridge(call.metadata)) return null
   if (call.metadata.openai_session_id !== input.sessionId) return null
   const text = input.text.trim().slice(0, 4000)
   if (!text) return null
+  const turnKey = typeof input.turnKey === 'string' && input.turnKey.trim() ? input.turnKey.trim().slice(0, 200) : null
+  if (turnKey) {
+    const existingTurn = await supabaseRest<Array<{ id: string }>>(
+      `luxor_call_transcript_segments?select=id&call_id=eq.${encodeURIComponent(call.id)}&transcription_sid=eq.${encodeURIComponent(ELENA_LIVE_AGENT_TRANSCRIPTION_SID)}&agent_turn_key=eq.${encodeURIComponent(turnKey)}&limit=1`,
+    )
+    if (existingTurn.length) return call
+  }
   const existing = await getTranscriptRows(`call_id=eq.${encodeURIComponent(call.id)}&transcription_sid=eq.${encodeURIComponent(ELENA_LIVE_AGENT_TRANSCRIPTION_SID)}`)
   const sequenceId = typeof input.sequenceId === 'number' && Number.isFinite(input.sequenceId) && input.sequenceId > 0
     ? Math.trunc(input.sequenceId)
@@ -624,6 +632,7 @@ export async function saveLuxorElenaAgentTranscriptSegment(input: {
       translation_status: 'not_requested',
       is_final: true,
       event_timestamp: eventTime,
+      agent_turn_key: turnKey,
     }),
   })
   if (!inserted.length) return call
