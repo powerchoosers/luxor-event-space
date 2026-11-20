@@ -37,7 +37,7 @@ function loadCallsServer(options = {}) {
         if (!init.method) {
           if (query.includes('luxor_calls?') && query.includes('twilio_call_sid')) {
             return [{
-              id: 'call-id', twilio_call_sid: 'CA' + '1'.repeat(32), recording_consent_status: 'automatic', metadata: { scope: 'elena_live_inbound', openai_session_id: 'live_session', accepted_at: '2026-11-14T19:25:00.000Z' },
+              id: 'call-id', twilio_call_sid: 'CA' + '1'.repeat(32), recording_consent_status: options.recordingConsentStatus || 'automatic', metadata: { scope: 'elena_live_inbound', openai_session_id: 'live_session', accepted_at: '2026-11-14T19:25:00.000Z' },
               recording_started_at: '2026-11-14T19:25:00.000Z', answered_at: '2026-11-14T19:25:00.000Z', started_at: '2026-11-14T19:24:50.000Z',
               transcription_status: 'processing', summary_status: 'not_generated', updated_at: '2026-11-14T19:25:00.000Z', last_sequence_number: 0,
             }]
@@ -298,7 +298,16 @@ test('elena agent segments treat concurrent agent_turn_key 23505 as already save
   await exports.saveLuxorElenaAgentTranscriptSegment({ ...payload, sequenceId: 2, text: 'Lost race.' })
   const segments = inserted.filter((row) => row.query.startsWith('luxor_call_transcript_segments') && row.body.agent_turn_key).map((row) => row.body)
   assert.equal(segments.length, 1)
-  assert.match(inserted[0].query, /on_conflict=call_id%2Ctranscription_sid%2Cagent_turn_key/)
+  assert.match(inserted[0].query, /on_conflict=call_id%2Ctranscription_sid%2Csequence_id%2Ctrack/)
+})
+
+test('elena agent segments save while recording consent is still pending', async () => {
+  const { exports, inserted } = loadCallsServer({ recordingConsentStatus: 'not_requested' })
+  await exports.saveLuxorElenaAgentTranscriptSegment({
+    callSid: 'CA' + '1'.repeat(32), sessionId: 'live_session', text: 'Before consent.', startMs: 7000, endMs: 9000, sequenceId: 1, turnKey: 'agent-turn:resp_pre',
+  })
+  const segments = inserted.filter((row) => row.query.startsWith('luxor_call_transcript_segments')).map((row) => row.body)
+  assert.equal(segments.length, 1)
 })
 
 test('elena agent segments dedupe by turn key', async () => {
