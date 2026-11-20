@@ -14,7 +14,19 @@ export const metadata: Metadata = {
 const googleMapsUrl = 'https://maps.app.goo.gl/qQyX6MP98A9FNwvr6?g_st=ic'
 const appleMapsUrl = 'https://maps.apple/p/SYUX3ViRAh0KJ2'
 
-export default function ContactPage() {
+type ContactPageProps = {
+  searchParams?: Promise<{ intent?: string }>
+}
+
+function readContactIntent(raw: string | undefined) {
+  const intent = raw?.trim().toLowerCase() || ''
+  if (intent === 'work-with-us' || intent === 'partnership') return intent
+  return null
+}
+
+export default async function ContactPage({ searchParams }: ContactPageProps) {
+  const query = searchParams ? await searchParams : undefined
+  const contactIntent = readContactIntent(query?.intent)
   return (
     <main className="min-h-screen bg-[#faf7f2] pt-28 text-[#241d17]">
       <div className="mx-auto max-w-7xl px-5 py-12 sm:px-6 sm:py-16 lg:px-8 lg:py-20">
@@ -146,7 +158,7 @@ export default function ContactPage() {
 
           {/* Right Column: Contact Form */}
           <div>
-            <LuxorContactForm locale="en" />
+            <LuxorContactForm locale="en" contactIntent={contactIntent} />
           </div>
         </div>
       </div>

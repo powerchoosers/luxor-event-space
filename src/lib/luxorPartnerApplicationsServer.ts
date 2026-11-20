@@ -327,6 +327,84 @@ export async function submitLuxorMarketVendorApplication(input: MarketVendorSubm
   }
 }
 
+export type PartnerContactIntakeInput = {
+  applicationType: LuxorPartnerApplicationType
+  fullName: string
+  email: string
+  phone: string
+  message: string
+  pagePath?: string | null
+  referrer?: string | null
+  submissionKey: string
+  ipHash?: string
+  userAgent?: string
+}
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+
+export async function submitLuxorPartnerApplicationFromContact(input: PartnerContactIntakeInput) {
+  const submissionKey = input.submissionKey.trim()
+  if (!UUID_RE.test(submissionKey)) {
+    throw new Error('Refresh the page and try again.')
+  }
+
+  const existing = await getLuxorPartnerApplicationBySubmissionKey(submissionKey)
+  if (existing) return { application: existing, replayed: true as const }
+
+  const fullName = input.fullName.trim()
+  const email = input.email.trim().toLowerCase()
+  const phone = normalizePhone(input.phone)
+  const message = input.message.trim()
+
+  if (!fullName || fullName.length > 200) throw new Error('Enter your full name.')
+  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new Error('Enter a valid email address.')
+  if (!message || message.length > 3000) throw new Error('Please shorten the message to 3,000 characters or fewer.')
+
+  if (!(input.applicationType as string)) throw new Error('Unable to classify this request.')
+
+  const answers = {
+    intake_channel: 'contact_form',
+    message,
+    page_path: input.pagePath || null,
+    referrer: input.referrer || null,
+    submitted_at: new Date().toISOString(),
+  }
+
+  const [created] = await supabaseRestStrict<LuxorPartnerApplicationRow[]>(
+    `luxor_partner_applications?select=${applicationSelect}`,
+    {
+      method: 'POST',
+      headers: { Prefer: 'return=representation' },
+      body: JSON.stringify({
+        application_type: input.applicationType,
+        event_id: null,
+        status: 'new',
+        payment_status: null,
+        business_name: fullName.slice(0, 200),
+        contact_name: fullName.slice(0, 200),
+        email,
+        phone,
+        instagram_handle: null,
+        city: null,
+        website_url: null,
+        vendor_category: null,
+        selected_space: null,
+        selected_space_price_cents: null,
+        requires_electricity: null,
+        additional_displays: [],
+        answers,
+        internal_notes: null,
+        submission_key: submissionKey,
+        ip_hash: input.ipHash || null,
+        user_agent: input.userAgent || null,
+      }),
+    },
+  )
+
+  if (!created) throw new Error('Unable to save your message.')
+  return { application: created, replayed: false as const }
+}
+
 export function parseMarketVendorFormData(form: FormData) {
   const get = (key: string) => String(form.get(key) || '').trim()
   const displays = form

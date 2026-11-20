@@ -17,9 +17,11 @@ function formatPhoneNumber(value: string) {
 export function LuxorContactForm({
   locale = 'en',
   className = '',
+  contactIntent = null,
 }: {
   locale?: 'en' | 'es'
   className?: string
+  contactIntent?: 'work-with-us' | 'partnership' | null
 }) {
   const spanish = locale === 'es'
   const [fullName, setFullName] = useState('')
@@ -73,6 +75,7 @@ export function LuxorContactForm({
         metadata: {
           contactFormSubmittedAt: new Date().toISOString(),
           websiteLocale: locale,
+          ...(contactIntent ? { contactIntent, workWithUsIntent: 'work-with-us' } : {}),
         },
       }
 
