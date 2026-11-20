@@ -96,10 +96,10 @@ export async function POST(request: Request) {
       const changed = await supabaseRestStrict<Call[]>(`luxor_calls?twilio_call_sid=eq.${parent}&metadata->>scope=eq.${SCOPE}&updated_at=eq.${encodeURIComponent(row.updated_at)}&select=twilio_call_sid`, { method: 'PATCH', headers: { Prefer: 'return=representation' }, body: JSON.stringify(patch) })
       if (!changed.length) continue
       if (leg === 'elena' && status === 'in-progress' && typeof previous.openai_session_id === 'string') {
-        triggerElenaInboundAgentTranscriptSideband(parent, previous.openai_session_id)
+        await startAutomaticElenaRecording(parent, previous.openai_session_id).catch(() => console.warn('[Elena Inbound] Automatic recording awaits an accepted call.'))
+        triggerElenaInboundAgentTranscriptSideband(parent, previous.openai_session_id, previous)
         await notifyElenaInboundAnswered({ callSid: parent, sessionId: previous.openai_session_id })
         await syncElenaInboundAnsweredAt(parent).catch(() => undefined)
-        await startAutomaticElenaRecording(parent, previous.openai_session_id).catch(() => console.warn('[Elena Inbound] Automatic recording awaits an accepted call.'))
       }
       if (!child && terminal) {
         finalizeElenaInboundCall(parent).catch(() => console.warn('[Elena Inbound] Call-end summary could not be queued.'))

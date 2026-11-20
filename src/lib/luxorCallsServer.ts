@@ -588,7 +588,8 @@ export async function saveLuxorElenaAgentTranscriptSegment(input: {
   turnKey?: string | null
 }) {
   let call = await getLuxorCallBySid(input.callSid)
-  if (!call || !canProcessLuxorRecording(call) || !luxorElenaLiveInboundTranscriptUsesSipBridge(call.metadata)) return null
+  if (!call || !luxorElenaLiveInboundTranscriptUsesSipBridge(call.metadata)) return null
+  if (call.metadata.rehearsal_only === true) return null
   if (call.metadata.openai_session_id !== input.sessionId) return null
   const text = input.text.trim().slice(0, 4000)
   if (!text) return null
@@ -617,9 +618,6 @@ export async function saveLuxorElenaAgentTranscriptSegment(input: {
   if (startSeconds == null && Number.isFinite(recordingStartMs) && Number.isFinite(eventMs)) {
     startSeconds = Math.max(0, (eventMs - recordingStartMs) / 1000)
   }
-  const conflictTarget = turnKey
-    ? 'call_id%2Ctranscription_sid%2Cagent_turn_key'
-    : 'call_id%2Ctranscription_sid%2Csequence_id%2Ctrack'
   const segmentBody = {
     call_id: call.id,
     transcription_sid: ELENA_LIVE_AGENT_TRANSCRIPTION_SID,
@@ -637,7 +635,7 @@ export async function saveLuxorElenaAgentTranscriptSegment(input: {
   }
   let inserted: Array<{ id: string }>
   try {
-    inserted = await supabaseRest<Array<{ id: string }>>(`luxor_call_transcript_segments?on_conflict=${conflictTarget}`, {
+    inserted = await supabaseRest<Array<{ id: string }>>('luxor_call_transcript_segments?on_conflict=call_id%2Ctranscription_sid%2Csequence_id%2Ctrack', {
       method: 'POST', headers: { Prefer: 'resolution=ignore-duplicates,return=representation' },
       body: JSON.stringify(segmentBody),
     })

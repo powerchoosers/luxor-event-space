@@ -8,7 +8,16 @@ import {
   maxElenaModelTranscriptSequenceForCallSid,
   saveLuxorElenaAgentTranscriptSegment,
 } from './luxorCallsServer'
-import { agentTranscriptSidebandClaimQuerySuffix, resolveElenaInboundAgentTranscriptWorkerOrigin } from './luxorElenaInboundAgentTranscriptClaim'
+import {
+  agentTranscriptSidebandClaimDelayMs,
+  agentTranscriptSidebandClaimQuerySuffix,
+  ELENA_AGENT_TRANSCRIPT_CLAIM_MAX_ATTEMPTS,
+  ELENA_INBOUND_AGENT_TRANSCRIPT_STALE_RUNNING_MS,
+  ELENA_INBOUND_AGENT_TRANSCRIPT_WORKER_MAX_MS,
+  isStaleAgentTranscriptSideband,
+  resolveElenaInboundAgentTranscriptWorkerOrigin,
+  shouldStartAgentTranscriptSideband,
+} from './luxorElenaInboundAgentTranscriptClaim'
 import { SupabaseRestError, supabaseRestStrict } from './supabaseRestServer'
 
 export const ELENA_INBOUND_AGENT_TRANSCRIPT_WORKER_ORIGIN =
@@ -16,9 +25,10 @@ export const ELENA_INBOUND_AGENT_TRANSCRIPT_WORKER_ORIGIN =
 const CALL_SID = /^CA[0-9a-f]{32}$/i
 const SESSION_ID = /^[A-Za-z0-9][A-Za-z0-9_-]{1,180}$/
 const TERMINAL = new Set(['completed', 'busy', 'failed', 'no-answer', 'canceled'])
-/** Stay under the Vercel function wall (~13 min) while leaving time to flush the last turn. */
-export const ELENA_INBOUND_AGENT_TRANSCRIPT_WORKER_MAX_MS = 11 * 60_000
-export const ELENA_INBOUND_AGENT_TRANSCRIPT_STALE_RUNNING_MS = ELENA_INBOUND_AGENT_TRANSCRIPT_WORKER_MAX_MS + 2 * 60_000
+export {
+  ELENA_INBOUND_AGENT_TRANSCRIPT_STALE_RUNNING_MS,
+  ELENA_INBOUND_AGENT_TRANSCRIPT_WORKER_MAX_MS,
+} from './luxorElenaInboundAgentTranscriptClaim'
 
 type LiveCall = { id: string; twilio_call_sid: string; status: string; metadata: Record<string, unknown>; updated_at: string }
 
@@ -33,29 +43,18 @@ function parseLiveEvent(raw: string): Record<string, unknown> | null {
   }
 }
 
-function sidebandStartedAt(metadata: Record<string, unknown>) {
-  const value = metadata.agent_transcript_sideband_started_at
-  return typeof value === 'string' && Number.isFinite(Date.parse(value)) ? Date.parse(value) : Number.NaN
-}
-
-function isStaleRunningSideband(metadata: Record<string, unknown>) {
-  return metadata.agent_transcript_sideband === 'running'
-    && Number.isFinite(sidebandStartedAt(metadata))
-    && Date.now() - sidebandStartedAt(metadata) > ELENA_INBOUND_AGENT_TRANSCRIPT_STALE_RUNNING_MS
-}
-
 async function readBoundLiveCall(callSid: string, sessionId: string) {
   const [row] = await supabaseRestStrict<LiveCall[]>(`luxor_calls?select=id,twilio_call_sid,status,metadata,updated_at&twilio_call_sid=eq.${encodeURIComponent(callSid)}&metadata->>scope=eq.elena_live_inbound&limit=1`)
   if (!row || row.metadata.openai_session_id !== sessionId || row.metadata.rehearsal_only !== false) return null
   return row
 }
 
-async function claimAgentTranscriptSideband(row: LiveCall, sessionId: string) {
+async function claimAgentTranscriptSidebandOnce(row: LiveCall, sessionId: string) {
   const status = row.metadata.agent_transcript_sideband
   if (status === 'completed') return 'already_completed'
-  if (status === 'running' && !isStaleRunningSideband(row.metadata)) return 'already_running'
+  if (status === 'running' && !isStaleAgentTranscriptSideband(row.metadata)) return 'already_running'
   const startedAt = new Date().toISOString()
-  const claimable = isStaleRunningSideband(row.metadata) ? '' : agentTranscriptSidebandClaimQuerySuffix()
+  const claimable = isStaleAgentTranscriptSideband(row.metadata) ? '' : agentTranscriptSidebandClaimQuerySuffix()
   let claimed: LiveCall[] | undefined
   try {
     claimed = await supabaseRestStrict<LiveCall[]>(`luxor_calls?twilio_call_sid=eq.${encodeURIComponent(row.twilio_call_sid)}&metadata->>scope=eq.elena_live_inbound&updated_at=eq.${encodeURIComponent(row.updated_at)}${claimable}&select=id,twilio_call_sid,status,metadata,updated_at`, {
@@ -81,11 +80,44 @@ async function claimAgentTranscriptSideband(row: LiveCall, sessionId: string) {
     console.warn('[Elena Inbound] Agent transcript sideband claim failed.', {
       callSid: row.twilio_call_sid,
       message,
+      code: error instanceof SupabaseRestError ? error.code : undefined,
       status: error instanceof SupabaseRestError ? error.status : undefined,
     })
     return 'claim_error'
   }
   return claimed?.[0] ? 'claimed' : 'lost_claim'
+}
+
+async function claimAgentTranscriptSideband(callSid: string, sessionId: string, initialRow: LiveCall) {
+  for (let attempt = 0; attempt < ELENA_AGENT_TRANSCRIPT_CLAIM_MAX_ATTEMPTS; attempt += 1) {
+    const row = attempt === 0 ? initialRow : await readBoundLiveCall(callSid, sessionId)
+    if (!row) return 'call_unavailable'
+    const result = await claimAgentTranscriptSidebandOnce(row, sessionId)
+    if (result !== 'lost_claim') return result
+    if (attempt + 1 < ELENA_AGENT_TRANSCRIPT_CLAIM_MAX_ATTEMPTS) {
+      await new Promise((resolve) => setTimeout(resolve, agentTranscriptSidebandClaimDelayMs(attempt + 1)))
+    }
+  }
+  const latest = await readBoundLiveCall(callSid, sessionId)
+  if (latest?.metadata.agent_transcript_sideband === 'running' && !isStaleAgentTranscriptSideband(latest.metadata)) {
+    return 'already_running'
+  }
+  console.warn('[Elena Inbound] Agent transcript sideband claim lost after retries.', { callSid, attempts: ELENA_AGENT_TRANSCRIPT_CLAIM_MAX_ATTEMPTS })
+  return 'lost_claim'
+}
+
+function logAgentTranscriptTurnPersistFailure(
+  error: unknown,
+  context: { callSid: string; turnKey: string; sequenceId: number },
+) {
+  console.warn('[Elena Inbound] Agent transcript turn could not be saved.', {
+    callSid: context.callSid,
+    turnKey: context.turnKey,
+    sequenceId: context.sequenceId,
+    message: error instanceof Error ? error.message : 'unknown',
+    code: error instanceof SupabaseRestError ? error.code : undefined,
+    status: error instanceof SupabaseRestError ? error.status : undefined,
+  })
 }
 
 async function finishAgentTranscriptSideband(callSid: string, sessionId: string, status: SidebandFinishStatus) {
@@ -104,7 +136,7 @@ export async function runElenaInboundAgentTranscriptSideband(callSid: string, se
   if (!CALL_SID.test(callSid) || !SESSION_ID.test(sessionId)) throw new Error('Invalid live transcript capture request.')
   const row = await readBoundLiveCall(callSid, sessionId)
   if (!row) return { started: false, reason: 'call_unavailable' }
-  const claim = await claimAgentTranscriptSideband(row, sessionId)
+  const claim = await claimAgentTranscriptSideband(callSid, sessionId, row)
   if (claim !== 'claimed') return { started: false, reason: claim }
 
   const config = getElenaLiveConfig()
@@ -120,17 +152,27 @@ export async function runElenaInboundAgentTranscriptSideband(callSid: string, se
       const maxSeq = await maxElenaModelTranscriptSequenceForCallSid(callSid)
       modelSequence = Math.max(modelSequence, maxSeq)
       const sequenceId = modelSequence + 1
-      const saved = await saveLuxorElenaAgentTranscriptSegment({
-        callSid,
-        sessionId,
-        text: turn.text,
-        startMs: turn.startMs,
-        endMs: turn.endMs,
-        sequenceId,
-        turnKey: turn.turnKey,
-      })
-      if (saved) modelSequence = sequenceId
-    }).catch(() => console.warn('[Elena Inbound] Agent transcript turn could not be saved.'))
+      try {
+        const saved = await saveLuxorElenaAgentTranscriptSegment({
+          callSid,
+          sessionId,
+          text: turn.text,
+          startMs: turn.startMs,
+          endMs: turn.endMs,
+          sequenceId,
+          turnKey: turn.turnKey,
+        })
+        if (saved) modelSequence = sequenceId
+        else console.warn('[Elena Inbound] Agent transcript turn was skipped.', {
+          callSid,
+          turnKey: turn.turnKey,
+          sequenceId,
+          reason: 'save_returned_null',
+        })
+      } catch (error) {
+        logAgentTranscriptTurnPersistFailure(error, { callSid, turnKey: turn.turnKey, sequenceId })
+      }
+    })
   }
 
   await new Promise<void>((resolve) => {
@@ -184,8 +226,13 @@ export async function runElenaInboundAgentTranscriptSideband(callSid: string, se
 }
 
 /** Starts a dedicated worker route that can outlive the signed OpenAI webhook. */
-export function triggerElenaInboundAgentTranscriptSideband(callSid: string, sessionId: string) {
+export function triggerElenaInboundAgentTranscriptSideband(
+  callSid: string,
+  sessionId: string,
+  metadata?: Record<string, unknown> | null,
+) {
   if (!CALL_SID.test(callSid) || !SESSION_ID.test(sessionId)) return
+  if (!shouldStartAgentTranscriptSideband(metadata)) return
   const secret = process.env.OPENAI_VOICE_WEBHOOK_SECRET || ''
   if (secret.length < 32) return
   const token = signElenaLiveClaim({ kind: 'call', callSid, sessionId, exp: Math.floor(Date.now() / 1000) + ELENA_LIVE_CLAIM_MAX_SECONDS }, secret)

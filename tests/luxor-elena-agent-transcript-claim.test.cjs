@@ -35,3 +35,16 @@ test('worker origin defaults to www and rewrites apex', () => {
   assert.equal(claim.resolveElenaInboundAgentTranscriptWorkerOrigin('https://luxoratlaspalmas.com'), 'https://www.luxoratlaspalmas.com')
   assert.equal(claim.resolveElenaInboundAgentTranscriptWorkerOrigin('luxoratlaspalmas.com'), 'https://www.luxoratlaspalmas.com')
 })
+
+test('shouldStartAgentTranscriptSideband suppresses duplicate fresh workers', () => {
+  const startedAt = new Date().toISOString()
+  assert.equal(claim.shouldStartAgentTranscriptSideband({ agent_transcript_sideband: 'completed' }), false)
+  assert.equal(claim.shouldStartAgentTranscriptSideband({ agent_transcript_sideband: 'running', agent_transcript_sideband_started_at: startedAt }), false)
+  assert.equal(claim.shouldStartAgentTranscriptSideband({ agent_transcript_sideband: 'failed' }), true)
+  assert.equal(claim.shouldStartAgentTranscriptSideband({}), true)
+})
+
+test('claim retry backoff stays short', () => {
+  assert.equal(claim.agentTranscriptSidebandClaimDelayMs(1), 50)
+  assert.equal(claim.agentTranscriptSidebandClaimDelayMs(100), 400)
+})
