@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useEffectEvent, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { LoaderCircle } from '@/lib/icons/phosphor-compat'
 import { Document, Page } from 'react-pdf'
 import type { LuxorCreatedDocumentFieldType } from '@/lib/luxorCreatedDocumentFieldTypes'
@@ -89,7 +89,9 @@ function CreatedDocumentFieldPdfCanvasLoaded({
   const [pdfFetchFailed, setPdfFetchFailed] = useState(false)
   const renderPageWidth = pageWidth > 0 ? pageWidth : 520
   const pdfLoading = !pdfFile && !pdfFetchFailed
+  const reportFetchError = useEffectEvent(() => onError?.())
 
+  // Keep the PDF source stable when field overlays or their callbacks change.
   useEffect(() => {
     let cancelled = false
     fetch(pdfUrl, { credentials: 'same-origin' })
@@ -105,13 +107,13 @@ function CreatedDocumentFieldPdfCanvasLoaded({
       .catch(() => {
         if (!cancelled) {
           setPdfFetchFailed(true)
-          onError?.()
+          reportFetchError()
         }
       })
     return () => {
       cancelled = true
     }
-  }, [onError, pdfUrl])
+  }, [pdfUrl])
   const pageRange = useMemo(() => {
     if (mode === 'layout') return [layoutPageIndex]
     return Array.from({ length: numPages }, (_, index) => index)
