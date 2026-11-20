@@ -18,10 +18,7 @@ import {
   submitLuxorPartnerApplicationFromContact,
 } from '@/lib/luxorPartnerApplicationsServer'
 import { LUXOR_PARTNER_APPLICATION_TYPE_LABELS } from '@/lib/luxorPartnerApplicationTypes'
-import {
-  classifyLuxorWorkWithUsIntake,
-  isLuxorWorkWithUsMisclassifiedInquiry,
-} from '@/lib/luxorWorkWithUsIntakeServer'
+import { classifyLuxorWorkWithUsIntake } from '@/lib/luxorWorkWithUsIntakeServer'
 
 const VALID_INQUIRY_STATUSES: LuxorInquiryStatus[] = [
   'new',
@@ -56,8 +53,7 @@ export async function GET(request: NextRequest) {
     const inquiries = requestedLimit === null || !Number.isFinite(requestedLimit)
       ? await listAllLuxorInquiries()
       : await listLuxorInquiries(Math.max(0, Math.min(requestedLimit, 10000)))
-    const eventLeads = inquiries.filter((inquiry) => !isLuxorWorkWithUsMisclassifiedInquiry(inquiry))
-    return NextResponse.json(eventLeads)
+    return NextResponse.json(inquiries)
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unable to fetch inquiries.'
     return NextResponse.json({ error: message }, { status: 500 })

@@ -48,7 +48,6 @@ function loadTypeScript(filePath, stubs = {}) {
 
 const {
   classifyLuxorWorkWithUsIntake,
-  isLuxorWorkWithUsMisclassifiedInquiry,
   shouldRouteLuxorInquiryToWorkWithUs,
 } = loadTypeScript('src/lib/luxorWorkWithUsIntakeServer.ts', { 'server-only': {} })
 
@@ -93,23 +92,10 @@ test('explicit work-with-us intent from contact query is routed to applications'
   assert.equal(classified.applicationType, 'sponsorship')
 })
 
-test('misclassified historical inquiries can be hidden from the leads list', () => {
-  const inquiry = {
-    flow: 'contact_form',
-    source: 'contact_page',
-    message: 'Looking to partner with Luxor on promotional campaigns.',
-    event_type: 'Private celebration',
-    page_path: '/contact',
-    referrer: null,
-    metadata: {},
-  }
-  assert.equal(isLuxorWorkWithUsMisclassifiedInquiry(inquiry), true)
-})
-
 test('inquiries route intercepts contact-form Work With Us intake before createLuxorInquiry', () => {
   const filename = path.resolve('src/app/api/inquiries/route.ts')
   const source = fs.readFileSync(filename, 'utf8')
   assert.match(source, /submitLuxorPartnerApplicationFromContact/)
-  assert.match(source, /isLuxorWorkWithUsMisclassifiedInquiry/)
+  assert.doesNotMatch(source, /isLuxorWorkWithUsMisclassifiedInquiry/)
   assert.match(source, /workWithUsIntake\.isWorkWithUs/)
 })

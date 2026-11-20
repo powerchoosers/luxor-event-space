@@ -1,6 +1,6 @@
 import 'server-only'
 
-import type { LuxorInquiry, LuxorInquiryInput } from '@/lib/luxorInquiryTypes'
+import type { LuxorInquiryInput } from '@/lib/luxorInquiryTypes'
 import type { LuxorPartnerApplicationType } from '@/lib/luxorPartnerApplicationTypes'
 
 const EVENT_HOSTING_PATTERN =
@@ -108,19 +108,4 @@ export function shouldRouteLuxorInquiryToWorkWithUs(
   input: Pick<LuxorInquiryInput, 'flow' | 'source' | 'message' | 'eventType' | 'pagePath' | 'referrer' | 'metadata'>,
 ) {
   return classifyLuxorWorkWithUsIntake(input).isWorkWithUs
-}
-
-/** Hides misrouted historical contact-form rows on the Leads workspace without changing stored data. */
-export function isLuxorWorkWithUsMisclassifiedInquiry(
-  inquiry: Pick<LuxorInquiry, 'flow' | 'source' | 'message' | 'event_type' | 'page_path' | 'referrer' | 'metadata'>,
-) {
-  return classifyLuxorWorkWithUsIntake({
-    flow: inquiry.flow,
-    source: inquiry.source,
-    message: inquiry.message,
-    eventType: inquiry.event_type,
-    pagePath: inquiry.page_path,
-    referrer: inquiry.referrer,
-    metadata: inquiry.metadata,
-  }).isWorkWithUs
 }
