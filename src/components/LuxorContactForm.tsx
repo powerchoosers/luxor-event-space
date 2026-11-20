@@ -1,7 +1,6 @@
 'use client'
 
-import { FormEvent, useMemo, useState } from 'react'
-import { useSearchParams } from 'next/navigation'
+import { FormEvent, useState } from 'react'
 import { Check, Loader2, Send } from '@/lib/icons/phosphor-compat'
 import { motion, AnimatePresence } from 'framer-motion'
 import { getLuxorPublicAttribution, getLuxorPublicSessionId } from '@/lib/luxorPublicAttribution'
@@ -18,17 +17,13 @@ function formatPhoneNumber(value: string) {
 export function LuxorContactForm({
   locale = 'en',
   className = '',
+  contactIntent = null,
 }: {
   locale?: 'en' | 'es'
   className?: string
+  contactIntent?: 'work-with-us' | 'partnership' | null
 }) {
   const spanish = locale === 'es'
-  const searchParams = useSearchParams()
-  const contactIntent = useMemo(() => {
-    const intent = searchParams.get('intent')?.trim().toLowerCase() || ''
-    if (intent === 'work-with-us' || intent === 'partnership') return intent
-    return null
-  }, [searchParams])
   const [fullName, setFullName] = useState('')
   const [email, setEmail] = useState('')
   const [phone, setPhone] = useState('')
