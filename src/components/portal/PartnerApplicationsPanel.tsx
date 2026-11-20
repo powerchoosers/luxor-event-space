@@ -79,6 +79,15 @@ function statusTone(status: LuxorPartnerApplicationStatus): PortalStatusTone {
   return 'neutral'
 }
 
+function applicantMessageFromAnswers(answers: Record<string, unknown> | undefined) {
+  const message = answers && typeof answers.message === 'string' ? answers.message.trim() : ''
+  return message || null
+}
+
+function contactFormIntakeLabel(answers: Record<string, unknown> | undefined) {
+  return answers?.intake_channel === 'contact_form' ? 'Submitted through the contact form' : null
+}
+
 export function PartnerApplicationsPanel() {
   const [loading, setLoading] = useState(true)
   const [unavailable, setUnavailable] = useState(false)
@@ -284,6 +293,18 @@ export function PartnerApplicationsPanel() {
           </div>
         ) : (
           <div className="space-y-6 py-1">
+            {applicantMessageFromAnswers(detail.answers) ? (
+              <div className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-4 sm:p-5">
+                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[color:var(--portal-muted)]">Applicant message</p>
+                {contactFormIntakeLabel(detail.answers) ? (
+                  <p className="mt-1 text-[11px] text-[color:var(--portal-faint)]">{contactFormIntakeLabel(detail.answers)}</p>
+                ) : null}
+                <p className="mt-3 whitespace-pre-wrap break-words text-sm leading-6 text-[color:var(--portal-text)]">
+                  {applicantMessageFromAnswers(detail.answers)}
+                </p>
+              </div>
+            ) : null}
+
             <div className="grid gap-3 sm:grid-cols-2">
               <DetailField label="Business" value={detail.business_name} />
               <DetailField label="Contact" value={detail.contact_name} />
