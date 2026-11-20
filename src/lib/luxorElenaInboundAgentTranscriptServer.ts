@@ -149,10 +149,11 @@ export async function runElenaInboundAgentTranscriptSideband(callSid: string, se
 
   const enqueueAgentTurn = (turn: { text: string; startMs: number | null; endMs: number | null; turnKey: string }) => {
     persistChain = persistChain.then(async () => {
-      const maxSeq = await maxElenaModelTranscriptSequenceForCallSid(callSid)
-      modelSequence = Math.max(modelSequence, maxSeq)
-      const sequenceId = modelSequence + 1
+      let sequenceId = modelSequence + 1
       try {
+        const maxSeq = await maxElenaModelTranscriptSequenceForCallSid(callSid)
+        modelSequence = Math.max(modelSequence, maxSeq)
+        sequenceId = modelSequence + 1
         const saved = await saveLuxorElenaAgentTranscriptSegment({
           callSid,
           sessionId,
