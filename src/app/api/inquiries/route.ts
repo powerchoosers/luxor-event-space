@@ -13,6 +13,15 @@ import { supabaseRest } from '@/lib/supabaseRestServer'
 import { isConfiguredTestSubmission, startLuxorTestRun } from '@/lib/luxorTestLeadServer'
 import { isLuxorBookingDateWithinLimit, isPublicEventDateSelectable } from '@/lib/publicEventDate'
 import { attachTourToPackagesInquiry, readPackagesInquiryContinuationId } from '@/lib/luxorPackagesInquiryTourServer'
+import {
+  partnerApplicationsSchemaUnavailable,
+  submitLuxorPartnerApplicationFromContact,
+} from '@/lib/luxorPartnerApplicationsServer'
+import { LUXOR_PARTNER_APPLICATION_TYPE_LABELS } from '@/lib/luxorPartnerApplicationTypes'
+import {
+  classifyLuxorWorkWithUsIntake,
+  isLuxorWorkWithUsMisclassifiedInquiry,
+} from '@/lib/luxorWorkWithUsIntakeServer'
 
 const VALID_INQUIRY_STATUSES: LuxorInquiryStatus[] = [
   'new',
@@ -47,7 +56,8 @@ export async function GET(request: NextRequest) {
     const inquiries = requestedLimit === null || !Number.isFinite(requestedLimit)
       ? await listAllLuxorInquiries()
       : await listLuxorInquiries(Math.max(0, Math.min(requestedLimit, 10000)))
-    return NextResponse.json(inquiries)
+    const eventLeads = inquiries.filter((inquiry) => !isLuxorWorkWithUsMisclassifiedInquiry(inquiry))
+    return NextResponse.json(eventLeads)
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unable to fetch inquiries.'
     return NextResponse.json({ error: message }, { status: 500 })
@@ -163,6 +173,78 @@ export async function POST(request: NextRequest) {
       })
     } catch (protectionError) {
       console.warn('Public inquiry protection event could not be recorded:', protectionError)
+    }
+
+    const workWithUsIntake = classifyLuxorWorkWithUsIntake({
+      flow: payload.flow,
+      source: payload.source,
+      message: typeof payload.message === 'string' ? payload.message : null,
+      eventType: payload.eventType,
+      pagePath: payload.pagePath,
+      referrer: payload.referrer,
+      metadata: payload.metadata,
+    })
+
+    if (workWithUsIntake.isWorkWithUs && workWithUsIntake.applicationType) {
+      const submissionKey = request.headers.get('idempotency-key')?.trim() || ''
+      if (submissionKey.length < 8) {
+        return NextResponse.json({ error: 'Refresh the page and try again.' }, { status: 400 })
+      }
+
+      try {
+        const result = await submitLuxorPartnerApplicationFromContact({
+          applicationType: workWithUsIntake.applicationType,
+          fullName: payload.fullName,
+          email: payload.email || '',
+          phone: payload.phone || '',
+          message: typeof payload.message === 'string' ? payload.message : '',
+          pagePath: payload.pagePath,
+          referrer: payload.referrer,
+          submissionKey,
+          ipHash,
+          userAgent: request.headers.get('user-agent') ?? undefined,
+        })
+
+        await recordLuxorPublicEvent({
+          eventName: 'partner_application_submitted',
+          sessionId: payload.sessionId,
+          pagePath: payload.pagePath,
+          source: 'contact_page',
+          ipHash,
+          metadata: {
+            applicationType: workWithUsIntake.applicationType,
+            applicationId: result.application.id,
+            intake: 'contact_form',
+          },
+        }).catch(() => undefined)
+
+        const typeLabel = LUXOR_PARTNER_APPLICATION_TYPE_LABELS[workWithUsIntake.applicationType]
+        await sendLuxorWebPush('booking', {
+          title: 'New Work With Us request',
+          body: `${result.application.contact_name} sent a ${typeLabel.toLowerCase()} message via the contact form.`,
+          url: `/portal/operations?tab=vendors&vendorView=applications`,
+          tag: `luxor-partner-contact-${result.application.id}`,
+        }).catch((pushError) => {
+          console.error('Partner application saved, but Web Push delivery failed:', pushError)
+        })
+
+        const status = result.replayed ? 200 : 201
+        return NextResponse.json({
+          inquiry: null,
+          partnerApplication: { id: result.application.id, type: result.application.application_type },
+          workWithUsIntake: true,
+          replayed: result.replayed,
+        }, { status })
+      } catch (error) {
+        if (partnerApplicationsSchemaUnavailable(error)) {
+          return NextResponse.json(
+            { error: 'Work With Us requests are temporarily unavailable. Please call Luxor.' },
+            { status: 503 },
+          )
+        }
+        const message = error instanceof Error ? error.message : 'Unable to submit your message.'
+        return NextResponse.json({ error: message }, { status: 400 })
+      }
     }
 
     const packagesContinuationId = readPackagesInquiryContinuationId(payload.metadata)

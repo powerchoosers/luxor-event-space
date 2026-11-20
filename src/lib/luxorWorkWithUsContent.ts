@@ -67,7 +67,7 @@ export const WORK_WITH_US_OPPORTUNITIES: WorkWithUsOpportunity[] = [
     title: 'General Inquiry',
     description: 'Have a different partnership idea or collaboration in mind? We’d love to hear from you!',
     cta: 'Contact Us',
-    href: '/contact',
+    href: '/contact?intent=work-with-us',
     image: '/images/dining-hall/main-hall-conversation-candid.png',
     imageAlt: 'Guests conversing in the Luxor ballroom',
     iconName: 'sparkles',

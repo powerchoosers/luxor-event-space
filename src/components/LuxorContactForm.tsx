@@ -1,6 +1,7 @@
 'use client'
 
-import { FormEvent, useState } from 'react'
+import { FormEvent, useMemo, useState } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { Check, Loader2, Send } from '@/lib/icons/phosphor-compat'
 import { motion, AnimatePresence } from 'framer-motion'
 import { getLuxorPublicAttribution, getLuxorPublicSessionId } from '@/lib/luxorPublicAttribution'
@@ -22,6 +23,12 @@ export function LuxorContactForm({
   className?: string
 }) {
   const spanish = locale === 'es'
+  const searchParams = useSearchParams()
+  const contactIntent = useMemo(() => {
+    const intent = searchParams.get('intent')?.trim().toLowerCase() || ''
+    if (intent === 'work-with-us' || intent === 'partnership') return intent
+    return null
+  }, [searchParams])
   const [fullName, setFullName] = useState('')
   const [email, setEmail] = useState('')
   const [phone, setPhone] = useState('')
@@ -73,6 +80,7 @@ export function LuxorContactForm({
         metadata: {
           contactFormSubmittedAt: new Date().toISOString(),
           websiteLocale: locale,
+          ...(contactIntent ? { contactIntent, workWithUsIntent: 'work-with-us' } : {}),
         },
       }
 
