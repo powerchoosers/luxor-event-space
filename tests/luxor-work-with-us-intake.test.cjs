@@ -98,4 +98,25 @@ test('inquiries route intercepts contact-form Work With Us intake before createL
   assert.match(source, /submitLuxorPartnerApplicationFromContact/)
   assert.doesNotMatch(source, /isLuxorWorkWithUsMisclassifiedInquiry/)
   assert.match(source, /workWithUsIntake\.isWorkWithUs/)
+  assert.match(source, /queueLuxorPartnerApplicationContactStaffAlerts/)
+  assert.match(source, /!result\.replayed/)
+})
+
+test('partner application review dialog shows applicant message with line breaks', () => {
+  const filename = path.resolve('src/components/portal/PartnerApplicationsPanel.tsx')
+  const source = fs.readFileSync(filename, 'utf8')
+  assert.match(source, /Applicant message/)
+  assert.match(source, /whitespace-pre-wrap/)
+  assert.match(source, /answers\.message/)
+})
+
+test('partner contact staff alert uses rendered inquiry_notification jobs', () => {
+  const staffAlerts = path.resolve('src/lib/luxorPartnerApplicationStaffAlertsServer.ts')
+  const source = fs.readFileSync(staffAlerts, 'utf8')
+  assert.match(source, /notificationKind: 'partner_application_contact'/)
+  assert.match(source, /notificationRendered: true/)
+  assert.match(source, /listLuxorOwnerNotificationRecipients/)
+  assert.ok(source.includes(".replace(/\\n/g, '<br />')"), 'staff alert HTML should preserve newlines')
+  const notifications = path.resolve('src/lib/luxorNotificationEmails.ts')
+  assert.match(fs.readFileSync(notifications, 'utf8'), /partner_application_contact/)
 })

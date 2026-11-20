@@ -17,6 +17,7 @@ import {
   partnerApplicationsSchemaUnavailable,
   submitLuxorPartnerApplicationFromContact,
 } from '@/lib/luxorPartnerApplicationsServer'
+import { queueLuxorPartnerApplicationContactStaffAlerts } from '@/lib/luxorPartnerApplicationStaffAlertsServer'
 import { LUXOR_PARTNER_APPLICATION_TYPE_LABELS } from '@/lib/luxorPartnerApplicationTypes'
 import { classifyLuxorWorkWithUsIntake } from '@/lib/luxorWorkWithUsIntakeServer'
 
@@ -213,6 +214,12 @@ export async function POST(request: NextRequest) {
             intake: 'contact_form',
           },
         }).catch(() => undefined)
+
+        if (!result.replayed) {
+          await queueLuxorPartnerApplicationContactStaffAlerts(result.application).catch((alertError) => {
+            console.error('Partner application saved, but staff email alerts could not be queued:', alertError)
+          })
+        }
 
         const typeLabel = LUXOR_PARTNER_APPLICATION_TYPE_LABELS[workWithUsIntake.applicationType]
         await sendLuxorWebPush('booking', {

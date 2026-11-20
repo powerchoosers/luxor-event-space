@@ -560,6 +560,20 @@ export async function deliverLuxorInquiryNotification(job: LuxorEmailJob): Promi
       if (!task || task.status !== 'pending' || !['high', 'urgent'].includes(task.priority)) return { status: 'skipped' }
     }
   }
+  if (cancellationKind === 'partner_application_contact') {
+    const applicationId = job.metadata.partnerApplicationId
+    if (
+      job.metadata.notificationRendered !== true
+      || typeof applicationId !== 'string'
+      || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(applicationId)
+    ) {
+      throw new Error('Work With Us staff alert is missing its saved identity.')
+    }
+    const [application] = await supabaseRest<Array<{ id: string; status: string }>>(
+      `luxor_partner_applications?select=id,status&id=eq.${encodeURIComponent(applicationId)}&limit=1`,
+    )
+    if (!application) return { status: 'skipped' }
+  }
   if (cancellationKind === 'client_status_change') {
     const eventId = job.metadata.clientStatusEventId
     const leadId = job.metadata.leadId ?? job.inquiry_id
