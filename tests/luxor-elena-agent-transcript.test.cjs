@@ -14,6 +14,12 @@ function loadCallsServer(options = {}) {
   const inserted = []
   const modelRows = []
   let concurrentTurnKeyInserts = 0
+  const callRowBase = () => ({
+    id: 'call-id', twilio_call_sid: 'CA' + '1'.repeat(32), recording_consent_status: options.recordingConsentStatus || 'automatic', metadata: { scope: 'elena_live_inbound', openai_session_id: 'live_session', accepted_at: '2026-11-14T19:25:00.000Z' },
+    recording_started_at: options.omitRecordingStartedAt ? null : '2026-11-14T19:25:00.000Z',
+    answered_at: '2026-11-14T19:25:00.000Z', started_at: '2026-11-14T19:24:50.000Z',
+    transcription_status: 'processing', summary_status: 'not_generated', updated_at: '2026-11-14T19:25:00.000Z', last_sequence_number: 0,
+  })
   const mod = new Module(filename, module)
   mod.filename = filename
   mod.paths = Module._nodeModulePaths(path.dirname(filename))
@@ -36,11 +42,7 @@ function loadCallsServer(options = {}) {
       supabaseRest: async (query, init = {}) => {
         if (!init.method) {
           if (query.includes('luxor_calls?') && query.includes('twilio_call_sid')) {
-            return [{
-              id: 'call-id', twilio_call_sid: 'CA' + '1'.repeat(32), recording_consent_status: options.recordingConsentStatus || 'automatic', metadata: { scope: 'elena_live_inbound', openai_session_id: 'live_session', accepted_at: '2026-11-14T19:25:00.000Z' },
-              recording_started_at: '2026-11-14T19:25:00.000Z', answered_at: '2026-11-14T19:25:00.000Z', started_at: '2026-11-14T19:24:50.000Z',
-              transcription_status: 'processing', summary_status: 'not_generated', updated_at: '2026-11-14T19:25:00.000Z', last_sequence_number: 0,
-            }]
+            return [callRowBase()]
           }
           if (query.includes('agent_turn_key=eq.')) {
             if (options.raceTurnKeyInsert) return []
@@ -308,6 +310,16 @@ test('elena agent segments save while recording consent is still pending', async
   })
   const segments = inserted.filter((row) => row.query.startsWith('luxor_call_transcript_segments')).map((row) => row.body)
   assert.equal(segments.length, 1)
+})
+
+test('elena agent segments use session-relative start when recording has not started', async () => {
+  const { exports, inserted } = loadCallsServer({ omitRecordingStartedAt: true })
+  await exports.saveLuxorElenaAgentTranscriptSegment({
+    callSid: 'CA' + '1'.repeat(32), sessionId: 'live_session', text: 'Early model line.', startMs: 4500, endMs: 7200, sequenceId: 1, turnKey: 'agent-turn:resp_early',
+  })
+  const segments = inserted.filter((row) => row.query.startsWith('luxor_call_transcript_segments')).map((row) => row.body)
+  assert.equal(segments.length, 1)
+  assert.equal(segments[0].segment_start_seconds, 4.5)
 })
 
 test('elena agent segments dedupe by turn key', async () => {

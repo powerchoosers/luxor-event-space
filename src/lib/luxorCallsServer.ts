@@ -612,9 +612,14 @@ export async function saveLuxorElenaAgentTranscriptSegment(input: {
       ? new Date(sessionEpochMs + input.endMs).toISOString()
       : new Date().toISOString()
   const eventMs = Date.parse(eventTime)
-  let startSeconds: number | null = typeof input.startMs === 'number' && Number.isFinite(input.startMs) && Number.isFinite(sessionEpochMs) && Number.isFinite(recordingStartMs)
-    ? Math.max(0, (sessionEpochMs + input.startMs - recordingStartMs) / 1000)
-    : null
+  let startSeconds: number | null = null
+  if (typeof input.startMs === 'number' && Number.isFinite(input.startMs) && Number.isFinite(sessionEpochMs)) {
+    if (Number.isFinite(recordingStartMs)) {
+      startSeconds = Math.max(0, (sessionEpochMs + input.startMs - recordingStartMs) / 1000)
+    } else {
+      startSeconds = Math.max(0, input.startMs / 1000)
+    }
+  }
   if (startSeconds == null && Number.isFinite(recordingStartMs) && Number.isFinite(eventMs)) {
     startSeconds = Math.max(0, (eventMs - recordingStartMs) / 1000)
   }
@@ -676,11 +681,22 @@ export async function saveLuxorRecordingCopy(input: { callSid: string; recording
     duplex: 'half',
   } as RequestInit & { duplex: 'half' })
   if (!copied.ok) throw new Error(`Private recording copy failed (${copied.status}).`)
-  const recordingStartedAt = input.recordingStartedAt && Number.isFinite(Date.parse(input.recordingStartedAt)) ? new Date(input.recordingStartedAt).toISOString() : null
+  const incomingRecordingStartedMs = input.recordingStartedAt && Number.isFinite(Date.parse(input.recordingStartedAt))
+    ? Date.parse(input.recordingStartedAt)
+    : Number.NaN
   for (let attempt = 0; attempt < 4; attempt += 1) {
     const current = await getLuxorCallBySid(input.callSid)
     if (!current || (!isVoicemail && !canProcessLuxorRecording(current))) return null
     const updatedAt = new Date(Math.max(Date.now(), Date.parse(current.updated_at) + 1)).toISOString()
+    const existingRecordingStartedMs = Date.parse(current.recording_started_at || '')
+    let recordingStartedAt: string | null = null
+    if (Number.isFinite(incomingRecordingStartedMs) && Number.isFinite(existingRecordingStartedMs)) {
+      recordingStartedAt = new Date(Math.min(incomingRecordingStartedMs, existingRecordingStartedMs)).toISOString()
+    } else if (Number.isFinite(incomingRecordingStartedMs)) {
+      recordingStartedAt = new Date(incomingRecordingStartedMs).toISOString()
+    } else if (Number.isFinite(existingRecordingStartedMs)) {
+      recordingStartedAt = current.recording_started_at ?? null
+    }
     const [updated] = await supabaseRest<LuxorCall[]>(`luxor_calls?select=*&id=eq.${encodeURIComponent(current.id)}&updated_at=eq.${encodeURIComponent(current.updated_at)}`, {
       method: 'PATCH', headers: { Prefer: 'return=representation' },
       body: JSON.stringify({ recording_sid: input.recordingSid, recording_url: input.recordingUrl, recording_duration_seconds: input.durationSeconds, recording_storage_path: path, recording_started_at: recordingStartedAt, is_voicemail: isVoicemail, ...(isVoicemail ? { is_read: false } : {}), updated_at: updatedAt, metadata: { ...current.metadata, recording_copy_status: 'stored_private', recording_retention: 'indefinite' } }),

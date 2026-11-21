@@ -92,7 +92,7 @@ export function createElenaInboundAgentTranscriptTurnCollector(): ElenaInboundAg
 
   const finishAgentTurn = (
     parent: Record<string, unknown>,
-    nested: Record<string, unknown>,
+    nested: Record<string, unknown> | null,
     ready: ElenaAgentTurnReady[],
   ) => {
     const responseId = resolveResponseId(parent, nested) || activeResponseId
@@ -144,8 +144,13 @@ export function createElenaInboundAgentTranscriptTurnCollector(): ElenaInboundAg
       }
     }
 
-    if (isSessionOutputAudioBufferStopped(type) && spoken.text.trim() && !activeResponseId) {
-      const turnKey = agentTurnKey(null, spoken)
+    if (isResponseTurnFinished(type)) {
+      finishAgentTurn(event, null, ready)
+      activeResponseId = null
+    }
+
+    if (isSessionOutputAudioBufferStopped(type) && spoken.text.trim()) {
+      const turnKey = agentTurnKey(activeResponseId, spoken)
       const turn = markTurn(turnKey, spoken)
       if (turn) ready.push(turn)
     }

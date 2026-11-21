@@ -8,11 +8,11 @@ import { supabaseRestStrict } from './supabaseRestServer'
 const BASE = 'https://www.luxoratlaspalmas.com'
 const SID = /^CA[0-9a-f]{32}$/i
 const ELENA_TRANSCRIPTION_HINTS = 'Luxor, Las Palmas, Luxor at Las Palmas, quinceañera, quince, Signature Package, Luxor Package, Essentials Package, luxoratlaspalmas.com, XV, sweet fifteen, boda, wedding, San Antonio'
-type Call = { twilio_call_sid: string; direction: string; to_number: string; status: string; recording_consent_status: string; metadata: Record<string, unknown>; updated_at: string }
+type Call = { twilio_call_sid: string; direction: string; to_number: string; status: string; recording_consent_status: string; recording_started_at?: string | null; metadata: Record<string, unknown>; updated_at: string }
 
 async function readBoundCall(callSid: string, sessionId: string) {
   if (!SID.test(callSid) || !/^[A-Za-z0-9][A-Za-z0-9_-]{1,180}$/.test(sessionId)) throw new Error('Invalid live call.')
-  const [row] = await supabaseRestStrict<Call[]>(`luxor_calls?select=twilio_call_sid,direction,to_number,status,recording_consent_status,metadata,updated_at&twilio_call_sid=eq.${callSid}&limit=1`)
+  const [row] = await supabaseRestStrict<Call[]>(`luxor_calls?select=twilio_call_sid,direction,to_number,status,recording_consent_status,recording_started_at,metadata,updated_at&twilio_call_sid=eq.${callSid}&limit=1`)
   if (!row || row.direction !== 'inbound' || row.to_number !== process.env.LUXOR_ELENA_LIVE_NUMBER
     || !['ringing', 'in-progress'].includes(row.status) || row.metadata.scope !== 'elena_live_inbound'
     || row.metadata.rehearsal_only !== false || row.metadata.accepted !== true || row.metadata.openai_session_id !== sessionId) throw new Error('Live call is unavailable.')
@@ -73,9 +73,11 @@ async function startElenaRecordingSessions(callSid: string, sessionId: string, c
   const config = getLuxorTwilioConfig()
   const client = twilio(config.accountSid, config.authToken, { timeout: 8000, autoRetry: false })
   let recordingStarted = false, transcriptionStarted = false, recordingSid: string | null = null, transcriptionSid: string | null = null
+  let recordingStartedAt: string | null = null
   try {
     const parent = await client.calls(callSid).fetch()
     if (parent.accountSid !== config.accountSid || parent.to !== process.env.LUXOR_ELENA_LIVE_NUMBER || parent.direction !== 'inbound' || parent.status !== 'in-progress') throw new Error('Call ended.')
+    recordingStartedAt = new Date().toISOString()
     const recording = await client.calls(callSid).recordings.create({ recordingChannels: 'dual', recordingStatusCallback: `${BASE}/api/twilio/recording-status?recordCallSid=${callSid}`, recordingStatusCallbackMethod: 'POST', recordingStatusCallbackEvent: ['completed', 'absent'] })
     if (!/^RE[0-9a-f]{32}$/i.test(recording.sid)) throw new Error('Recording identifier unavailable.')
     recordingSid = recording.sid
@@ -99,9 +101,14 @@ async function startElenaRecordingSessions(callSid: string, sessionId: string, c
   let stopRequested = false
   try {
     for (let attempt = 0; attempt < 3; attempt += 1) {
-      const [current] = await supabaseRestStrict<Call[]>(`luxor_calls?select=twilio_call_sid,direction,to_number,status,recording_consent_status,metadata,updated_at&twilio_call_sid=eq.${callSid}&limit=1`)
+      const [current] = await supabaseRestStrict<Call[]>(`luxor_calls?select=twilio_call_sid,direction,to_number,status,recording_consent_status,recording_started_at,metadata,updated_at&twilio_call_sid=eq.${callSid}&limit=1`)
       if (!current || current.metadata.scope !== 'elena_live_inbound' || current.metadata.openai_session_id !== sessionId) break
-      const saved = await update(current, transcriptionStarted ? {} : { transcription_status: 'failed' }, { recording_start_status: recordingStarted ? 'started' : 'failed', transcription_start_status: transcriptionStarted ? 'started' : 'failed', live_recording_sid: recordingSid, live_transcription_sid: transcriptionSid })
+      const callValues: Record<string, unknown> = transcriptionStarted ? {} : { transcription_status: 'failed' }
+      const existingRecordingStartedMs = Date.parse(current.recording_started_at || '')
+      if (recordingStarted && recordingStartedAt && !Number.isFinite(existingRecordingStartedMs)) {
+        callValues.recording_started_at = recordingStartedAt
+      }
+      const saved = await update(current, callValues, { recording_start_status: recordingStarted ? 'started' : 'failed', transcription_start_status: transcriptionStarted ? 'started' : 'failed', live_recording_sid: recordingSid, live_transcription_sid: transcriptionSid })
       if (saved) { metadataSaved = true; stopRequested = Boolean(current.metadata.recording_stop_requested_at); break }
     }
   } catch { console.warn('[Elena Inbound] Recording identifiers could not be saved.') }
