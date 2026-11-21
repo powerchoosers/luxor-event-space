@@ -45,6 +45,8 @@ test('confirmation starts recording and transcript once for the bound live call'
   const prepared = await prepareElenaRecording(callSid, sessionId)
   const result = await confirmElenaRecording(callSid, sessionId, prepared.nonce, true)
   assert.equal(result.recordingStarted, true); assert.equal(result.transcriptionStarted, true)
+  assert.equal(typeof row.recording_started_at, 'string')
+  assert.ok(Number.isFinite(Date.parse(row.recording_started_at)))
   assert.deepEqual(calls.map((item) => item[0]), ['recording', 'transcription'])
   assert.equal(calls[0][1].recordingChannels, 'dual')
   assert.equal(calls[1][1].track, 'both_tracks')
